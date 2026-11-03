@@ -292,7 +292,7 @@ class CashbackService:
             now = datetime.now(timezone.utc)
             only = data.removeprefix(deals.FEED + ":") if data != deals.FEED else None
             text, keyboard = deals.feed_for(self.repo, user_id, only, now)
-            return BotReply(text, inline_keyboard=tuple(tuple((b["text"], b["callback_data"]) for b in row)
+            return BotReply(text, inline_keyboard=tuple(tuple((b["text"], b.get("url") or b.get("callback_data", "")) for b in row)
                                                         for row in keyboard))
         if data == "u:dc:home":
             return deal_categories_reply(labels, deals.user_categories(self.repo, user_id))

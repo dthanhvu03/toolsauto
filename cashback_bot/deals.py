@@ -346,14 +346,22 @@ def _clock(stamp: str | None) -> str:
         return ""
 
 
-_SHOWN = re.compile(r"u:dl:\d+:(\d+)")
+_SHOWN = re.compile(r'(?:u:dl:\d+:|"deal_id":\s*)(\d+)')
 
 
 def recently_shown(conn: sqlite3.Connection, user: int, now: datetime) -> set[int]:
     """Món đã gửi cho khách trong REPEAT_GAP (đọc từ nút của các tin deal đã xếp hàng)."""
-    rows = conn.execute("SELECT reply_markup_json FROM admin_notifications WHERE event_type = 'DEALS' AND chat_id = ? "
+    rows = conn.execute("SELECT reply_markup_json, source_ref FROM admin_notifications WHERE event_type = 'DEALS' AND chat_id = ? "
                         "AND created_at >= ?", (user, _stamp(now - REPEAT_GAP)))
-    return {int(item) for (markup,) in rows for item in _SHOWN.findall(markup or "")}
+    items = set()
+    for markup, source_ref in rows:
+        for item in _SHOWN.findall(markup or ""):
+            items.add(int(item))
+        if source_ref and source_ref.startswith("deals:"):
+            for part in source_ref[6:].split(","):
+                if part.isdigit():
+                    items.add(int(part))
+    return items
 
 
 def pick(products: list[dict], stats: dict) -> list[dict]:
@@ -432,6 +440,36 @@ def _k(vnd: int) -> str:
     return (f"{thousands:.0f}" if thousands == int(thousands) else f"{thousands:.1f}".replace(".", ",")) + "k"
 
 
+def deal_link(deal: dict, affiliate_id: str | None = None) -> str:
+    """Tạo link affiliate trực tiếp cho deal: ưu tiên shortlink s.shopee.vn/XXXXX, fallback an_redir."""
+    cached = deal.get("url")
+    if cached:
+        return cached
+    shop_id, item_id = deal.get("shop_id"), deal.get("item_id")
+    clean = f"https://shopee.vn/product/{shop_id}/{item_id}"
+    try:
+        from cashback_bot.shopee_shortener import shorten_shopee_url
+        short = shorten_shopee_url(clean, sub_id="AUTOSALE", timeout=6.0)
+        if short:
+            deal["url"] = short
+            return short
+    except Exception:
+        pass
+    if not affiliate_id:
+        try:
+            from cashback_bot.config import load_settings
+            affiliate_id = load_settings().affiliate_id
+        except Exception:
+            affiliate_id = "17315920094"
+    try:
+        from cashback_bot.affiliate import build_an_redir
+        redir = build_an_redir(clean, str(affiliate_id), sub_id="AUTOSALE")
+        deal["url"] = redir
+        return redir
+    except Exception:
+        return clean
+
+
 def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int], *, limit: int = PER_MESSAGE,
                 min_drop: float = 0.0, reason: str | None = None, at: str = "") -> tuple[str, list[dict]] | None:
     """Tin của một khách: chia đều các danh mục, tối đa `limit` món. Không có món nào thì None.
@@ -466,10 +504,11 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
             number += 1
             low = " · thấp nhất 30 ngày" if deal["lowest_30d"] else ""
             name = html.escape(_short(deal["name"]))
+            link = deal_link(deal)
             lines.append(f"{number}. {name}: <b>{_k(deal['price'])}</b> (thường {_k(deal['usual'])}{low}) "
-                         f"· hoàn ~{_k(deal['cashback'])}")
-            buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
-                             "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"}])
+                         f"· hoàn ~{_k(deal['cashback'])} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
+            buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 24)} ↗",
+                             "url": link, "deal_id": deal["item_id"]}])
     lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
               "Giá có thể đổi khi bạn mở."]
     if reason is None:
@@ -519,10 +558,11 @@ def send_round(repo: TrackingRepository, now: datetime) -> int:
             if built is None:
                 continue
             text, keyboard = built
+            ref_items = ",".join(str(b["deal_id"]) for row in keyboard for b in row if "deal_id" in b)
             enqueue_event(conn, event_key=f"deals:{stamp}:{user}", event_type="DEALS", chat_id=user,
                           message_html=text, audience="customer", category=CATEGORY,
                           reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False),
-                          source_ref=SCAN_KEY, now=stamp)
+                          source_ref=f"deals:{ref_items}" if ref_items else SCAN_KEY, now=stamp)
             sent += 1
     return sent
 
@@ -563,10 +603,11 @@ def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None
     for number, (key, deal) in enumerate(picked, 1):
         icon = CATEGORIES[key][0].split()[0]
         drop = round((deal["usual"] - deal["price"]) * 100 / deal["usual"])
+        link = deal_link(deal)
         lines.append(f"{number}. {icon} {html.escape(_short(deal['name']))}: <b>{_k(deal['price'])}</b> "
-                     f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])}")
-        buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
-                         "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"}])
+                     f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
+        buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 24)} ↗",
+                         "url": link, "deal_id": deal["item_id"]}])
     lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
               "Giá có thể đổi khi bạn mở.", "Xem theo danh mục: bấm nút bên dưới."]
     chips = [{"text": CATEGORIES[key][0], "callback_data": f"{FEED}:{key}"} for key in pools if key != only]

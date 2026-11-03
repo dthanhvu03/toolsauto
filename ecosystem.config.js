@@ -191,6 +191,25 @@ module.exports = {
       max_memory_restart: "512M",
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
+    // Rút gọn s.shopee.vn qua CloakBrowser Windows (run_shopee_mcp.sh dọn chrome mồ côi khi PM2 restart).
+    {
+      name: "shopee-mcp",
+      script: "run_shopee_mcp.sh",
+      interpreter: "bash",
+      cwd: PROJECT_ROOT,
+      kill_timeout: 15000,
+      max_restarts: 10,
+      min_uptime: 10000,
+      restart_delay: 5000,
+      autorestart: true,
+      env: {
+        SHOPEE_DOMAIN: "shopee.vn",
+        SHOPEE_PROFILE_DIR: "C:\\Users\\Admin\\.shopee-mcp\\chrome-profile",
+        USERPROFILE: "C:\\Users\\Admin",
+        HOMEDRIVE: "C:",
+        HOMEPATH: "\\Users\\Admin",
+      },
+    },
     // PLAN-111 — giọng đọc VieNeu trên GPU cho bước dub. Venv riêng (torch CUDA); tắt thì dub tự về edge-tts.
     {
       name: "VieNeu_TTS",

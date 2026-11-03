@@ -1,12 +1,47 @@
 # ToolsAuto
 
-Hệ thống tự động đăng nội dung lên mạng xã hội (Facebook, Threads, …): dashboard admin (FastAPI + HTMX), job queue, worker Playwright (PM2), PostgreSQL.
+Hệ thống tự động hóa nội dung đa kênh & dịch vụ trực tuyến:
+- **Cashback Bot**: Bot Telegram & Zalo tự động tạo link hoàn tiền Shopee/TikTok (`cashback_bot/`).
+- **Shopee MCP Bridge**: Cầu nối rút gọn shortlink Shopee Affiliate `s.shopee.vn` qua CloakBrowser.
+- **Xe Tết Live Stream**: Game tương tác livestream 3D WebGL trên TikTok LIVE (`xe_tet/`).
+- **Buffer & Media Workers**: Dashboard FastAPI + HTMX, worker Playwright tự động đăng bài đa nền tảng.
+
+👉 **Xem hướng dẫn lệnh chi tiết tại: [docs/COMMANDS.md](docs/COMMANDS.md)**
+
+---
+
+## ⚡ Các Lệnh Vận Hành Nhanh
+
+### 1. Cashback Bot (Telegram & Zalo - Systemd)
+```bash
+sudo systemctl restart cashback-bot cashback-zalo   # Khởi động lại 2 bot
+journalctl -u cashback-bot -u cashback-zalo -f       # Xem log trực tiếp
+.venv/bin/pytest tests/test_cashback_*.py -q        # Chạy kiểm thử cashback
+```
+
+### 2. Shopee MCP Bridge & Buffer Workers (PM2)
+```bash
+pm2 list                                             # Xem tất cả tiến trình PM2
+pm2 logs shopee-mcp --lines 30                      # Xem log rút gọn link Shopee
+pm2 restart all                                      # Khởi động lại tất cả worker
+pm2 save                                             # Lưu danh sách tiến trình
+```
+
+### 3. Xe Tết Game Server (Cổng 8810)
+```bash
+/home/vu/venv-xetet/bin/python -m xe_tet.server     # Chạy server game
+cd xe_tet/overlay && npm run build                   # Build lại overlay Three.js
+# Màn hình live: http://127.0.0.1:8810/ | Điều khiển: http://127.0.0.1:8810/control
+```
+
+---
 
 ## Bắt đầu đọc code
 
-1. Map thư mục: [docs/TREE.md](docs/TREE.md)
-2. Kiến trúc module: [agents/decisions/ADR-007-module-boundary.md](agents/decisions/ADR-007-module-boundary.md)
-3. Feature cụ thể: `app/features/<name>/README.md`
+1. **Sổ tay câu lệnh vận hành**: [docs/COMMANDS.md](docs/COMMANDS.md)
+2. Map thư mục: [docs/TREE.md](docs/TREE.md)
+3. Kiến trúc module: [agents/decisions/ADR-007-module-boundary.md](agents/decisions/ADR-007-module-boundary.md)
+4. Feature cụ thể: `app/features/<name>/README.md`
 
 ## Chạy nhanh (local)
 

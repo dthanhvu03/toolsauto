@@ -4,6 +4,7 @@ Bắt đầu ở đây nếu mới vào repo.
 
 | Doc | Nội dung |
 |-----|----------|
+| [COMMANDS.md](COMMANDS.md) | **Sổ tay câu lệnh vận hành** — systemd, PM2, bot, test, logs |
 | [CONFIG.md](CONFIG.md) | **.env + config.py + storage/db/config** — map cấu hình tập trung |
 | [TREE.md](TREE.md) | **Map thư mục + “đọc feature X từ đâu”** |
 | [01_ARCHITECTURE.md](01_ARCHITECTURE.md) | Tổng quan FastAPI / queue / workers / adapters |

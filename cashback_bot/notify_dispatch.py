@@ -147,6 +147,12 @@ class Dispatcher:
         markup = None
         if "reply_markup_json" in row.keys() and row["reply_markup_json"]:
             markup = json.loads(row["reply_markup_json"])
+            if isinstance(markup, dict) and "inline_keyboard" in markup:
+                valid_keys = {"text", "url", "callback_data", "web_app", "login_url", "switch_inline_query"}
+                markup = {"inline_keyboard": [
+                    [{k: v for k, v in b.items() if k in valid_keys} for b in r]
+                    for r in markup["inline_keyboard"]
+                ]}
         attempts = int(row["attempt_count"]) + 1
         try:
             kwargs = {"disable_notification": row["event_type"] in SILENT_EVENTS}

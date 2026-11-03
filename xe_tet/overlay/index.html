@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xe Tết Sum Vầy LIVE 9:16</title>
+  <!-- font tự chứa (public/fonts): mở trong LIVE Studio không phải chờ mạng tải font -->
+  <link rel="stylesheet" href="/fonts/fonts.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="labels"></div>
+    <div id="hud">
+      <header id="title">
+        <div class="brand">XE TẾT SUM VẦY</div>
+        <div class="sub"><span id="countdown">Còn – ngày nữa là Tết</span></div>
+      </header>
+
+      <section id="route" class="card">
+        <div class="route-top">
+          <span id="phase-pill" class="pill">Đón khách</span>
+          <span id="phase-text"></span>
+          <span id="seats" class="seats"></span>
+        </div>
+        <!-- cả chuyến: chấm điểm dừng (☕ trạm, 📍 thả khách), xe đang ở đâu (PLAN-130) -->
+        <div class="track"><div class="bar"><i id="bar-fill"></i></div><div id="marks"></div></div>
+        <div id="next-stops" class="next-stops"></div>
+      </section>
+
+      <!-- Lời kêu gọi: người mới vào phòng phải hiểu cần làm gì trong 3 giây -->
+      <section id="cta">
+        <!-- xe bị chặn (trạm thu phí / công an — PLAN-148): thay dòng «Gõ tên tỉnh» bằng thanh góp quà -->
+        <div id="cta-block" class="cta-block hidden"></div>
+        <div id="cta-main" class="cta-main"></div>
+        <div id="cta-sub" class="cta-sub"></div>
+        <!-- bảng quà cố định (PLAN-144/146): chỉ một xe 24 giường — quà giúp chính người tặng, không gọi xe nào khác -->
+        <!-- gọn một dòng (anh 03/11 «che hết rồi»); bảng ô đầy đủ chỉ mở lúc có quà / mỗi 45 giây một lần -->
+        <div class="gift-line">🎁 Quà: mỗi xu 🚀 xe x2 thêm 3 giây · 1 xu ⚡ lên đầu hàng · 10 🎆 · 100 🏮 băng rôn · 1000 🧧 chúc Tết · 👑 Chủ nhà xe</div>
+        <div class="gift-head">🎁 TẶNG QUÀ = XE CHẠY NHANH · LÊN XE TRƯỚC</div>
+        <div class="gift-grid">
+          <div><b>Mỗi xu</b><i>🚀</i><span>xe x2 thêm 3 giây</span></div>
+          <div><b>1 xu</b><i>⚡</i><span>lên đầu hàng chờ</span></div>
+          <div><b>10 xu</b><i>🎆</i><span>pháo hoa về quê</span></div>
+          <div><b>100 xu</b><i>🏮</i><span>băng rôn tên bạn</span></div>
+          <div><b>1000 xu</b><i>🧧</i><span>cả xe chúc Tết</span></div>
+          <div class="wide"><b>Tặng nhiều nhất</b><i>👑</i><span>Chủ nhà xe · nhì: Phó nhà xe</span></div>
+        </div>
+        <!-- mục tiêu buổi live (anh 03/11): thanh chung cả phòng, mỗi mốc mở cảnh vui cho mọi người -->
+        <div id="goal-bar" class="goal-bar"><i></i><span></span></div>
+        <div id="cta-foot" class="cta-foot"></div>
+      </section>
+
+      <div id="loxe"><div class="face">🧢</div><div class="bubble"><b>Anh Tư lơ xe</b><span id="loxe-text">Lên xe về quê ăn Tết nào</span></div></div>
+      <div id="toasts"></div>
+      <div id="callout" class="hidden"></div>
+      <div id="hearts"></div>
+      <div id="sound-lock" class="hidden">🔇 Bấm vào màn hình một lần để bật tiếng</div>
+
+      <section id="rest-card" class="card side hidden">
+        <h3>☕ Trạm dừng chân</h3>
+        <div id="rest-orders"></div>
+        <div id="rest-wc"></div>
+      </section>
+
+      <section id="board" class="card side">
+        <h3 id="board-title">🏆 Tỉnh dẫn đầu</h3>
+        <ol id="board-list"></ol>
+        <div id="stay"></div>
+      </section>
+
+      <div id="banner" class="hidden"></div>
+      <div id="guide" class="hidden">
+        <h2>🧧 CÁCH CHƠI</h2>
+        <ol>
+          <li>💬 Gõ <b>tên tỉnh quê</b> (Nghệ An, 37, Sài Gòn…) → có giường về quê</li>
+          <li>❤ <b>Thả tim</b> → xe chạy nhanh hơn</li>
+          <li>🎫 Gõ <b>xe nào</b> → xem vé, còn bao lâu tới quê</li>
+          <li>🏠 Ở lại? Gõ <b>không về</b></li>
+          <li>🎁 <b>Tặng quà</b> → mỗi xu xe chạy x2 thêm 3 giây (chuyến sau tới sớm), đang chờ thì lên đầu hàng, có giường thì giường vàng (từ 18 tuổi)</li>
+        </ol>
+      </div>
+      <div id="flash" class="hidden"></div>
+      <div id="offline" class="hidden">Đang kết nối lại máy chủ…</div>
+    </div>
+    <div id="fade"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

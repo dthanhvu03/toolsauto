@@ -1,3 +1,231 @@
+## Phiên 2026-11-03 (xe-tet) — PLAN-144…150: một xe 24 giường, quà tăng tốc, trạm thu phí / công an, mục tiêu 100k, đua tỉnh, bảng quảng cáo
+
+- System State: nhánh `feat/xe-tet` đã push (tới 9ca6af2). 8810 đã khởi động lại 03/11 04:14 bằng bản mới (tmux `xetet`,
+  kiểm tra trước: TikTok «ended», 0 màn hình, xe trống). Cài đặt mới mặc định: chặn xe bật, phí theo phòng, tự bù lỗ 60 giây,
+  bảng quảng cáo tự chiếu 10 phút / video (chưa có video nào), mục tiêu buổi 1000 xu. 8811 đã tắt.
+- Done: PLAN-144…148 (xem PLAN), PLAN-149 (thanh mục tiêu buổi live, bảng doanh thu /control, tự bù lỗ bật / tắt 60 giây),
+  PLAN-150 (đua tỉnh; bảng quảng cáo chiếu video tải lên, xe dừng xem). Proof: pytest 174, fuzz 0 lỗi, ảnh 8811 trong PLAN.
+- Next Action: anh tải video lên /control «📺 Bảng quảng cáo»; sau buổi live tới xem /report + bảng doanh thu để chỉnh
+  (số liệu thật mới có 1 buổi 20 phút). Anh đọc luật TikTok trong app (Live Center > Rules and Guidance > Inauthentic Gift
+  Requests). Chưa xem trên máy live: người bước lên đúng lúc đọc tên, tiếng video bảng quảng cáo.
+## Phiên 2026-11-02 (buffer-chk3) — Báo cáo Buffer: 3/4 kênh đăng bài mất file từ 31/10 (chỉ đọc log + DB)
+
+- PM2: Maintenance, Web_Dashboard, 9Router_Gateway online từ 31/10 14:21Z (WSL khởi động lại, `pm2 resurrect` tự lên). Không gọi API Buffer.
+- Job Buffer (DONE/FAILED): 30/10 12/4, 31/10 5/0, 01/11 5/0, 02/11 1/0 (tới 09:00). 4 lỗi 30/10 vẫn là «Scheduled posts limit reached 10/10» (14:01, 19:01). Từ 31/10 chỉ còn Sống Nhẹ Tuổi 40 được xếp lịch.
+- **Sự cố chính:** 31/10 08:52 VN, 261 `viral_materials` READY → FAILED «Không còn file video» (Hoa Lệ Đây 210, trnvp89 35, Uyển Nhi 14, Sống Nhẹ 2). Không có dòng log nào ghi việc xoá file, chưa rõ vì sao mất.
+  - Hệ quả: 30 bài đến giờ đăng từ 31/10 08:52 tới 02/11 09:00, có **20 bài Buffer lấy video bị 404** (Web_Dashboard log): Hoa Lệ Đây 7 (1449–1460), trnvp89 7 (1505–1511), Uyển Nhi 6 (1633–1683). Gần như chắc các bài này lỗi trên Buffer; 10 bài của Sống Nhẹ lấy video bình thường.
+  - Còn 7 bài đã hẹn mà file đã mất, sẽ lỗi tiếp: Hoa Lệ Đây 1462/1463/1464 và trnvp89 1512/1513/1514 (02/11 14:00, 19:00, 03/11 09:00), Uyển Nhi 1709 (02/11 15:30).
+  - Sau 03/11 09:00, 3 kênh này không còn bài hẹn và kho READY bằng 0. Kho READY chỉ còn Sống Nhẹ 45 bài; hàng chờ Sống Nhẹ 10/10, xa nhất 04/11 07:30. Không có video mới vào `viral_materials` từ 28/10.
+- Suất 30 ngày còn: f8pL 1364/2000, RZX2 455/2000, ZVsP 70/1000 (khoảng 3–4 request/ngày). Sync «đã đăng» vẫn tắt, lần xác nhận POSTED cuối 28/10 22:29.
+- Chủ bot quên email đăng nhập: đã gọi `account { email }` 1 lần mỗi key (purpose=channel_bootstrap, tổng 3 request). Email không ghi vào repo.
+- **Cấp video mới (chủ bot yêu cầu):** bật lại nguồn `hoalexx2` (id 6 → Hoa Lệ Đây) và `nhung_1410tn` (id 3 → Uyển Nhi) bằng `SourceService.set_enabled` (cả hai tắt từ 23/10 21:37). Quét ngay vòng sau: Uyển Nhi 41 video mới, Hoa Lệ Đây 16; đã lên READY 2 video, phần còn lại đang tải và xử lý, Maintenance tự hẹn lên Buffer. trnvp89 (nguồn id 7) vẫn tắt.
+- Chủ bot đã tự xoá trên web Buffer 3 bài hẹn mất file của trnvp89 (job 1254, 1259, 1265). DB vẫn ghi DONE, không sửa vì kênh không có nguồn nên không ảnh hưởng xếp lịch. Còn chờ xoá: Hoa Lệ Đây 1253/1258/1264, Uyển Nhi 1252.
+- Bật thêm nguồn id 7 (reels FB `61595147031656` → trnvp89, chủ bot duyệt): quét ra 4 video mới (46 đã có), đang chờ tải. Kết quả tới lúc ghi: Uyển Nhi 19 READY, đã hẹn 9 bài từ 02/11 19:30, hàng chờ kín 10/10; Hoa Lệ Đây 6 READY, đã hẹn 6 bài từ 03/11 14:00.
+- `buffer_cooldown.json` có 1 mục tới 07/11 — khoá tạm ngưng first comment 7 ngày (gói Free, PLAN-070), bình thường.
+- **Next (chủ bot chọn):** (1) xem tab Error trên web Buffer để xác nhận 20 bài lỗi; có thể xoá 7 bài hẹn còn lại trên web để khỏi lỗi tiếp; (2) cấp video mới cho Hoa Lệ Đây, trnvp89, Uyển Nhi; (3) cần PLAN backend tìm vì sao file reup mất ngày 31/10, và cho job không hẹn bài khi file có thể bị dọn trước giờ đăng.
+
+---
+
+## Phiên 2026-10-31 (live TikTok) — dự án mới `xe_tet/` (P1 MVP chạy được)
+
+- Anh bỏ ngách «viếng chùa online» (đã bão hoà: ≥ 6 phòng cùng mẫu, video top là reaction). Chọn ngách
+  **Xe Tết Sum Vầy** (anh đổi từ tàu sang xe khách 24 chỗ + trạm dừng chân, dùng Three.js): comment tên tỉnh lên xe,
+  tim cho xe chạy, trạm dừng ăn / WC / mua quà, thả khách đọc tên; mùa 15/12 → mùng 10 Tết (6/2/2027).
+- Tạo `xe_tet/README.md`: công nghệ (TikTokLive Python + FastAPI + SQLite + VieNeu TTS; overlay Vite 5 + TS + Three.js 0.187),
+  vòng chuyến xe, bảng tương tác, trạm dừng chân, lịch mùa, các bước P1–P3. Không đụng code khác.
+- **P1 MVP xong (PLAN-126 — đánh số nhầm 120 lúc tạo, đã đổi 01/11):** `xe_tet/server` (FastAPI + WebSocket, luật chơi thuần, giả lập phòng đông,
+  `/control`), `xe_tet/overlay` (Vite 5 + TS + Three.js 0.187, CSS2D cho chữ). 15 test qua, ruff + tsc sạch, chụp Chromium thật
+  5 cảnh. Server đang chạy nền cổng 8810 (`venv/bin/python -m xe_tet.server`), không PM2.
+- **Test UI/UX xong (anh yêu cầu):** 11 tình huống + bảng điều khiển 2 cỡ màn; sửa 1 lỗi thật (sự kiện trạm dừng bị overlay
+  bỏ qua do trường `kind` trùng), bố cục né vùng TikTok che, băng rôn không che cảnh. 16 test qua. Chi tiết trong PLAN-126.
+- **Admin điều khiển mọi thứ (anh yêu cầu):** bỏ tự đổi góc; `/control` có camera (ngoài / trong, 4 góc, gần / xa), tạm dừng,
+  ±30 s, thời gian, bật / tắt từng phần, lơ xe nói + băng rôn tuỳ ý. Lưu `storage/db/config/xe_tet.json`. 23 test + 26/26 bấm thật.
+- **Nhấp nháy (anh báo):** do màn đen 0,3 s mỗi lần đổi cảnh (14 lần / 2 phút) → mặc định cắt thẳng + công tắc mờ nhẹ tuỳ chọn;
+  HUD thôi ghi DOM thừa. Đo lại: 0 lần màn đen. Nếu anh vẫn thấy nháy → hỏi nháy trên Chrome hay chỉ trong LIVE Studio.
+- **Rà soát BA / BRD / thuật toán / SA (anh yêu cầu):** `xe_tet/REVIEW.md`. Sửa 11 điểm (gọi tên tất cả, quà không mất,
+  lọc nội dung, tán gẫu không huỷ vé…), 33 test. **Chờ anh quyết 3 việc** (năng lực chở, cộng dồn quà, mật khẩu `/control`).
+- **Học 2 repo cùng ngách (anh gửi):** cùng dùng `tiktok-live-connector`; áp dụng kiểm Host + giới hạn 30 khung/giây;
+  bài học P2 ghi ở `xe_tet/README.md` mục 5b (tự nối lại, quà combo, userId, ảnh đại diện…). 34 test.
+- **Làm theo đề xuất + nối TikTok (anh duyệt):** giờ cao điểm + giờ chờ trên vé, cộng dồn quà, mã `/control` tuỳ chọn,
+  cầu nối TikTokLive 7 (venv riêng `/home/vu/venv-xetet`, tự nối lại). Thử thật vào phòng anh gửi: 145 sự kiện / 40 s, 0 lỗi.
+  48 test. **Next:** anh live thử bằng tài khoản của anh (`/control` → Kết nối) để xem vùng TikTok che + FPS trên GPU thật;
+  sau đó PM2 + SQLite (vé khứ hồi) + giọng VieNeu. Chưa commit.
+- **Rà soát BA / SA lần 2 (anh yêu cầu):** sửa 8 điểm lộ ra khi có dữ liệu live thật (combo quà spam, vé ma, nối lại vào-rớt,
+  tự nối lại sau khởi động, mã lọt log…). 55 test. Cao điểm đo được 178 khách/giờ. **Chờ anh quyết:** đưa vào PM2.
+- **Trải nghiệm người xem (anh ưu tiên):** HUD làm lại cho màn điện thoại (chữ ≥ 30–38 px), lời kêu gọi to, thẻ lớn khi lên xe,
+  tim bay + ⚡ tốc độ, bảng «Trên xe số N», thả khách 4 tên / trang. 56 test, e2e sạch. Next đề xuất: âm thanh + giọng đọc tên,
+  làm đẹp hình 3D, ảnh đại diện.
+- **PLAN-121 làm đẹp 3D — V1 xong (anh duyệt kế hoạch):** `overlay/src/art.ts`: ánh sáng điện ảnh + bóng đổ, trời chuyển màu,
+  xe khách mới (bo tròn, kính + rèm, LED «VỀ QUÊ ĂN TẾT», câu đối, cành đào…), người chibi có dáng đi, cánh hoa đào / mai.
+  384 lần vẽ / 59k tam giác. **Chờ anh:** duyệt ảnh trước / sau + mở `/?fps=1` trên Chrome Windows báo số khung/giây → làm V2.
+- **PLAN-121 V2 xong:** tách `props.ts` + `sets.ts` (3 bối cảnh có điểm mốc, scene hết toạ độ cứng); bến xe, trạm dừng chân
+  (ghế nhựa đỏ xanh, nồi phở bốc hơi…), đầu ngõ (cổng làng ghi tên tỉnh, mái ngói, bánh chưng…). 512 lần vẽ / 116k tam giác.
+  **Chờ anh:** duyệt ảnh + số khung/giây (`/?fps=1`) → V3 (đường 4 vùng).
+- **PLAN-121 V3 xong (anh duyệt + «đường gồ ghề, ổ gà, trụ điện»):** `road.ts` (nhựa vá / nứt / ổ gà, trụ điện dây võng
+  chằng chịt, cột cây số), `landscape.ts` (4 vùng: ruộng bậc thang / cát phi lao / đồi cà phê đất đỏ / ruộng nước; nhà ống bồn
+  inox), `weather.ts` (mưa phùn Bắc), giảm xóc xe (sập ổ gà chúi / ngóc / lắc), bảng trời 4 thời điểm, đêm ánh trăng.
+  209–290 lần vẽ khi chạy. **Chờ anh:** duyệt ảnh + đo `/?fps=1` → V4 (hiệu ứng + nút chất lượng thấp / cao). Chưa commit.
+- **PLAN-121 V4 xong:** `effects.ts` — pháo hoa bay lên có vệt sáng + nổ thành tia có đuôi, bụi bánh xe + khói ống xả,
+  bụi tung khi sập ổ gà; nút **Chất lượng Cao / Thấp** trên `/control` (thấp ≈ nửa số lần vẽ). Sửa lỗi có từ trước: pháo hoa nổ
+  dưới băng rôn (người xem không thấy) → điểm nổ chung `SHOW_SKY` tính theo 4 góc máy. 57 test, e2e 11 tình huống + 28/28.
+  **Chờ anh:** đo `/?fps=1` trên Chrome Windows (Cao và Thấp) + quyết commit. Toàn bộ `xe_tet/` vẫn chưa commit.
+- **BRD tuyến xe thật (anh hỏi: bến đi thật, km thật, xe hướng Bắc mà có người comment Cà Mau, đường quanh co / đồi núi):**
+  `xe_tet/docs/BRD-tuyen-xe.md`. Đề xuất phương án B: bến nhiều làn theo hướng, mỗi lần một xe xuất bến, hướng chọn theo nhu
+  cầu (BR-1…BR-9); km thật từ OSRM (đã thử: Đà Lạt → Cà Mau 592 km, → Hà Nội 1.401 km) tính một lần lưu repo; đường quanh
+  co / đèo bằng «thế giới uốn cong» theo hồ sơ địa hình. **Chờ anh quyết:** bến đi mặc định, phương án B, cho gọi OSRM.
+- **PLAN-122 tuyến xe thật xong R1–R4 (anh chốt: mặc định Miền Đông mới, phương án B, cho gọi OSRM):**
+  - Dữ liệu `server/game/data/routes.json` (5 bến đi × 62 tỉnh, `tools/build_routes.py`): km đường bộ, độ quanh co / 10 km,
+    đèo đi qua, làn theo trục đường. **Phát hiện:** OSRM cho 79 / 310 tuyến Nam ↔ Bắc vòng qua Campuchia – Lào (Cần Thơ →
+    Điện Biên qua cả Thái Lan) → tuyến nào có điểm xa mọi tỉnh lỵ > 130 km thì dẫn lại qua QL1 (Cam Ranh, Quảng Ngãi, Đông Hà,
+    Vinh); còn 0 tuyến ra nước ngoài. TP.HCM → Hà Nội 1.676 km qua Cổ Mã, Cả, Cù Mông, Hải Vân, Ngang, Tam Điệp. Tổng
+    ≈ 700 lượt OSRM (2 lần dựng lại do lỗi thuật toán của em + 79 lượt dẫn lại), nay có cache `tools/osrm_cache.json.gz`
+    (gitignore) → chỉnh thuật toán không phải gọi mạng nữa.
+  - Luật chơi: hàng chờ theo làn, xe trống quay đầu theo khách đầu, làn bị bỏ 2 chuyến bắt buộc chạy, dừng theo km thật,
+    tỉnh trùng bến đi = «đã ở quê», đổi bến đi chỉ khi bến trống. Màn hình: «Đi Hà Nội · chạy sau», làn có người chờ, vé ghi
+    «Đà Lạt → Hà Tĩnh · 1.059 km», thả khách ghi km + giờ xe (dưới 1 giờ tính phút), LED đầu xe, biển bến + bảng từng làn.
+  - Đường: `overlay/src/bend.ts` uốn cua / dốc theo độ quanh co thật (đồng bằng 10–16 °/km → thẳng; Pha Đin, Khau Phạ
+    130–220 → cua gắt), xe nghiêng theo cua. Sửa lỗi lộ ra khi chụp: mặt đất / đường chỉ có đỉnh ở 2 đầu nên bị nhấc che xe →
+    `strip()` chia đỉnh mỗi 2,5 đơn vị.
+  - Proof: 66 test (có test dữ liệu thật), fuzz 2 giờ live × 5 bến 0 vi phạm, e2e 11 tình huống + 28/28 bảng điều khiển,
+    ảnh Đà Lạt + Cà Mau / đèo / đồng bằng. Server 8810 đã chạy code mới. (Đã commit 01/11, xem dưới.)
+- **Rà soát sau PLAN-122 (anh hỏi 01/11: hardcode, rác code, lỗi logic / nghiệp vụ, chuyên môn, tâm lý, dữ liệu đường mới):**
+  2 reviewer độc lập (server + overlay) + em đo trên dữ liệu thật. Đã xác minh trong code: km đứng 0 cả chuyến nếu quà lớn
+  lúc đón khách (`resume` không reset); đổi tỉnh sang làn khác bỏ trống giường; xe trống không đổi sang làn có người chờ;
+  comment tỉnh bến đi khi đang ngồi vẫn giữ giường; chuyến 12 km vẫn có trạm nghỉ; cảnh vùng lấy theo điểm dừng kế (TP.HCM →
+  Hà Nội vẽ cảnh miền Bắc suốt 1.676 km); qua Hải Vân / Cả / Cù Mông / Tam Điệp thực tế đi hầm (độ quanh co 10–38) mà màn hình
+  ghi «đèo»; biển bến chỉ 3 bảng làn (bến có 4–5 làn); biển trên overlay rò bộ nhớ khi đổi vùng / người đi bộ; vệt pháo hoa
+  không vẽ. Mô phỏng chờ: phòng vắng (1 comment / 45 s) người khác làn chờ trung vị 10–15 phút; phòng đông chỉ 7–22 % người
+  hướng Hà Nội được lên xe. Dữ liệu đường: OSRM cập nhật OSM ~2 ngày; cao tốc Bắc – Nam thông toàn tuyến cuối 4/2026;
+  34 tỉnh từ 1/7/2025 (game giữ 63 tên quê cũ). **Chờ anh duyệt kế hoạch sửa 3 đợt** (chưa sửa gì).
+- **PLAN-123 xong (anh duyệt 01/11 «vá hết theo thứ tự ưu tiên, vừa vá vừa research»):** đợt 1 lỗi (12 lỗi server + rò bộ nhớ
+  / pháo hoa / biển làn / chữ HUD), đợt 2 chuyên môn (hầm vs đèo đo bằng độ quanh co, cảnh + trạm nghỉ theo tỉnh xe đang đi qua,
+  đặc sản 63 tỉnh, làn theo hành lang + km rẽ nhánh), đợt 3 tâm lý (chuyến chạy đường ≤ ~4 phút, «ai chờ trước đi trước» chọn
+  bằng mô phỏng 5 luật, bảng «⏳ Chờ xe sau» + «Xe kế tiếp»). Dọn: số giường 1 hằng, hằng lặp, bảng món ăn 1 bảng, 12 export
+  thừa, `Province.lat`, `avatar`, `roundtrip` → `followed`. Proof trong PLAN-123: 82 test, fuzz 0 vi phạm, e2e 28/28 + UX 0 lỗi,
+  ảnh. Server 8810 chạy code mới. (Đã commit 01/11, xem dưới.)
+- **PLAN-124 đường đèo thật xong (anh duyệt 01/11):** bóng đổ uốn cùng đường → cua theo bán kính thật (đồng bằng thẳng,
+  Bảo Lộc ~170 m, Pha Đin 40 m), dốc đèo 8 % lên trước đỉnh / xuống sau đỉnh, đèo ≥ 16 s / hầm ≥ 8 s trên màn hình, hầm có
+  vách gạch men + đèn + đá núi (cảnh tối, xe bật đèn), xe nghiêng theo v² / R. Rò bộ nhớ đổi vùng hết (261 → 263 hình).
+- **PLAN-125 xe tăng cường + admin mọi chuyến xong (anh chốt «tự động + quà 100 xu», thêm «admin control tất cả chuyến,
+  góc cam»):** xe chạy ngầm theo tuyến thật, đọc tên khi tới; `/control` «Các chuyến xe» chiếu xe nào / tới điểm kế / gọi
+  thêm / tắt tự gọi. Phòng 1 comment / 6 s: lên xe trong 30 phút 40 % → 98 %. 91 test, fuzz sạch.
+- **01/11 — commit + duyệt:** commit `01d3bed` trên nhánh `feat/xe-tet` (đặt lại trên `origin/main` để PR không kéo theo 2 commit Studio chưa push; nhánh cũ `feat/xe-tet-sum-vay` bỏ). Sửa `.gitignore`:
+  luật gốc `data/` làm `xe_tet/server/game/data/routes.json` bị bỏ qua (deploy sẽ lỗi) → thêm ngoại lệ. Anh duyệt ảnh →
+  archive PLAN-121…126; MVP đổi số 120 → 126 (trùng PLAN-120 ngắt dòng phụ đề của Studio).
+- **01/11 — tổng duyệt admin trước live (anh hỏi):** phòng giả lập 15 sự kiện / giây × 4 phút, 90 thao tác admin ngẫu
+  nhiên trên khổ điện thoại: 0 lỗi JS, 0 lỗi server. Sửa 3 điểm dùng trên điện thoại: thanh ghim đáy (Dừng / Qua pha / Xe
+  chính / Góc kế / Các xe, vừa 360 px), lời báo bị từ chối hiện đầu màn hình (trước nằm cuối trang), lời báo viết rõ (409,
+  không còn «giá trị không hợp lệ»). E2E 28/28, 91 test. Chưa thử: nối TikTok thật bằng tài khoản anh, FPS trên GPU thật,
+  chạy dưới PM2 (máy khởi động lại là server tắt), lưu trạng thái (server khởi động lại là mất vé).
+- **01/11 ~08:00 — DỪNG STUDIO để anh test live TikTok (anh duyệt):** máy lag (RAM trống ~1,5 / 7,7 GB, tải 3,2 / 4 nhân)
+  do job lồng tiếng `dub8-5a5bb2f6` (Demucs tách giọng, chạy 18 phút) + VieNeu TTS 1,5 GB. Đã `pm2 stop Studio_Heavy
+  Studio_Light VieNeu_TTS` → RAM trống ~4,8 GB. **Job dub8 bị ngắt giữa chừng — phải bấm lồng tiếng lại.** Test xong:
+  `pm2 start Studio_Heavy Studio_Light VieNeu_TTS`.
+- **PLAN-127 nhạc + tiếng hiệu ứng xong (anh chốt «cả hai» nguồn nhạc, nhạc từng xe + hiệu ứng):** 6 bài tự sinh (ngũ
+  cung, không bản quyền) + thư mục `storage/media/xe_tet/music/` cho file của anh; mỗi xe một đài, tiếng theo xe đang
+  chiếu; /control qua bài / tắt / âm lượng. 93 test, e2e 28/28. Trả lại thiết lập «Chất lượng Cao» (lần tổng duyệt bấm
+  ngẫu nhiên để lại «Thấp»). Studio vẫn đang DỪNG chờ anh test live xong.
+- **01/11 — sự cố trong lúc anh test (lỗi của em):** anh bấm «Tạm dừng» rồi game tự chạy tiếp, xe số 2 về số 1. Nguyên
+  nhân: em khởi động lại server 8810 (nạp tính năng tải nhạc) và chạy e2e `control_panel` (bấm dừng / chạy tiếp / làm lại)
+  vào đúng server anh đang test. Game không tự bỏ tạm dừng (chỉ nút ⏸ / làm lại / khởi động lại đổi được). Sửa quy trình: e2e
+  mặc định chạy máy chủ thử cổng 8811 + file thiết lập riêng (`XE_TET_SETTINGS`); đã chạy thử 28/28 trên 8811, server 8810
+  không đổi gì. **Quy tắc: không bấm thử / khởi động lại 8810 khi anh đang dùng.**
+- **Tải nhạc lên trên /control (anh đề xuất):** xong, 94 test.
+- **PLAN-128 giọng Anh Tư lơ xe xong (anh chốt VieNeu + dự phòng edge-tts; đọc câu lơ xe, tên lên / xuống xe, cảm ơn
+  quà):** thử đủ trên 8811, 102 test. Đã bật lại riêng `VieNeu_TTS` (Studio_Heavy / Light vẫn tắt). Chưa nạp vào 8810 — chờ
+  anh cho khởi động lại.
+- **01/11 chiều — lơ xe nói chợ búa + đồ Tết (PLAN-129) + giờ chạy / bảng chặng / tự chiếu / font / trộn tiếng (PLAN-130):**
+  - `talk.py`: câu lơ xe cộc, lẹ, đời như ngoài bến (không chửi thề — TikTok khoá live); viết hoa lại chỗ điền đầu câu.
+  - Đồ Tết (`overlay/src/tet.ts`): cờ trên trụ điện + nhà ống, đèn lồng, chậu mai / đào / quất trước hiên, băng rôn «CHÚC
+    MỪNG NĂM MỚI · XUÂN ĐINH MÙI 2027» (tự tính can chi), cây nêu, dưa hấu, bánh chưng, cúc vàng; mai vàng xen cây miền
+    Trung / Nam. Lần vẽ tăng ~70 / cảnh (bến 477 → 516, đường 242–296 → 323–367).
+  - Thời gian chạy: giây chạy = `trip_minutes` (mặc định 8, chỉnh 3–15 trên /control) × (km / 1.750)^0,75, tối thiểu 45 giây
+    → 300 km ≈ 2:10, 900 km ≈ 4:50, 1.700 km ≈ 8:00. Đồng hồ trên xe = giờ xuất bến + km / 52 km/h + 30 phút / trạm; trời
+    sáng / tối theo đồng hồ đó (pha màu dần). Bảng chặng: thanh cả chuyến có chấm điểm dừng + 🚌, «🕐 giờ trên xe · 📍 điểm kế
+    giờ tới (còn m:ss)»; /control: từng xe đủ các điểm dừng.
+  - Tự chiếu xe (`auto_feature`: theo chuyện hay / xoay vòng / tắt). Thử 8811: nhảy sang xe tăng cường ở giây 42, về 76,
+    lại 112 → 137 (3 điểm thả). Admin bấm tay → nhường 2 phút.
+  - Font tự chứa `overlay/public/fonts` (Be Vietnam Pro + Baloo 2 cho tiêu đề / băng rôn), /control 16 px, hai cột trên máy tính.
+  - Trộn tiếng: nén chung, tiếng lốp / gió theo tốc độ, máy nổ chờ ở bến, lơ xe nói thì nhạc + tiếng xe cùng nhỏ; chế độ
+    Cân bằng / Nhạc nổi / Lơ xe nổi.
+  - 113 test. **Đã khởi động lại 8810 (anh cho phép 01/11 ~17:39)**: chạy code mới, giữ thiết lập của anh (giọng Quang Sơn,
+    tốc độ đọc 1,25), tự chiếu «Theo chuyện hay», chuyến xa nhất 8 phút. TikTok đang chưa nối — anh bấm Kết nối một lần.
+- **PLAN-131 kiểu nói lơ xe (anh yêu cầu):** Bến xe / Gen Z / Gen Y / Trộn (mặc định), 147 câu, không «!» / «nha», «!»
+  đọc như dấu chấm. 114 test. Đã khởi động lại 8810 (anh cho phép), kiểu nói mặc định «Trộn».
+- **Tiếng rè rè (anh báo):** (1) máy nổ chờ ở bến sóng răng cưa + tiếng lốp lặp có «tách» → bỏ / làm êm; (2) nhạc tự sinh
+  bị trễ thì phát dồn mọi nốt lỡ cùng lúc → bỏ nốt lỡ, lên lịch trước 1 giây, AudioContext bộ đệm lớn; (3) «Cao» làm máy
+  quá tải → thêm chất lượng «Vừa» (75 % độ phân giải, bóng cách khung) — anh xác nhận «Thấp» hết rè.
+- **PLAN-132 tối ưu (anh yêu cầu + /code-review):** 12 điểm (màn hình live đứng hình không tự nối lại, game khựng mỗi phút
+  vì hỏi VieNeu, ffprobe trong vòng game, font tiếng Việt trên biển, rò bộ nhớ âm thanh, /control bấm trượt, người chibi
+  23 → 11 lần vẽ, dựng sẵn vùng…). 115 test, e2e 28/28 trên 8811. Đã khởi động lại 8810 (anh cho phép).
+- **Chữ trên live to quá (anh báo):** cỡ chữ + khung co bằng `zoom` (mặc định 80 %), vị trí neo giữ nguyên, cụm trên dồn
+  lên mốc 150 px; thanh «Cỡ chữ trên live» 0,6–1,2 trên /control (`hud_scale`). Ảnh 100 / 80 / 65 % trên 8811. Đã khởi động lại
+  toàn bộ phần game (anh cho phép): 8810 + PM2 `VieNeu_TTS`; Studio_Heavy / Light vẫn tắt; bot cashback / store không đụng.
+- **Phản biện 10 vai giật lag / thuật toán (anh yêu cầu, chưa sửa code):** đo trên 8811 (đã tắt) — 30 % luồng chính là biên
+  dịch shader, thủ phạm pháo hoa (vật liệu mới mỗi chùm, `dispose` xoá chương trình → biên dịch lại; `bendTree` đổi vật
+  liệu đang bay sang bản uốn). Server không phải nguồn giật (tick 11 µs, snapshot 0,5 ms). Thứ tự ghé tham lam: +3,1 % km
+  nhưng chờ chỉ +0,84 % so tối ưu → giữ. Kế hoạch 7 bước: `agents/plans/active/PLAN-133-xe-tet-stutter.md`.
+- **PLAN-133 bước 1–6 xong (anh duyệt «triển khai đi»):** pháo hoa bể đối tượng, biên dịch sẵn shader (`warmUp`, PCF),
+  nhạc tự sinh dựng sẵn offline, nhịp khung theo lịch, server `Outbox` mỗi màn hình. Proof trên 8811 (bản sao build riêng):
+  biên dịch shader giữa trận 25 → 0 / 150 giây, luồng chính bận 42 → 8 %, pytest 117, e2e 28/28 + UX 0 lỗi, ảnh pháo hoa.
+  Anh duyệt → đã build + khởi động lại 8810 (lúc đó TikTok idle, xe trống), trang live 0 lỗi; đã commit. Bước 7 (Lambert,
+  gộp khối…) chờ số `/?fps=1` trên GPU thật. 8810 đang để chất lượng «Thấp» (anh đặt).
+- **PLAN-133 bước 7 (anh đo Cao: đường 30 khung/s, trạm 40 người 22):** người không đổ bóng thật, chỗ trạm cấp theo danh
+  sách chỗ trống, đẩy nhãn tên — đã nạp 8810 (commit 85f7567). Rò bộ nhớ: không (overlay hình 367 rồi đứng; server 6 giờ
+  15.000 người xem 8,7 MB).
+- **PLAN-134 (anh duyệt 4 đợt + chốt 4 điểm):** A tuyến đường thật (đồ thị tỉnh + Floyd–Warshall ghép với mô hình cây, xe số 2
+  4.441 → 2.999 km, tỉnh «đi qua» trên HUD / /control), B người xem biết mình ở xe nào («xe nào / tới đâu rồi», số xe trên vé,
+  trạng thái từng xe, lơ xe gọi tỉnh đi qua), C luật làn dọc đường + lịch mùa 2027 + thùng quà Tết, D nhớ khách SQLite
+  `storage/db/xe_tet.db` + chào khách quay lại + ghép cùng quê + gọi tên công bằng + ghi chú 18+. Proof: pytest 125, fuzz
+  290 chuyến × 5 bến 0 vi phạm, e2e 28/28 + UX 0 lỗi trên 8811, ảnh. Đã commit; **đã nạp 8810** (anh duyệt 01/11,
+  `index-cKzjP-kB.js`, trang live 0 lỗi, log 0 lỗi, tạo `storage/db/xe_tet.db`). Còn: C3 chiều ra (bước
+  riêng, trước 9/2/2027); anh cân nhắc bỏ gợi ý «🎯 thêm N xu → …».
+- **01/11 tối — setup live thật:** nguồn «Liên kết» LIVE Studio `http://127.0.0.1.nip.io:8810/` (ô không nhận IP / localhost;
+  server nhận thêm tên này), 1080×1920; đêm Tết sáng hơn (27 → 83/255); chống vang: chỉ một màn game phát tiếng, chọn
+  trên /control (commit 17f79c3). Anh live thử báo vang + mờ: vang do thu cả tiếng máy (em bảo bật loa — sai), mờ do
+  LIVE Studio 720p **60 FPS** 4600 kbps → khuyên 30 FPS. **Anh bảo tắt server game: 8810 đã tắt** (tắt êm, đã ghi hồ sơ
+  khách); VieNeu_TTS (PM2) vẫn chạy.
+- **02/11 — PLAN-135 → 138 (đã commit, CHƯA nạp 8810, 8810 đang tắt):** lơ xe trả lời câu hỏi (câu sẵn + Gemini, mặc định
+  tắt, chờ anh thêm `GEMINI_API_KEY` vào `.env`), bắt xe dọc đường, gọi xe ra bến khác, địa chỉ chi tiết, đủ 63 tỉnh, khoá 10
+  giây cuối, LED đầu xe đúng chuyến, lọc từ tục / tên bậy / miệt thị vùng miền, AI nhớ câu trả lời, đổ xăng / rửa xe, mời người
+  chỉ thả tim chưa lên xe, thôi gợi ý quà sau 1000 xu. Proof: pytest 144, e2e 28/28 + UX 0 lỗi trên 8811, fuzz 395 chuyến OK;
+  overlay đã build lại (`dist` mới). Bật 8810 là chạy toàn bộ bản mới — anh duyệt trước.
+- **02/11 — PLAN-139 (anh duyệt «làm bước 1»):** cả đám đông vẽ một lượt (instancing người 3D, không đổi hình): trạm dừng
+  40 người 433 → 196 lượt vẽ, bến 24 người 395 → 229. e2e 28/28 + UX 0 lỗi trên 8811. Chưa nạp 8810. Bước 2 (phông nền ảnh
+  vẽ nhiều lớp) chờ anh chọn nguồn ảnh.
+- **02/11 — PLAN-140 (anh duyệt «triển khai đi»):** biển chào tỉnh + biển chỉ đường (km thật), phông núi vẽ bằng code theo
+  vùng (đá vôi / Trường Sơn / cao nguyên / hàng dừa), cọc tiêu, biển 60, quán cóc, xe máy chở mai đào; giữ ổn định: tự dựng lại
+  khi mất ngữ cảnh WebGL (mất hẳn → tải lại sau ~10 giây), nới nhịp 30 khung, bỏ sắp nhãn mỗi khung. e2e 28/28 + UX 0 lỗi
+  trên 8811. Chưa nạp 8810.
+- **02/11 ~05:15 — ĐÃ NẠP 8810 (anh «bật bản mới đi em»):** `/home/vu/venv-xetet/bin/python -m xe_tet.server` (nohup, log
+  scratchpad `xe_tet_server_8810.log`), trang phục vụ `index-DJD67wBG.js` = PLAN-135 → 140. Lúc bật: TikTok idle (chưa nhập
+  username trên /control), không dừng, AI có khoá (`ai.key=true`) nhưng công tắc «AI trả lời» vẫn tắt (mặc định). Chưa mở trang
+  nào vào 8810 (tránh giành màn phát tiếng).
+- **02/11 — PLAN-141 (anh chọn quà + bình luận + tim, tối đa 60 giây):** xe tăng cường lên sóng theo điểm khách trên xe;
+  pytest 146, e2e 28/28 + UX 0 lỗi trên 8811. Server 8810 CHƯA khởi động lại (đang chạy PLAN-140); `dist` đã build bản có thông
+  báo «đang lên sóng» (trang 8810 tải lại sẽ lấy, vô hại khi server cũ).
+- **02/11 ~05:50 — ĐÃ KHỞI ĐỘNG LẠI 8810 (anh «khởi động lại đi em»):** tắt êm (SIGTERM, ghi hồ sơ khách), chạy PLAN-141,
+  trang `index-Dd74jmbr.js`, log 0 lỗi. Thiết lập anh đặt trên /control lúc 05:35: tự chiếu «rotate» 60 giây (luật lên sóng theo
+  điểm chỉ chạy ở chế độ «events»), AI trả lời BẬT, chất lượng Cao.
+- **02/11 chiều — PLAN-142 (anh chọn: mỗi món quà một hiệu ứng; thẻ cách chơi + màn hướng dẫn):** sửa lơ xe nói chỗ xe chính
+  khi đang chiếu xe khác; lơ xe đọc luật mỗi 3 phút / khi có người mới; quà theo món (hoa rơi, còi, tim, pháo, lì xì, đèn lồng).
+  pytest 150, e2e 28/28 trên 8811. Chưa nạp 8810 (anh đã tự khởi động lại 8810 nghe 0.0.0.0; lúc kiểm tra TikTok «ended»
+  twot283, không màn nào mở).
+- **02/11 ~19:20 — Nâng cấp đồ họa Stylized 3D V2 + Blender 4.0 GLB (anh duyệt «oke em update và cập nhật cho anh đi em»):**
+  - Dựng 3 model `.glb` bằng Blender 4.0 (`public/models/{bus_coach,bus_wheel,village_house}.glb`) nạp sẵn qua `models.ts`:
+    thân xe khí động học có khoét hốc bánh xe Boolean, bánh xe đúc 6 chấu đúng trục Z ngang xe, nhà cổ 3 gian mái ngói âm dương
+    võng đầu đao + cột gỗ lim + cây rơm (hiện cả trên đường quê lẫn bối cảnh Đầu ngõ `HomeSet`).
+  - Gộp hình học tĩnh (`mergeGeometries` + Vertex Colors) cho cây cối, chậu hoa, đèn lồng, trụ điện, nhà cửa; thay địa hình bằng
+    2D Value-Noise (hết vệt sọc lặp); bỏ cây cao tiền cảnh che xe; lọc nhãn tên thông minh ở trạm đông (tối đa 10 nhãn, ưu tiên
+    VIP + người đang bước đi, không đè HUD).
+  - Đo trên GTX 1650 (720×1280 @ 30 FPS + mã hoá NVENC H.265 đồng thời): Draw calls giảm 340 → 207 (chạy đường) và 327 → 240
+    (trạm 40 người), GPU P95 7.7–12.6 ms (≤ 20 ms), VRAM toàn máy 1.67–1.74 GB (≤ 2.5 GB), pytest 146/146. Đã build `dist`
+    (`index-CCXV7aY4.js`) phục vụ trực tiếp trên 8810.
+- **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
+  LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+  Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
+  (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
+
 ## Phiên 2026-10-30 → 31 (studio) — PLAN-106 Studio P1–P4 + PLAN-108 dọn giao diện (đã merge main)
 
 - Anh: mọi bài đã đăng qua Buffer, UI đăng bài cũ không cần nữa, «đập đi xây lại 1 hệ sinh thái edit video». Anh chốt: edit tự động theo mẫu + duyệt / chỉnh tay; 3 nguồn (reup, tự quay, AI); điều khiển bằng web + Telegram; **xây song song**, Buffer vẫn đăng bình thường.
@@ -91,6 +319,12 @@
     Trung) — Demucs hết RAM (exit -9) → Whisper lần hai cũng hỏng → «không có lời thoại» sai, lại bị lưu cố định. Sửa: Demucs theo khúc
     60 s, dùng lời thoại của bước phân tích, chỉ lưu cố định kết quả chắc chắn, nút «Lồng tiếng lại», tiến trình ⚠. Cần restart 3 app,
     rồi mở #11 → «Lồng tiếng lại».
+  - **31/10 — PLAN-119 chất lượng lồng tiếng (anh: «vá giúp anh»; code xong, commit cục bộ):** dịch theo câu, câu đọc Việt hoá
+    (sub / say), sửa chữ Whisper nghe nhầm, chuẩn −14 LUFS, trần bitrate 3M; nút «Dịch & lồng lại»; lỗi tiếng không còn tắt NVENC.
+    Cần restart 3 app, rồi mở #12 → «Dịch & lồng lại». Ghi nhận: cổng 9Router trả auth 404, AI tự chuyển Gemini (không thuộc Studio).
+  - **31/10 — PLAN-120 ngắt dòng phụ đề (anh: «cách ngắt dòng chưa chuẩn»; commit `171e023` cục bộ):** mỗi câu một lượt, ≤ 2 dòng
+    cân theo cụm từ / dấu câu, không tách tên riêng, không chữ lẻ, đo bằng font thật (× 0,65 libass, chặn 32 ký tự), thời gian theo độ dài.
+    Áp khi restart Studio_Heavy; video cũ đổi khi render / lồng lại. Ngoài tầm: từ ghép không dấu hiệu («mùa ⏎ hè»).
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
@@ -138,6 +372,13 @@
   bài 21 link an_redir bị cắt mất 2 mục cuối dù chữ chỉ ~2.300. Test `test_cat_tin_khong_tinh_url_trong_link`. Cả bộ cashback cắt mạng:
   1064 qua, chỉ hỏng `test_b9_…` (màn ví admin, có từ trước) + 3 test cần DNS.
 - Tất cả CHƯA commit. Anh restart: `systemctl restart cashback-bot cashback-zalo`.
+- **Kiểm log thật sau khi đã commit `94f0c76`/`0c5af03` và restart (11:36 UTC):** bài 99329 (12:55): bridge rút gọn 7/7 link,
+  2,2–3,2 s mỗi link (timeout 6 s), gọi lần lượt. 9 khách Telegram nhận đủ 7 link, 8 khách Zalo nhận bản gọn 3/7 link. Cả 17 tin
+  gửi được ở lần đầu, không lỗi. Từ 11:00 không có WARNING/ERROR. Bản gọn bỏ 4 mục «Deal VIP 29K/99K/119K–299K/399K» (chỉ +1 vip,
+  không có %, dưới `MIN_QUALITY`), nhưng câu chú thích vẫn ghi «bỏ mã lọc tài khoản, game, mã cũ», chưa đúng với trường hợp này. Chưa
+  sửa, chờ anh quyết. Bài 99328 (11:21) chỉ đăng kênh, không gửi khách: không có từ khoá mã (`_SEND_WORDS`), đúng thiết kế.
+- **HEAD 7/7 link bài 99329 (anh cho phép, có thể tính click):** cả 7 link trả 200, đều có `utm_source=an_17315920094`,
+  `utm_medium=affiliates`, `utm_content=AUTOSALE----` (sub_id1 = AUTOSALE, sub_id2–5 trống).
 
 ## Phiên 2026-10-31 (relay-shopee-only) — Bài săn sale chỉ giữ link Shopee
 
