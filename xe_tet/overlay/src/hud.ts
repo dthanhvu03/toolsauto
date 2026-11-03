@@ -432,6 +432,7 @@ export class Hud {
 
   onEvent(e: GameEvent): void {
     const name = esc(e.name ?? "");
+    this.eventAvatar = e.avatar ?? "";  // thông báo của sự kiện này có ảnh đại diện người đó (anh 03/11)
     switch (e.type) {
       case "loxe":
         this.loxe(e.text ?? "");
@@ -745,9 +746,12 @@ export class Hud {
     box.classList.add("pop");
   }
 
+  private eventAvatar = "";
+
   private toast(title: string, sub = "", kind = "", key = ""): void {
     const list = $("toasts");
-    const html = sub ? `${title}<small>${sub}</small>` : title;
+    const face = this.eventAvatar ? avatarImg(this.eventAvatar) : "";
+    const html = sub ? `${face}${title}<small>${sub}</small>` : `${face}${title}`;
     const old = key ? this.keyed.get(key) : undefined;
     if (old && old.el.isConnected && !old.el.classList.contains("out")) {
       old.el.innerHTML = html;
@@ -820,4 +824,10 @@ export class Hud {
     window.clearTimeout(this.flashTimer);
     this.flashTimer = window.setTimeout(() => el.classList.add("hidden"), 2600);
   }
+}
+
+/** Ảnh đại diện TikTok tròn nhỏ trước tên; ảnh hỏng / hết hạn thì tự ẩn. */
+export function avatarImg(url: string | undefined, cls = "av"): string {
+  if (!url || !/^https:\/\/[^"'<>\s\\]+$/.test(url)) return "";
+  return `<img class="${cls}" src="${url.replace(/&/g, "&amp;")}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`;
 }

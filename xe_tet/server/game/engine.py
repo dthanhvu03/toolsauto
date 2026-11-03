@@ -90,6 +90,12 @@ SNACKS = {"nem": ("Nem chua", "🍢"), "bi": ("Bì cuốn", "🌯"), "banh_mi": 
 VENDOR_REMIND_GAP = 90.0  # lơ xe nhắc góp gọi cô bán hàng tối đa một lần / chừng này giây
 
 
+def avatar_url(raw: object) -> str:
+    """Chỉ nhận link ảnh https gọn (đưa thẳng vào thẻ <img> trên overlay)."""
+    url = str(raw or "")
+    return url if url.startswith("https://") and len(url) <= 800 and not any(c in url for c in "\"'<> \\") else ""
+
+
 def snack_of(text: str) -> str | None:
     """«nem», «2 bánh mì», «bì cuốn» → món; câu dài / «xe bị gì» thì không («bị» bỏ dấu cũng là «bi»)."""
     words = normalize(text).split()
@@ -352,6 +358,7 @@ class Viewer:
     stage_comments: int = 0
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
     prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
+    avatar: str = ""  # ảnh đại diện TikTok (https)
     snack: str | None = None  # món mua của cô bán hàng chuyến này (nem / bì / bánh mì) — hiện cạnh tên trên xe
     roll_missed: int = 0  # số lần lỡ điểm danh liên tiếp (có tương tác lại thì về 0)
     roll_skip: int = -1  # lỡ điểm danh ở chuyến số này → chuyến đó không xếp giường nữa (lùi xuống chuyến sau)
@@ -410,6 +417,7 @@ class Engine:
         self.paused = False
         self.rng = random.Random()  # bốc câu lơ xe (test truyền hạt giống cố định nếu cần)
         self.viewers: dict[str, Viewer] = {}
+        self.avatars: dict[str, str] = {}  # tên hiện → ảnh đại diện TikTok
         self.outbox: list[dict] = []
         self.queues: dict[str, list[str]] = {ln.key: [] for ln in self.network.lanes}  # vé chờ theo làn
         self.queued_at: dict[str, float] = {}  # giờ bắt đầu chờ của từng vé (giữ nguyên khi đổi tỉnh cùng làn)
@@ -535,6 +543,8 @@ class Engine:
     # ---- tiện ích -------------------------------------------------------
 
     def emit(self, type_: str, **data) -> None:
+        if "avatar" not in data and (url := self.avatars.get(data.get("name") or "")):
+            data["avatar"] = url  # ảnh đại diện TikTok cạnh tên trên thẻ / thông báo (anh 03/11)
         self.outbox.append({"type": type_, **data})
 
     def talk(self, kind: str, speak: bool = True, main: bool = False, **fields) -> None:
@@ -1017,7 +1027,7 @@ class Engine:
         v.snack = item
         self.vendor["sold"][item] += 1
         label, emoji = SNACKS[item]
-        self.emit("snack", name=v.name, hue=v.hue, item=label, emoji=emoji)
+        self.emit("snack", name=v.name, hue=v.hue, item=label, emoji=emoji, seat=self.bus.seat_of(v.uid))
 
     def _vendor_view(self) -> dict | None:
         if self.vendor:
@@ -1787,6 +1797,9 @@ class Engine:
         if not uid:
             return False
         v = self.viewer(uid, name)
+        if (url := avatar_url(event.get("avatar"))) and v.avatar != url:
+            v.avatar = url
+            self.avatars[v.name] = url
         if kind != "join" or v.province:  # vào phòng chưa tính là đang xem (người lướt qua); người có vé quay lại thì tính
             v.last_seen = now
             if v.roll_missed or v.uid in self.rollcalls:
@@ -2620,6 +2633,7 @@ class Engine:
         for uid in uids:
             v = self.viewers.get(uid) if uid else None
             out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "snack": SNACKS[v.snack][1] if v.snack else "",
+                        "avatar": v.avatar,
                         "province": BY_KEY[v.province].name if v.province else ""} if v else None)
         return out
 

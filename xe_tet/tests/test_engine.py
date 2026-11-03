@@ -2019,3 +2019,15 @@ def test_vendor_gets_off_when_bus_reaches_a_stop():
     e.phase = "REST"
     e.tick(t + 1)
     assert e.vendor is None and "vendor_end" in types(e.drain())
+
+
+def test_tiktok_avatar_kept_and_shown_with_name():
+    """Anh 03/11 «cập avt cho user»: ảnh đại diện TikTok theo người — lên thẻ vé / thông báo và tên trên xe; link lạ thì bỏ."""
+    e = Engine(0.0)
+    url = "https://p16-sign-sg.tiktokcdn.com/abc~tplv.webp?x=1&y=2"
+    e.handle({"type": "comment", "uid": "tt:1", "name": "An", "text": "Huế", "avatar": url}, 1)
+    e.handle({"type": "comment", "uid": "tt:2", "name": "Bình", "text": "Huế", "avatar": 'javascript:"<x>'}, 2)
+    seats = {s["name"]: s["avatar"] for s in e.snapshot()["bus"]["seats"] if s}
+    assert seats == {"An": url, "Bình": ""}
+    tickets = [ev for ev in e.drain() if ev["type"] == "ticket"]
+    assert tickets[0]["avatar"] == url and "avatar" not in tickets[1]

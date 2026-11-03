@@ -393,7 +393,7 @@ html, body {
 .lbl.win.focus, .lbl.berth.focus { font-size: 30px; max-width: 360px; padding: 4px 12px; z-index: 5; background: #fff;
   border: 3px solid var(--red); box-shadow: 0 0 0 6px rgba(255, 210, 63, 0.7), 0 0 28px rgba(255, 210, 63, 0.9);
   animation: pop 0.35s ease; }
-.lbl.berth { font-size: 26px; max-width: 150px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
+.lbl.berth { font-size: 26px; max-width: 190px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
 .lbl.berth.empty { background: rgba(255, 255, 255, 0.35); color: rgba(255, 255, 255, 0.9); font-weight: 400; }
 .lbl.berth.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }
 .lbl.floor { font-size: 34px; font-weight: 800; background: var(--red); color: var(--gold-soft); max-width: none; }
@@ -459,3 +459,8 @@ html, body {
 .side { right: calc(20px / var(--z)); }
 #board, #rest-card { top: calc(1290px / var(--z)); }
 #offline { bottom: calc(200px / var(--z)); }
+
+/* ảnh đại diện TikTok cạnh tên (anh 03/11) */
+img.av { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; vertical-align: -0.2em; margin-right: 0.25em;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9); background: #eee; }
+.lbl.win img.av { width: 1em; height: 1em; margin-right: 0.15em; }

@@ -11,12 +11,15 @@ import { BLOSSOM_TEX, Fireworks, Floaters, LANTERN_TEX, LIXI_TEX, Puffs } from "
 import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
 import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
+import { avatarImg } from "./hud";
 import { Weather } from "./weather";
 import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor } from "./types";
 
 export const W = 1080;
 export const H = 1920;
 const BASE_SPEED = 14; // đơn vị / giây khi speed = 1
+const escHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const VENDOR_WALK = 3.2;  // cô bán hàng đi trong khoang (đơn vị / giây)
 const INSIDE_X = 500; // khoang trong xe đặt riêng một chỗ, camera riêng
 
 // Góc máy ngoài xe admin chọn: [vị trí camera x, y, z, điểm nhìn x, y, z]
@@ -220,6 +223,8 @@ export class World {
   private showCam = false;
   private focusSeat = -1;
   private vendorWalker: Walker | null = null;
+  private vendorIn: THREE.Group | null = null;
+  private vendorGo = { dir: 1, target: null as number | null, pause: 0, phase: 0 };
   private vendorTag: CSS2DObject | null = null;
   private riderTag = label("", "lbl riders");  // bảng tên hành khách dưới thân xe (đủ tên dài)
   private windowTags: CSS2DObject[] = [];  // tên từng người ngay ô cửa sổ giường của mình (anh 03/11)
@@ -467,7 +472,7 @@ export class World {
       el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
-      el.textContent = s ? `${s.vip ? "⭐" : ""}${i === this.focusSeat ? s.name : short}${s.snack ?? ""}` : "";
+      el.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐" : ""}${escHtml(i === this.focusSeat ? s.name : short)}${s.snack ?? ""}` : "";
       this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
     const riders = seats.filter((x): x is Seat => !!x);
@@ -476,7 +481,7 @@ export class World {
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
     const shown = riders.slice(0, RIDER_TAG_MAX);
     el.innerHTML = `<b>🚌 Trên xe ${riders.length}/${seats.length}</b> `
-      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}</span>`).join(" · ")
+      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${avatarImg(r.avatar)}${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}</span>`).join(" · ")
       + (riders.length > shown.length ? ` · <i>+${riders.length - shown.length} người</i>` : "");
   }
 
@@ -487,7 +492,7 @@ export class World {
       b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
-      b.tag.element.textContent = s ? `${s.vip ? "⭐ " : ""}${s.name}${s.snack ? ` ${s.snack}` : ""}` : `trống`;
+      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}` : `trống`;
     });
   }
 
@@ -559,6 +564,9 @@ export class World {
         break;
       case "chat":
         if (e.seat != null) this.bubble(e.seat, e.text ?? "");
+        break;
+      case "snack":  // khách gõ mua: cô Ba đi tới ngang giường người đó
+        if (e.seat != null && this.berths[e.seat]) this.vendorGo.target = this.berths[e.seat].bubbleAt.z + 0.8;
         break;
       case "rest":
         this.rest.setSpecialty(e.specialty ?? "");
@@ -669,7 +677,8 @@ export class World {
 
   /** Cô bán hàng (anh 03/11): xe tấp vào → cô đội nón lá ôm thúng từ lề bước lên cửa trước; lúc bán thì bảng «🧺 Cô Ba bán…»
    * chạy dọc thân xe (cô đang đi giữa hai dãy giường). Dựng theo state: màn mở giữa chừng vẫn thấy. */
-  private updateVendor(v: Vendor | null): void {
+  private updateVendor(v: Vendor | null, dt: number): void {
+    this.updateVendorInside(v?.stage === "sell" ? v : null, dt);
     const stop = v?.stage === "stop" && this.set === "road";
     if (stop && !this.vendorWalker) {
       const p = makePerson(25, `🧺 ${v!.name}`);  // màu 25: nón lá, không ba lô
@@ -696,6 +705,49 @@ export class World {
       this.vendorTag = null;
     }
     if (this.vendorTag) this.vendorTag.position.set(Math.sin(this.t * 0.35) * 3.2, 3.1, 1.2);  // đi tới đi lui trong xe
+  }
+
+  /** Trong khoang xe (góc «trong xe», anh 03/11): cô Ba ôm thúng đi qua đi lại ở lối giữa hai tầng giường; ai gõ mua thì cô
+   * đi tới ngang giường người đó, đứng một chút rồi đi tiếp. */
+  private updateVendorInside(v: Vendor | null, dt: number): void {
+    if (v && !this.vendorIn) {
+      const p = makePerson(25, `🧺 ${v.name}`, false, 2.2);  // tên ngắn: món đã ghi trên thẻ bán hàng
+      p.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.26, 12), mat(0x9c6b30)), 0.42, 0.95, 0.15),
+        at(box(0.5, 0.12, 0.5, 0xf2c14e), 0.42, 1.12, 0.15));
+      p.position.set(0, 0, -11);
+      this.inside.add(p);
+      this.vendorIn = p;
+      this.vendorGo = { dir: 1, target: null, pause: 0, phase: 0 };
+    }
+    if (!v && this.vendorIn) {
+      dropLabels(this.vendorIn);
+      this.inside.remove(this.vendorIn);
+      this.vendorIn = null;
+      return;
+    }
+    const p = this.vendorIn;
+    if (!p) return;
+    const go = this.vendorGo;
+    if (go.pause > 0) {  // đứng ngang giường người vừa mua: đưa món
+      go.pause -= dt;
+      animatePerson(p, "wave", (go.phase += dt * 6));
+      return;
+    }
+    const goal = go.target ?? (go.dir > 0 ? 11 : -11);
+    const step = VENDOR_WALK * dt * Math.sign(goal - p.position.z);
+    if (Math.abs(goal - p.position.z) <= Math.abs(step)) {
+      p.position.z = goal;
+      if (go.target != null) {
+        go.target = null;
+        go.pause = 1.6;
+      } else {
+        go.dir = -go.dir;  // tới đầu / cuối xe: quay lại
+      }
+    } else {
+      p.position.z += step;
+      p.rotation.y = step > 0 ? 0 : Math.PI;  // mặt nhìn theo hướng đi
+    }
+    animatePerson(p, "walk", (go.phase += dt * 7));
   }
 
   private buildBlock(kind: string): void {
@@ -1181,7 +1233,7 @@ export class World {
     const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block
       && s?.vendor?.stage !== "stop";  // dừng đón / bị chặn / tấp vào cho cô bán hàng lên: đứng yên
     this.updateBlock(s?.block?.kind ?? null, dt);
-    this.updateVendor(s?.vendor ?? null);
+    this.updateVendor(s?.vendor ?? null, dt);
     this.updateBillboard(s?.show ?? null);
     if (moving && this.roadside.length) {
       this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));

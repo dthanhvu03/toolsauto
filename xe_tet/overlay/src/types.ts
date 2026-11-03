@@ -49,6 +49,7 @@ export interface Seat {
   hue: number;
   vip: boolean;
   province: string;
+  avatar?: string;  // ảnh đại diện TikTok
   snack?: string;  // món mua của cô bán hàng (emoji) — hiện cạnh tên
 }
 
@@ -178,6 +179,7 @@ export interface GameEvent {
   action?: string; // rest_action: food | wc | shop
   emoji?: string;
   item?: string;  // snack / vendor_treat
+  avatar?: string;  // ảnh đại diện TikTok của người trong sự kiện
   stage?: string;  // vendor: stop | sell
   riders?: number;  // vendor_treat: số người trên xe được bao
   sold?: number;  // vendor_end
