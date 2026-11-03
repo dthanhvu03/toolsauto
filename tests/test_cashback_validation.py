@@ -350,11 +350,10 @@ class TestValidationScreen:
         _sync(bot, _checkout(sub=sub))
         home = _callback(bot, ADMIN, "c:cv:home")
         assert "Đơn qua bot: <b>1</b>" in home.text and NO_APPROVAL_NOTE in home.text
-        assert f"{'Chờ xác minh':<19}{1:>4}" in home.text and f"{'Shopee đã duyệt':<19}{0:>4}" in home.text
+        assert f"{'Chờ xác minh':<19}{1:>4}" in home.text and f"{'Shopee đã trả':<19}{0:>4}" in home.text
         assert NO_APPROVAL_NOTE in _callback(bot, ADMIN, "c:cv:l:approved").text
-        bot.repo.update_shopee_cookie_status(status="connected")
-        shopee = _callback(bot, ADMIN, "c:menu:shopee")
-        assert ("🧾 Duyệt hoa hồng", "c:cv:home") in [b for row in shopee.inline_keyboard for b in row]
+        orders = _callback(bot, ADMIN, "c:menu:orders")
+        assert ("🧾 Duyệt hoa hồng", "c:cv:home") in [b for row in orders.inline_keyboard for b in row]
 
     def test_detail_history_and_acknowledge_with_audit(self, bot):
         sub = _link(bot)
@@ -362,7 +361,7 @@ class TestValidationScreen:
         _sync(bot, _checkout(sub=sub, net=12_000))
         detail = _callback(bot, ADMIN, "c:cv:o:o1")
         assert "Hoa hồng ban đầu: 20.000đ · hiện tại: <b>12.000đ</b> · chênh: -8.000đ" in detail.text
-        assert "hoa hồng: 20.000đ → <b>12.000đ</b>" in detail.text and "Tiền Shopee đã trả: <b>chưa xác minh</b>" in detail.text
+        assert "hoa hồng: 20.000đ → <b>12.000đ</b>" in detail.text and "Tiền Shopee đã trả: <b>chưa</b> (đơn chưa nằm trong kỳ thanh toán đã khớp)" in detail.text
         assert ("✔️ Đã kiểm tra cảnh báo", "c:cv:ack:o1") in [b for row in detail.inline_keyboard for b in row]
         acked = _callback(bot, ADMIN, "c:cv:ack:o1")
         assert "Đã ghi nhận" in acked.text and _row(bot)["review_status"] == "reviewed"

@@ -16,6 +16,8 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from cashback_bot import insights
+from cashback_bot.admin.ui.glossary import MONEY_HOME, OWNER_REAL, OWNER_SOON
+from cashback_bot.admin.ui.views import customer_money_lines
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, fit_html
 from cashback_bot.money import format_vnd
@@ -35,10 +37,14 @@ PAGE = 8
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 HOME = (("◀️ Tổng quan", "c:menu:home"),)
 NAV = (
-    (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d")),
-    (("🛠 Vận hành", "c:in:o"), ("👥 Khách hàng", "c:in:u:margin:1")),
-    (("🎯 Mục tiêu", "c:in:t"), *HOME),
+    (("📈 Tăng trưởng", "c:in:g:30d"), ("🛠 Vận hành", "c:in:o")),
+    (("👥 Khách hàng", "c:in:u:margin:1"), ("🎯 Mục tiêu", "c:in:t")),
+    HOME,
 )
+# Dòng tiền, hoà vốn, chi phí vận hành thuộc 💰 Tiền & ví (2026-11-03): quay về đó, không lẫn với báo cáo khác.
+MONEY = html.escape(MONEY_HOME)
+MONEY_NAV = ((("◀️ Tiền & ví", "c:menu:money"), *HOME),)
+MONEY_SETTINGS_NAV = ((("◀️ Cài đặt tiền", "c:menu:moneycfg"), *HOME),)
 GOAL_BUTTONS = {
     "completed": "⭐ Đơn hoàn thành", "net": "HH ròng", "new": "Khách mới", "active": "Khách hoạt động",
     "activation": "% có đơn 7 ngày", "cancel": "Ngưỡng huỷ",
@@ -251,17 +257,16 @@ def link_text(d: insights.LinkDetail) -> str:
 
 
 def money_text(view: insights.Overview) -> str:
-    m, debt, timing = view.money, view.liabilities, view.timing
-    lines = [_title(f"Dòng tiền · {insights.PERIODS[view.period]}").rstrip("\n"), ""]
+    """Dòng tiền: phần ƯỚC TÍNH theo khung ngày (dự phòng), phần THEO CHỨNG TỪ lấy từ money_flow (mọi kỳ)."""
+    m, snap, timing = view.money, view.money_flow, view.timing
+    lines = [_title(MONEY, f"Dòng tiền · {insights.PERIODS[view.period]}").rstrip("\n"), ""]
     lines += [
-        "ⓘ Tạm tính: mọi đơn chưa huỷ. Thực: đơn Shopee đã trả, đối soát khớp.",
-        "",
+        f"📊 <b>Ước tính</b> · đơn mua trong {insights.PERIODS[view.period].lower()}, chưa huỷ (theo dự phòng)",
         f"🛒 GMV <b>{format_vnd(m.gmv)}</b> · {m.orders} đơn · {m.customers} khách",
-        f"💰 Hoa hồng gộp {format_vnd(m.gross)} − MCN {format_vnd(m.mcn_fee)} = ròng <b>{format_vnd(m.net)}</b>",
+        f"💰 Hoa hồng gộp {format_vnd(m.gross)} − MCN {format_vnd(m.mcn_fee)} = HH ròng <b>{format_vnd(m.net)}</b>",
         f" ├ Phần khách: {format_vnd(m.cashback)} ({_pct(m.cashback, m.net)})",
-        f" ├ Biên trước dự phòng: {format_vnd(m.margin_before_reserve)} ({_pct(m.margin_before_reserve, m.net)})",
         f" ├ Dự phòng thuế / phí: {format_vnd(m.reserve)}",
-        f" ├ Biên: <b>{format_vnd(m.margin)}</b> ({_pct(m.margin, m.net)})",
+        f" ├ Biên (phần anh, ước tính): <b>{format_vnd(m.margin)}</b> ({_pct(m.margin, m.net)})",
     ]
     if m.ops_cost is None:
         lines.append(" └ Chi phí vận hành / hạ tầng: <b>chưa nhập</b> (bấm ✍️ bên dưới)")
@@ -270,22 +275,23 @@ def money_text(view: insights.Overview) -> str:
             f" └ Chi phí vận hành / hạ tầng {format_vnd(m.ops_cost)} ({m.days} ngày, "
             f"{format_vnd(m.ops_cost_monthly or 0)}/tháng) → lãi <b>{format_vnd(m.profit or 0)}</b>"
         )
+    lines.append(f"❌ Mất do huỷ / gian lận: {format_vnd(m.cancelled_net)} ({m.cancelled_orders} đơn, {m.cancel_rate * 100:.0f}%)")
+    lines += ["", "🏦 <b>Theo chứng từ</b> · mọi kỳ Shopee, không theo khung ngày"]
+    if snap.settled:
+        lines.append(f"💼 {OWNER_REAL}: <b>{format_vnd(snap.owner_vnd)}</b> ({len(snap.settled)} kỳ khớp, "
+                     f"Shopee chuyển {format_vnd(snap.received_vnd)})")
+    else:
+        lines.append(f"💼 {OWNER_REAL}: chưa có kỳ Shopee nào khớp")
+    for p in snap.upcoming:
+        if p.amount_vnd is not None:
+            lines.append(f"⏳ {OWNER_SOON} kỳ {html.escape(p.period)}: {format_vnd(p.amount_vnd)} · anh ~{format_vnd(p.owner_vnd)}")
+    lines += customer_money_lines(snap.customers, snap.fund)
     lines += [
-        f"❌ Mất do huỷ / gian lận: {format_vnd(m.cancelled_net)} ({m.cancelled_orders} đơn, {m.cancel_rate * 100:.0f}%)",
-        f"✅ Thực: ròng {format_vnd(m.settled_net)} · biên {format_vnd(m.settled_margin)}",
-        f"⏳ Shopee đã duyệt, chưa trả (sắp về): {format_vnd(debt.upcoming)}",
-        "",
-        "🏦 <b>Nghĩa vụ với khách</b> (hiện tại)",
-        f"Chờ Shopee {format_vnd(debt.pending)} · Đang giữ {format_vnd(debt.holding)} · Trong ví {format_vnd(debt.in_wallet)}",
-        f"Chờ chuyển {format_vnd(debt.requested)} · Đã trả {format_vnd(debt.paid)}"
-        + (f" · Đang trừ lại {format_vnd(debt.negative)}" if debt.negative else ""),
-        f"Shopee đã trả về tài khoản: {format_vnd(debt.shopee_paid)} · Quỹ có chứng từ còn: "
-        + ("chưa có kỳ khớp" if debt.fund_headroom is None else format_vnd(debt.fund_headroom)),
         "",
         "⏱ <b>Ra tiền</b> (trung vị)",
         f"Mua → hoàn thành: {_days(timing.purchase_to_complete, timing.samples[0])}",
         f"Hoàn thành → Shopee trả: {_days(timing.complete_to_settled, timing.samples[1])}",
-        f"Yêu cầu rút → đã trả: {_days(timing.request_to_paid, timing.samples[2])} · cam kết 3–7 ngày làm việc",
+        f"Yêu cầu rút → đã chuyển: {_days(timing.request_to_paid, timing.samples[2])} · cam kết 3–7 ngày làm việc",
     ]
     return "\n".join(lines)
 
@@ -328,7 +334,7 @@ def growth_text(view: insights.Overview) -> str:
 
 def breakeven_text(b: insights.Breakeven) -> str:
     """Hoà vốn theo từng mức % hoàn. Chỉ để xem: không đổi chính sách."""
-    lines = [_title("Hoà vốn").rstrip("\n"), ""]
+    lines = [_title(MONEY, "Cài đặt tiền", "Hoà vốn").rstrip("\n"), ""]
     if b.ops_cost_monthly is None:
         return "\n".join(lines + ["Chưa có chi phí vận hành. Bấm ✍️ Chi phí vận hành / tháng để nhập trước."])
     share = "–" if b.current_share is None else f"{b.current_share * 100:.0f}%"
@@ -351,7 +357,7 @@ def breakeven_text(b: insights.Breakeven) -> str:
         lines += ["", f"Ở mức đang hoàn: 30 ngày qua đạt {b.net_30d * 100 / current.need_net_month:.1f}% mức hoà vốn."]
     lines += [
         "",
-        "ⓘ Chỉ để xem, không đổi % hoàn của khách. Đổi % ở 💰 Chính sách (áp cho link mới).",
+        "ⓘ Chỉ để xem, không đổi % hoàn của khách. Đổi % ở ⚙️ Cài đặt tiền → 💰 % hoàn (áp cho link mới).",
         "ⓘ Còn ít đơn nên HH ròng trung bình mỗi đơn còn dao động.",
     ]
     return "\n".join(lines)
@@ -406,7 +412,7 @@ def detail_text(c: insights.Customer, m: insights.Money, prof: insights.Profile,
         f"🔗 {c.links} link · {c.clicks} click · {c.orders} đơn ({c.completed} hoàn thành, {c.cancelled} huỷ)",
         f"🛒 GMV {format_vnd(c.gmv)} · HH ròng {format_vnd(c.net)}",
         f"💸 Phần khách {format_vnd(c.cashback)} · dự phòng {format_vnd(c.reserve)} · biên <b>{format_vnd(c.margin)}</b>",
-        f"✅ Thực (Shopee đã trả): ròng {format_vnd(m.settled_net)} · biên {format_vnd(m.settled_margin)}",
+        f"✅ Đơn Shopee đã trả (kỳ khớp): HH ròng {format_vnd(m.settled_net)} · biên ước tính {format_vnd(m.settled_margin)}",
         f"👛 Ví {format_vnd(c.wallet)} · chờ chuyển {format_vnd(c.requested)} · đã nhận {format_vnd(c.paid)}",
         "",
         "🏦 " + (f"{html.escape(prof.bank)} · {prof.bank_state}" if prof.bank else "Chưa khai tài khoản"),
@@ -446,7 +452,7 @@ class InsightsAdmin:
         if data == "c:in:b":
             with insights.open_readonly(self.db_path) as conn:
                 text = breakeven_text(insights.breakeven(conn, now))
-            return BotReply(text, inline_keyboard=((("✍️ Chi phí vận hành / tháng", "c:in:cost"),), *NAV))
+            return BotReply(text, inline_keyboard=((("✍️ Chi phí vận hành / tháng", "c:in:cost"),), *MONEY_SETTINGS_NAV))
         if data == "c:in:t":
             return self._goals(now)
         if data == "c:in:f":
@@ -577,6 +583,7 @@ class InsightsAdmin:
         rows: list[tuple[tuple[str, str], ...]] = [_periods(kind, view.period)]
         if kind == "m":
             rows.append((("✍️ Chi phí vận hành / tháng", "c:in:cost"), ("🧮 Hoà vốn", "c:in:b")))
+            return BotReply(fit_html(text), inline_keyboard=(*rows, *MONEY_NAV))
         return BotReply(fit_html(text), inline_keyboard=(*rows, *NAV))
 
     def _users(self, key: str, page: int, now: datetime) -> BotReply:

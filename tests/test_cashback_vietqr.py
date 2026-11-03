@@ -239,7 +239,7 @@ class TestPayoutQR:
         _paid(bot)
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
         assert detail.photo is None
-        assert "Ảnh mã QR" not in detail.text and "✅ Đã trả (có chứng từ)" in detail.text
+        assert "Ảnh mã QR" not in detail.text and "✅ Đã chuyển (có chứng từ)" in detail.text
         assert "FT26102499999" in detail.text
 
     def test_unsupported_bank_on_old_payout_falls_back_to_text(self, tmp_path):

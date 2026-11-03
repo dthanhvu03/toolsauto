@@ -15,11 +15,11 @@ from cashback_bot.messages import BotReply
 from cashback_bot.payout_gate import FinancialGate
 
 HOME = "c:rd:home"
-BACK_MENU = (("◀️ Tổng quan", "c:menu:home"),)
+BACK_MENU = (("◀️ Cài đặt tiền", "c:menu:moneycfg"), ("◀️ Tổng quan", "c:menu:home"))
 BACK_HOME = (("◀️ Sẵn sàng chi trả", HOME),)
 
 TAX_TEXT = (
-    "⚙️ Quản trị › Sẵn sàng chi trả › <b>Thuế</b>\n\n"
+    "⚙️ Quản trị › Tiền &amp; ví › Cài đặt tiền › Sẵn sàng chi trả › <b>Thuế</b>\n\n"
     "Trạng thái: <b>PENDING_REVIEW</b>, chưa có quyết định nào được duyệt.\n\n"
     "<b>Sáu khoản khác nhau, không gộp:</b>\n"
     "1. Thuế của chủ bot trên hoa hồng affiliate: theo chứng từ Shopee/cơ quan thuế.\n"
@@ -36,7 +36,7 @@ TAX_TEXT = (
     "ⓘ Các mốc pháp lý 2026 trong báo cáo mới được xác nhận qua nguồn thứ cấp, phải đối chiếu văn bản gốc."
 )
 CLAWBACK_TEXT = (
-    "⚙️ Quản trị › Sẵn sàng chi trả › <b>Hoa hồng bị thu hồi</b>\n\n"
+    "⚙️ Quản trị › Tiền &amp; ví › Cài đặt tiền › Sẵn sàng chi trả › <b>Hoa hồng bị thu hồi</b>\n\n"
     "Trạng thái: <b>PENDING_REVIEW</b>. Bot chỉ ghi nhận, không trừ hay thu tiền của khách.\n\n"
     "<b>Đang làm (đã có trong code):</b>\n"
     "• Trước khi Shopee duyệt: khoản dự kiến cập nhật theo hoa hồng mới, ghi lịch sử thay đổi.\n"
@@ -77,7 +77,7 @@ class ReadinessAdmin:
         unresolved = coverage[policy_snapshot.UNRESOLVED] + coverage["missing"]
         open_tickets = sum(count for status, count in counts.items() if status not in support.FINAL)
         lines = [
-            "⚙️ Quản trị › <b>Sẵn sàng chi trả</b>",
+            "⚙️ Quản trị › Tiền &amp; ví › Cài đặt tiền › <b>Sẵn sàng chi trả</b>",
             "",
             f"🔒 Ví và chi trả: <b>{'KHOÁ' if not readiness.ok else 'đủ điều kiện hệ thống'}</b>",
         ]
@@ -94,11 +94,12 @@ class ReadinessAdmin:
             "",
             "🧩 <b>Điều kiện chi trả (PLAN-078)</b>",
             *[f"{'✅' if item.ok else '❌'} {item.label}" for item in conditions],
-            (f"🏦 Quỹ có chứng từ: còn <b>{fund.headroom_vnd:,}đ</b>".replace(",", ".") if fund.verified
-             else "🏦 Quỹ có chứng từ: <b>Chưa xác minh</b>"),
+            (f"🏦 Quỹ chi trả còn: <b>{fund.headroom_vnd:,}đ</b>".replace(",", ".") if fund.verified
+             else "🏦 Quỹ chi trả: <b>chưa có kỳ Shopee nào khớp</b>"),
             f"🧮 Kiểm tra sổ: <b>{'ổn' if not problems else f'{len(problems)} cảnh báo'}</b>",
             "",
-            "ⓘ Màn này chỉ để xem. Không có nút duyệt hay mở ví. Đạt hết vẫn cần khoá cũ mở và chủ bot duyệt riêng.",
+            "ⓘ Màn này chỉ để xem. Đạt hết thì bật ví được ở 👛 Ví khách (ADR-062). Mất một điều kiện (kỳ bị đảo, "
+            "thuế bị thu hồi…) thì ví tự khoá lại.",
         ]
         keyboard = (
             (("⚖️ Thuế", "c:rd:tax"), ("↩️ Thu hồi hoa hồng", "c:rd:claw")),

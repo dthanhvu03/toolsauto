@@ -569,7 +569,7 @@ class TestFinancialLock:
         assert [(r["status"], r["cashback_vnd"]) for r in rows] == [("holding", 7_000)]
         assert links == 1
         stats = _callback(bot, ADMIN, "c:menu:wallet")
-        assert "Chờ duyệt: <b>7.000đ</b>" in stats.text  # admin vẫn thấy tiền chờ để đối soát
+        assert "Chờ Shopee trả: <b>7.000đ</b>" in stats.text  # admin vẫn thấy tiền chờ để đối soát
 
     def test_quotes_unchanged_v11_70_percent(self, tmp_path):
         bot = _bot(tmp_path)

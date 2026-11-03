@@ -292,8 +292,8 @@ class TestValidationAndAdjustments:
         engine.import_document(batch, _doc("shopee_validation_report", ref="VAL-2026-10",
                                            items=[{"order_ref": "SN-o1", "approved_vnd": 10_000}]), "test")
         assert _conv(bot, "o1")["validation_status"] == PENDING  # APPROVED vẫn BLOCKED (ADR-051)
-        home = _callback(bot, ADMIN, "c:sm:home")
-        assert "10.000đ (chưa đối chiếu)" in home.text
+        detail = _callback(bot, ADMIN, f"c:sm:b:{batch}")
+        assert "Shopee báo đã duyệt (báo cáo xác thực): 10.000đ (chưa đối chiếu)" in detail.text
 
     def test_paid_or_completed_is_not_settled_without_batch(self, world):
         bot, _engine = world
@@ -397,20 +397,18 @@ class TestSettlementScreen:
     def test_home_without_evidence_says_not_verified(self, world):
         bot, _engine = world
         home = _callback(bot, ADMIN, "c:sm:home")
-        assert "Chưa có kỳ thanh toán nào" in home.text and "Chưa xác minh" in home.text
-        assert "settlement_import" in home.text and "Thuộc đơn Cashback Bot" in home.text
-        payout_line = next(line for line in home.text.split("\n") if "Shopee báo thanh toán" in line)
-        assert "0đ" not in payout_line
-        bot.repo.update_shopee_cookie_status(status="connected")
-        shopee = _callback(bot, ADMIN, "c:menu:shopee")
-        assert ("💳 Đối soát thanh toán", "c:sm:home") in [b for row in shopee.inline_keyboard for b in row]
+        assert "Chưa có kỳ thanh toán nào" in home.text and "settlement_import" in home.text
+        assert "0đ" not in home.text, "chưa có chứng từ thì không hiện 0đ"
+        money = _callback(bot, ADMIN, "c:menu:money")
+        assert ("💳 Kỳ thanh toán Shopee", "c:sm:home") in [b for row in money.inline_keyboard for b in row]
+        assert ("◀️ Tiền & ví", "c:menu:money") in [b for row in home.inline_keyboard for b in row]
 
     def test_batch_detail_items_evidence_viewed_and_history(self, world):
         bot, engine = world
         batch = _matched(bot, engine)
         detail = _callback(bot, ADMIN, f"c:sm:b:{batch}")
-        assert "✅ Chứng từ khớp" in detail.text and "Đơn qua bot (khớp)" in detail.text and "10.000đ" in detail.text
-        assert "chưa phải tiền khách được rút" in detail.text
+        assert "✅ Khớp" in detail.text and "Đơn qua bot (khớp)" in detail.text and "10.000đ" in detail.text
+        assert "Tiền hoàn khách của kỳ" in detail.text and "phần anh" in detail.text
         items = _callback(bot, ADMIN, f"c:sm:items:{batch}")
         assert "➖ ngoài bot" in items.text and "✅" in items.text
         with bot.repo.connect() as conn:

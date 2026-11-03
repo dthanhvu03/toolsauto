@@ -225,14 +225,14 @@ def test_six_screens_permission_and_modes(tmp_path):
     # 2. Thuế & phí: một nút đổi mức áp dụng (wizard xem trước rồi mới áp dụng)
     fee_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     fee_datas = [d for r in fee_reply.inline_keyboard for _l, d in r]
-    assert fee_datas == ["c:rs:new", "c:menu:home"]
+    assert fee_datas == ["c:rs:new", "c:menu:moneycfg", "c:menu:home"]
 
     # 3. Mô phỏng: chỉ để xem & tính thử, KHÔNG có nút hành động thay đổi
     sim_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
     sim_datas = [d for r in sim_reply.inline_keyboard for _l, d in r]
     for d in sim_datas:
         # Chỉ có nút điều hướng và chọn hoa hồng giả định (PLAN-076), không nút ghi.
-        assert d == "c:menu:home" or d.startswith("c:sim:")
+        assert d in ("c:menu:home", "c:menu:moneycfg") or d.startswith("c:sim:")
 
     # 4. Lịch sử: chế độ xem (read-only)
     hist_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:hist", "private", NOW)

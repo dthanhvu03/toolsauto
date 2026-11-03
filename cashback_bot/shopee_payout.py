@@ -213,8 +213,9 @@ def _notice(batch, payout: Payout, paid: bool) -> str:
         tax,
         f"Dự kiến về tài khoản: <b>{format_vnd(amount)}</b>" if amount is not None else "Chưa tính được số dự kiến.",
         "",
-        f"Bot đã nhập báo cáo Shopee vào 🧾 Đối soát thanh toán (kỳ #{batch['id']}).",
-        f"{step} Ví khách vẫn khoá.",
+        f"Bot đã nhập báo cáo Shopee vào 💰 Tiền &amp; ví → 💳 Kỳ thanh toán Shopee (kỳ {batch['period']}).",
+        step,
+        "ⓘ Kỳ khớp (tiền về đúng số) thì tính vào 💼 Thực nhận, và tiền hoàn của khách trong kỳ vào ví.",
     ])
 
 

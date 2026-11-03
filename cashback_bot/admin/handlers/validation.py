@@ -1,7 +1,11 @@
-"""Màn /admin → 🔗 Shopee Affiliate → 🧾 Duyệt hoa hồng (PLAN-074).
+"""Màn /admin → 🧾 Đơn & hoa hồng → 🧾 Duyệt hoa hồng (PLAN-074).
 
 Chỉ xem, lọc, xem lịch sử và đánh dấu "đã kiểm tra cảnh báo" (có audit). Không sửa hoa hồng,
-không gán APPROVED, không đụng ví hay chi trả. Số liệu lấy thẳng từ DB, không suy diễn thêm.
+không gán APPROVED, không đụng ví hay chi trả.
+
+Báo cáo đơn Shopee không có trường nào chứng minh «đã duyệt» (commission_validation.py). Đơn nằm trong một kỳ thanh
+toán đã khớp (settlement_status = SETTLED) là bằng chứng chắc chắn Shopee đã duyệt và đã trả (ADR-062): màn này xếp
+đơn đó vào «Shopee đã trả», không còn ở «chờ xác minh» hay «cần kiểm tra» (trừ khi Shopee gắn gian lận).
 """
 
 from __future__ import annotations
@@ -21,13 +25,17 @@ from cashback_bot.money import format_vnd
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 HOME = "c:cv:home"
-BACK_SHOPEE = (("◀️ Shopee Affiliate", "c:menu:shopee"),)
+BACK_ORDERS = (("◀️ Đơn & hoa hồng", "c:menu:orders"),)
 BACK_HOME_ROW = (("◀️ Duyệt hoa hồng", HOME),)
-NO_APPROVAL_NOTE = "⚠️ Chưa có dữ liệu đủ điều kiện xác nhận hoa hồng đã được Shopee duyệt."
+SECTION = "Đơn &amp; hoa hồng"
+NO_APPROVAL_NOTE = "ⓘ Chưa có đơn nào nằm trong kỳ Shopee đã khớp."
 SOURCE_NOTE = (
-    "ⓘ Trạng thái suy ra từ báo cáo Shopee (độ tin cậy: <b>suy luận</b>). "
-    "Tiền Shopee đã trả: <b>chưa xác minh</b>. Màn này không mở ví hay chi trả."
+    "ⓘ Trạng thái duyệt suy ra từ báo cáo đơn Shopee (<b>suy luận</b>). Đơn nằm trong kỳ thanh toán đã khớp là "
+    "chắc chắn Shopee đã duyệt và đã trả (💰 Tiền &amp; ví → 💳 Kỳ thanh toán Shopee). Màn này không mở ví hay chi trả."
 )
+SETTLED = "settlement_status = 'SETTLED'"
+NOT_SETTLED = "COALESCE(settlement_status, '') != 'SETTLED'"
+PAID_LABEL = "✅ Shopee đã trả"
 
 _CONV = re.compile(r"^c:cv:(o|ack):([0-9A-Za-z:_-]{1,48})$")
 _LIST = re.compile(r"^c:cv:l:(pending|approved|rejected|alert|seen|changed)$")
@@ -62,18 +70,18 @@ ORDER_LABELS = {
     "CANCELED": "Đã huỷ",
 }
 LISTS = {
-    "pending": ("📋 Chờ xác minh", f"validation_status IN ('{PENDING}', '{UNKNOWN}')"),
-    "approved": ("✅ Đã duyệt", f"validation_status = '{APPROVED}'"),
+    "pending": ("📋 Chờ xác minh", f"validation_status IN ('{PENDING}', '{UNKNOWN}') AND {NOT_SETTLED}"),
+    "approved": (PAID_LABEL, f"({SETTLED} OR validation_status = '{APPROVED}')"),
     "rejected": ("❌ Bị từ chối", f"validation_status = '{REJECTED}'"),
     # Cần kiểm tra = việc admin còn phải xem. Đã bấm ✔️ mà Shopee chưa đổi trạng thái thì sang «Đã xem, chờ Shopee».
     "alert": (
         "🚨 Gian lận / cần kiểm tra",
         f"((validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') AND COALESCE(review_status, '') != 'reviewed') "
-        "OR review_status = 'needs_review')",
+        f"OR review_status = 'needs_review') AND ({NOT_SETTLED} OR validation_status = '{FRAUD}')",
     ),
     "seen": (
         "✔️ Đã xem, chờ Shopee",
-        f"(validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') AND review_status = 'reviewed')",
+        f"(validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') AND review_status = 'reviewed') AND {NOT_SETTLED}",
     ),
     "changed": (
         "🔄 Hoa hồng thay đổi",
@@ -134,7 +142,7 @@ class ValidationAdmin:
             conn.execute(
                 f"SELECT COUNT(*) FROM shopee_conversions WHERE {_BOT} AND "
                 f"((validation_status = '{NEEDS_REVIEW}' AND COALESCE(review_status, '') != 'reviewed') "
-                "OR review_status = 'needs_review')"
+                f"OR review_status = 'needs_review') AND {NOT_SETTLED}"
             ).fetchone()[0]
         )
         return counts
@@ -145,7 +153,7 @@ class ValidationAdmin:
             last = conn.execute("SELECT status, completed_at FROM shopee_sync_runs ORDER BY id DESC LIMIT 1").fetchone()
         rows = [
             ("Chờ xác minh", counts["pending"]),
-            ("Shopee đã duyệt", counts["approved"]),
+            ("Shopee đã trả", counts["approved"]),
             ("Bị từ chối", counts["rejected"]),
             ("Gian lận", counts["fraud"]),
             ("Cần kiểm tra", counts["review"]),
@@ -155,7 +163,7 @@ class ValidationAdmin:
         table = "\n".join(f"{label:<19}{value:>4}" for label, value in rows)
         sync = "chưa đồng bộ" if last is None else f"{_vn(last['completed_at'])} ({html.escape(str(last['status']))})"
         lines = [
-            _title("Shopee Affiliate", "Duyệt hoa hồng"),
+            _title(SECTION, "Duyệt hoa hồng"),
             "",
             f"Đơn qua bot: <b>{counts['total']}</b> · Đồng bộ gần nhất: {sync}",
             f"<pre>{table}</pre>",
@@ -164,11 +172,11 @@ class ValidationAdmin:
             lines.append(NO_APPROVAL_NOTE)
         lines += ["", SOURCE_NOTE]
         keyboard = (
-            ((f"📋 Chờ xác minh ({counts['pending']})", "c:cv:l:pending"), (f"✅ Đã duyệt ({counts['approved']})", "c:cv:l:approved")),
+            ((f"📋 Chờ xác minh ({counts['pending']})", "c:cv:l:pending"), (f"{PAID_LABEL} ({counts['approved']})", "c:cv:l:approved")),
             ((f"❌ Bị từ chối ({counts['rejected']})", "c:cv:l:rejected"), (f"🚨 Gian lận / cần kiểm tra ({counts['alert']})", "c:cv:l:alert")),
             ((f"🔄 Hoa hồng thay đổi ({counts['changed']})", "c:cv:l:changed"), (f"✔️ Đã xem ({counts['seen']})", "c:cv:l:seen")),
             (("🕘 Lịch sử", "c:cv:h"),),
-            BACK_SHOPEE,
+            BACK_ORDERS,
         )
         return BotReply("\n".join(lines), inline_keyboard=keyboard)
 
@@ -177,19 +185,20 @@ class ValidationAdmin:
         with self.repo.connect() as conn:
             rows = conn.execute(
                 f"""
-                SELECT conversion_id, order_sn, item_name, net_commission_vnd, validation_status, platform
+                SELECT conversion_id, order_sn, item_name, net_commission_vnd, validation_status, settlement_status,
+                       platform
                 FROM shopee_conversions WHERE {_BOT} AND {where}
                 ORDER BY COALESCE(purchase_time, created_at) DESC LIMIT 10
                 """
             ).fetchall()
-        lines = [_title("Shopee Affiliate", "Duyệt hoa hồng", label.split(" ", 1)[1]), ""]
+        lines = [_title(SECTION, "Duyệt hoa hồng", label.split(" ", 1)[1]), ""]
         if not rows:
             lines.append(NO_APPROVAL_NOTE if key == "approved" else "Chưa có đơn nào trong mục này.")
         else:
             lines.append("Bấm một đơn để xem chi tiết và lịch sử.")
         buttons = []
         for row in rows:
-            icon = STATUS_LABELS.get(row["validation_status"], "❔").split(" ", 1)[0]
+            icon = "✅" if row["settlement_status"] == "SETTLED" else STATUS_LABELS.get(row["validation_status"], "❔").split(" ", 1)[0]
             name = buyer_name(row["item_name"] or row["order_sn"] or "-")[:28]
             amount = "-" if row["net_commission_vnd"] is None else format_vnd(int(row["net_commission_vnd"]))
             mark = "🎵 " if row["platform"] == "tiktok" else ""
@@ -216,7 +225,8 @@ class ValidationAdmin:
         reason = REASON_LABELS.get(row["validation_reason"] or "", row["validation_reason"] or "-")
         tiktok = row["platform"] == "tiktok"
         market, source = ("TikTok", "RioHub (TikTok Shop)") if tiktok else ("Shopee", "báo cáo Shopee")
-        lines = [_title("Shopee Affiliate", "Duyệt hoa hồng", "Chi tiết đơn"), ""]
+        lines = [_title(SECTION, "Duyệt hoa hồng", "Chi tiết đơn"), ""]
+        settled = row["settlement_status"] == "SETTLED"
         if notice:
             lines += [notice, ""]
         lines += [
@@ -224,8 +234,11 @@ class ValidationAdmin:
             f"• Mã đơn: <code>{html.escape(short_order(row['order_sn']))}</code> · Sub ID: <code>{html.escape(row['sub_id'] or '-')}</code>",
             f"• Người được ghi nhận: {who}",
             f"• Trạng thái đơn: <b>{_order_label(row['order_status'])}</b>",
-            f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status'])}</b> · {html.escape(reason)}",
-            f"• Tiền {market} đã trả: <b>chưa xác minh</b>",
+            (f"• Duyệt hoa hồng: <b>{PAID_LABEL}</b> (đơn nằm trong kỳ thanh toán đã khớp)" if settled else
+             f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status'])}</b> · "
+             f"{html.escape(reason)}"),
+            f"• Tiền {market} đã trả: <b>{'đã trả, kỳ đã khớp' if settled else 'chưa'}</b>"
+            + ("" if settled else " (đơn chưa nằm trong kỳ thanh toán đã khớp)"),
             f"• Hoa hồng ban đầu: {_money(first)} · hiện tại: <b>{_money(current)}</b> · chênh: {diff}",
             f"• Đồng bộ gần nhất: {_vn(row['updated_at'])} · nguồn: {source} · độ tin cậy: suy luận",
         ]
@@ -262,7 +275,7 @@ class ValidationAdmin:
                 ORDER BY h.id DESC LIMIT 15
                 """
             ).fetchall()
-        lines = [_title("Shopee Affiliate", "Duyệt hoa hồng", "Lịch sử"), ""]
+        lines = [_title(SECTION, "Duyệt hoa hồng", "Lịch sử"), ""]
         if not rows:
             lines.append("Chưa có thay đổi nào được ghi nhận.")
         for row in rows:
