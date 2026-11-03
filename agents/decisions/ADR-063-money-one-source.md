@@ -27,4 +27,4 @@ Rà soát 24 màn /admin có số tiền (2026-11-03) thấy:
 ## Hệ quả
 - Thêm khái niệm tiền mới: thêm vào `money_flow.Snapshot`, đặt tên trong `glossary.py`, rồi mới dùng ở màn.
 - Test `tests/test_cashback_owner_wallet.py` khoá: cùng số trên mọi màn, cùng tiêu đề / nút quay lại, không còn câu cũ.
-- Chưa đổi: chữ phía khách (`messages.py` vẫn «Chờ duyệt» cho khoản holding) — ngoài phạm vi admin.
+- Phía khách (2026-11-03, cùng ngày): tên gọi chuyển vào `money_flow.py`, admin (`glossary.py`) và khách (`messages.py`, Zalo dùng chung) cùng đọc. Ví khách: Trong ví (rút được) · Chờ Shopee trả · Đang chờ chuyển · Đã chuyển cho bạn · Đang trừ lại. Tiến trình đơn: Đã mua › Hoàn thành › Shopee trả › Vào ví (đơn trong kỳ khớp = Shopee đã trả). Đơn đã vào ví hiện «tiền hoàn», không còn «tạm tính».

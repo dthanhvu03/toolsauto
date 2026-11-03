@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
+from cashback_bot.money_flow import (  # noqa: F401 — dùng lại từ admin.ui
+    FUND_LEFT,
+    IN_WALLET,
+    OWED_BACK,
+    OWNER_REAL,
+    OWNER_SOON,
+    PAID_OUT,
+    RESERVED,
+    WAIT_HOLD,
+    WAIT_SHOPEE,
+)
+
 
 
 # Một định nghĩa cho mọi màn (PLAN-076; thuật ngữ chung từ rà soát 2026-10-26, xem GLOSSARY).
@@ -10,17 +22,8 @@ ADMIN_KEEP_NOTE = (
     "Là số ước tính, chưa trừ phí và thuế thực tế theo chứng từ."
 )
 
-# Tên gọi tiền dùng chung cho mọi màn (2026-11-03, money_flow.py). Đổi chữ ở đây, không viết lại ở từng màn.
+# Tên gọi tiền: một nguồn ở money_flow.py (admin, khách, web dùng chung).
 MONEY_HOME = "Tiền & ví"
-WAIT_SHOPEE = "Chờ Shopee trả"
-WAIT_HOLD = "Chờ đủ ngày giữ"
-IN_WALLET = "Trong ví"
-OWED_BACK = "Đang trừ lại"
-RESERVED = "Đang chờ chuyển"
-PAID_OUT = "Đã chuyển"
-FUND_LEFT = "Quỹ chi trả còn"
-OWNER_REAL = "Thực nhận"
-OWNER_SOON = "Sắp về"
 
 # Bảng thuật ngữ dùng chung cho mọi màn admin, Telegram và web (⚙️ Cài đặt → 📖 Thuật ngữ).
 GLOSSARY = (
