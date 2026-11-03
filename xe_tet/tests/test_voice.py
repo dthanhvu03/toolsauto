@@ -17,7 +17,7 @@ def announcer(settings=None):
 
 
 def texts(a):
-    return [t for _, _, t, _ in a.queue]
+    return [t for _, _, t, _, _ in a.queue]
 
 
 def test_text_is_made_speakable():
@@ -215,3 +215,17 @@ def test_every_talk_line_fills_its_fields():
     assert len(options("boarding", "mix")) == sum(len(LINES[s]["boarding"]) for s in STYLES)
     assert hours_phrase(26.4) == "chừng 26 tiếng" and hours_phrase(0.4) == "chừng 20 phút"
     assert speakable("Chào bà con tối nay!!") == "Chào bà con tối nay."  # câu admin gõ cũng đọc đều
+
+
+def test_stale_lines_are_dropped_so_voice_matches_screen():
+    """Anh báo sau buổi live 2 (03/11) «tiếng sau hình trước»: máy đọc kín công suất, câu dồn hàng → lơ xe nói chuyện đã qua.
+    Câu chờ quá lâu (theo mức) thì bỏ; câu anh gõ luôn đọc."""
+    a = announcer()
+    a.offer("câu lơ xe cũ", voice.LOXE)
+    a.offer("tên lên xe cũ", BOARD, ["An"])
+    a.offer("Anh gõ", ADMIN)
+    born = a.queue[0][4]
+    assert a.next_fresh(born + 60)[2].startswith("Anh gõ")  # admin: không giới hạn
+    assert a.next_fresh(born + 60) is None and a.stale == 2
+    a.offer("câu mới", voice.LOXE)
+    assert a.next_fresh(a.queue[0][4] + 3)[2].startswith("câu mới")

@@ -42,7 +42,10 @@ LOW = LOXE
 QUEUE_SOFT = 3
 BOARD_WINDOW = 3.0  # gom tên người lên xe trong 3 giây thành một câu
 BOARD_GAP = 5.0  # hai câu đọc tên lên xe cách nhau tối thiểu 5 giây (chưa tới thì gom tiếp, không bỏ ai)
-BOARD_NAMES = 5  # một câu đọc tối đa 5 tên người lên xe; còn lại câu sau đọc tiếp
+BOARD_NAMES = 5
+# Câu chờ quá lâu thì bỏ (anh báo sau buổi live 2, 03/11: «tiếng sau hình trước» — 77 phút, 200 người lên xe, máy đọc kín
+# 8–11 câu / phút suốt buổi, hàng câu dồn mãi nên lơ xe nói chuyện đã qua cả phút). Tiếng luôn khớp hình: thà bỏ câu cũ.
+MAX_AGE = {DROPOFF: 15.0, BOARD: 20.0, GIFT: 15.0, LOXE: 10.0}  # giây; ADMIN (anh gõ) luôn đọc  # một câu đọc tối đa 5 tên người lên xe; còn lại câu sau đọc tiếp
 GIFT_COOLDOWN = 30.0  # mỗi người được cảm ơn quà tối đa một lần / 30 giây
 NAMES_READ = 3  # đọc tối đa 3 tên, còn lại «và N người nữa»
 
@@ -80,7 +83,9 @@ class Announcer:
     def __init__(self, emit: Callable[[dict], Awaitable[None]], settings: Callable[[], dict]):
         self.emit = emit
         self.settings = settings
-        self.queue: list[tuple[int, int, str, list[str]]] = []  # (ưu tiên, thứ tự, câu, tên người lên xe được đọc)
+        self.queue: list[tuple[int, int, str, list[str], float]] = []  # (ưu tiên, thứ tự, câu, tên được đọc, lúc vào hàng)
+        self.stale = 0  # số câu bỏ vì chờ quá lâu (đo độ dồn)
+        self.rendering: dict[str, asyncio.Task] = {}  # câu đang đọc sẵn (song song lúc câu trước đang phát)
         self.wake = asyncio.Event()
         self.seq = 0
         self.boarding: list[tuple[str, str]] = []  # (tên, tỉnh) chờ gom
@@ -145,7 +150,7 @@ class Announcer:
         if priority >= LOW and len(self.queue) >= QUEUE_SOFT:
             return  # đang dồn: bỏ câu ít quan trọng
         self.seq += 1
-        self.queue.append((priority, self.seq, text, names or []))
+        self.queue.append((priority, self.seq, text, names or [], time.monotonic()))
         self.queue.sort()
         self.wake.set()
 
@@ -156,20 +161,44 @@ class Announcer:
         async with httpx.AsyncClient(timeout=VIENEU_TIMEOUT) as client:
             self.client = client
             while True:
-                if not self.queue:
+                item = self.next_fresh(time.monotonic())
+                if item is None:
                     self.wake.clear()
                     await self.wake.wait()
                     continue
-                _, _, text, names = self.queue.pop(0)
+                _, _, text, names, _ = item
                 try:
-                    name, seconds = await self.render(text)
+                    name, seconds = await self.render_once(text)
                 except Exception:
                     log.exception("lơ xe đọc lỗi: %s", text)
                     continue
                 rate = float(self.settings().get("voice_rate") or 1.0)  # overlay phát nhanh / chậm theo tốc độ này
                 await self.emit({"kind": "event", "type": "speak", "url": f"/voice/{name}", "text": text,
                                  "seconds": round(seconds / rate, 2), "names": names})
+                if self.queue:  # đọc sẵn câu kế trong lúc câu này đang phát: không còn ~1,5 giây im giữa hai câu
+                    self.render_once(self.queue[0][2])
                 await asyncio.sleep(seconds / rate + 0.3)  # đọc hết câu mới sang câu sau
+
+    def next_fresh(self, now: float) -> tuple | None:
+        """Câu kế tiếp còn «tươi»; câu chờ quá MAX_AGE theo mức ưu tiên thì bỏ (không nói chuyện đã qua)."""
+        while self.queue:
+            item = self.queue.pop(0)
+            limit = MAX_AGE.get(item[0])
+            if limit is None or now - item[4] <= limit:
+                return item
+            self.stale += 1
+            if self.stale % 20 == 1:
+                log.info("lơ xe bỏ câu cũ (đã bỏ %d câu): %s", self.stale, item[2])
+        return None
+
+    def render_once(self, text: str) -> asyncio.Task:
+        """Một câu chỉ đọc một lần dù được gọi hai nơi (đọc sẵn + lượt chính) — hai lần ghi cùng file sẽ hỏng file."""
+        task = self.rendering.get(text)
+        if task is None:
+            task = asyncio.ensure_future(self.render(text))
+            self.rendering[text] = task
+            task.add_done_callback(lambda _t: self.rendering.pop(text, None))
+        return task
 
     async def render(self, text: str) -> tuple[str, float]:
         voice = self.settings().get("voice_name") or "Adam"
