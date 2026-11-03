@@ -67,7 +67,7 @@ function radiusFor(wind: number): number {
 }
 const MAX_BUBBLES = 6;
 const BOARD_STEP_S = 1.0;  // bến, khi tắt giọng lơ xe: mỗi giây một người bước lên xe
-const BOARD_FALLBACK_S = 14;  // đứng đầu hàng quá lâu mà chưa nghe đọc tên (giọng lỗi / bị cắt) thì vẫn lên
+const BOARD_FALLBACK_S = 32;  // đứng quá lâu mà chưa nghe đọc tên (giọng lỗi / bị cắt) thì vẫn lên — khớp FULL_HOLD_MAX của server (35 giây)
 const LINE_COLS = 8;  // hàng chờ ở cửa xe gập dòng sau 8 người
 const PICKUP_STEP_S = 1.3;  // dừng đón bên đường: khớp PICKUP_STOP_STEP của server
 const BUBBLE_MS = 5000;

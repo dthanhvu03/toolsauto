@@ -102,7 +102,9 @@ def test_full_bus_departs_fast_and_overflow_goes_to_next_bus():
     for i in range(SEATS + 3):
         comment(e, f"K{i}", "Huế", 1)
     assert len(e.bus.riders()) == SEATS and len(e.queues["north"]) == 3
-    assert e.phase_until <= 1 + FULL_BUS_SECONDS
+    # đủ giường thì chạy sớm, nhưng 24 người vừa lên dồn thì giữ đủ lâu cho lơ xe đọc tên từng người (rà soát 03/11)
+    from xe_tet.server.game.engine import FULL_HOLD_MAX
+    assert 1 + SEATS * 1.0 <= e.phase_until <= 1 + FULL_HOLD_MAX
     tickets = [ev for ev in e.drain() if ev["type"] == "ticket"]
     assert tickets[-1]["next"] is True and tickets[-1]["bus_no"] == 2
     t = run_until(e, "FINISH", 1)
@@ -532,8 +534,10 @@ def test_last_seconds_before_departure_nobody_gets_off():
         comment(e, f"K{i}", "Hà Nội", 1)
     comment(e, "Cho", "Hà Nội", 2)  # hàng chờ cùng làn
     e.drain()
-    comment(e, "K0", "Cà Mau", 3)  # xe đầy → đang đếm ngược 10 giây: không xuống được
-    comment(e, "K1", "không về", 3)
+    lock = e.phase_until - 5  # xe đầy → đếm ngược; 10 giây cuối: không xuống được
+    e.tick(lock)
+    comment(e, "K0", "Cà Mau", lock)
+    comment(e, "K1", "không về", lock)
     assert e.bus.seat_of("k0") is not None and e.bus.seat_of("k1") is not None and e.lane_of_uid("cho")
     assert any(ev["type"] == "loxe" for ev in e.drain())
     early = Engine(0.0)
@@ -1582,7 +1586,7 @@ def _driving(e, t=1.0):
 def test_toll_stops_bus_until_gifts_cover_fee_only_gifts_count():
     """Anh 03/11: qua trạm thu phí / bị công an → xe đứng, chỉ QUÀ góp mới tính, chờ tới khi đủ thì đi tiếp."""
     e = Engine(0.0)
-    e.blocks_on, e.toll_xu = True, 20
+    e.blocks_on, e.toll_xu, e.fee_auto = True, 20, False
     _driving(e)
     e.block_now("toll")
     (ev,) = [x for x in e.drain() if x["type"] == "block"]
@@ -1608,17 +1612,17 @@ def test_police_speeding_fine_and_anh_tu_covers_the_loss():
     import pytest
     from xe_tet.server.game.engine import Refused, SPEEDING_FACTOR
     e = Engine(0.0)
-    e.blocks_on, e.fine_xu = True, 10
+    e.blocks_on, e.fine_xu, e.fee_auto = True, 10, False
     _driving(e)
     with pytest.raises(Refused):
         e.cover()
     e.handle({"type": "gift", "name": "Bé", "diamonds": 5}, 2)
     e.block_now("police")
-    assert e.block["speeding"] and e.block["goal"] == 10 * SPEEDING_FACTOR and e.turbo == 0
+    assert e.block["speeding"] and e.block["goal"] == 10 * SPEEDING_FACTOR and e.turbo == 15  # giây chạy nhanh giữ lại
     e.cover()
     (end,) = [x for x in e.drain() if x["type"] == "block_end"]
     assert end["by"] == "cover" and e.block is None
-    e.cover_seconds = 30
+    e.cover_seconds, e.turbo = 30, 0.0
     e.block_now("police")
     assert not e.block["speeding"] and e.block["goal"] == 10
     e.tick(20)
@@ -1642,3 +1646,49 @@ def test_blocks_planned_on_long_trips_away_from_stops():
     comment(short, "A", "Hà Nội", 1)
     short._depart(2)
     assert short.block_plan == []  # engine trần (blocks_on tắt): không chặn
+
+
+def test_fee_follows_room_gift_rate_low_gift_room_pays_one_xu():
+    """Rà soát 03/11 (buổi live thật ~0,3 xu / phút): phí cố định 20 xu thì xe đứng ~1 giờ. Phí theo phòng: lượng xu phòng hay
+    tặng trong 1,5 phút, ít nhất 1, nhiều nhất bằng mức admin đặt; một đại gia không đẩy phí cả phòng."""
+    e = Engine(0.0)
+    e.blocks_on, e.toll_xu = True, 20
+    _driving(e)
+    e.block_now("toll")
+    assert e.block["goal"] == 1  # chưa ai tặng: 1 xu là qua
+    e.handle({"type": "gift", "name": "A", "diamonds": 1}, 2)
+    assert e.block is None
+    for i in range(30):  # phòng tặng đều ~30 xu / phút
+        e.last_now = 10 + i * 10
+        e.handle({"type": "gift", "name": f"G{i}", "diamonds": 5}, e.last_now)
+    e.block_now("toll")
+    assert e.block["goal"] == 20  # chạm trần admin đặt
+    e.cover()
+    e.last_now, e.turbo = 2000, 0.0  # 10 phút sau không ai tặng: phí về lại 1
+    e.block_now("police")
+    assert e.block["goal"] == 1
+
+
+def test_block_edge_cases_turn_off_pause_and_gift_credit_once():
+    e = Engine(0.0)
+    e.blocks_on, e.cover_seconds = True, 30
+    _driving(e)
+    e.block_now("toll")
+    e.paused = True
+    e.tick(100)  # tạm dừng 100 giây
+    e.paused = False
+    e.tick(101)
+    assert e.block  # không tự bù lỗ ngay khi bỏ tạm dừng
+    e.blocks_on = False
+    e.tick(102)
+    assert e.block is None and [x for x in e.drain() if x["type"] == "block_end"][-1]["by"] == "off"
+    # tặng quà lúc chưa có vé: lần giữ chỗ kế tiếp lên đầu hàng, MỘT lần
+    f = Engine(0.0)
+    comment(f, "An", "Hà Nội", 1)
+    fill_lane(f, "Cà Mau", 3, 2)
+    f.handle({"type": "gift", "name": "Lạ", "diamonds": 1}, 3)
+    comment(f, "Lạ", "Cà Mau", 4)
+    assert f.queues["south"][0] == "lạ"
+    comment(f, "Lạ", "không về", 5)
+    comment(f, "Lạ", "Cà Mau", 6)
+    assert f.queues["south"][-1] == "lạ"

@@ -285,16 +285,17 @@
       <button id="cover" class="primary">💸 Anh Tư bù lỗ (cho xe đi)</button>
     </div>
     <p class="hint" id="block-now">Xe đang không bị chặn.</p>
+    <label class="toggle"><input type="checkbox" data-show="fee_auto"> Phí tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua; tối đa bằng số bên dưới)</label>
     <div class="row">
-      <span>Phí trạm</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
-      <span>Phạt</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
+      <span>Phí trạm tối đa</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
+      <span>Phạt tối đa</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
     </div>
     <div class="row" style="margin-top:8px">
       <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="0" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
       <span>giây (0 = chờ tới khi góp đủ)</span>
       <button id="save-blocks">Lưu</button>
     </div>
-    <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy nhanh nhờ quà / tim mà gặp công an thì «quá tốc độ», phạt gấp 3.
+    <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy x2 nhờ quà mà gặp công an thì «quá tốc độ», phạt gấp 3 (giây chạy nhanh còn lại giữ nguyên).
       Phòng ít quà: bấm «Anh Tư bù lỗ», lơ xe nói bù phần thiếu rồi xe đi.</p>
   </section>
 

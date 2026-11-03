@@ -29,6 +29,13 @@ from .talk import hours_phrase, line, spoken_list
 SEATS = 24
 BOARD_SECONDS = 180.0
 FULL_BUS_SECONDS = 10.0
+# Đủ giường mà vừa có nhiều người lên dồn (cả hàng chờ được xếp lên lúc vào bến): giữ xe thêm cho lơ xe kịp đọc tên từng
+# người (PLAN-147 đọc ~5 tên / câu, câu cách nhau 5 giây ≈ 1 giây / người) — trước: 24 người lên cùng lúc, 10 giây xe chạy,
+# hầu hết không được đọc tên, hàng người ở cửa xe biến mất
+NAME_READ_S = 1.0
+NAME_LEAD_S = 5.0
+NAME_WINDOW_S = 40.0
+FULL_HOLD_MAX = 35.0
 REST_SECONDS = 90.0
 HONK_BEFORE_END = 15.0
 FINISH_SECONDS = 12.0
@@ -151,13 +158,25 @@ TURBO_SPEED_CAP = 4.0  # tim + xăng đầy + quà cùng lúc: không vượt x4
 TURBO_TALK_GAP = 10.0
 # Trạm thu phí / công an (anh 03/11): xe bị chặn lại, người xem TẶNG QUÀ góp đủ xu thì xe đi tiếp — chỉ quà mới tính; chờ tới
 # khi đủ. Phòng ít quà thì admin bấm «Anh Tư bù lỗ» trên /control (hoặc đặt tự bù lỗ sau N giây) cho xe qua.
-TOLL_EVERY_KM = 350.0  # cứ chừng này km một trạm thu phí, tối đa TOLL_MAX trạm / chuyến
+# Tần suất (rà soát 03/11, giả lập theo số liệu buổi live thật): chuyến xa nhất ~8 phút; trước 350 km / trạm + 60 % công an
+# = ~2,6 lần chặn / chuyến dài → phòng ít quà đứng chờ 34 phút / giờ. Giờ: chuyến 600–1199 km một trạm, từ 1200 km hai trạm,
+# công an 40 % — chuyến dài trung bình ~2 lần, chuyến ngắn 0–1 lần.
+TOLL_EVERY_KM = 600.0
 TOLL_MAX = 2
-TOLL_MIN_KM = 120.0  # chuyến ngắn hơn: không qua trạm
-POLICE_CHANCE = 0.6  # chuyến từ POLICE_MIN_KM: khả năng bị công an kiểm tra một lần
+TOLL_MIN_KM = 300.0  # chuyến ngắn hơn: không qua trạm
+POLICE_CHANCE = 0.4  # chuyến từ POLICE_MIN_KM: khả năng bị công an kiểm tra một lần
 POLICE_MIN_KM = 150.0
-SPEEDING_SPEED = 2.0  # công an bắn tốc độ lúc xe đang chạy nhanh nhờ quà / tim → «quá tốc độ», phạt gấp SPEEDING_FACTOR
-SPEEDING_FACTOR = 3
+SPEEDING_FACTOR = 3  # công an gặp lúc xe đang chạy x2 nhờ quà → «quá tốc độ», phạt gấp 3 (tim không tính: CTA bảo thả tim)
+# Phí tự theo phòng (số liệu thật 02/11: 20 phút, 46 người xem, 6 quà = 6 xu ≈ 0,3 xu / phút → phí 20 xu chờ ~1 giờ):
+# phí = lượng xu phòng hay tặng trong BLOCK_TARGET_MIN phút (đo 10 phút gần nhất, mỗi quà tính tối đa GIFT_RATE_CAP xu cho
+# một đại gia không đẩy phí cả phòng), ít nhất 1 xu, nhiều nhất bằng mức admin đặt
+BLOCK_TARGET_MIN = 1.5
+GIFT_RATE_WINDOW = 600.0
+GIFT_RATE_CAP = 50
+# Phòng ít quà thì ít bị chặn: giữ mỗi điểm chặn đã định với xác suất theo lượng quà (≥ BLOCK_FULL_RATE xu / phút: giữ hết),
+# không dưới BLOCK_KEEP_MIN — phí đã xuống 1 xu mà phòng 0,3 quà / phút vẫn chờ ~3 phút mỗi lần
+BLOCK_FULL_RATE = 1.0
+BLOCK_KEEP_MIN = 0.3
 BLOCK_CLEAR_KM = 12.0  # điểm chặn không đặt sát điểm thả khách / trạm nghỉ
 BLOCK_GAP_KM = 40.0
 BLOCK_REMIND_GAP = 25.0  # đang bị chặn: lơ xe nhắc góp quà mỗi 25 giây
@@ -284,6 +303,7 @@ class Viewer:
     stage: float = 0.0  # điểm lên sóng trong buổi (quà / bình luận / tim) — xe tăng cường của người này được chiếu lâu hơn
     stage_comments: int = 0
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
+    prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
     priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
 
 
@@ -358,6 +378,9 @@ class Engine:
         self.cover_seconds = 0.0  # 0: chờ tới khi góp đủ (admin bấm bù lỗ); > 0: tự bù lỗ sau chừng này giây
         self.block_rng = random.Random()
         self.last_block_remind = -1e9
+        self.fee_auto = True  # phí trạm / phạt tự theo lượng quà của phòng (tối đa toll_xu / fine_xu)
+        self.gift_log: list[tuple[float, int]] = []  # (giờ, xu) quà trong GIFT_RATE_WINDOW giây gần nhất
+        self.seated_at: list[float] = []  # giờ từng người có giường ở bến (giữ xe đủ lâu để đọc tên)
         self.bus_counter = 0
         self.trip: Trip | None = None
         self.reliefs: list[Relief] = []
@@ -648,6 +671,7 @@ class Engine:
             self.run_avg += AVG_WEIGHT * (now - self.trip_started - self.run_avg)
             self.trip_started = None
         self.boarding_started = now
+        self.seated_at = []
         self.bus_counter += 1
         self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
         self.next_banner = None
@@ -672,7 +696,13 @@ class Engine:
     def _board_time(self) -> float:
         """Giờ đón tỉ lệ số giường còn trống: xe đã kín người chờ lên sẵn thì không bắt cả bến đợi đủ 3 phút."""
         free = SEATS - len(self.bus.riders())
-        return FULL_BUS_SECONDS + (self.board_seconds - FULL_BUS_SECONDS) * free / SEATS
+        hold = self._full_hold()
+        return hold + (max(self.board_seconds, hold) - hold) * free / SEATS
+
+    def _full_hold(self) -> float:
+        """Đủ giường thì chạy sau chừng này giây: ít nhất FULL_BUS_SECONDS, đủ cho lơ xe đọc tên người vừa lên."""
+        recent = sum(1 for t in self.seated_at if t >= self.last_now - NAME_WINDOW_S)
+        return max(FULL_BUS_SECONDS, min(FULL_HOLD_MAX, NAME_LEAD_S + recent * NAME_READ_S))
 
     def _pick_lane(self) -> str:
         """Tuyến của chuyến mới (PLAN-145): ai chờ quá LANE_MAX_WAIT giây thì tuyến của người chờ lâu nhất đi trước (không ai bị
@@ -718,6 +748,7 @@ class Engine:
                 continue
             self._unqueue(uid)
             self.bus.seats[free] = uid
+            self.seated_at.append(self.last_now)
             # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
             # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
             self._ticket(self.viewers[uid], free, changed=False, promoted=True)
@@ -1084,6 +1115,8 @@ class Engine:
         self.boost *= math.pow(0.5, dt / BOOST_HALF_LIFE)
         if self.paused:
             self.phase_until += dt  # đồng hồ pha đứng yên, xe không chạy
+            if self.block:
+                self.block["since"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
             return
         self._run_reliefs(dt)
         self._remind_direction(now)
@@ -1156,6 +1189,8 @@ class Engine:
         if total >= POLICE_MIN_KM and rng.random() < POLICE_CHANCE:
             plan.append((total * rng.uniform(0.2, 0.85), "police"))
         keep: list[tuple[float, str]] = []
+        chance = 1.0 if not self.fee_auto else max(BLOCK_KEEP_MIN, min(1.0, self._gift_rate() / BLOCK_FULL_RATE))
+        plan = [(odo, kind) for odo, kind in plan if rng.random() < chance]
         for odo, kind in sorted(plan):
             if (BLOCK_CLEAR_KM < odo < total - BLOCK_CLEAR_KM and all(abs(odo - leg.km) > BLOCK_CLEAR_KM for leg in self.legs)
                     and all(abs(odo - o) > BLOCK_GAP_KM for o, _ in keep)):
@@ -1180,14 +1215,13 @@ class Engine:
         place = BY_KEY[self._where()[0]].name
         speeding = False
         if kind == "toll":
-            reason, goal = f"Trạm thu phí {place}", self.toll_xu
+            reason, goal = f"Trạm thu phí {place}", self._fee(self.toll_xu)
         else:
-            speeding = self.turbo > 0 or self.speed() >= SPEEDING_SPEED
+            speeding = self.turbo > 0  # giây chạy nhanh còn lại không mất: nộp phạt xong chạy tiếp
             if speeding:
-                reason, goal = "chạy quá tốc độ", self.fine_xu * SPEEDING_FACTOR
-                self.turbo = 0.0  # bị bắn tốc độ: hết chạy nhanh
+                reason, goal = "chạy quá tốc độ", self._fee(self.fine_xu) * SPEEDING_FACTOR
             else:
-                reason, goal = self.block_rng.choice(POLICE_REASONS), self.fine_xu
+                reason, goal = self.block_rng.choice(POLICE_REASONS), self._fee(self.fine_xu)
         self.block = {"kind": kind, "reason": reason, "goal": goal, "paid": 0, "givers": {}, "since": now,
                       "place": place, "speeding": speeding}
         self.last_block_remind = now
@@ -1197,8 +1231,23 @@ class Engine:
         else:
             self.talk("speeding" if speeding else "police", reason=reason, goal=goal, main=True)
 
+    def _fee(self, cap: int) -> int:
+        """Phí / phạt: cố định `cap`, hoặc (fee_auto) theo lượng xu phòng hay tặng trong BLOCK_TARGET_MIN phút."""
+        if not self.fee_auto:
+            return max(1, cap)
+        return max(1, min(cap, math.ceil(self._gift_rate() * BLOCK_TARGET_MIN)))
+
+    def _gift_rate(self) -> float:
+        """Xu / phút phòng tặng trong GIFT_RATE_WINDOW giây gần nhất (mỗi quà tính tối đa GIFT_RATE_CAP xu)."""
+        xu = sum(min(x, GIFT_RATE_CAP) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW)
+        return xu / (GIFT_RATE_WINDOW / 60)
+
     def _block_tick(self, now: float) -> None:
         b = self.block
+        if not self.blocks_on:  # admin tắt tính năng giữa lúc đang bị chặn: cho xe đi luôn, không bắt góp tiếp
+            self.block = None
+            self.emit("block_end", kind=b["kind"], by="off", name="", paid=b["paid"], goal=b["goal"])
+            return
         if self.cover_seconds > 0 and now - b["since"] >= self.cover_seconds:
             self.cover()
         elif now - self.last_block_remind >= BLOCK_REMIND_GAP:
@@ -1209,7 +1258,7 @@ class Engine:
     def _pay_block(self, v: Viewer, diamonds: int) -> str:
         """Quà lúc xe đang bị chặn: góp vào phí / tiền phạt; đủ thì xe đi. Trả dòng cho thẻ quà (rỗng: không bị chặn)."""
         b = self.block
-        if not b or self._phase_now() != "DRIVING":
+        if not b:
             return ""
         b["paid"] += diamonds
         b["givers"][v.name] = b["givers"].get(v.name, 0) + diamonds
@@ -1439,14 +1488,17 @@ class Engine:
             self._fill_from_queue()
         if self.boarding_open() and self._fits(v.province) and (free := self.bus.free_seat()) is not None:
             self.bus.seats[free] = v.uid
+            self.seated_at.append(self.last_now)
+            v.prio_credit = False  # có giường ngay: suất «lên đầu hàng» đã dùng cho lần đặt vé này
             self._ticket(v, free, changed)
             self._same_home(v)
             left = SEATS - len(self.bus.riders())
             if left == 0:
+                hold = self._full_hold()
                 if self.phase == "SPECIAL":
-                    self.resume = ("BOARDING", min(self.resume[1], FULL_BUS_SECONDS))
+                    self.resume = ("BOARDING", min(self.resume[1], hold))
                 else:
-                    self.phase_until = min(self.phase_until, self.last_now + FULL_BUS_SECONDS)
+                    self.phase_until = min(self.phase_until, self.last_now + hold)
                 self.talk("full", main=True)
             elif left == 5:
                 self.talk("seats_left", n=left, main=True)
@@ -1458,7 +1510,8 @@ class Engine:
                 return
             self.queues[lane].append(v.uid)
             self.queued_at[v.uid] = v.last_seen
-            if v.gift_session > 0:  # đã tặng quà trong buổi rồi mới gõ tỉnh: vẫn được xếp đầu hàng (bảng quà «1 xu lên đầu hàng»)
+            if v.prio_credit:  # tặng quà lúc chưa có vé rồi mới gõ tỉnh: xếp đầu hàng MỘT lần (không phải cả buổi)
+                v.prio_credit = False
                 self._prioritize(v, lane)
             self._ticket(v, None, changed, passed=passed)
 
@@ -1983,10 +2036,13 @@ class Engine:
         relief = None  # PLAN-144 (anh 03/11): bỏ xe tăng cường; chỉ một xe 24 chỗ — quà không gọi xe nào khác
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
         v.gift_session += diamonds
+        self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
         paid = self._pay_block(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
         self.turbo_by = v.name
+        if not ticketed:
+            v.prio_credit = True
         moved = None
         if queued and not v.priority:
             moved = self._prioritize(v, queued)

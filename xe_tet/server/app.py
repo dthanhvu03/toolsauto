@@ -129,6 +129,7 @@ class Hub:
 
     def apply_blocks(self, engine: Engine) -> None:
         engine.blocks_on = self.settings["blocks_on"]
+        engine.fee_auto = self.settings["fee_auto"]
         engine.toll_xu = self.settings["toll_xu"]
         engine.fine_xu = self.settings["fine_xu"]
         engine.cover_seconds = float(self.settings["cover_seconds"])

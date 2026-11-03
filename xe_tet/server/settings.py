@@ -52,6 +52,7 @@ DEFAULTS: dict = {
     "hud_scale": 0.8,  # cỡ chữ + khung trên live (PLAN-133): 0,6 nhỏ → 1,2 to
     "talk_style": "mix",  # kiểu nói lơ xe (PLAN-131): mix | ben (bến xe) | genz | geny
     "blocks_on": True,  # trạm thu phí / công an chặn xe, góp quà đi tiếp (PLAN-148)
+    "fee_auto": True,  # phí / phạt tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua), tối đa toll_xu / fine_xu
     "toll_xu": 20,  # phí qua trạm (xu)
     "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
     "cover_seconds": 0,  # 0: chờ tới khi góp đủ (admin bấm «Anh Tư bù lỗ»); > 0: tự bù lỗ sau chừng này giây
