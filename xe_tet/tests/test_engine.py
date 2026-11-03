@@ -1720,6 +1720,7 @@ def test_province_race_decides_next_trip_and_resets_each_trip(monkeypatch):
     nhiều điểm nhất có người chờ thì chuyến mới đi hướng đó; mỗi chuyến một vòng."""
     monkeypatch.setattr("xe_tet.server.game.engine.LANE_MAX_WAIT", 1e9)  # chuyến Hà Nội dài: tắt luật «chờ quá 10 phút»
     e = Engine(0.0)
+    e.race_on = True  # anh 03/11 tắt mặc định (ai đặt trước lên trước); máy giữ lại
     fill_lane(e, "Cà Mau", SEATS, 1)  # chuyến 1 hướng nam, đầy
     comment(e, "Tây1", "Bạc Liêu", 2)  # hướng nam: hết giường → chờ
     fill_lane(e, "Hà Nội", 3, 3, prefix="B")  # hướng bắc đông người chờ hơn
@@ -1775,3 +1776,25 @@ def test_billboard_video_stops_bus_then_continues():
     e._in_pass = lambda: False
     e.tick(28)
     assert e.show and e.show_pending is None
+
+
+def test_first_booked_rides_first_only_gifts_jump_and_admin_picks_next_trip():
+    """Anh 03/11: «người nào lên trước thì lên xe trước, ưu tiên những người có quà thôi»; «control cho phép xe 12 chạy sau
+    xe 10». Hướng chuyến mới = người đặt vé sớm nhất (người tặng quà đang chờ được trước) — không còn «tuyến đông nhất»."""
+    e = Engine(0.0)
+    fill_lane(e, "Cà Mau", SEATS, 1)  # chuyến 1 hướng nam đầy
+    comment(e, "Sớm", "Hà Nội", 2)  # đặt sớm nhất: hướng bắc, 1 người
+    fill_lane(e, "Bạc Liêu", 5, 3, prefix="B")  # hướng nam đông hơn nhưng đặt sau
+    up = e.snapshot()["upcoming"]
+    assert [u["first"] for u in up] == ["Sớm", "B0"] and up[0]["trip"] == 2 and up[1]["trip"] == 3
+    tickets = [x for x in e.drain() if x["type"] == "ticket" and x.get("next")]
+    assert tickets[-1]["bus_no"] == 3  # vé người hướng nam ghi đúng chuyến 3
+    assert e._pick_lane() == e.network.lane_of(e.viewers["sớm"].province)
+    e.handle({"type": "gift", "name": "B4", "diamonds": 1}, 4)  # người tặng quà đang chờ: hướng của họ lên trước
+    assert e.snapshot()["upcoming"][0]["first"] == "B4"
+    nam = e.network.lane_of(e.viewers["b0"].province)
+    bac = e.network.lane_of(e.viewers["sớm"].province)
+    e.set_next_lane(bac)  # anh chọn trên /control: chuyến kế tiếp đi bắc
+    assert e.snapshot()["upcoming"][0]["lane"] == bac and e.snapshot()["upcoming"][0]["chosen"]
+    assert e._pick_lane() == bac and e.next_lane is None  # dùng một lần
+    assert e._pick_lane() == nam

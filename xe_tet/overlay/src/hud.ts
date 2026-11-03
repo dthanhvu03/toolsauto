@@ -317,7 +317,7 @@ export class Hud {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn",
         "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»",
-        "⚔️ Đua tỉnh: bình luận, thả tim, tặng quà · tỉnh thắng đi chuyến sau"];
+        "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
         tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
@@ -394,11 +394,14 @@ export class Hud {
       setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()
         .map((r) => `<li>${r.vip ? "⭐ " : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
-    } else {  // đua tỉnh (anh 03/11): tỉnh thắng có người chờ được đi chuyến sau
+    } else if (s.race?.length) {  // đua tỉnh (đang tắt mặc định từ 03/11: ai đặt trước lên trước)
       setText("board-title", "⚔️ Đua tỉnh · thắng đi trước");
-      setHTML("board-list", s.race?.length
-        ? s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join("")
-        : "<li>Bình luận · thả tim · tặng quà</li><li><small>kéo tỉnh mình lên đầu</small></li>");
+      setHTML("board-list", s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join(""));
+    } else {
+      setText("board-title", "🏆 Tỉnh đông nhất");
+      setHTML("board-list", s.board.length
+        ? s.board.slice(0, 5).map((b) => `<li>${esc(b.province)} <span>${b.count}</span></li>`).join("")
+        : "<li>Chưa ai lên xe</li>");
     }
   }
 

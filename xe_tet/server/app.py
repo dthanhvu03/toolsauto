@@ -458,6 +458,8 @@ async def _admin(body: dict) -> dict:
         engine.block_now(str(body.get("kind") or ""))
     elif action == "cover":  # «Anh Tư bù lỗ»: xe đang bị chặn đi tiếp luôn
         engine.cover()
+    elif action == "next_lane":  # chọn hướng cho chuyến kế tiếp ("" = về thứ tự đặt vé)
+        engine.set_next_lane(str(body.get("lane") or ""))
     elif action == "show":  # bảng quảng cáo: dừng xe chiếu video ngay (tên file, trống = video kế tiếp)
         engine.show_now(str(body.get("name") or ""))
     elif action == "show_stop":

@@ -29,7 +29,8 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
 };
 // đang chiếu video bảng quảng cáo: máy quay ngước lên khung bảng (sau xe), xe vẫn trong khung dưới
 const SHOW_CAM: [number, number, number, number, number, number] = [3.5, 8.5, 25, 0.5, 6.2, -8.5];
-const BOARD_H = 9.5;  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
+const BOARD_H = 9.5;
+const RIDER_TAG_MAX = 24;  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
 // ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
@@ -216,6 +217,7 @@ export class World {
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
   private blockLeaving = false;
   private showCam = false;
+  private riderTag = label("", "lbl riders");  // bảng tên hành khách trên nóc xe
   private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
   private boardTimer = 0;
   private fx = new Fireworks();
@@ -313,6 +315,9 @@ export class World {
     this.scene.add(this.hemi, this.sun, this.sun.target, this.sky.mesh, this.petals.points);
 
     this.stars = this.buildStars();
+    this.riderTag.position.set(1.4, -0.2, 3.0);  // mặt đường ngay dưới thân xe phía máy quay: trên nóc thì lơ xe / khung chữ che
+    this.riderTag.element.style.display = "none";
+    this.bus.group.add(this.riderTag);
     this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.fx.group,
       this.dust.group, this.lixi.group, this.skyLanterns.group, this.blossoms.group);
 
@@ -419,6 +424,7 @@ export class World {
     if (key !== this.seatsKey) {
       this.seatsKey = key;
       this.refreshBerths(state.bus.seats);
+      this.refreshRiderTag(state.bus.seats);
     }
     this.bus.setBanner(state.bus.banner);
     if (state.care) this.bus.setDirt(state.care.dirt);
@@ -428,6 +434,19 @@ export class World {
     this.bus.setRoute(`${state.departure.short} → ${last && state.phase !== "BOARDING" ? last.label : state.bus.to}`);
     this.ben.setStation(state.departure.name);
     this.ben.setLanes(state.lanes);
+  }
+
+  /** Bảng tên hành khách trên nóc xe (anh 03/11: «góc nhìn nào cũng phải có tên những người đang ở trong xe»): đi theo xe ở
+   * mọi góc máy ngoài xe; trong xe thì tên đã nằm trên từng giường. Người tặng quà ⭐ viền vàng, đông quá thì «+N người». */
+  private refreshRiderTag(seats: (Seat | null)[]): void {
+    const riders = seats.filter((x): x is Seat => !!x);
+    const el = this.riderTag.element;
+    el.style.display = riders.length ? "" : "none";
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+    const shown = riders.slice(0, RIDER_TAG_MAX);
+    el.innerHTML = `<b>🚌 Trên xe ${riders.length}/${seats.length}</b> `
+      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${r.vip ? "⭐" : ""}${esc(r.name)}</span>`).join(" · ")
+      + (riders.length > shown.length ? ` · <i>+${riders.length - shown.length} người</i>` : "");
   }
 
   private refreshBerths(seats: (Seat | null)[]): void {
@@ -1201,6 +1220,7 @@ export class World {
       this.transition(() => {
         this.view = view;
         this.inside.visible = view === "inside";
+        this.riderTag.visible = view !== "inside";  // trong xe: tên đã nằm trên giường
         this.onView?.(view);
       });
     }

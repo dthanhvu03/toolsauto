@@ -401,6 +401,8 @@ class Engine:
         self.goal_round = 0
         self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
         self.started_at = now
+        self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
+        self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
         self.race_leader: str | None = None
         self.race_winner: str | None = None
@@ -746,13 +748,20 @@ class Engine:
         recent = sum(1 for t in self.seated_at if t >= self.last_now - NAME_WINDOW_S)
         return max(FULL_BUS_SECONDS, min(FULL_HOLD_MAX, NAME_LEAD_S + recent * NAME_READ_S))
 
-    def _pick_lane(self) -> str:
+    def _pick_lane(self, consume: bool = True) -> str:
         """Tuyến của chuyến mới (PLAN-145): ai chờ quá LANE_MAX_WAIT giây thì tuyến của người chờ lâu nhất đi trước (không ai bị
         bỏ đói); còn lại chọn tuyến chở được nhiều người đang chờ nhất — tính cả người làn khác mà xe đi ngang quê họ."""
         self._prune_queues()
         waiting = [lane for lane, q in self.queues.items() if q]
         if not waiting:
             return self.bus.lane or self.network.lanes[0].key
+        if self.next_lane in waiting:  # anh chọn trên /control: chuyến này chạy hướng đó
+            lane = self.next_lane
+            if consume:  # xem trước (bảng «chuyến sau» trên màn hình) thì giữ lựa chọn
+                self.next_lane = None
+            return lane
+        if not self.race_on:  # anh 03/11: ai đặt trước lên trước, chỉ người tặng quà được ưu tiên
+            return self._fifo_order()[0]
         oldest = min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
         if self.last_now - self.queued_at.get(self.queues[oldest][0], self.last_now) > LANE_MAX_WAIT:
             return oldest
@@ -769,6 +778,39 @@ class Engine:
                 self.race_winner = key
                 return max(lanes, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
         return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
+
+    def _fifo_order(self) -> list[str]:
+        """Thứ tự các hướng chạy tiếp theo: hướng của người tặng quà đang chờ trước, rồi người đặt vé sớm nhất (anh 03/11)."""
+        first: dict[str, tuple] = {}
+        for lane, q in self.queues.items():
+            for u in q:
+                key = (not self.viewers[u].priority, self.queued_at.get(u, self.last_now))
+                if lane not in first or key < first[lane]:
+                    first[lane] = key
+        return sorted(first, key=lambda lane: first[lane])
+
+    def set_next_lane(self, lane: str) -> None:
+        """/control «Chạy kế tiếp»: chuyến sau (hết chuyến đang chạy) đi hướng này; "" = bỏ chọn, về thứ tự đặt vé."""
+        if lane and lane not in self.queues:
+            raise ValueError(lane)
+        if lane and not self.queues[lane]:
+            raise Refused("Hướng này chưa ai chờ.")
+        self.next_lane = lane or None
+
+    def upcoming(self) -> list[dict]:
+        """Các chuyến sắp chạy cho /control: số chuyến, hướng, bao nhiêu người chờ, ai đầu hàng."""
+        order = self._fifo_order()
+        if self.next_lane in order:
+            order.remove(self.next_lane)
+            order.insert(0, self.next_lane)
+        out = []
+        for i, key in enumerate(order):
+            ln = self.network.lane_by_key[key]
+            head = self.viewers[self.queues[key][0]]
+            out.append({"lane": key, "label": ln.label, "arrow": ln.arrow, "trip": self.bus.no + 1 + i,
+                        "waiting": len(self.queues[key]), "first": head.name, "gift": head.priority,
+                        "chosen": key == self.next_lane})
+        return out
 
     def drive_seconds(self, total_km: float, rush: bool = False) -> float:
         """Giây chạy đường của cả chuyến `total_km` (BR-7): xa lâu hơn, nhưng cong (mũ DRIVE_CURVE) chứ không tỉ lệ thẳng."""
@@ -1293,7 +1335,7 @@ class Engine:
     def _race(self, v: Viewer, points: int) -> None:
         """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước)."""
         key = v.province or v.home
-        if not key or points <= 0:
+        if not self.race_on or not key or points <= 0:
             return
         self.race[key] += points
         leader = self.race.most_common(1)[0][0]
@@ -2043,10 +2085,14 @@ class Engine:
         Chuyến hiện tại phải xong trước; mỗi làn có người chờ lâu hơn người đầu hàng làn này thì đi trước một chuyến
         (BR-4 ai chờ trước đi trước).
         """
-        queue = self.queues[lane]
-        mine = self.queued_at.get(queue[0], self.last_now) if queue else self.last_now
-        older = sum(1 for key, q in self.queues.items()
-                    if key != lane and q and self.queued_at.get(q[0], self.last_now) < mine)
+        if not self.race_on:  # cùng thứ tự với chuyến thật sẽ chạy (quà trước, đặt sớm trước, anh chọn trên /control trước)
+            order = [u["lane"] for u in self.upcoming()]
+            older = order.index(lane) if lane in order else len(order)
+        else:
+            queue = self.queues[lane]
+            mine = self.queued_at.get(queue[0], self.last_now) if queue else self.last_now
+            older = sum(1 for key, q in self.queues.items()
+                        if key != lane and q and self.queued_at.get(q[0], self.last_now) < mine)
         trips = 1 + position // SEATS + older
         return self.bus.no + trips, self._eta_minutes(trips)
 
@@ -2292,7 +2338,7 @@ class Engine:
         """Làn chạy kế tiếp + người đang chờ (làn đó trước) — người chờ luôn thấy tên mình và thứ tự trên màn hình."""
         if not self.waiting():
             return None, []
-        net, nxt = self.network, self._pick_lane()
+        net, nxt = self.network, self._pick_lane(consume=False)
         order = sorted(net.lanes, key=lambda ln: (ln.key != nxt, -len(self.queues[ln.key])))
         people = []
         for ln in order:
@@ -2377,6 +2423,7 @@ class Engine:
             "show": {"url": self.show["url"], "title": self.show["title"], "seconds": self.show["seconds"],
                      "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
             "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
+            "upcoming": self.upcoming(),
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,

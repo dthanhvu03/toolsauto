@@ -118,6 +118,10 @@
       <button data-extend="-30">−30 giây</button>
       <button id="skip">⏭ Qua pha tiếp</button>
     </div>
+    <h3>🚌 Chuyến sắp chạy — bấm để chọn chuyến kế tiếp</h3>
+    <ul id="upcoming" class="files"></ul>
+    <p class="hint" style="margin-top:4px">Mặc định: ai đặt vé trước đi trước, người tặng quà được lên đầu hàng. Anh chọn một
+      chuyến thì hết chuyến đang chạy xe đi chuyến đó; vé của người chờ tự đổi số chuyến theo.</p>
     <h3>🗣 Lơ xe nói</h3>
     <div class="row">
       <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay" aria-label="Câu lơ xe nói">
@@ -659,6 +663,20 @@ $("save-show").onclick = () => {
   setControl({ show_every_min: +$("show-every").value, show_max_seconds: +$("show-max").value });
   log("Đã lưu lịch chiếu video");
 };
+// chuyến sắp chạy: anh chọn chuyến kế tiếp (anh 03/11 «xe 10 chạy xong thì control cho phép xe 12»)
+$("upcoming").onclick = (e) => {
+  const b = e.target.closest("button[data-lane]");
+  if (b) admin({ action: "next_lane", lane: b.dataset.lane });
+};
+function renderUpcoming(s) {
+  const up = s.upcoming || [];
+  setIfChanged($("upcoming"), up.length
+    ? up.map((u) => `<li><span><b>Chuyến ${u.trip}</b> ${u.arrow} ${esc(u.label)} · ${u.waiting} người chờ`
+      + ` <small>· đầu hàng: ${u.gift ? "🎁 " : ""}${esc(u.first)}</small></span>`
+      + (u.chosen ? `<button data-lane="" class="on">✓ Đã chọn · bỏ</button>` : `<button data-lane="${esc(u.lane)}">▶ Chạy kế tiếp</button>`)
+      + `</li>`).join("")
+    : `<li><span class="hint" style="margin:0">Chưa ai chờ chuyến sau.</span></li>`);
+}
 function renderVideos(s) {
   const vids = s.videos || [];
   setIfChanged($("video-files"), vids.length
@@ -874,6 +892,7 @@ async function refresh() {
     renderStations(s);
     renderFiles(s);
     renderVideos(s);
+    renderUpcoming(s);
     renderVoices(s);
     $("s-next").textContent = s.waiting;
     $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
