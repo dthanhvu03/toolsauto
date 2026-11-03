@@ -265,16 +265,16 @@ html, body {
   left: 0;
   right: 0;
   margin: 0 auto;
-  width: 940px;
-  padding: 18px 28px;
+  width: 820px;  /* anh 03/11 «hơi bị to»: thẻ vé gọn lại, che ít bảng quà hơn */
+  padding: 10px 22px;
   text-align: center;
   background: rgba(255, 255, 255, 0.97);
   border: 5px solid var(--gold);
   border-radius: 28px;
   box-shadow: var(--shadow);
 }
-#callout .big { font-family: var(--display); font-size: 50px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
-#callout .small { font-size: 32px; font-weight: 600; color: #6b4a33; margin-top: 4px; }
+#callout .big { font-family: var(--display); font-size: 38px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
+#callout .small { font-size: 26px; font-weight: 600; color: #6b4a33; margin-top: 2px; }
 #callout.show { animation: pop 0.35s ease; }
 
 /* ---- tim bay lên thanh tốc độ: tim của người xem làm xe chạy ---- */
