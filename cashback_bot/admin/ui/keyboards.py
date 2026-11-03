@@ -162,6 +162,7 @@ def wallet_admin_keyboard(settings, requests) -> Keyboard:
           f"{_who_short(int(row['telegram_user_id']), row['username'])}", f"c:wl:rq:{row['id']}"),)
         for row in requests
     ]
+    rows.append((("💼 Ví của anh", "c:wl:own"),))
     rows.append((("👥 Thành viên", "c:wl:members"), ("⚙️ Cài đặt", "c:wl:cfg")))
     if settings.enabled:
         rows.append((("⏸️ Tắt ví", "c:wl:off"),))
