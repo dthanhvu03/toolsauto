@@ -8,7 +8,6 @@ import io
 import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import cashback_bot.poller as poller
@@ -41,26 +40,15 @@ def _link(bot) -> str:
         return conn.execute("SELECT sub_id FROM link_requests WHERE link_status = 'created'").fetchone()[0]
 
 
-DRAFT_EVIDENCE = Path(__file__).resolve().parents[1] / "cashback_bot" / "migrations" / "007_settlement_evidence.DRAFT.sql"
 
 
 def _financially_ready(bot, period: str = "2026-10", amount: int = 10_000_000, users=(USER,)) -> None:
-    """CHỈ DB TEST: dựng bằng chứng kỳ Shopee đã trả + thuế người nhận đã duyệt để thử luồng rút tiền.
+    """CHỈ DB TEST: dựng kỳ đối soát MATCHED + thuế người nhận đã duyệt để thử luồng rút tiền.
 
     PLAN-078: thêm quyết định chính sách đã duyệt, hạn mức ACTIVE, một kỳ đối soát MATCHED có quỹ `amount`,
     backup mới, điều khoản chi trả đã công bố và `users` đã đồng ý. Không có công tắc bỏ qua trong code.
     """
     with bot.repo.connect() as conn:
-        conn.executescript(DRAFT_EVIDENCE.read_text(encoding="utf-8"))
-        conn.execute(
-            "INSERT INTO shopee_settlements (period, amount_vnd, evidence_ref, recorded_by, recorded_at) "
-            "VALUES (?, ?, ?, 1, '2026-11-15T00:00:00Z')",
-            (period, amount, f"TEST-{period}-{amount}"),
-        )
-        conn.execute(
-            "INSERT INTO payout_tax_policies (policy_ref, approved_by, approved_at) "
-            "VALUES ('TEST-ADR', 1, '2026-11-15T00:00:00Z')"
-        )
         _payout_policies_ready(conn, period, amount, users)
 
 

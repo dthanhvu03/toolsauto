@@ -197,9 +197,8 @@ CREATE TABLE IF NOT EXISTS shopee_conversion_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_conversion_changes_conv ON shopee_conversion_changes(conversion_id);
 
--- Đối soát thanh toán Shopee (PLAN-075, ADR-052). Tên bảng cố ý KHÁC `shopee_settlements` /
--- `payout_tax_policies` (điều kiện mở khoá của payout_gate, PLAN-078): nhập chứng từ hay đối soát
--- MATCHED không thể mở ví. Tiền là VND nguyên; NULL nghĩa là "chưa xác minh", không phải 0.
+-- Đối soát thanh toán Shopee (PLAN-075, ADR-052). Từ 2026-11-03 kỳ MATCHED (cùng quyết định thuế APPROVED)
+-- là điều kiện mở khoá tài chính (trigger financial_lock_*, payout_gate.py), thay bảng nháp `shopee_settlements`. Tiền là VND nguyên; NULL nghĩa là "chưa xác minh", không phải 0.
 CREATE TABLE IF NOT EXISTS settlement_batches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     period TEXT NOT NULL CHECK (length(period) = 7),
@@ -500,7 +499,7 @@ BEGIN SELECT RAISE(ABORT, 'bank_account_verifications is append-only'); END;
 
 -- Quyết định chính sách cần trước khi chi (thuế, thu hồi, điều khoản chi trả, xác minh tài khoản, hạn mức,
 -- quy trình chuyển khoản). Dòng mới nhất mỗi chủ đề có hiệu lực. Bot không có nút duyệt; APPROVED cần người
--- duyệt và tham chiếu. Không phải điều kiện mở khoá cũ: khoá shopee_settlements / payout_tax_policies vẫn đứng.
+-- duyệt và tham chiếu. Quyết định thuế mới nhất APPROVED là một điều kiện của trigger financial_lock_*.
 CREATE TABLE IF NOT EXISTS payout_policy_decisions (
     id INTEGER PRIMARY KEY,
     topic TEXT NOT NULL CHECK (topic IN
@@ -701,37 +700,41 @@ CREATE TABLE IF NOT EXISTS failed_updates (
     last_seen_at TEXT NOT NULL
 );
 
--- Khoá tài chính ở tầng DB (Production Safety Hardening V1): chưa có bảng bằng chứng Shopee đã trả
--- và chính sách thuế người nhận thì không ghi được khoản 'available', yêu cầu rút mới hay trạng thái 'paid',
--- kể cả khi gọi SQL trực tiếp. Điều kiện chi tiết (có dòng, đủ quỹ, không gian lận) ở payout_gate.py.
+-- Khoá tài chính ở tầng DB (Production Safety Hardening V1): chưa có kỳ đối soát MATCHED (báo cáo Shopee khớp
+-- tiền về ngân hàng) hoặc quyết định thuế người nhận mới nhất chưa APPROVED thì không ghi được khoản 'available'
+-- (số dương), yêu cầu rút mới hay trạng thái đưa tiền ra, kể cả khi gọi SQL trực tiếp. Điều kiện chi tiết (đơn
+-- SETTLED, đủ quỹ, không gian lận) ở payout_gate.py. Trước 2026-11-03 các trigger này đòi bảng nháp
+-- shopee_settlements / payout_tax_policies (migration 007, không bao giờ chạy): TrackingRepository._migrate
+-- xoá bản cũ để tạo lại theo điều kiện dưới (FINANCIAL_LOCK_TRIGGERS).
 CREATE TRIGGER IF NOT EXISTS financial_lock_entry_insert BEFORE INSERT ON cashback_entries
-WHEN NEW.status = 'available' AND (
-    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
-    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+WHEN NEW.status = 'available' AND NEW.cashback_vnd > 0 AND (
+    NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
 
 CREATE TRIGGER IF NOT EXISTS financial_lock_entry_update BEFORE UPDATE OF status ON cashback_entries
-WHEN NEW.status = 'available' AND OLD.status != 'available' AND (
-    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
-    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+WHEN NEW.status = 'available' AND OLD.status != 'available' AND NEW.cashback_vnd > 0 AND (
+    NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
 
 CREATE TRIGGER IF NOT EXISTS financial_lock_payout_insert BEFORE INSERT ON cashback_payouts
-WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
-    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies')
+WHEN (
+    NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
 
 CREATE TRIGGER IF NOT EXISTS financial_lock_payout_paid BEFORE UPDATE OF status ON cashback_payouts
 WHEN NEW.status = 'paid' AND (
-    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
-    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+    NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
 
 -- PLAN-078: các trạng thái đưa tiền ra (duyệt chi, đang chuyển, đã gửi, đã trả) cũng bị khoá như 'paid'.
 CREATE TRIGGER IF NOT EXISTS financial_lock_payout_progress BEFORE UPDATE OF status ON cashback_payouts
 WHEN NEW.status IN ('approved_for_payment', 'processing', 'sent_unconfirmed', 'paid_confirmed') AND (
-    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
-    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+    NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
 
 -- Đã trả chỉ ghi được từ «đã gửi, chờ xác nhận» và khi đã có sự kiện kèm chứng từ ngân hàng.
@@ -940,6 +943,10 @@ def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> N
 
 
 # Bảng huỷ lịch chính sách (PLAN-076). Admin cũng chạy file này khi mở kết nối, như 004–006.
+FINANCIAL_LOCK_TRIGGERS = (
+    "financial_lock_entry_insert", "financial_lock_entry_update", "financial_lock_payout_insert",
+    "financial_lock_payout_paid", "financial_lock_payout_progress",
+)
 CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
 
 
@@ -1098,6 +1105,11 @@ class TrackingRepository:
 
     def _migrate(self) -> None:
         with self.connect() as conn:
+            # Khoá tài chính bản cũ (đòi bảng nháp migration 007): xoá để SCHEMA tạo lại theo kỳ đối soát MATCHED.
+            for name in FINANCIAL_LOCK_TRIGGERS:
+                row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?", (name,)).fetchone()
+                if row is not None and "shopee_settlements" in (row[0] or ""):
+                    conn.execute(f"DROP TRIGGER {name}")
             conn.executescript(SCHEMA)
             conn.executescript(CANCEL_SCHEMA_PATH.read_text(encoding="utf-8"))
             columns = {row[1] for row in conn.execute("PRAGMA table_info(link_requests)")}

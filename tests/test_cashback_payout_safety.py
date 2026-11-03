@@ -87,12 +87,12 @@ def test_b8_khoa_theo_du_lieu_khong_theo_bang_ton_tai(tmp_path):
     bot = _ready(tmp_path)
     with bot.repo.connect() as conn:
         conn.execute("UPDATE settlement_batches SET status = 'DISPUTED'")
-        with pytest.raises(sqlite3.IntegrityError, match="no matched settlement"):
+        with pytest.raises(sqlite3.IntegrityError, match="financial_lock"):
             conn.execute(
                 "INSERT INTO cashback_payouts (telegram_user_id, amount_vnd, status, bank_code, account_no, account_name, "
                 "created_at) VALUES (?, 1, 'requested', 'MB', '1', 'A', 'x')", (USER,)
             )
-        with pytest.raises(sqlite3.IntegrityError, match="entry not in a matched settlement"):
+        with pytest.raises(sqlite3.IntegrityError, match="financial_lock"):
             conn.execute(
                 "INSERT INTO cashback_entries (conversion_id, telegram_user_id, commission_vnd, cashback_vnd, status, "
                 "created_at, updated_at) VALUES ('raw', ?, 10000, 5000, 'available', 'x', 'x')", (USER,)
