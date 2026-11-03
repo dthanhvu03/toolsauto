@@ -1265,6 +1265,7 @@ class Engine:
         if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
             raise Refused("Chỉ chặn được lúc xe đang chạy đường (không đang dừng đón / bị chặn / xem video).")
         self._start_block(kind, self.last_now)
+        self.block["manual"] = True  # anh bấm tay: vẫn chặn dù đã tắt «tự gặp trạm / công an dọc đường»
 
     def _start_block(self, kind: str, now: float) -> None:
         place = BY_KEY[self._where()[0]].name
@@ -1388,7 +1389,7 @@ class Engine:
 
     def _block_tick(self, now: float) -> None:
         b = self.block
-        if not self.blocks_on:  # admin tắt tính năng giữa lúc đang bị chặn: cho xe đi luôn, không bắt góp tiếp
+        if not self.blocks_on and not b.get("manual"):  # admin tắt tính năng giữa lúc đang bị chặn: xe đi luôn
             self.block = None
             self.emit("block_end", kind=b["kind"], by="off", name="", paid=b["paid"], goal=b["goal"])
             return

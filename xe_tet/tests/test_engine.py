@@ -1679,9 +1679,13 @@ def test_block_edge_cases_turn_off_pause_and_gift_credit_once():
     e.paused = False
     e.tick(101)
     assert e.block  # không tự bù lỗ ngay khi bỏ tạm dừng
+    e.block["manual"] = False  # điểm chặn tự động (theo lịch chuyến)
     e.blocks_on = False
     e.tick(102)
     assert e.block is None and [x for x in e.drain() if x["type"] == "block_end"][-1]["by"] == "off"
+    e.block_now("police")  # tắt tự động nhưng anh bấm tay: vẫn chặn
+    e.tick(103)
+    assert e.block
     # tặng quà lúc chưa có vé: lần giữ chỗ kế tiếp lên đầu hàng, MỘT lần
     f = Engine(0.0)
     comment(f, "An", "Hà Nội", 1)

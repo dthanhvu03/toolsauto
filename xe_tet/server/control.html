@@ -37,7 +37,7 @@
   h2 { margin:0 0 10px; font-size:15px; color:var(--muted); font-weight:600; }
   h3 { margin:12px 0 6px; font-size:13px; color:var(--muted); font-weight:600; }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  input[type=text], input[type=number] { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  input[type=text], input[type=number], input[type=search] { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
   input[type=number] { flex:0 0 96px; }
   button { padding:9px 13px; border:1px solid var(--line); border-radius:10px; background:var(--soft); font:inherit; cursor:pointer; color:inherit; }
   button:hover { border-color:var(--gold); }
@@ -72,22 +72,39 @@
   ol.pax li { padding: 2px 6px; border-radius: 6px; break-inside: avoid; }
   ol.pax li.on { background: #ffe08a; font-weight: 700; }
   details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+  /* xếp theo tần suất dùng khi live (anh 03/11): khối «Đang live» trên cùng, cài đặt gập lại phía dưới */
+  .wide { grid-column: 1 / -1; }
+  section.live { border: 2px solid var(--gold); box-shadow: 0 4px 14px rgba(232,176,74,.18); }
+  section.live h2 { color: var(--red); font-size: 16px; }
+  section.live .stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+  section.live .stat b { font-size: 16px; }
+  .live-line { font-weight: 600; color: var(--ink); margin: 0 0 6px; }
+  .live-line.alert { color: var(--red); }
+  h2.group { grid-column: 1 / -1; margin: 10px 0 0; font-size: 15px; color: var(--muted); }
+  details.cfg { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; }
+  details.cfg[open] { padding-bottom: 14px; }
+  details.cfg > summary { list-style: none; margin: 0; padding: 10px 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  details.cfg > summary::-webkit-details-marker { display: none; }
+  details.cfg > summary::after { content: "▸"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+  details.cfg[open] > summary::after { transform: rotate(90deg); }
+  details.inline > summary { font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
 <div id="notice" role="alert"></div>
 <nav id="dock" aria-label="Điều khiển nhanh">
   <button id="q-pause" class="primary">⏸<small>Dừng</small></button>
-  <button id="q-skip">⏭<small>Qua pha</small></button>
-  <button id="q-main">📺<small>Xe chính</small></button>
+  <button id="q-cover">💸<small>Bù lỗ</small></button>
+  <button id="q-video">📺<small>Video</small></button>
+  <button id="q-say">🗣<small>Nói</small></button>
   <button id="q-cam">🎥<small>Góc kế</small></button>
-  <button id="q-buses">🚌<small>Các xe</small></button>
+  <button id="q-skip">⏭<small>Qua pha</small></button>
 </nav>
 <main>
   <h1>🚌 Điều khiển Xe Tết Sum Vầy</h1>
 
-  <section>
-    <h2>Trạng thái</h2>
+  <section class="wide live">
+    <h2>⚡ Đang live — thao tác nhanh</h2>
     <div class="stats">
       <div class="stat"><b id="s-phase">–</b><span id="s-left">Pha</span></div>
       <div class="stat"><b id="s-bus">–</b><span>Xe / khách</span></div>
@@ -95,6 +112,27 @@
       <div class="stat"><b id="s-likes">–</b><span>Tim chuyến này</span></div>
       <div class="stat"><b id="s-done">–</b><span>Đã đưa về quê</span></div>
     </div>
+    <div class="row" style="margin-top:10px">
+      <button id="pause" class="primary">⏸ Tạm dừng</button>
+      <button data-extend="30">+30 giây</button>
+      <button data-extend="-30">−30 giây</button>
+      <button id="skip">⏭ Qua pha tiếp</button>
+    </div>
+    <h3>🗣 Lơ xe nói</h3>
+    <div class="row">
+      <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay" aria-label="Câu lơ xe nói">
+      <button class="primary" id="say-send">Lơ xe nói</button>
+    </div>
+    <h3>🚧 Xe bị chặn — trạm thu phí / công an</h3>
+    <p class="hint live-line" id="block-now">Xe đang không bị chặn.</p>
+    <div class="row">
+      <button id="cover" class="primary">💸 Anh Tư bù lỗ (cho xe đi)</button>
+      <button data-block="toll">🚧 Trạm thu phí ngay</button>
+      <button data-block="police">👮 Công an ngay</button>
+    </div>
+    <h3>📺 Bảng quảng cáo</h3>
+    <p class="hint live-line" id="show-now">Đang không chiếu.</p>
+    <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
     <div class="row" style="margin-top:10px">
       <a href="/" target="_blank"><button>Mở màn hình live</button></a>
       <a id="report-link" href="/report" target="_blank"><button>📊 Báo cáo buổi live</button></a>
@@ -112,6 +150,9 @@
     </div>
     <div class="track"><i id="m-bar"></i></div>
     <p class="hint" id="m-top"></p>
+    <p class="hint">Tính mọi quà vào game (cả quà thử trên trang này). Số chính xác của TikTok xem trong app. Thanh mục tiêu: mốc
+      10 % mưa lì xì · 30 % đèn lồng · 60 % pháo hoa lớn · 100 % cả xe chúc Tết rồi sang vòng mới — cảnh vui cho cả phòng.</p>
+    <details class="inline"><summary>Chỉnh mục tiêu</summary>
     <div class="row">
       <span>Mục tiêu tiền / giờ</span><input type="number" id="target-vnd" min="1000" step="10000" aria-label="Mục tiêu tiền mỗi giờ (đồng)"><span>đ</span>
       <span>1 xu ≈</span><input type="number" id="vnd-per-xu" min="1" max="1000" step="10" aria-label="Tiền nhận mỗi xu (đồng)"><span>đ</span>
@@ -120,8 +161,7 @@
       <span>Thanh mục tiêu trên live</span><input type="number" id="goal-xu" min="10" max="100000" step="50" aria-label="Mục tiêu buổi live (xu)"><span>xu</span>
       <button id="save-money">Lưu</button>
     </div>
-    <p class="hint">Tính mọi quà vào game (cả quà thử trên trang này). Số chính xác của TikTok xem trong app. Thanh mục tiêu: mốc
-      10 % mưa lì xì · 30 % đèn lồng · 60 % pháo hoa lớn · 100 % cả xe chúc Tết rồi sang vòng mới — cảnh vui cho cả phòng.</p>
+    </details>
   </section>
 
   <section>
@@ -135,6 +175,28 @@
     <div id="tt-log"></div>
     <p class="hint">Chỉ đọc sự kiện công khai của phòng live, không cần mật khẩu TikTok. Nối trước khi lên live cũng được:
       tài khoản chưa live thì tự chờ và vào khi live bắt đầu. Rớt mạng thì tự nối lại.</p>
+  </section>
+
+  <section>
+    <h2>🧾 Hành khách — ai ở xe nào</h2>
+    <div class="row">
+      <input id="pax-q" type="search" placeholder="Tìm tên người xem…" aria-label="Tìm tên người xem" style="flex:1;min-width:200px">
+    </div>
+    <div id="pax-found" class="hint" style="margin:8px 0"></div>
+    <div id="pax"></div>
+    <p class="hint">Trên xe: tên · tỉnh về · giường. Hàng chờ: thứ tự lên chuyến sau của từng làn. Cập nhật mỗi 2 giây.</p>
+  </section>
+
+  <section>
+    <h2>📢 Băng rôn trên live</h2>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="ann-title" maxlength="60" placeholder="Tiêu đề băng rôn" aria-label="Tiêu đề băng rôn">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="ann-text" maxlength="160" placeholder="Dòng phụ (không bắt buộc)" aria-label="Dòng phụ băng rôn">
+      <input type="number" id="ann-seconds" value="8" min="3" max="30" aria-label="Số giây hiện băng rôn">
+      <button class="primary" id="ann-send">Hiện băng rôn</button>
+    </div>
   </section>
 
   <section>
@@ -168,8 +230,66 @@
     </div>
   </section>
 
-  <section>
-    <h2>🎵 Nhạc & âm thanh</h2>
+  <h2 class="group">⚙️ Cài đặt — bấm từng mục để mở</h2>
+
+  <details class="cfg" data-key="show">
+    <summary>📺 Bảng quảng cáo — tải video, lịch chiếu</summary>
+    <label class="toggle"><input type="checkbox" data-show="show_on"> Xe đang chạy tự dừng lại xem video trên bảng quảng cáo bên đường (xoay vòng danh sách)</label>
+    <label class="toggle"><input type="checkbox" data-show="show_sound"> Phát tiếng video (nhạc trong xe nhỏ lại khi chiếu)</label>
+    <div class="row" style="margin-top:8px">
+      <span>Mỗi</span><input type="number" id="show-every" min="1" max="120" step="1" aria-label="Mỗi bao nhiêu phút chiếu một video"><span>phút một video</span>
+      <span>· tối đa</span><input type="number" id="show-max" min="5" max="900" step="5" aria-label="Chiếu tối đa bao nhiêu giây"><span>giây / video</span>
+      <button id="save-show">Lưu</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="file" id="video-file" accept=".mp4,.webm,video/mp4,video/webm" multiple aria-label="Chọn video" style="flex:1;min-width:0">
+      <button id="video-upload" class="primary">⬆ Tải video lên</button>
+    </div>
+    <ul id="video-files" class="files"></ul>
+    <p class="hint">Video mp4 / webm, tối đa 500 MB / file (video iPhone .mov đổi sang mp4 trước). Chỉ chiếu lúc xe đang chạy
+      đường, dừng giữa chặng. Anh tự chịu trách nhiệm quyền dùng video — video có nhạc bản quyền có thể bị TikTok tắt tiếng.</p>
+  </details>
+
+  <details class="cfg" data-key="block">
+    <summary>🚧 Trạm thu phí & công an — phí, tự bù lỗ</summary>
+    <label class="toggle"><input type="checkbox" data-show="blocks_on"> Dọc đường gặp trạm thu phí / công an — xe đứng chờ người xem tặng quà góp đủ mới đi</label>
+    <label class="toggle"><input type="checkbox" data-show="fee_auto"> Phí tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua; tối đa bằng số bên dưới)</label>
+    <div class="row">
+      <span>Phí trạm tối đa</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
+      <span>Phạt tối đa</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
+    </div>
+    <label class="toggle"><input type="checkbox" data-show="cover_on"> Tự bù lỗ — góp chưa đủ thì Anh Tư bù phần thiếu cho xe đi (tắt: chờ tới khi góp đủ hoặc anh bấm tay)</label>
+    <div class="row" style="margin-top:8px">
+      <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="10" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
+      <span>giây</span>
+      <button id="save-blocks">Lưu</button>
+    </div>
+    <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy x2 nhờ quà mà gặp công an thì «quá tốc độ», phạt gấp 3 (giây chạy nhanh còn lại giữ nguyên).
+      Phòng ít quà: bấm «Anh Tư bù lỗ», lơ xe nói bù phần thiếu rồi xe đi.</p>
+  </details>
+
+  <details class="cfg" data-key="times">
+    <summary>🚦 Thời gian chuyến xe · làm lại từ đầu</summary>
+    <h3>Thời gian (giây) — áp dụng từ pha sau</h3>
+    <div class="row">
+      <span>Đón khách</span><input type="number" id="board-seconds" min="20" max="900" step="10" aria-label="Thời gian đón khách">
+      <span>Nghỉ trạm</span><input type="number" id="rest-seconds" min="20" max="300" step="10" aria-label="Thời gian nghỉ trạm">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>Chuyến xa nhất chạy</span><input type="number" id="trip-minutes" min="3" max="15" step="0.5" aria-label="Phút chạy đường của chuyến xa nhất"><span>phút</span>
+      <button id="save-times">Lưu</button>
+    </div>
+    <p class="hint" id="trip-hint">Chuyến gần ngắn hơn theo km (không tỉ lệ thẳng). Lơ xe nói «chừng 26 tiếng» thì đồng hồ trên xe
+      chạy đủ 26 tiếng trong mấy phút đó — trời sáng / tối theo đồng hồ xe.</p>
+    <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="reset">↺ Làm lại từ đầu</button>
+      <span class="hint" style="margin:0">Xoá mọi vé, hàng chờ, bảng tỉnh — chỉ dùng khi thử</span>
+    </div>
+  </details>
+
+  <details class="cfg" data-key="sound">
+    <summary>🎵 Nhạc & âm thanh · giọng lơ xe</summary>
     <div class="row" style="flex-wrap:wrap; gap:6px; margin-bottom:8px">
       <span style="min-width:96px">Phát tiếng ở</span>
       <span id="screens" style="display:flex; flex-wrap:wrap; gap:6px; flex:1"></span>
@@ -230,10 +350,41 @@
     <p class="hint">Mỗi xe một bài riêng (chọn trong danh sách ở «Các chuyến xe»); tiếng theo xe đang chiếu. Bài anh tải lên (mp3 / ogg / m4a / wav, tối đa
       200 MB / file) vào danh sách ngay — anh tự chịu trách nhiệm quyền dùng bài: nhạc có bản quyền có thể bị TikTok tắt
       tiếng. Màn hình live phải được bấm vào một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
-  </section>
+  </details>
 
-  <section>
-    <h2 id="buses-title">🚌 Các chuyến xe</h2>
+  <details class="cfg" data-key="screen">
+    <summary>🖥 Màn hình live · AI trả lời</summary>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="show_route"> Bảng tuyến đường</label>
+      <label class="toggle"><input type="checkbox" data-show="show_loxe"> Lơ xe</label>
+      <label class="toggle"><input type="checkbox" data-show="show_toasts"> Thông báo vé / quà</label>
+      <label class="toggle"><input type="checkbox" data-show="show_board"> Bảng tỉnh</label>
+      <label class="toggle"><input type="checkbox" data-show="auto_loxe"> Lơ xe tự nói</label>
+      <label class="toggle"><input type="checkbox" data-show="ai_reply"> Lơ xe trả lời câu hỏi bằng AI (Gemini)</label>
+    </div>
+    <p class="hint" id="ai-status"></p>
+    <div class="row" style="margin-top:8px">
+      <span style="min-width:96px">Cỡ chữ trên live</span>
+      <input type="range" min="0.6" max="1.2" step="0.05" data-volume="hud_scale" aria-label="Cỡ chữ trên live" style="flex:1">
+      <output id="vol-hud_scale">0.80</output>
+    </div>
+    <p class="hint">Nhỏ lại thì chữ + khung trên live gọn hơn, nhường chỗ cho cảnh; cụm trên cùng tự dồn lên sát thanh TikTok.</p>
+  </details>
+
+  <details class="cfg" data-key="station">
+    <summary>🚏 Bến đi</summary>
+    <div class="row">
+      <select id="departure" aria-label="Bến đi" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff"></select>
+      <button id="departure-set">Đổi bến</button>
+    </div>
+    <p class="hint" id="lanes-now"></p>
+    <p class="hint">Chỉ đổi được khi xe đang đón, chưa ai lên xe và không ai giữ chỗ (tránh vé sai hướng).</p>
+    <p class="hint" id="station-votes"></p>
+  </details>
+
+  <details class="cfg" data-key="buses">
+    <summary>🚌 Xe đang chạy · nhạc từng xe</summary>
+    <span id="buses-title"></span>
     <p class="hint">Chỉ chạy <b>một xe</b> (PLAN-145): ai muốn đi gõ tên tỉnh để có vé / xếp hàng; hết chuyến xe quay về bến
       đón tiếp, chọn tuyến chở được nhiều người chờ nhất (ai chờ quá 10 phút thì tuyến của họ đi trước).</p>
     <div class="row" hidden>
@@ -255,133 +406,10 @@
     <p class="hint" hidden>Khi có xe tăng cường: «📺 Chiếu xe này» = màn hình live theo xe đó (cảnh, đèo / hầm, tên trên xe, nhạc của
       xe đó; góc máy chọn ở phần Camera). Mỗi xe một đài nhạc chạy liên tục — chuyển xe là nghe đúng đoạn xe đó đang phát.
       Xe tăng cường tới bến cuối thì màn hình tự về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
-  </section>
+  </details>
 
-  <section>
-    <h2>🧾 Hành khách — ai ở xe nào</h2>
-    <div class="row">
-      <input id="pax-q" type="search" placeholder="Tìm tên người xem…" aria-label="Tìm tên người xem" style="flex:1;min-width:200px">
-    </div>
-    <div id="pax-found" class="hint" style="margin:8px 0"></div>
-    <div id="pax"></div>
-    <p class="hint">Trên xe: tên · tỉnh về · giường. Hàng chờ: thứ tự lên chuyến sau của từng làn. Cập nhật mỗi 2 giây.</p>
-  </section>
-
-  <section>
-    <h2>🚏 Bến đi</h2>
-    <div class="row">
-      <select id="departure" aria-label="Bến đi" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff"></select>
-      <button id="departure-set">Đổi bến</button>
-    </div>
-    <p class="hint" id="lanes-now"></p>
-    <p class="hint">Chỉ đổi được khi xe đang đón, chưa ai lên xe và không ai giữ chỗ (tránh vé sai hướng).</p>
-    <p class="hint" id="station-votes"></p>
-  </section>
-
-  <section>
-    <h2>🚦 Chuyến xe</h2>
-    <div class="row">
-      <button id="pause" class="primary">⏸ Tạm dừng</button>
-      <button data-extend="30">+30 giây</button>
-      <button data-extend="-30">−30 giây</button>
-      <button id="skip">⏭ Qua pha tiếp</button>
-      <button id="reset">↺ Làm lại từ đầu</button>
-    </div>
-    <h3>Thời gian (giây) — áp dụng từ pha sau</h3>
-    <div class="row">
-      <span>Đón khách</span><input type="number" id="board-seconds" min="20" max="900" step="10" aria-label="Thời gian đón khách">
-      <span>Nghỉ trạm</span><input type="number" id="rest-seconds" min="20" max="300" step="10" aria-label="Thời gian nghỉ trạm">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <span>Chuyến xa nhất chạy</span><input type="number" id="trip-minutes" min="3" max="15" step="0.5" aria-label="Phút chạy đường của chuyến xa nhất"><span>phút</span>
-      <button id="save-times">Lưu</button>
-    </div>
-    <p class="hint" id="trip-hint">Chuyến gần ngắn hơn theo km (không tỉ lệ thẳng). Lơ xe nói «chừng 26 tiếng» thì đồng hồ trên xe
-      chạy đủ 26 tiếng trong mấy phút đó — trời sáng / tối theo đồng hồ xe.</p>
-    <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
-  </section>
-
-  <section>
-    <h2>📺 Bảng quảng cáo — video nổi bật</h2>
-    <label class="toggle"><input type="checkbox" data-show="show_on"> Xe đang chạy tự dừng lại xem video trên bảng quảng cáo bên đường (xoay vòng danh sách)</label>
-    <label class="toggle"><input type="checkbox" data-show="show_sound"> Phát tiếng video (nhạc trong xe nhỏ lại khi chiếu)</label>
-    <div class="row" style="margin-top:8px">
-      <span>Mỗi</span><input type="number" id="show-every" min="1" max="120" step="1" aria-label="Mỗi bao nhiêu phút chiếu một video"><span>phút một video</span>
-      <span>· tối đa</span><input type="number" id="show-max" min="5" max="900" step="5" aria-label="Chiếu tối đa bao nhiêu giây"><span>giây / video</span>
-      <button id="save-show">Lưu</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <input type="file" id="video-file" accept=".mp4,.webm,video/mp4,video/webm" multiple aria-label="Chọn video" style="flex:1;min-width:0">
-      <button id="video-upload" class="primary">⬆ Tải video lên</button>
-    </div>
-    <p class="hint" id="show-now">Đang không chiếu.</p>
-    <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
-    <ul id="video-files" class="files"></ul>
-    <p class="hint">Video mp4 / webm, tối đa 500 MB / file (video iPhone .mov đổi sang mp4 trước). Chỉ chiếu lúc xe đang chạy
-      đường, dừng giữa chặng. Anh tự chịu trách nhiệm quyền dùng video — video có nhạc bản quyền có thể bị TikTok tắt tiếng.</p>
-  </section>
-
-  <section>
-    <h2>🚧 Trạm thu phí & công an</h2>
-    <label class="toggle"><input type="checkbox" data-show="blocks_on"> Dọc đường gặp trạm thu phí / công an — xe đứng chờ người xem tặng quà góp đủ mới đi</label>
-    <div class="row" style="margin-top:8px">
-      <button data-block="toll">🚧 Trạm thu phí ngay</button>
-      <button data-block="police">👮 Công an ngay</button>
-      <button id="cover" class="primary">💸 Anh Tư bù lỗ (cho xe đi)</button>
-    </div>
-    <p class="hint" id="block-now">Xe đang không bị chặn.</p>
-    <label class="toggle"><input type="checkbox" data-show="fee_auto"> Phí tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua; tối đa bằng số bên dưới)</label>
-    <div class="row">
-      <span>Phí trạm tối đa</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
-      <span>Phạt tối đa</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
-    </div>
-    <label class="toggle"><input type="checkbox" data-show="cover_on"> Tự bù lỗ — góp chưa đủ thì Anh Tư bù phần thiếu cho xe đi (tắt: chờ tới khi góp đủ hoặc anh bấm tay)</label>
-    <div class="row" style="margin-top:8px">
-      <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="10" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
-      <span>giây</span>
-      <button id="save-blocks">Lưu</button>
-    </div>
-    <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy x2 nhờ quà mà gặp công an thì «quá tốc độ», phạt gấp 3 (giây chạy nhanh còn lại giữ nguyên).
-      Phòng ít quà: bấm «Anh Tư bù lỗ», lơ xe nói bù phần thiếu rồi xe đi.</p>
-  </section>
-
-  <section>
-    <h2>🖥 Màn hình</h2>
-    <div class="row">
-      <label class="toggle"><input type="checkbox" data-show="show_route"> Bảng tuyến đường</label>
-      <label class="toggle"><input type="checkbox" data-show="show_loxe"> Lơ xe</label>
-      <label class="toggle"><input type="checkbox" data-show="show_toasts"> Thông báo vé / quà</label>
-      <label class="toggle"><input type="checkbox" data-show="show_board"> Bảng tỉnh</label>
-      <label class="toggle"><input type="checkbox" data-show="auto_loxe"> Lơ xe tự nói</label>
-      <label class="toggle"><input type="checkbox" data-show="ai_reply"> Lơ xe trả lời câu hỏi bằng AI (Gemini)</label>
-    </div>
-    <p class="hint" id="ai-status"></p>
-    <div class="row" style="margin-top:8px">
-      <span style="min-width:96px">Cỡ chữ trên live</span>
-      <input type="range" min="0.6" max="1.2" step="0.05" data-volume="hud_scale" aria-label="Cỡ chữ trên live" style="flex:1">
-      <output id="vol-hud_scale">0.80</output>
-    </div>
-    <p class="hint">Nhỏ lại thì chữ + khung trên live gọn hơn, nhường chỗ cho cảnh; cụm trên cùng tự dồn lên sát thanh TikTok.</p>
-  </section>
-
-  <section>
-    <h2>📢 Lơ xe nói & băng rôn</h2>
-    <div class="row">
-      <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay" aria-label="Câu lơ xe nói">
-      <button class="primary" id="say-send">Lơ xe nói</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <input type="text" id="ann-title" maxlength="60" placeholder="Tiêu đề băng rôn" aria-label="Tiêu đề băng rôn">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <input type="text" id="ann-text" maxlength="160" placeholder="Dòng phụ (không bắt buộc)" aria-label="Dòng phụ băng rôn">
-      <input type="number" id="ann-seconds" value="8" min="3" max="30" aria-label="Số giây hiện băng rôn">
-      <button class="primary" id="ann-send">Hiện băng rôn</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Gửi sự kiện thử</h2>
+  <details class="cfg" data-key="test">
+    <summary>🧪 Gửi sự kiện thử</summary>
     <div class="row"><input type="text" id="name" value="Minh Anh" aria-label="Tên người xem"></div>
     <div class="row" style="margin-top:8px">
       <input type="text" id="text" placeholder="Comment: nghệ an, 37, không về, phở, wc…" aria-label="Nội dung comment">
@@ -400,10 +428,10 @@
       <button data-type="join">👋 Vào phòng</button>
     </div>
     <p class="hint">Mỗi tên là một người xem. Đổi tên để thử nhiều người.</p>
-  </section>
+  </details>
 
-  <section>
-    <h2>Giả lập phòng đông</h2>
+  <details class="cfg" data-key="sim">
+    <summary>🧪 Giả lập phòng đông (chỉ khi thử)</summary>
     <div class="row">
       <button data-sim="0">Tắt</button>
       <button data-sim="2">Vắng (2/giây)</button>
@@ -412,7 +440,7 @@
     </div>
     <p class="hint paused">⚠ Chỉ dùng khi thử. Không bật khi đang live thật: TikTok coi tương tác giả là gian lận.</p>
     <div id="log"></div>
-  </section>
+  </details>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -506,11 +534,18 @@ function notice(text, ok = false) {
 
 // ---- thanh điều khiển nhanh (ghim đáy) ----
 const CAM_ORDER = ["wide", "high", "side", "close"];
+let lastShow = false;
 $("q-pause").onclick = () => admin({ action: "pause", paused: !paused });
 $("q-skip").onclick = () => admin({ action: "skip" });
-$("q-main").onclick = () => admin({ action: "feature", bus_no: 0 });
+$("q-cover").onclick = () => admin({ action: "cover" });
+$("q-video").onclick = () => admin({ action: lastShow ? "show_stop" : "show" });
+$("q-say").onclick = () => { $("say").scrollIntoView({ behavior: "smooth", block: "center" }); $("say").focus(); };
 $("q-cam").onclick = () => setControl({ cam: CAM_ORDER[(CAM_ORDER.indexOf(control.cam ?? "wide") + 1) % CAM_ORDER.length] });
-$("q-buses").onclick = () => $("buses-title").scrollIntoView({ behavior: "smooth", block: "start" });
+// mục cài đặt gập / mở: nhớ trên máy này (lần sau mở lại đúng mục anh hay chỉnh)
+document.querySelectorAll("details.cfg").forEach((d) => {
+  try { if (localStorage.getItem(`cfg:${d.dataset.key}`) === "1") d.open = true; } catch {}
+  d.addEventListener("toggle", () => { try { localStorage.setItem(`cfg:${d.dataset.key}`, d.open ? "1" : "0"); } catch {} });
+});
 
 // ---- các chuyến xe: chiếu xe nào, xe tăng cường tới điểm kế, gọi thêm xe ----
 // Danh sách vẽ lại mỗi giây → bắt bấm ở khung ngoài (nút mới vẽ vẫn bấm được ngay).
@@ -845,7 +880,11 @@ async function refresh() {
     $("s-done").textContent = s.delivered;
     $("pause").textContent = paused ? "▶ Chạy tiếp" : "⏸ Tạm dừng";
     $("q-pause").innerHTML = paused ? "▶<small>Chạy tiếp</small>" : "⏸<small>Dừng</small>";
-    $("q-main").classList.toggle("on", s.featured == null);
+    lastShow = !!s.show;
+    $("q-video").innerHTML = s.show ? "⏹<small>Tắt video</small>" : "📺<small>Video</small>";
+    $("q-video").disabled = !s.show && !(s.videos || []).length;
+    $("q-cover").disabled = !s.block;
+    $("q-cover").classList.toggle("primary", !!s.block);
     document.querySelectorAll("[data-set]").forEach((b) => b.classList.toggle("on", control[b.dataset.set] === b.dataset.val));
     document.querySelectorAll("[data-sim]").forEach((b) => b.classList.toggle("on", +b.dataset.sim === s.sim_rate));
     document.querySelectorAll("[data-show]").forEach((c) => {
@@ -882,6 +921,8 @@ async function refresh() {
         + (blk.cover_in != null ? ` · tự bù lỗ sau ${blk.cover_in} giây` : "")
       : "Xe đang không bị chặn.";
     $("cover").disabled = !blk;
+    $("block-now").classList.toggle("alert", !!blk);
+    $("show-now").classList.toggle("alert", !!s.show);
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
     if (!timesLoaded) {  // không ghi đè khi admin đang gõ
       $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
