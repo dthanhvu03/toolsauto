@@ -193,6 +193,9 @@ class OwnerPeriod:
     expected_vnd: int | None  # Shopee báo sẽ chuyển (sau phí, thuế); None: chưa có số
     customer_vnd: int  # tiền hoàn của khách cho đơn bot trong kỳ
     received: bool  # đã có chứng từ ngân hàng
+    commission_vnd: int | None = None  # hoa hồng Shopee báo (gồm điều chỉnh), trước phí / thuế
+    fee_vnd: int | None = None  # phí dịch vụ (+ VAT chưa gồm)
+    tax_vnd: int | None = None  # thuế Shopee giữ; None: chưa rõ
 
 
 @dataclass(frozen=True)
@@ -207,6 +210,10 @@ class OwnerPosition:
     received_vnd: int
     own_orders_vnd: int  # đơn ngoài bot + không rõ đơn, trước phí / thuế
     costs_vnd: int  # phí + VAT chưa gồm + thuế Shopee giữ
+    commission_vnd: int  # hoa hồng Shopee báo (gồm điều chỉnh), trước phí / thuế
+    fee_vnd: int  # phí dịch vụ + VAT chưa gồm
+    tax_vnd: int  # thuế Shopee giữ (TNCN + VAT)
+    bot_commission_vnd: int  # hoa hồng của đơn qua bot, trước phí / thuế
     customer_vnd: int
     waiting_vnd: int  # phần khách còn chờ đủ ngày giữ
     reserved_vnd: int
@@ -241,19 +248,35 @@ def _batch_items(conn: sqlite3.Connection, batch: sqlite3.Row) -> list[sqlite3.R
     ).fetchall()
 
 
+def _batch_money(batch: sqlite3.Row) -> tuple[int | None, int | None, int | None]:
+    """(hoa hồng gồm điều chỉnh, phí + VAT chưa gồm, thuế giữ) của một kỳ; None khi chứng từ chưa có số."""
+    commission = None
+    if batch["reported_commission_vnd"] is not None:
+        commission = int(batch["reported_commission_vnd"]) + int(batch["adjustments_vnd"] or 0)
+    fee = None
+    if batch["fee_vnd"] is not None:
+        fee = int(batch["fee_vnd"]) + (0 if batch["fee_includes_vat"] else int(batch["fee_vat_vnd"] or 0))
+    tax = None if batch["tax_withheld_vnd"] is None else int(batch["tax_withheld_vnd"])
+    return commission, fee, tax
+
+
 def owner_position(conn: sqlite3.Connection) -> OwnerPosition:
-    received = own = costs = 0
+    received = own = commission = fee = tax = bot_commission = 0
     settled_ids: set[str] = set()
     matched = conn.execute("SELECT * FROM settlement_batches WHERE status = 'MATCHED' ORDER BY period, id").fetchall()
     for batch in matched:
         received += int(batch["bank_received_vnd"] or 0)
-        vat = 0 if batch["fee_includes_vat"] else int(batch["fee_vat_vnd"] or 0)
-        costs += int(batch["fee_vnd"] or 0) + vat + int(batch["tax_withheld_vnd"] or 0)
+        batch_commission, batch_fee, batch_tax = _batch_money(batch)
+        commission += batch_commission or 0
+        fee += batch_fee or 0
+        tax += batch_tax or 0
         for item in _batch_items(conn, batch):
+            amount = int(item["settled_vnd"] or 0) + int(item["adjustment_vnd"] or 0)
             if item["is_bot"] and item["match_status"] == "MATCHED" and item["conversion_id"]:
                 settled_ids.add(str(item["conversion_id"]))
+                bot_commission += amount
             elif item["match_status"] in ("NOT_BOT", "UNKNOWN_ORDER"):
-                own += int(item["settled_vnd"] or 0) + int(item["adjustment_vnd"] or 0)
+                own += amount
     customer, waiting = _customer_share(conn, settled_ids)
     upcoming = []
     for batch in conn.execute(
@@ -263,10 +286,13 @@ def owner_position(conn: sqlite3.Connection) -> OwnerPosition:
         expected = batch["bank_received_vnd"] if batch["bank_received_vnd"] is not None else batch["shopee_payout_vnd"]
         upcoming.append(OwnerPeriod(
             str(batch["period"]), None if expected is None else int(expected), _customer_share(conn, ids)[0],
-            batch["bank_received_vnd"] is not None,
+            batch["bank_received_vnd"] is not None, *_batch_money(batch),
         ))
     reserved, paid = payout_totals(conn)
-    return OwnerPosition(len(matched), received, own, costs, customer, waiting, reserved, paid, tuple(upcoming))
+    return OwnerPosition(
+        len(matched), received, own, fee + tax, commission, fee, tax, bot_commission, customer, waiting, reserved, paid,
+        tuple(upcoming),
+    )
 
 
 def payout_totals(conn: sqlite3.Connection, user_id: int | None = None) -> tuple[int, int]:
