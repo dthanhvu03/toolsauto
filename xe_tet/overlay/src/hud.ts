@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { Block, FleetBus, GameEvent, Quiz, Route, State, Vendor } from "./types";
+import type { Block, FleetBus, GameEvent, Quiz, Route, State, Vendor, Versus, VersusSide } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -396,6 +396,21 @@ export class Hud {
       const pct = Math.min(100, Math.round((g.xu / Math.max(1, g.goal)) * 100));
       setHTML("goal-bar", `<i style="width:${pct}%"></i><span>🎯 Mục tiêu buổi live ${g.xu}/${g.goal} xu · tới ${g.next_xu} xu: ${esc(g.next)}</span>`);
     }
+    this.renderVersus(s.versus ?? null);
+  }
+
+  /** Thanh đối kháng: hai màu, phần mỗi bên theo tỉ lệ điểm (0 – 0 thì chia đôi); bên dẫn có vương miện. */
+  private renderVersus(vs: Versus | null): void {
+    const bar = $("vs-bar");
+    bar.classList.toggle("hidden", !vs);
+    if (!vs) return;
+    const [a, b] = vs.sides;
+    const total = a.points + b.points;
+    const pct = total ? Math.round((a.points / total) * 100) : 50;
+    const side = (x: VersusSide) => `${x.lead && total ? "👑 " : ""}${x.arrow} ${esc(x.dest)} <b>${x.points}</b>`;
+    setHTML("vs-bar", `<i style="width:${Math.min(92, Math.max(8, pct))}%"></i>`
+      + `<span class="a">${side(a)}</span><em>⚔️</em><span class="b">${side(b)}</span>`
+      + `<small>Quê bên nào thì bình luận · thả tim · tặng quà cho bên đó — bên nhiều điểm chạy trước</small>`);
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
@@ -525,6 +540,15 @@ export class Hud {
         break;
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
+        break;
+      case "versus_start":  // đối kháng: vòng mới
+        if (e.sides?.length === 2) this.note(`⚔️ Đối kháng: ${esc(e.sides[0])} đấu ${esc(e.sides[1])}`,
+          "Quê bên nào thì bình luận, thả tim, tặng quà cho bên đó · bên nhiều điểm chạy trước");
+        break;
+      case "versus_win":  // đối kháng: hướng thắng chạy chuyến này
+        this.flash(`⚔️ ${e.dest ?? ""} thắng!`);
+        this.note(`⚔️ ${esc(e.dest ?? "")} thắng ${esc(e.rival ?? "")} · ${e.points} – ${e.rival_points ?? 0}`,
+          `Chuyến này chạy ${esc(e.lane ?? "")} · vòng đối kháng mới bắt đầu`);
         break;
       case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
         this.flash(`⚔️ ${e.province ?? ""} thắng đua tỉnh!`);

@@ -270,6 +270,9 @@ RACE_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây 
 RACE_LIKES_PER_POINT = 20
 RACE_PER_XU = 5
 RACE_TALK_GAP = 30.0
+# Đối kháng (anh 03/11 «game đối kháng như mấy chỗ live khác»): hai hướng đứng đầu hàng chờ đấu nhau — ai quê thuộc hướng
+# nào thì bình luận / tim / quà cộng điểm cho hướng đó (cùng thang điểm đua tỉnh); vào bến, hướng nhiều điểm hơn chạy trước
+VERSUS_TALK_GAP = 30.0
 # Bảng quảng cáo bên đường (anh 03/11): video anh tải lên; xe đang chạy dừng lại xem hết rồi chạy tiếp
 SHOW_LEG_WINDOW = (0.15, 0.8)
 FOCUS_SECONDS = 12.0  # /control bấm vào một khách: máy quay zoom vào cửa sổ giường người đó chừng này giây (anh 03/11)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
@@ -527,6 +530,11 @@ class Engine:
         self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
         self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
+        self.versus_on = False  # chế độ đối kháng (/control)
+        self.versus: Counter = Counter()  # điểm đối kháng vòng này (theo làn)
+        self.versus_leader: str | None = None
+        self.versus_winner: tuple[str, str, int, int] | None = None  # (làn thắng, làn thua, điểm thắng, điểm thua)
+        self.last_versus_talk = -1e9
         self.race_leader: str | None = None
         self.race_winner: str | None = None
         self.last_race_talk = -1e9
@@ -858,7 +866,15 @@ class Engine:
         self.seated_at = []
         self.bus_counter += 1
         self.race_winner = None
+        self.versus_winner = None
         self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
+        if self.versus_winner:  # vòng đối kháng: hướng thắng chạy chuyến này
+            win, lose, wp, lp = self.versus_winner
+            self.emit("versus_win", lane=self.network.lane_by_key[win].label, dest=self._dest(win), points=wp,
+                      rival=self._dest(lose), rival_points=lp)
+            self.talk("versus_win", lead=self._dest(win), rival=self._dest(lose), main=True)
+        self.versus.clear()
+        self.versus_leader = None
         if self.race_winner:  # vòng đua tỉnh này có tỉnh thắng: báo rồi sang vòng mới
             win = BY_KEY[self.race_winner].name
             self.emit("race_win", province=win, points=self.race[self.race_winner])
@@ -915,6 +931,13 @@ class Engine:
             if consume:  # xem trước (bảng «chuyến sau» trên màn hình) thì giữ lựa chọn
                 self.next_lane = None
             return lane
+        pair = self._versus_pair()
+        if pair:  # đối kháng: hướng nhiều điểm hơn chạy trước (hoà: thứ tự đặt vé)
+            win = self._versus_lead(pair)
+            lose = pair[1] if win == pair[0] else pair[0]
+            if consume and self.versus[win] > 0:
+                self.versus_winner = (win, lose, self.versus[win], self.versus[lose])
+            return win
         if not self.race_on:  # anh 03/11: ai đặt trước lên trước, chỉ người tặng quà được ưu tiên
             return self._fifo_order()[0]
         oldest = min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
@@ -933,6 +956,45 @@ class Engine:
                 self.race_winner = key
                 return max(lanes, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
         return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
+
+    def _versus_pair(self) -> list[str]:
+        """Hai hướng đang đối kháng: hai hướng đứng đầu thứ tự chạy (quà trước, đặt sớm trước); dưới hai hướng có người chờ
+        thì không đấu."""
+        if not self.versus_on:
+            return []
+        order = self._fifo_order()
+        return order[:2] if len(order) >= 2 else []
+
+    def _versus_lead(self, pair: list[str]) -> str:
+        return max(pair, key=lambda lane: (self.versus[lane], -pair.index(lane)))
+
+    def _versus_score(self, v: Viewer, points: int) -> None:
+        """Điểm đối kháng cho hướng có quê người xem (vé đang có, không thì quê đã về lần trước)."""
+        key = v.province or v.home
+        pair = self._versus_pair()
+        lane = self.network.lane_of(key) if key and pair else None
+        if lane not in pair or points <= 0:
+            return
+        self.versus[lane] += points
+        lead = self._versus_lead(pair)
+        other = pair[1] if lead == pair[0] else pair[0]
+        if lead != self.versus_leader and self.versus[lead] > self.versus[other]:
+            self.versus_leader = lead
+            if self.last_now - self.last_versus_talk >= VERSUS_TALK_GAP:
+                self.last_versus_talk = self.last_now
+                self.talk("versus_lead", lead=self._dest(lead), rival=self._dest(other))
+
+    def _versus_view(self) -> dict | None:
+        pair = self._versus_pair()
+        if not pair:
+            return None
+        lead = self._versus_lead(pair)
+        sides = []
+        for lane in pair:
+            ln = self.network.lane_by_key[lane]
+            sides.append({"lane": lane, "label": ln.label, "arrow": ln.arrow, "dest": self._dest(lane),
+                          "points": self.versus[lane], "waiting": len(self.queues[lane]), "lead": lane == lead})
+        return {"sides": sides, "chosen": self.next_lane in self.queues and bool(self.queues.get(self.next_lane))}
 
     def _fifo_order(self) -> list[str]:
         """Thứ tự các hướng chạy tiếp theo: hướng của người tặng quà đang chờ trước, rồi người đặt vé sớm nhất (anh 03/11)."""
@@ -979,6 +1041,11 @@ class Engine:
     def upcoming(self) -> list[dict]:
         """Các chuyến sắp chạy cho /control: số chuyến, hướng, bao nhiêu người chờ, ai đầu hàng."""
         order = self._fifo_order()
+        pair = self._versus_pair()
+        if pair:  # đối kháng: hướng đang dẫn điểm chạy trước
+            lead = self._versus_lead(pair)
+            order.remove(lead)
+            order.insert(0, lead)
         if self.next_lane in order:
             order.remove(self.next_lane)
             order.insert(0, self.next_lane)
@@ -1219,6 +1286,10 @@ class Engine:
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
         self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)), main=True)
+        pair = self._versus_pair()
+        if pair:  # vòng đối kháng mới: hai hướng đầu hàng chờ đấu nhau giành chuyến sau
+            self.emit("versus_start", sides=[self._dest(lane) for lane in pair])
+            self.talk("versus_start", lead=self._dest(pair[0]), rival=self._dest(pair[1]))
         self._roll_weather(BY_KEY[self._where()[0]].region, now, force=True)
         self._enter_driving(now)
 
@@ -1851,6 +1922,7 @@ class Engine:
 
     def _race(self, v: Viewer, points: int) -> None:
         """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước)."""
+        self._versus_score(v, points)
         key = v.province or v.home
         if not self.race_on or not key or points <= 0:
             return
@@ -2993,6 +3065,7 @@ class Engine:
             "show": {"url": self.show["url"], "title": self.show["title"], "seconds": self.show["seconds"],
                      "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
             "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
+            "versus": self._versus_view(),
             "upcoming": self.upcoming(),
             "focus": self._focus_view(),
             "block": self._block_view(),

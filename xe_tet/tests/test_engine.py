@@ -1618,7 +1618,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
                   goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì",
                   q="Phở bò là của tỉnh nào", a="Nam Định", b="Huế", c="Hà Nội", ans="A, Nam Định",
-                  fact="Nam Định nổi tiếng với phở bò")
+                  fact="Nam Định nổi tiếng với phở bò", lead="Hà Nội", rival="Cà Mau")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -2329,3 +2329,53 @@ def test_ads_setting_is_cleaned():
     assert out["ads"][0] == {"title": "@x_bot", "desc": "a b", "say": "y" * 200}
     assert [a["title"] for a in out["ads"]] == ["@x_bot", "2", "3"] and out["ads_talk_min"] == 2
     assert [a["title"] for a in DEFAULTS["ads"]] == ["@zt_shopee_bot", "@aipass_shop_bot"]
+
+
+def test_versus_two_lanes_fight_for_next_trip(real_routes):
+    """Anh 03/11 «game đối kháng»: hai hướng đầu hàng chờ đấu điểm theo quê (bình luận / tim / quà như đua tỉnh); vào bến,
+    hướng nhiều điểm hơn chạy trước dù đặt vé sau; người quê hướng khác không cộng điểm; tắt thì về thứ tự đặt vé."""
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e.versus_on = True
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    north = e.bus.lane
+    comment(e, "Cà", "Cà Mau", t + 1)  # đặt trước
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
+    assert {camau, danang}.isdisjoint({north}) and camau != danang
+    view = e.snapshot()["versus"]
+    assert [x["lane"] for x in view["sides"]] == [camau, danang]  # hai hướng đầu hàng, theo thứ tự đặt vé
+    # Cà đặt vé lúc chưa có đối thủ (không điểm); Đà gõ quê lúc đã có hai hướng: bình luận được 1 điểm như đua tỉnh
+    e.handle({"type": "like", "name": "Đà", "count": 200}, t + 3)
+    e.handle({"type": "like", "name": "Bắc0", "count": 400}, t + 3)  # quê hướng khác: không cộng
+    pts = {x["lane"]: x["points"] for x in e.snapshot()["versus"]["sides"]}
+    assert pts[danang] > 0 and pts[camau] == 0
+    assert e.upcoming()[0]["lane"] == danang  # bảng chuyến sau: hướng dẫn điểm chạy trước
+    assert any(x["type"] == "loxe" and "Đà Nẵng" in x["text"] for x in e.drain())
+    run_until(e, "BOARDING", t + 4)
+    out = e.drain()
+    assert e.bus.lane == danang
+    win = next(x for x in out if x["type"] == "versus_win")
+    assert win["dest"] == "Đà Nẵng" and win["rival"] == "Cà Mau" and win["points"] > win["rival_points"] == 0
+    assert all(p == 0 for p in e.versus.values())  # vòng mới
+
+
+def test_versus_off_or_single_lane_keeps_booking_order(real_routes):
+    from xe_tet.server.game.network import Network
+    net = Network(real_routes, "hcm_miendong")
+    e = Engine(0.0, network=net)
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    comment(e, "Cà", "Cà Mau", t + 1)
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    e.handle({"type": "like", "name": "Đà", "count": 400}, t + 3)
+    assert e.snapshot()["versus"] is None  # tắt
+    run_until(e, "BOARDING", t + 4)
+    assert e.bus.lane == e.network.lane_of("camau") and "versus_win" not in types(e.drain())
+    e2 = Engine(0.0, network=net)
+    e2.versus_on = True
+    comment(e2, "Cà", "Cà Mau", 1)
+    assert e2.snapshot()["versus"] is None  # một hướng: không có ai để đấu

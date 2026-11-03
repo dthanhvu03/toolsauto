@@ -124,6 +124,7 @@ export interface State {
   focus?: { seat: number; name: string; vip: boolean; province: string; stops_before: number | null; in_s: number | null; trips: number; left: number } | null;
   show?: { url: string; title: string; seconds: number; left: number } | null;  // đang dừng xem video bảng quảng cáo
   race?: { province: string; points: number }[];  // đua tỉnh vòng này
+  versus?: Versus | null;  // đối kháng: hai hướng đầu hàng chờ đấu điểm giành chuyến sau (anh 03/11)
   videos?: { name: string; title: string; url: string; seconds: number }[];
   goal?: { xu: number; goal: number; round: number; next_xu: number; next: string };  // mục tiêu buổi live  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
 }
@@ -228,6 +229,10 @@ export interface GameEvent {
   page_size?: number;
   page_seconds?: number;
   lane?: string;  // vé / xuất bến: «Hướng Hà Nội»
+  dest?: string;  // versus_win: tỉnh đặt tên hướng thắng
+  rival?: string;  // versus_win: hướng thua
+  rival_points?: number;
+  sides?: string[];  // versus_start: hai hướng đấu nhau
   arrow?: string;
   km?: number;  // km thật từ bến đi
   hours?: number;  // giờ xe khách thật (thả khách)
@@ -266,3 +271,6 @@ export interface GameEvent {
   question?: string; options?: string[];  // quiz
   answer?: string; option?: string; winners?: string[]; right?: number;  // quiz_end
 }
+
+export interface VersusSide { lane: string; label: string; arrow: string; dest: string; points: number; waiting: number; lead: boolean }
+export interface Versus { sides: VersusSide[]; chosen: boolean }

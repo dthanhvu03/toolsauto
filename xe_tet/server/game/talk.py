@@ -236,6 +236,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{prov} thắng đua tỉnh, chuyến này Anh Tư chạy hướng {prov}, bà con chuẩn bị lên xe.",
             "Chúc mừng {prov} thắng đua tỉnh, xe đi hướng {prov} liền.",
         ),
+        "versus_start": (  # đối kháng (anh 03/11): hai hướng đầu hàng chờ giành chuyến sau
+            "Đối kháng chuyến sau nè bà con, hướng {lead} đấu hướng {rival}, quê bên nào thì bình luận, thả tim, tặng quà cho bên đó, bên nào nhiều điểm chạy trước.",
+            "Chuyến sau ai đi trước, {lead} hay {rival}, bà con quê bên nào kéo điểm cho bên đó, chưa gõ quê thì gõ tên tỉnh vô.",
+        ),
+        "versus_lead": (
+            "Hướng {lead} đang dẫn điểm hướng {rival} rồi, bà con {rival} đâu, thả tim kéo lên coi.",
+            "{lead} vượt lên rồi bà con, {rival} mà không kéo là chờ chuyến sau đó.",
+        ),
+        "versus_win": (
+            "Hướng {lead} thắng đối kháng, chuyến này Anh Tư chạy hướng {lead}, bà con {rival} ráng chuyến sau.",
+            "{lead} thắng {rival} rồi, xe chạy hướng {lead} liền, bà con lên xe.",
+        ),
         "show_start": (  # bảng quảng cáo: dừng xe xem video
             "Dừng xe xem chút nè bà con, trên bảng đang chiếu {title}.",
             "Tấp vô lề coi cái bảng quảng cáo nè, {title}, xem xong chạy tiếp.",
@@ -587,6 +599,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{prov} win đua tỉnh, chuyến này chạy hướng {prov} luôn.",
             "Team {prov} thắng rồi, xe đi {prov} ae ơi.",
         ),
+        "versus_start": (
+            "Pê ka chuyến sau nè ae, team {lead} đấu team {rival}, quê bên nào thì com men, thả tim, tặng quà cho bên đó, team nào nhiều điểm chạy trước.",
+            "{lead} hay {rival} chạy trước đây ae, chưa gõ quê thì gõ tên tỉnh vô để vào team.",
+        ),
+        "versus_lead": (
+            "Team {lead} đang dẫn team {rival}, team {rival} đâu rồi, thả tim gánh team đi ae.",
+            "{lead} vượt lên rồi, {rival} không kéo là chờ chuyến sau đó ae.",
+        ),
+        "versus_win": (
+            "Team {lead} win pê ka, chuyến này chạy hướng {lead}, team {rival} hẹn chuyến sau.",
+            "{lead} thắng {rival} rồi ae, xe chạy hướng {lead} luôn.",
+        ),
         "show_start": (
             "Dừng xe hóng cái bảng quảng cáo nè ae, {title}.",
             "Tạm dừng xem video hot, {title}, xem xong chạy tiếp.",
@@ -936,6 +960,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "race_win": (
             "{prov} thắng đua tỉnh, chuyến này đi hướng {prov}.",
             "Chúc mừng {prov}, xe đi hướng {prov}.",
+        ),
+        "versus_start": (
+            "Đối kháng chuyến sau: hướng {lead} đấu hướng {rival}, mọi người quê bên nào thì bình luận, thả tim, tặng quà cho bên đó, bên nhiều điểm hơn chạy trước.",
+            "Chuyến sau đi {lead} hay {rival} là do mọi người, ai chưa gõ quê thì gõ tên tỉnh để vào phe.",
+        ),
+        "versus_lead": (
+            "Hướng {lead} đang dẫn điểm hướng {rival}, mọi người {rival} cố lên.",
+            "{lead} đang dẫn trước {rival}, còn kịp lật kèo.",
+        ),
+        "versus_win": (
+            "Hướng {lead} thắng đối kháng, chuyến này đi hướng {lead}, hướng {rival} đi chuyến sau.",
+            "Chúc mừng {lead}, xe đi hướng {lead}, {rival} hẹn chuyến sau.",
         ),
         "show_start": (
             "Xe dừng một chút để mọi người xem video trên bảng, {title}.",

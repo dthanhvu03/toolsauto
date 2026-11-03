@@ -145,6 +145,13 @@
       <span>Góp</span><input type="number" id="vendor-xu" min="1" max="1000" step="1" aria-label="Số xu góp gọi cô bán hàng"><span>xu</span>
       <button id="save-vendor">Lưu</button>
     </div>
+    <h3>⚔️ Đối kháng</h3>
+    <p class="hint">Hai hướng đứng đầu hàng chờ đấu nhau: ai quê thuộc hướng nào thì bình luận, thả tim, tặng quà cộng điểm
+      cho hướng đó. Vào bến, hướng nhiều điểm hơn chạy trước. Anh chọn tay «Chạy kế tiếp» thì lựa chọn của anh thắng.</p>
+    <p class="hint live-line" id="versus-now">–</p>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="versus_on" data-default="off"> Bật đối kháng</label>
+    </div>
     <h3>🧠 Đố vui · 🛞 Sự cố dọc đường</h3>
     <p class="hint live-line" id="quiz-now">Chưa có câu đố.</p>
     <div class="row">
@@ -1042,6 +1049,11 @@ async function refresh() {
       : qz.done ? `Đáp án ${"ABC"[qz.answer]}: ${qz.right} người đúng` + (qz.winners.length ? ` · ${qz.winners.join(", ")}` : "")
       : `🧠 ${qz.question} · ${qz.answered} người trả lời · còn ${qz.left} giây`;
     $("quiz-call").disabled = !!qz && !qz.done;
+    const vs = s.versus;
+    $("versus-now").textContent = control.versus_on !== true ? "Đối kháng đang tắt."
+      : !vs ? "Chờ có ít nhất hai hướng có người chờ."
+      : vs.sides.map((x) => `${x.arrow} ${x.dest}: ${x.points} điểm · ${x.waiting} chờ${x.lead ? " 👑" : ""}`).join("  ⚔️  ")
+        + (vs.chosen ? " · anh đã chọn tay hướng chạy kế tiếp" : "");
     $("sky-now").textContent = { clear: "☀️ quang", drizzle: "🌦 mưa phùn", rain: "🌧 mưa rào", fog: "🌫 sương mù" }[s.weather] || "–";
     $("vendor-call").disabled = !!vd && vd.stage !== "pool";
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");

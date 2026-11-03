@@ -70,6 +70,7 @@ DEFAULTS: dict = {
     "roll_idle_min": 15,  # im lặng quá chừng này phút thì điểm danh
     "roll_wait_s": 45,  # giây chờ người được gọi tên thả tim / bình luận
     # đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn)
+    "versus_on": False,  # đối kháng (anh 03/11): hai hướng đầu hàng chờ đấu điểm theo quê, hướng thắng chạy chuyến sau
     "quiz_on": True,  # đố vui A / B / C về các tỉnh lúc xe chạy
     "quiz_every_min": 3,
     "incidents_on": True,  # sự cố dọc đường: xẹp lốp, kẹt xe, trâu qua đường — tự xong, tim làm nhanh hơn, quà xong ngay
