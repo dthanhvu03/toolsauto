@@ -169,7 +169,7 @@ def test_bam_da_nhan_dung_thi_nhap_ngan_hang_va_thay_bao_cao(bot):
     assert len(_rows(bot, "SELECT * FROM settlement_evidence")) == 1
     assert "Số dự kiến đã đổi" in _callback(bot, ADMIN, f"c:sm:bok:{batch}:17000").text
     done = _callback(bot, ADMIN, f"c:sm:bok:{batch}:17800")
-    assert "Đã ghi tài khoản nhận 17.800đ" in done.text and "Chứng từ khớp" in done.text
+    assert "Đã ghi tài khoản nhận 17.800đ" in done.text and "✅ Khớp" in done.text
     assert not [d for row in done.inline_keyboard for _l, d in row if d.startswith("c:sm:bok")]
     row = _rows(bot, "SELECT * FROM settlement_batches WHERE id = ?", batch)[0]
     assert (row["status"], row["tax_withheld_vnd"], row["shopee_payout_vnd"], row["bank_received_vnd"]) == (

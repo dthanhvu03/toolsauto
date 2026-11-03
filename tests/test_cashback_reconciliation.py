@@ -282,11 +282,11 @@ def test_man_admin_don_can_doi_soat(tmp_path):
     _seed(bot, {"req": timedelta(days=50), "new": timedelta(days=2)}, sub)
     reconciliation.evaluate(bot.repo, NOW)
     screen = _callback(bot, ADMIN, "c:rc:home")
-    assert "Đơn cần đối soát" in screen.text and "🔴 Cần đối soát" in screen.text and "lần cuối bot thấy" in screen.text
+    assert "Theo dõi đơn" in screen.text and "🔴 Cần đối soát" in screen.text and "lần cuối bot thấy" in screen.text
     assert "không tự kết luận Shopee đã duyệt, từ chối hay huỷ" in screen.text
     buttons = [d for row in screen.inline_keyboard for _l, d in row]
-    assert buttons == ["c:sm:home", "c:menu:shopee"], "chỉ đọc, không có nút đổi trạng thái"
-    assert "c:rc:home" in str(_callback(bot, ADMIN, "c:menu:shopee").inline_keyboard)
+    assert buttons == ["c:sm:home", "c:menu:orders"], "chỉ đọc, không có nút đổi trạng thái"
+    assert "c:rc:home" in str(_callback(bot, ADMIN, "c:menu:orders").inline_keyboard)
     assert "chỉ dành cho quản trị" in _callback(bot, USER, "c:rc:home").text
     assert "không còn hiệu lực" in _callback(bot, ADMIN, "c:rc:x").text
 

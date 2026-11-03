@@ -88,8 +88,10 @@ def test_man_tien_va_vi_tom_tat_va_dan_toi_cac_man_tien(tmp_path):
     home = _callback(bot, ADMIN, "c:menu:home")
     assert _buttons(home)[0] == "c:menu:money"
     money = _callback(bot, ADMIN, "c:menu:money")
-    assert "Anh thực nhận" in money.text and "Yêu cầu rút cần xử lý: <b>0</b>" in money.text
-    assert {"c:wl:own", "c:menu:wallet", "c:sm:home", "c:in:m:30d", "c:menu:home"} <= set(_buttons(money))
+    assert "Thực nhận: chưa có kỳ Shopee nào khớp" in money.text and "Đang chờ chuyển: <b>0đ</b> (0 yêu cầu)" in money.text
+    assert {"c:wl:own", "c:menu:wallet", "c:sm:home", "c:in:m:30d", "c:menu:moneycfg", "c:menu:home"} <= set(_buttons(money))
+    cfg = _callback(bot, ADMIN, "c:menu:moneycfg")
+    assert {"c:menu:policy", "c:menu:fee", "c:wl:cfg", "c:in:cost", "c:menu:sim", "c:in:b", "c:rd:home"} <= set(_buttons(cfg))
     own = _callback(bot, ADMIN, "c:wl:own")
     assert "c:menu:money" in _buttons(own)
     more = _callback(bot, ADMIN, "c:menu:more")

@@ -11,40 +11,49 @@ Keyboard = tuple[tuple[tuple[str, str], ...], ...]
 HOME_TARGET = "c:menu:home"
 BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
-# 2026-11-03: chủ bot thấy trang chủ rối → chỉ còn việc hằng ngày; tiền gom ở «Tiền & ví», phần còn lại ở «Thêm».
+# 2026-11-03: trang chủ chỉ còn việc hằng ngày. Mọi màn tiền ở «💰 Tiền & ví» (một tiêu đề, một nút quay lại);
+# đơn ở «🧾 Đơn & hoa hồng»; kết nối sàn, báo cáo, cài đặt khác ở «➕ Thêm».
 MENU_KEYBOARD: Keyboard = (
     (("💰 Tiền & ví", "c:menu:money"),),
     (("🧾 Đơn & hoa hồng", "c:menu:orders"),),
     (("📩 Hỗ trợ", "c:hp:home"), ("👥 Khách hàng", "c:in:u:margin:1")),
     (("➕ Thêm", "c:menu:more"),),
 )
+MONEY_BACK = (("◀️ Tiền & ví", "c:menu:money"),)
+# Màn con trong Cài đặt tiền: quay lại Cài đặt tiền và về Tổng quan (quy tắc: màn con nào cũng có ◀️ Tổng quan).
+MONEY_SETTINGS_BACK = (("◀️ Cài đặt tiền", "c:menu:moneycfg"), ("◀️ Tổng quan", "c:menu:home"))
 MONEY_MENU_KEYBOARD: Keyboard = (
-    (("💼 Ví của anh", "c:wl:own"),),
-    (("👛 Ví khách & yêu cầu rút", "c:menu:wallet"),),
-    (("💳 Đối soát Shopee", "c:sm:home"), ("💹 Dòng tiền", "c:in:m:30d")),
+    (("💼 Ví của anh", "c:wl:own"), ("👛 Ví khách", "c:menu:wallet")),
+    (("💳 Kỳ thanh toán Shopee", "c:sm:home"), ("💹 Dòng tiền", "c:in:m:30d")),
+    (("⚙️ Cài đặt tiền", "c:menu:moneycfg"),),
     BACK_HOME,
 )
-MONEY_BACK = (("◀️ Tiền & ví", "c:menu:money"),)
+MONEY_SETTINGS_KEYBOARD: Keyboard = (
+    (("💰 % hoàn", "c:menu:policy"), ("🧾 Dự phòng thuế & phí", "c:menu:fee")),
+    (("👛 Giữ tiền & rút", "c:wl:cfg"), ("✍️ Chi phí vận hành", "c:in:cost")),
+    (("🧪 Mô phỏng", "c:menu:sim"), ("🧮 Hoà vốn", "c:in:b")),
+    (("⚖️ Sẵn sàng chi trả", "c:rd:home"),),
+    MONEY_BACK,
+)
 MORE_MENU_KEYBOARD: Keyboard = (
     (("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f")),
     (("🛒 Shopee", "c:menu:shopee"), ("🎵 TikTok", "c:tk:home")),
     (("🛠 Vận hành", "c:in:o"), ("⚙️ Cài đặt", "c:menu:settings")),
     BACK_HOME,
 )
+MORE_BACK = (("◀️ Thêm", "c:menu:more"),)
+ORDERS_BACK = (("◀️ Đơn & hoa hồng", "c:menu:orders"),)
 ORDERS_MENU_KEYBOARD: Keyboard = (
-    (("🧾 Duyệt hoa hồng", "c:cv:home"),),
-    (("💳 Đối soát thanh toán", "c:sm:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
+    (("🧾 Duyệt hoa hồng", "c:cv:home"), ("🔎 Theo dõi đơn", "c:rc:home")),
     (("🗓 Thống kê Shopee 7 ngày", "c:st:7d"),),
     BACK_HOME,
 )
 SETTINGS_MENU_KEYBOARD: Keyboard = (
-    (("💰 Chính sách", "c:menu:policy"), ("🧾 Thuế & phí", "c:menu:fee")),
-    (("🧪 Mô phỏng", "c:menu:sim"), ("🧮 Hoà vốn", "c:in:b")),
     (("🎖️ Hạng thành viên", "c:menu:rank"), ("📋 Điều khoản", "c:tm:home")),
-    (("🔔 Thông báo khách", "c:nt:home"), ("⚖️ Sẵn sàng chi trả", "c:rd:home")),
+    (("🔔 Thông báo khách", "c:nt:home"), ("📣 Nhắc mùa sale", "c:eg:home")),
     (("📊 Lịch sử cấu hình", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
-    (("📣 Nhắc mùa sale", "c:eg:home"), ("📖 Thuật ngữ", "c:menu:glossary")),
-    BACK_HOME,
+    (("📖 Thuật ngữ", "c:menu:glossary"),),
+    MORE_BACK,
 )
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
@@ -53,18 +62,14 @@ def shopee_connected_keyboard() -> Keyboard:
     # PLAN-080: bật tự đồng bộ do chủ bot đặt trong .env; ở đây chỉ xem lịch, lịch sử, tạm dừng / tiếp tục.
     return (
         (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
-        (("🧾 Duyệt hoa hồng", "c:cv:home"), ("💳 Đối soát thanh toán", "c:sm:home")),
-        (("⏱ Tự động đồng bộ", "c:sy:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
-        (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
-        BACK_HOME,
+        (("⏱ Tự động đồng bộ", "c:sy:home"), ("🔑 Cập nhật Cookie", "c:shopee:auth")),
+        MORE_BACK,
     )
 
 SHOPEE_KEYBOARD_DISCONNECTED: Keyboard = (
     (("🔑 Kết nối Cookie", "c:shopee:auth"),),
-    # Duyệt / đối soát / lịch đồng bộ đọc dữ liệu đã có, không cần cookie: vẫn mở được khi cookie hết hạn.
-    (("🧾 Duyệt hoa hồng", "c:cv:home"), ("💳 Đối soát thanh toán", "c:sm:home")),
-    (("⏱ Tự động đồng bộ", "c:sy:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
-    BACK_HOME,
+    (("⏱ Tự động đồng bộ", "c:sy:home"),),
+    MORE_BACK,
 )
 
 SHOPEE_PROMPT_KEYBOARD: Keyboard = (
@@ -78,12 +83,12 @@ RANK_KEYBOARD: Keyboard = (
 
 POLICY_KEYBOARD: Keyboard = (
     (("✏️ Đổi tỷ lệ chia", "c:sh:new"),),
-    BACK_HOME,
+    MONEY_SETTINGS_BACK,
 )
 
 FEE_KEYBOARD: Keyboard = (
     (("✏️ Đổi mức áp dụng", "c:rs:new"),),
-    BACK_HOME,
+    MONEY_SETTINGS_BACK,
 )
 
 
@@ -99,7 +104,7 @@ def decision_keyboard(draft_id: int, nonce: str) -> Keyboard:
 
 def simulation_keyboard(amounts: tuple[int, ...], current: int) -> Keyboard:
     row = tuple((f"{'• ' if amount == current else ''}{short_vnd(amount)}", f"c:sim:{amount}") for amount in amounts)
-    return (row, (("✏️ Nhập số khác", "c:sim:input"),), BACK_HOME)
+    return (row, (("✏️ Nhập số khác", "c:sim:input"),), MONEY_SETTINGS_BACK)
 
 
 SIM_PROMPT_KEYBOARD: Keyboard = ((("✖️ Hủy", "c:menu:sim"),),)
@@ -174,15 +179,14 @@ def wallet_admin_keyboard(settings, requests) -> Keyboard:
           f"{_who_short(int(row['telegram_user_id']), row['username'])}", f"c:wl:rq:{row['id']}"),)
         for row in requests
     ]
-    rows.append((("💼 Ví của anh", "c:wl:own"),))
-    rows.append((("👥 Thành viên", "c:wl:members"), ("⚙️ Cài đặt", "c:wl:cfg")))
+    rows.append((("👥 Thành viên", "c:wl:members"), ("👛 Giữ tiền & rút", "c:wl:cfg")))
     if settings.enabled:
         rows.append((("⏸️ Tắt ví", "c:wl:off"),))
     elif settings.locked_reasons:
         rows.append((("🔒 Bật ví (đang khoá)", "c:wl:on"),))
     else:
         rows.append((("🟢 Bật ví cho khách", "c:wl:on"),))
-    rows.append(BACK_HOME)
+    rows.append(MONEY_BACK)
     return tuple(rows)
 WALLET_ENABLE_KEYBOARD: Keyboard = ((("✅ Bật ví", "c:wl:on:ok"),), WALLET_ADMIN_BACK)
 
@@ -203,13 +207,11 @@ def wallet_settings_keyboard(settings, hold_choices, min_choices, limits=None, l
                 (("• " if v == current else "") + f"{_limit_vnd(v)}/{unit}", f"c:wl:lim:{key}:{v}")
                 for v in limit_choices[key]
             ))
-    return (*rows, WALLET_ADMIN_BACK)
+    return (*rows, (WALLET_ADMIN_BACK[0], *MONEY_SETTINGS_BACK))
 
 
 def wallet_members_keyboard(members) -> Keyboard:
-    buttons = [
-        (_who_short(m["telegram_user_id"], m["username"])[:30], f"c:wl:u:{m['telegram_user_id']}") for m in members
-    ]
+    buttons = [(m["label"][:30], f"c:wl:u:{m['telegram_user_id']}") for m in members]
     rows = [tuple(buttons[i : i + 2]) for i in range(0, len(buttons), 2)]
     return (*rows, WALLET_ADMIN_BACK)
 

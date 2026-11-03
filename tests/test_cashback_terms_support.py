@@ -445,8 +445,8 @@ def test_29_30_san_sang_chi_tra_chi_doc_va_van_khoa(tmp_path):
     home = bot.admin_panel.handle_callback(ADMIN, "c:rd:home", "private", NOW)
     assert "Ví và chi trả: <b>KHOÁ</b>" in home.text
     assert "❌ Chính sách thuế khi chi cho người nhận" in home.text
-    assert "Quỹ có chứng từ: <b>Chưa xác minh</b>" in home.text
-    assert _buttons(home) == ["c:rd:tax", "c:rd:claw", "c:menu:home"]
+    assert "Quỹ chi trả: <b>chưa có kỳ Shopee nào khớp</b>" in home.text
+    assert _buttons(home) == ["c:rd:tax", "c:rd:claw", "c:menu:moneycfg", "c:menu:home"]
     tax = bot.admin_panel.handle_callback(ADMIN, "c:rd:tax", "private", NOW)
     assert "chỉ để <b>ước tính</b> số hoàn, không phải thuế của ai" in tax.text
     claw = bot.admin_panel.handle_callback(ADMIN, "c:rd:claw", "private", NOW)
@@ -531,7 +531,7 @@ def test_tin_khong_phai_link_khong_luu_noi_dung(tmp_path):
 
 def test_admin_xem_khach_che_so_tai_khoan():
     bank = BankAccount("VCB", "0123456789", "NGUYEN VAN A")
-    text = wallet_member_text(BUYER, "b", Balance(0, 0, 0, 0), [], bank)
+    text = wallet_member_text("@b", Balance(0, 0, 0, 0), [], bank)
     assert "0123456789" not in text
     assert "••••6789" in text and "NGUYEN VAN A" in text
 

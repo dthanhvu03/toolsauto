@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from cashback_bot import insights, payouts
+from cashback_bot import insights, money_flow
 from cashback_bot.admin.common import (
     DIRECTIONAL_BPS,
     SAMPLE_VND,
@@ -60,6 +60,7 @@ from cashback_bot.admin.ui import (
     GLOSSARY,
     MENU_KEYBOARD,
     MONEY_MENU_KEYBOARD,
+    MONEY_SETTINGS_KEYBOARD,
     MORE_MENU_KEYBOARD,
     NAV_KEYBOARD,
     ORDERS_MENU_KEYBOARD,
@@ -70,7 +71,9 @@ from cashback_bot.admin.ui import (
     fee_text,
     history_text,
     home_text,
+    money_settings_text,
     money_text,
+    money_todo,
     more_text,
     policy_text,
     rank_text,
@@ -97,7 +100,7 @@ __all__ = [
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "migrations" / "004_admin_policy.sql"
 _SEARCH_COMMAND = re.compile(r"^/tim(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
-_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary|money|more)$")
+_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary|money|moneycfg|more)$")
 
 
 def customer_policy_due(rows: list[dict], now: datetime) -> dict | None:
@@ -207,13 +210,11 @@ class AdminPanel:
         if name == "orders":
             return BotReply(self._orders_text(), inline_keyboard=ORDERS_MENU_KEYBOARD)
         if name == "money":
-            with self._connect() as conn:
-                position = payouts.owner_position(conn)
-                marks = ", ".join("?" for _ in payouts.OPEN)
-                requests = conn.execute(
-                    f"SELECT COUNT(*) FROM cashback_payouts WHERE status IN ({marks})", tuple(payouts.OPEN)
-                ).fetchone()[0]
-            return BotReply(money_text(position, int(requests)), inline_keyboard=MONEY_MENU_KEYBOARD)
+            with insights.open_readonly(self.db_path) as conn:
+                snap = money_flow.snapshot(conn)
+            return BotReply(money_text(snap), inline_keyboard=MONEY_MENU_KEYBOARD)
+        if name == "moneycfg":
+            return BotReply(money_settings_text(), inline_keyboard=MONEY_SETTINGS_KEYBOARD)
         if name == "more":
             return BotReply(more_text(), inline_keyboard=MORE_MENU_KEYBOARD)
         if name == "glossary":
@@ -356,10 +357,7 @@ class AdminPanel:
                 tickets = conn.execute(
                     "SELECT COUNT(*) FROM support_tickets WHERE status NOT IN ('RESOLVED', 'REJECTED', 'CLOSED')"
                 ).fetchone()[0]
-                marks = ", ".join("?" for _ in payouts.OPEN)
-                requests = conn.execute(
-                    f"SELECT COUNT(*) FROM cashback_payouts WHERE status IN ({marks})", payouts.OPEN
-                ).fetchone()[0]
+                snap = money_flow.snapshot(conn)
                 review = conn.execute(
                     f"SELECT COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL AND {VALIDATION_LISTS['alert'][1]}"
                 ).fetchone()[0]
@@ -369,13 +367,14 @@ class AdminPanel:
             return ["⚠️ Chưa đọc được số liệu (thử lại sau ít phút)."], ""
         if tickets:
             todo.append(f"📩 {tickets} yêu cầu hỗ trợ đang mở")
-        if requests:
-            todo.append(f"👛 {requests} yêu cầu rút đang chờ")
+        todo += money_todo(snap)
         if review:
             todo.append(f"🧾 {review} đơn cần kiểm tra (🧾 Đơn & hoa hồng)")
         todo += [f"🔴 {c.label}: {c.value}" for c in red if c.code not in ("tickets", "payouts")]
         today = (f"📅 <b>Hôm nay</b>: {day.orders} đơn · HH ròng {format_vnd(day.net)} · {day.new} khách mới · "
                  f"{day.links} link")
+        if snap.settled:
+            today += f"\n💼 Anh thực nhận (các kỳ đã về): <b>{format_vnd(snap.owner_vnd)}</b>"
         return todo, today
 
     def _wallet_on(self) -> bool:
@@ -397,8 +396,8 @@ class AdminPanel:
             f"Đơn qua link bot: 🛒 Shopee <b>{counts.get('shopee', 0)}</b> · 🎵 TikTok <b>{counts.get('tiktok', 0)}</b>\n"
             f"Cần kiểm tra: <b>{review}</b>\n\n"
             "• 🧾 Duyệt hoa hồng: trạng thái hoa hồng từng đơn (cả Shopee và TikTok).\n"
-            "• 💳 Đối soát thanh toán: khớp báo cáo Shopee đã trả với đơn.\n"
-            "• 🔎 Đơn cần đối soát: đơn chờ lâu hoặc vắng trong báo cáo Shopee."
+            "• 🔎 Theo dõi đơn: đơn chờ lâu hoặc vắng trong báo cáo Shopee.\n"
+            "ⓘ Shopee trả tiền theo kỳ: xem 💰 Tiền &amp; ví → 💳 Kỳ thanh toán Shopee."
         )
 
     def _pending_count(self, now: datetime) -> int | None:

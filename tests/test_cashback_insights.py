@@ -53,7 +53,7 @@ def test_dong_tien_tam_tinh_bien_va_huy(tmp_path):
     assert m.margin == m.net - m.cashback - m.reserve and m.margin_before_reserve == m.net - m.cashback
     assert (m.cancelled_orders, m.cancelled_net) == (1, 2_000)
     assert m.settled_net == 0 and m.profit is None, "chưa nhập chi phí vận hành thì không bịa lãi"
-    assert _view(bot).liabilities.pending == m.cashback
+    assert _view(bot).money_flow.customers.waiting_shopee_vnd == m.cashback, "Dòng tiền đọc ảnh chụp chung"
 
 
 def test_chi_phi_van_hanh_chia_theo_so_ngay(tmp_path):

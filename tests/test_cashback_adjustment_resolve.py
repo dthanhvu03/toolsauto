@@ -1,4 +1,4 @@
-"""/admin → Đối soát thanh toán → 🔍 Khoản chênh lệch: admin đóng điều chỉnh OPEN (2026-11-03)."""
+"""/admin → 💰 Tiền & ví → 💳 Kỳ thanh toán Shopee → 🔍 Khoản chênh lệch: admin đóng điều chỉnh OPEN (2026-11-03)."""
 
 from __future__ import annotations
 

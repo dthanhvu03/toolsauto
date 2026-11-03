@@ -487,7 +487,7 @@ def test_29_mo_phong_chi_doc_khong_bat_gi(tmp_path):
     before = _counts(tmp_path)
     for data in ["c:menu:sim", *(f"c:sim:{amount}" for amount in admin_policy.SIM_AMOUNTS)]:
         reply = bot.admin_panel.handle_callback(ADMIN, data, "private", NOW)
-        assert all(d == "c:menu:home" or d.startswith("c:sim:") for row in reply.inline_keyboard for _l, d in row)
+        assert all(d in ("c:menu:home", "c:menu:moneycfg") or d.startswith("c:sim:") for row in reply.inline_keyboard for _l, d in row)
     assert _counts(tmp_path) == before
     assert bot.admin_panel.resolve_policy(NOW) == bot.admin_panel.resolve_policy(NOW)
     assert "<b>12.462đ</b>" in bot.handle_text(BUYER, "buyer", LINK, update_id=2, now=NOW).text
@@ -755,7 +755,7 @@ def test_huy_lich_ty_le_truoc_moc(tmp_path):
     _schedule_share(bot)
     policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
     buttons = [d for row in policy.inline_keyboard for _l, d in row]
-    assert buttons == ["c:sh:new", "c:pc:s:1", "c:menu:home"]
+    assert buttons == ["c:sh:new", "c:pc:s:1", "c:menu:moneycfg", "c:menu:home"]
     confirm = bot.admin_panel.handle_callback(ADMIN, "c:pc:s:1", "private", NOW)
     assert "Lịch #1: <b>tỷ lệ chia 65%</b>, hiệu lực <b>00:00 24/10/2026</b>" in confirm.text
     assert _rows(tmp_path, "SELECT COUNT(*) FROM policy_cancellations") == [(0,)], "bước hỏi lại chưa ghi"
@@ -782,7 +782,7 @@ def test_huy_lich_du_phong_va_huy_lai(tmp_path):
     preview = _wizard(bot, NOW, tax="2", when="w:tmr")
     bot.admin_panel.handle_callback(ADMIN, _data(preview, ":ok"), "private", NOW)
     fee = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", NOW)
-    assert [d for row in fee.inline_keyboard for _l, d in row] == ["c:rs:new", "c:pc:r:1", "c:menu:home"]
+    assert [d for row in fee.inline_keyboard for _l, d in row] == ["c:rs:new", "c:pc:r:1", "c:menu:moneycfg", "c:menu:home"]
     bot.admin_panel.handle_callback(ADMIN, "c:pc:r:1:ok", "private", NOW)
     assert bot.admin_panel.resolve_policy(NOW + timedelta(days=1)).tax_reserve_bps == 1_000
     again = bot.admin_panel.handle_callback(ADMIN, "c:pc:r:1:ok", "private", NOW)
