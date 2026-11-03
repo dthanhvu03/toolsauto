@@ -83,6 +83,8 @@ function radiusFor(wind: number): number {
 const MAX_BUBBLES = 6;
 const BOARD_STEP_S = 1.0;  // bến, khi tắt giọng lơ xe: mỗi giây một người bước lên xe
 const BOARD_FALLBACK_S = 32;  // đứng quá lâu mà chưa nghe đọc tên (giọng lỗi / bị cắt) thì vẫn lên — khớp FULL_HOLD_MAX của server (35 giây)
+const BOARD_HURRY_S = 0.35;  // xe đã đủ khách / sắp chạy: người còn đứng hàng (đã có giường) lên liền một mạch
+const HURRY_LEFT_S = 12;  // còn chừng này giây là xe chạy thì cũng lên liền
 const LINE_COLS = 8;  // hàng chờ ở cửa xe gập dòng sau 8 người
 const PICKUP_STEP_S = 1.3;  // dừng đón bên đường: khớp PICKUP_STOP_STEP của server
 const BUBBLE_MS = 5000;
@@ -991,6 +993,12 @@ export class World {
     const voiceOff = this.state?.control?.voice_on === false;
     let go = this.boardLine.find((w) => w.callAt !== undefined && this.t >= w.callAt);
     const head = this.boardLine[0];
+    // anh 03/11 «24/24 mà vẫn xếp hàng lên»: người trong hàng đã có giường, chỉ chờ lơ xe đọc tên — xe đầy / sắp chạy thì
+    // khỏi chờ đọc, lên liền cho cảnh khớp số 24/24
+    const s = this.state;
+    const hurry = !!s && s.phase === "BOARDING"
+      && (s.bus.seats.every((x) => x) || (s.phase_left ?? Infinity) < HURRY_LEFT_S);
+    if (!go && hurry && this.boardTimer >= BOARD_HURRY_S) go = head;
     if (!go && this.boardTimer >= BOARD_STEP_S && (voiceOff || this.t - (head.queuedAt ?? 0) > BOARD_FALLBACK_S)) go = head;
     if (!go) return;
     this.boardTimer = 0;
