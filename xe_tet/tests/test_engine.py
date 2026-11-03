@@ -1105,14 +1105,18 @@ def test_loxe_follows_the_bus_on_screen(monkeypatch):
     e.drain()
     e.feature(relief.no)
     said = []
+    vias = []
     t = 3
     while t < 400 and e.featured == relief.no:
         t += 1
         e.tick(t)
-        said += [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
+        out = e.drain()
+        said += [ev["text"] for ev in out if ev["type"] == "loxe"]
+        vias += [ev["bus_no"] for ev in out if ev["type"] == "via"]
     e.feature(None)
     said_back = [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
-    assert "via" not in said and "honk" not in said  # câu nhỏ của xe chính: không nói khi không lên hình
+    # câu nhỏ của xe chính không nói khi không lên hình (xe tăng cường đang chiếu thì gọi tỉnh của nó)
+    assert said.count("via") == vias.count(relief.no) and "honk" not in said
     main_kinds = {"rest", "depart", "finish", "parcels", "pickup", "pickup_wait", "passed"}  # (thả khách: xe đang chiếu)
     assert not [x for x in said if x in main_kinds]  # câu của xe chính đều có «Xe số N.» ở đầu
     assert "screen_main" in said + said_back  # xe tăng cường tới bến cuối hoặc admin chuyển về: lơ xe báo về xe chính

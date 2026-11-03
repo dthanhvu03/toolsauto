@@ -130,7 +130,9 @@ QUIZ_RESULT_S = 8.0  # thẻ đáp án còn trên màn hình chừng này giây
 QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đua tỉnh
 QUIZ_RACE = 3
 QUIZ_RECENT = 12  # không đố lại tỉnh vừa đố
-FACT_GAP = 75.0  # lơ xe kể chuyện tỉnh đang đi qua tối đa một lần / chừng này giây
+FACT_GAP = 75.0
+ARRIVE_SHOW_KM = 10.0  # còn chừng này km tới điểm thả khách thì màn ghi tên tỉnh đó
+PLACE_HOLD_KM = 15.0  # tên tỉnh mới phải giữ chừng này km mới đổi trên màn (ranh tỉnh / nối hai tuyến: hết nhảy qua lại)  # lơ xe kể chuyện tỉnh đang đi qua tối đa một lần / chừng này giây
 INCIDENTS = {  # sự cố dọc đường: tự xong sau INCIDENT_SECONDS giây; tim làm nhanh hơn, tặng quà góp đủ thì xong ngay
     "tire": ("🛞", "Xe xẹp lốp", "thay lốp"),
     "jam": ("🚗", "Kẹt xe", "mở đường"),
@@ -581,6 +583,8 @@ class Engine:
         self.ai_reply = False  # admin bật «lơ xe trả lời bằng AI» (Hub đặt theo thiết lập)
         self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
+        self.place_shown: str | None = None  # tên tỉnh đang ghi trên màn (đã giữ PLACE_HOLD_KM)
+        self.place_cand: tuple[str, float] | None = None  # tỉnh mới đang chờ đủ km
         self.last_via_talk = -1e9
         self.last_priority_talk = -1e9
         self.patrons: list[str] = []  # uid «Chủ nhà xe», «Phó nhà xe» (xu tặng trong buổi)
@@ -1202,6 +1206,7 @@ class Engine:
         self.legs = legs
         self.leg_index = 0
         self.block_plan = self._plan_blocks(total)
+        self.place_shown = self.place_cand = None
         if self.boarding_started is not None:
             self.board_avg += AVG_WEIGHT * (now - self.boarding_started - self.board_avg)
         self.trip_started = now
@@ -2514,7 +2519,8 @@ class Engine:
     def _watch_place(self, now: float) -> None:
         """Xe chính vào địa phận tỉnh không ai xuống (PLAN-134): lơ xe gọi bà con tỉnh đó — quê họ cũng là một phần chuyến
         đi. Mỗi VIA_TALK_GAP giây tối đa một lần."""
-        place = self._road_at(self.trip, self.trip_km())[0]
+        self._settle_place()
+        place = self._where()[0]
         if place == self.place_now:
             return
         self.place_now = place
@@ -2857,7 +2863,25 @@ class Engine:
             return self.network.departure.province, dict(FLAT)  # ở bến / về bến: cảnh của bến đi
         if self._phase_now() != "DRIVING":
             return leg.target, dict(FLAT)
-        return self._road_at(self.trip, self.trip_km())
+        place, terrain = self._road_at(self.trip, self.trip_km())
+        if leg.kind == "stop" and leg.km - self.trip_km() <= ARRIVE_SHOW_KM:
+            return leg.target, terrain  # sắp tới điểm thả khách: ghi đúng tỉnh đó (tỉnh lỵ sát ranh như TP.HCM — Đồng Nai)
+        return self.place_shown or place, terrain
+
+    def _settle_place(self) -> None:
+        """Tên tỉnh trên màn đổi khi tỉnh mới đã giữ PLACE_HOLD_KM km (gọi mỗi nhịp lúc xe chạy)."""
+        odo = self.trip_km()
+        raw = self._road_at(self.trip, odo)[0]
+        leg = self.current_leg()
+        if leg and leg.kind == "stop" and leg.km - odo <= ARRIVE_SHOW_KM:
+            raw = self.place_shown = leg.target  # sắp tới điểm thả: đổi ngay (khớp `_where`), rời đi thì giữ tên này
+            self.place_cand = None
+        if raw == self.place_shown or self.place_shown is None:
+            self.place_shown, self.place_cand = raw, None
+        elif self.place_cand is None or self.place_cand[0] != raw:
+            self.place_cand = (raw, odo)
+        elif odo - self.place_cand[1] >= PLACE_HOLD_KM:
+            self.place_shown, self.place_cand = raw, None
 
     def _road_at(self, trip: Trip, odo: float) -> tuple[str, dict]:
         """Tỉnh đang đi qua + độ quanh co, đèo / hầm, chiều dốc ở km `odo` của chuyến `trip`."""

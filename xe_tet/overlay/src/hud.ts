@@ -32,7 +32,7 @@ const PILL: Record<State["phase"], string> = {
   BOARDING: "Đón khách", DRIVING: "Đang chạy", REST: "Trạm dừng", DROPOFF: "Thả khách",
   FINISH: "Về bến", SPECIAL: "Chúc Tết",
 };
-const MAX_TOASTS = 3;
+const MAX_TOASTS = 2;  // anh 03/11 «che hết rồi»: tối đa 2 thẻ, không phủ xuống nóc xe
 const GIFTS_OPEN_MS = 10_000;
 const GIFTS_EVERY_MS = 45_000;
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)

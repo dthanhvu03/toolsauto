@@ -368,6 +368,7 @@ html, body {
   text-overflow: ellipsis;
 }
 .lbl.vip { background: linear-gradient(90deg, #b8860b, #f4c04e); color: #3a2118; }
+.lbl.sign.small { font-size: 24px !important; padding: 3px 10px !important; border-width: 2px !important; }
 .lbl.sign {
   font-size: 36px;
   font-weight: 800;
@@ -410,7 +411,7 @@ html, body {
 }
 .lbl.emoji { background: none; font-size: 52px; padding: 0; overflow: visible; }
 .lbl.banner {
-  font-size: 34px;
+  font-size: 26px;  /* anh 03/11: băng rôn nhỏ lại, không đè dải tên + thân xe */
   font-weight: 800;
   background: var(--gold);
   color: var(--red-deep);
@@ -451,9 +452,10 @@ html, body {
 #loxe { top: calc((150px + 800px * var(--z)) / var(--z)); left: calc(32px / var(--z)); }
 #toasts { top: calc((150px + 800px * var(--z)) / var(--z)); right: calc(24px / var(--z));
   /* không chạm bảng góc phải (top 1290 px): dồn nhiều thì thẻ cũ nhất (dưới cùng) bị cắt */
-  max-height: calc((1270px - 150px - 800px * var(--z)) / var(--z)); overflow: hidden; }
+  max-height: calc((1040px - 150px - 800px * var(--z)) / var(--z)); overflow: hidden; }  /* ≤ 2 thẻ, dừng trên nóc xe */
 #banner { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(40px / var(--z)); right: calc(40px / var(--z)); }
-#callout { top: calc(960px / var(--z)); }
+/* thẻ thông báo giữa (vé, giữ chỗ…): đè tạm lên khung «Gõ tên tỉnh» vài giây, không đè thân xe (anh 03/11 «che hết rồi») */
+#callout { top: calc((150px + 330px * var(--z)) / var(--z)); }
 #guide { zoom: var(--z); top: calc(760px / var(--z)); left: calc(60px / var(--z)); right: calc(60px / var(--z)); }
 #flash { top: calc(860px / var(--z)); }
 .side { right: calc(20px / var(--z)); }

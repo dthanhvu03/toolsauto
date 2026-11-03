@@ -40,7 +40,7 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
 // đang chiếu video bảng quảng cáo: máy quay ngước lên khung bảng (sau xe), xe vẫn trong khung dưới
 const SHOW_CAM: [number, number, number, number, number, number] = [3.5, 8.5, 25, 0.5, 6.2, -8.5];
 const BOARD_H = 9.5;
-const RIDER_TAG_MAX = 24;
+const RIDER_TAG_MAX = 8;  // anh 03/11 «che hết rồi»: 21 tên chiếm 5 dòng đè thân xe — tên đủ đã có trên cửa sổ / bảng phải
 const FOCUS_CAM = [2.2, 1.6, 8.5];  // máy quay đứng chéo trước cửa sổ khách đang focus (lệch về đầu xe, cao hơn chút)  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
@@ -680,7 +680,7 @@ export class World {
       this.roadside.push(this.addWalker(p, [new THREE.Vector3(doorX, 0.1, 2.4), new THREE.Vector3(doorX, 0.1, 1.5)], 3.2,
         undefined, 2 + i * PICKUP_STEP_S));
     });
-    const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign");
+    const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign small");
     sign.position.set(doorX + 3.4, 1.1, curb + 0.6);  // bên phải nhóm người, thấp — không đè tên
     this.scene.add(sign);
     window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
@@ -728,7 +728,7 @@ export class World {
     }
     const selling = v?.stage === "sell" && this.set === "road";
     if (selling && !this.vendorTag) {
-      this.vendorTag = label(`🧺 ${v!.name} đang bán nem · bì · bánh mì`, "lbl sign");
+      this.vendorTag = label(`🧺 ${v!.name}`, "lbl sign small");  // nhỏ: cách mua đã có trên dòng gợi ý
       this.bus.group.add(this.vendorTag);
     }
     if (!selling && this.vendorTag) {
