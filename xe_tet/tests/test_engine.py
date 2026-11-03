@@ -424,7 +424,8 @@ def test_empty_boarding_bus_turns_to_first_passenger():
 
 
 def test_oldest_ticket_goes_first():
-    """BR-4: ai chờ trước đi trước — làn 1 người chờ lâu hơn vẫn chạy trước làn 40 người."""
+    """BR-4: người chờ quá lâu (LANE_MAX_WAIT) thì tuyến của họ chạy trước, kể cả làn kia 40 người."""
+    from xe_tet.server.game.engine import LANE_MAX_WAIT
     e = Engine(0.0)
     for i in range(24):
         comment(e, f"B{i}", "Huế", 1)  # Bắc: 1 xe đầy
@@ -432,8 +433,22 @@ def test_oldest_ticket_goes_first():
     for i in range(40):
         comment(e, f"C{i}", "Huế", 2)  # Bắc: 40 người giữ chỗ sau
     t = run_until(e, "FINISH", 1)
+    e.queued_at["út"] = t - LANE_MAX_WAIT - 1  # Út đã chờ quá lâu
     run_until(e, "BOARDING", t)
+    # PLAN-145: bình thường chuyến mới chọn tuyến đông người — nhưng Út chờ quá LANE_MAX_WAIT nên tuyến Nam đi trước
     assert e.bus.lane == "south" and e.bus.seat_of("út") is not None
+
+
+def test_new_trip_takes_the_fullest_route_unless_someone_waited_too_long():
+    """PLAN-145: chỉ một xe — chuyến mới chở tuyến đông người chờ nhất (đi cùng tuyến về đầy đủ); chưa ai chờ quá lâu."""
+    e = Engine(0.0)
+    comment(e, "Út", "Cà Mau", 1)  # Nam: 1 người, chờ trước
+    for i in range(10):
+        comment(e, f"C{i}", "Huế", 2)  # Bắc: 10 người
+    e.queues  # Bắc đã lên xe chính (đang đón) — cho xe chạy rồi về để chọn tuyến chuyến sau
+    e.bus.lane = "south"
+    e._enter_boarding(3)
+    assert e.bus.lane == "north"
 
 
 def test_home_province_is_not_a_trip():
@@ -1356,15 +1371,19 @@ def test_roadside_pickup_for_province_still_ahead():
     where = e.ticket_of(e.viewers["bình"])
     assert where["status"] == "seat" and where["pickup"] == ticket["pickup"]
     picked = dropped = None
+    halted = False
     while e.phase != "FINISH" and t < 5000:
         t += 0.5
         e.tick(t)
+        if e.snapshot()["halt"]:
+            halted = True
         for ev in e.drain():
-            if ev["type"] == "pickup" and ev["name"] == "Bình":
+            if ev["type"] == "pickup_stop" and any(p["name"] == "Bình" for p in ev["people"]):
                 picked = t
             if ev["type"] == "dropoff" and any(p["name"] == "Bình" for p in ev["people"]):
                 dropped = (t, ev["province"])
     assert picked and dropped and picked < dropped[0] and dropped[1] == BY_KEY[key].name
+    assert halted  # PLAN-145: xe dừng hẳn bên lề lúc đón (snapshot có «halt», tốc độ 0)
 
 
 def test_province_already_passed_waits_for_next_bus():
@@ -1388,7 +1407,7 @@ def test_pickup_at_rest_stop_boards_right_there():
     e.drain()
     comment(e, "Dũng", BY_KEY[ahead[-1]].name, t)
     events = e.drain()
-    assert any(ev["type"] == "pickup" and ev["name"] == "Dũng" for ev in events)
+    assert any(ev["type"] == "pickup_stop" and ev["people"][0]["name"] == "Dũng" for ev in events) and not e.halt
     assert e.bus.seat_of("dũng") is not None and "dũng" not in e.pickups
 
 

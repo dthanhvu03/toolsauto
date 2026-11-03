@@ -144,7 +144,7 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    setText("phase-pill", s.paused ? "Tạm dừng" : PILL[s.phase]);
+    setText("phase-pill", s.paused ? "Tạm dừng" : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
@@ -173,6 +173,7 @@ export class Hud {
   /** [phần đầu, phần đuôi] của dòng trạng thái. */
   private statusText(s: State): [string, string] {
     if (s.paused) return ["Xe dừng chờ xíu nha", ""];
+    if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
     switch (s.phase) {
@@ -374,6 +375,12 @@ export class Hud {
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
         break;
+      case "pickup_stop": {  // xe dừng hẳn bên lề đón người hẹn (PLAN-145): đọc tên ai lên
+        const who = (e.people ?? []).slice(0, 4).map((p) => esc(p.name)).join(", ");
+        const more = (e.people?.length ?? 0) > 4 ? ` +${(e.people?.length ?? 0) - 4} người` : "";
+        this.note(`🚏 Xe dừng ở ${esc(e.place ?? "")} đón ${who}${more}`, "Đứng chờ sẵn bên đường · lên xe từng người");
+        break;
+      }
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
         this.toast(`🚏 Xe số ${e.bus_no} đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
         break;

@@ -209,7 +209,9 @@
 
   <section>
     <h2 id="buses-title">🚌 Các chuyến xe</h2>
-    <div class="row">
+    <p class="hint">Chỉ chạy <b>một xe</b> (PLAN-145): ai muốn đi gõ tên tỉnh để có vé / xếp hàng; hết chuyến xe quay về bến
+      đón tiếp, chọn tuyến chở được nhiều người chờ nhất (ai chờ quá 10 phút thì tuyến của họ đi trước).</p>
+    <div class="row" hidden>
       <span>Tự chiếu xe</span>
       <button data-set="auto_feature" data-val="events">Theo chuyện hay</button>
       <button data-set="auto_feature" data-val="rotate">Xoay vòng</button>
@@ -217,15 +219,15 @@
       <span id="rotate-box" class="row"><span>mỗi</span><input type="number" id="rotate-seconds" min="20" max="300" step="10"
         aria-label="Giây mỗi xe khi xoay vòng"><span>giây</span></span>
     </div>
-    <p class="hint">Theo chuyện hay: cảnh của xe chính (đón khách, trạm, thả khách) luôn lên màn hình; lúc xe chính chỉ đang
+    <p class="hint" hidden>Theo chuyện hay: cảnh của xe chính (đón khách, trạm, thả khách) luôn lên màn hình; lúc xe chính chỉ đang
       chạy thì tự nhảy sang xe tăng cường sắp thả khách, thả xong quay về. Anh bấm «Chiếu» tay thì tự chiếu nhường anh 2 phút.</p>
     <div id="buses"></div>
-    <h3>Gọi thêm xe tăng cường cho làn</h3>
-    <div id="relief-lanes" class="row"></div>
-    <div class="row" style="margin-top:10px">
+    <div hidden><h3>Gọi thêm xe tăng cường cho làn</h3>
+    <div id="relief-lanes" class="row"></div></div>
+    <div class="row" style="margin-top:10px" hidden>
       <label class="toggle"><input type="checkbox" data-show="relief_auto"> Tự gọi xe tăng cường khi một làn đủ 24 người chờ</label>
     </div>
-    <p class="hint">Khi có xe tăng cường: «📺 Chiếu xe này» = màn hình live theo xe đó (cảnh, đèo / hầm, tên trên xe, nhạc của
+    <p class="hint" hidden>Khi có xe tăng cường: «📺 Chiếu xe này» = màn hình live theo xe đó (cảnh, đèo / hầm, tên trên xe, nhạc của
       xe đó; góc máy chọn ở phần Camera). Mỗi xe một đài nhạc chạy liên tục — chuyển xe là nghe đúng đoạn xe đó đang phát.
       Xe tăng cường tới bến cuối thì màn hình tự về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
   </section>

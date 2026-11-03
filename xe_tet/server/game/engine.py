@@ -133,7 +133,14 @@ SHOW_MAX = 60.0  # tối đa một lượt (anh chọn 60)
 SHOW_AGAIN = 90.0  # xe vừa lên sóng thì 90 giây sau mới tới lượt lại — xe khác (ít điểm) cũng có lượt
 ON_AIR_NAMES = 3
 OFFSCREEN_SKIP = {"via", "honk"}
-RELIEF_AUTO = False  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
+RELIEF_AUTO = False
+# Dừng đón dọc đường (PLAN-145, anh 03/11): xe tới điểm hẹn thì dừng hẳn bên lề, người chờ lên từng người (đọc tên), xong chạy
+PICKUP_STOP_BASE = 3.5  # giây tấp vào / mở cửa (người chờ đứng 2 giây rồi mới bước lên)
+PICKUP_STOP_STEP = 1.3  # giây mỗi người bước lên
+PICKUP_JOIN = 0.4  # điểm đón sắp tới còn ≥ 40 % PICKUP_LEAD giây → người hẹn sau đứng chung điểm đó (xe dừng một lần)
+# Chọn tuyến cho chuyến mới (PLAN-145): tuyến chở được nhiều người đang chờ nhất (cả người làn khác mà xe đi ngang quê); ai chờ
+# quá LANE_MAX_WAIT giây thì tuyến của người đó được đi trước — đông mà không ai bị bỏ quên
+LANE_MAX_WAIT = 600.0  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
 # Quà = xe đưa người đang chờ về quê ngay (PLAN-144, kiểu «cứu N người» của game khác, đổi sang Tết): (xu, mã, tên, số người;
 # 0 = cả bến). Xu cộng dồn từng người (quà combo nhỏ cũng tới mốc); người tặng đang chờ thì được đưa về trước, rồi tới người
 # chờ lâu nhất. Không có ai chờ thì xu giữ lại tới khi có.
@@ -365,6 +372,7 @@ class Engine:
         self.last_station_talk = -1e9
         self.last_back_talk = -1e9
         self.pickups: dict[str, tuple[str, float]] = {}  # uid → (tỉnh có điểm đón, odometer điểm đón) chờ xe tới
+        self.halt: dict | None = None  # xe đang dừng bên đường đón khách: nơi, người lên, lúc chạy lại (PLAN-145)
         self.last_pickup_talk = -1e9
         self.ai_reply = False  # admin bật «lơ xe trả lời bằng AI» (Hub đặt theo thiết lập)
         self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
@@ -653,6 +661,7 @@ class Engine:
         self.next_banner = None
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
+        self.halt = None
         self.trip_likes = 0
         self.trip_gifted = False
         for v in self.viewers.values():
@@ -672,12 +681,21 @@ class Engine:
         return FULL_BUS_SECONDS + (self.board_seconds - FULL_BUS_SECONDS) * free / SEATS
 
     def _pick_lane(self) -> str:
-        """BR-4: làn của người đang chờ lâu nhất (công bằng theo người, không làn nào bị bỏ đói)."""
+        """Tuyến của chuyến mới (PLAN-145): ai chờ quá LANE_MAX_WAIT giây thì tuyến của người chờ lâu nhất đi trước (không ai bị
+        bỏ đói); còn lại chọn tuyến chở được nhiều người đang chờ nhất — tính cả người làn khác mà xe đi ngang quê họ."""
         self._prune_queues()
         waiting = [lane for lane, q in self.queues.items() if q]
         if not waiting:
             return self.bus.lane or self.network.lanes[0].key
-        return min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
+        oldest = min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
+        if self.last_now - self.queued_at.get(self.queues[oldest][0], self.last_now) > LANE_MAX_WAIT:
+            return oldest
+        people = [self.viewers[u].province for q in self.queues.values() for u in q]
+
+        def load(lane: str) -> int:
+            served = self.network.serves(lane)
+            return sum(1 for prov in people if prov in served)
+        return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
 
     def drive_seconds(self, total_km: float, rush: bool = False) -> float:
         """Giây chạy đường của cả chuyến `total_km` (BR-7): xa lâu hơn, nhưng cong (mũ DRIVE_CURVE) chứ không tỉ lệ thẳng."""
@@ -1092,7 +1110,10 @@ class Engine:
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
+        elif self.phase == "DRIVING" and self.halt and now < self.halt["until"]:
+            pass  # đang dừng bên đường: người chờ lên từng người, xe đứng yên
         elif self.phase == "DRIVING":
+            self.halt = None
             km_before = self.trip_km()
             self.progress += (dt * self.speed() / self.leg_seconds
                               * self._pace(self.trip, self.trip_km(), self._kmps(self.trip.total)))
@@ -1420,6 +1441,9 @@ class Engine:
             if target <= here or eta is None or eta < PICKUP_LEAD + PICKUP_MARGIN:
                 return name
             at = self._odo_at(PICKUP_LEAD)
+            ahead = [a for _, a in self.pickups.values() if a > here]
+            if ahead and (self._eta_odo(min(ahead)) or 0) >= PICKUP_LEAD * PICKUP_JOIN:
+                at = min(ahead)  # đứng chung điểm đón sắp tới: xe dừng một lần cho cả nhóm
         else:
             if target <= here:
                 return name
@@ -1441,20 +1465,28 @@ class Engine:
         return True
 
     def _check_pickups(self) -> None:
-        """Xe chính tới điểm đón: «tấp vô» đón người đã hẹn (lơ xe gọi tên, thông báo trên màn hình)."""
+        """Xe chính tới điểm đón: dừng hẳn bên lề (PLAN-145, anh 03/11 «tấp vào là dừng xe ở bên đường … xe tới dừng là lên»)
+        — người hẹn ở điểm này lên lần lượt, lơ xe đọc tên; dừng PICKUP_STOP_BASE + PICKUP_STOP_STEP giây mỗi người."""
         here = self.trip_km()
-        for uid, (place, at) in list(self.pickups.items()):
-            if here + 1e-6 < at:
-                continue
+        due = [(uid, place) for uid, (place, at) in self.pickups.items() if here + 1e-6 >= at]
+        if not due:
+            return
+        people, place = [], due[0][1]
+        for uid, _ in due:
             del self.pickups[uid]
             if self.bus.seat_of(uid) is None:  # đã bỏ vé / rời phòng trước khi xe tới
                 continue
             v = self.viewers[uid]
-            self.emit("pickup", name=v.name, hue=v.hue, place=BY_KEY[place].name, bus_no=self.bus.no,
-                      province=BY_KEY[v.province].name if v.province else None)
-            if self.last_now - self.last_pickup_talk >= PICKUP_TALK_GAP:
-                self.last_pickup_talk = self.last_now
-                self.talk("pickup", name=v.name, place=BY_KEY[place].name, main=True)
+            people.append({"name": v.name, "hue": v.hue, "province": BY_KEY[v.province].name if v.province else ""})
+        if not people:
+            return
+        seconds = PICKUP_STOP_BASE + PICKUP_STOP_STEP * len(people)
+        if self._phase_now() == "DRIVING":  # ở trạm / đầu ngõ xe vốn đang đứng: lên luôn, không cần dừng thêm
+            self.halt = {"place": BY_KEY[place].name, "people": people, "until": self.last_now + seconds}
+        self.emit("pickup_stop", place=BY_KEY[place].name, people=people, seconds=round(seconds, 1), bus_no=self.bus.no)
+        names = ", ".join(p["name"] for p in people[:3]) + (f" và {len(people) - 3} người nữa" if len(people) > 3 else "")
+        self.last_pickup_talk = self.last_now
+        self.talk("pickup", name=names, place=BY_KEY[place].name, main=True)
 
     def _odo_of(self, province: str | None) -> float | None:
         """Odometer xe chính tới tỉnh này trên chuyến đang chạy: điểm trả chưa tới, hoặc tỉnh xe đi qua; None: ngoài đường."""
@@ -2016,7 +2048,9 @@ class Engine:
             "terrain": terrain,
             "leg_index": self.leg_index,
             "progress": round(self.progress, 4),
-            "speed": round(self.speed(), 3),
+            "speed": 0.0 if self.halt else round(self.speed(), 3),
+            "halt": {"place": self.halt["place"], "people": self.halt["people"],
+                     "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,
             "leg_seconds": self.leg_seconds,
             "region": region,
             "place": BY_KEY[place].name,

@@ -66,6 +66,9 @@ function radiusFor(wind: number): number {
   return R_GENTLE * Math.pow(R_TIGHT / R_GENTLE, t);
 }
 const MAX_BUBBLES = 6;
+const BOARD_STEP_S = 1.0;  // bến: mỗi giây một người bước lên xe
+const LINE_COLS = 8;  // hàng chờ ở cửa xe gập dòng sau 8 người
+const PICKUP_STEP_S = 1.3;  // dừng đón bên đường: khớp PICKUP_STOP_STEP của server
 const BUBBLE_MS = 5000;
 const EXHAUST = 0x6f6f72;
 const LABEL_GAP = 4;  // px giữa hai nhãn tên bị đẩy
@@ -200,6 +203,8 @@ export class World {
   private bubbles: CSS2DObject[] = [];  // bong bóng chat đang hiện (giới hạn MAX_BUBBLES)
   private walkers: Walker[] = [];
   private wcLine: Walker[] = [];
+  private boardLine: Walker[] = [];  // bến: hàng người có vé chờ bước lên xe (PLAN-145)
+  private boardTimer = 0;
   private fx = new Fireworks();
   private dust = new Puffs(72);
   // hiệu ứng quà (PLAN-142): mỗi món một kiểu — sprite gom sẵn, có trần
@@ -457,6 +462,7 @@ export class World {
     this.road.roadside.visible = this.land.near.visible = name === "road";  // bối cảnh chiếm chỗ đồ ven đường
     for (const w of [...this.walkers]) this.removeWalker(w);
     this.wcLine = [];
+    this.boardLine = [];
     this.bus.group.position.set(0, 0, 0);
     const early = this.early;
     this.early = [];
@@ -472,6 +478,9 @@ export class World {
     switch (e.type) {
       case "ticket":
         if (!e.next && this.set === "ben" && !e.changed) this.boardWalk(e.name ?? "", e.hue ?? 0);
+        break;
+      case "pickup_stop":  // người hẹn đứng chờ sẵn bên lề / ở trạm, lên xe từng người (PLAN-145)
+        this.roadsidePickup(e);
         break;
       case "chat":
         if (e.seat != null) this.bubble(e.seat, e.text ?? "");
@@ -553,11 +562,47 @@ export class World {
     this.wcLine = this.wcLine.filter((x) => x !== w);
   }
 
+  /** Dừng đón: người hẹn đứng ở lề (đường) / sân (trạm, đầu ngõ) cạnh cửa xe, có biển điểm đón; lần lượt bước lên. */
+  private roadsidePickup(e: GameEvent): void {
+    const door = this.bus.doorSpot;
+    const curb = this.set === "road" ? -4.9 : -3.6;  // đường: đứng trên lề sỏi; trạm / đầu ngõ: ngoài sân
+    (e.people ?? []).forEach((person, i) => {
+      const p = makePerson(person.hue ?? 0, person.name);
+      // đứng dọc thân xe phía sau cửa (giữa khung dọc — phía trước đầu xe là mép khung, bị cắt)
+      p.position.set(door.x - 1.4 - (i % 6) * 0.8, 0.1, curb - Math.floor(i / 6) * 0.8);
+      this.addWalker(p, [new THREE.Vector3(door.x - 0.4, 0.1, door.z - 1.2), door.clone()], 3.2, undefined, 2 + i * PICKUP_STEP_S);
+    });
+    const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign");
+    sign.position.set(door.x - 2.2, 2.6, curb - 0.4);
+    this.scene.add(sign);
+    window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
+  }
+
+  /** Bến: người có vé xếp hàng ở cửa xe, mỗi BOARD_STEP_S giây một người bước lên (anh 03/11 «lên xe là phải xếp hàng lên
+   * từ từ, đọc tên là lên xe»). Hàng dài thì gập hai dòng. */
   private boardWalk(name: string, hue: number): void {
     const p = makePerson(hue, name);
     const { x0, x1, z0, z1 } = this.ben.waiting;
     p.position.set(x0 + Math.random() * (x1 - x0), 0.1, z0 + Math.random() * (z1 - z0));
-    this.addWalker(p, [new THREE.Vector3(this.bus.doorSpot.x, 0.1, -4), this.bus.doorSpot.clone()], 4.2);
+    const w = this.addWalker(p, [this.lineSpot(this.boardLine.length)], 4.2);
+    w.hold = true;
+    this.boardLine.push(w);
+  }
+
+  private lineSpot(k: number): THREE.Vector3 {
+    const door = this.bus.doorSpot;
+    return new THREE.Vector3(door.x + 1.1 + (k % LINE_COLS) * 0.75, 0.1, door.z - 1.6 - Math.floor(k / LINE_COLS) * 0.8);
+  }
+
+  private stepBoardLine(dt: number): void {
+    if (!this.boardLine.length) return;
+    this.boardTimer += dt;
+    if (this.boardTimer < BOARD_STEP_S) return;
+    this.boardTimer = 0;
+    const head = this.boardLine.shift()!;
+    head.hold = false;
+    head.path = [this.bus.doorSpot.clone()];  // tới cửa thì lên xe (hết đường đi → gỡ khỏi cảnh)
+    this.boardLine.forEach((w, i) => { w.path = [this.lineSpot(i)]; });
   }
 
   private bubble(seat: number, text: string): void {
@@ -901,7 +946,7 @@ export class World {
     this.t += dt;
     this.updateSky();
     const s = this.state;
-    const moving = s?.phase === "DRIVING" && this.set === "road";
+    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt;  // dừng đón bên đường: xe đứng yên
     const uphill = Math.max(0, this.shape.grade) / GRADE_PASS;  // leo dốc: cảnh trôi chậm lại (chỉ hình, km do server)
     const target = moving ? BASE_SPEED * (s?.speed ?? 1) * (1 - CLIMB_SLOW * uphill) : 0;
     this.speed += (target - this.speed) * Math.min(1, dt * 2);
@@ -955,6 +1000,7 @@ export class World {
       w.obj.position.y = 0.1 + Math.abs(Math.sin(w.phase)) * 0.12;
       animatePerson(w.obj, "walk", w.phase);
     }
+    this.stepBoardLine(dt);
     // hàng WC: mỗi 4 s người đầu hàng xong việc, quay lại xe
     if (this.wcLine.length) {
       this.wcTimer += dt;
