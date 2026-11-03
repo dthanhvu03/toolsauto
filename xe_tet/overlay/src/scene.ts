@@ -505,6 +505,9 @@ export class World {
         if (e.tier_up && (e.tier ?? 0) >= 2) this.fireworks(SHOW_SKY, 2); // chỉ khi lên bậc
         this.giftFx(e.fx, e.fx_n ?? 1);
         break;
+      case "ride_home":  // quà đưa người chờ về quê: pháo hoa mừng (chuyến bay cả bến: nhiều quả)
+        this.fireworks(SHOW_SKY, e.big ? 4 : 1);
+        break;
       case "special":
         for (let i = 0; i < 6; i++) {
           window.setTimeout(() => this.fireworks(SHOW_SKY.clone().add(new THREE.Vector3(-6 + i * 2.4, (i % 2) * 1.5, 0)), 1), i * 600);

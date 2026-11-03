@@ -133,6 +133,13 @@ SHOW_MAX = 60.0  # tối đa một lượt (anh chọn 60)
 SHOW_AGAIN = 90.0  # xe vừa lên sóng thì 90 giây sau mới tới lượt lại — xe khác (ít điểm) cũng có lượt
 ON_AIR_NAMES = 3
 OFFSCREEN_SKIP = {"via", "honk"}
+RELIEF_AUTO = False  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
+# Quà = xe đưa người đang chờ về quê ngay (PLAN-144, kiểu «cứu N người» của game khác, đổi sang Tết): (xu, mã, tên, số người;
+# 0 = cả bến). Xu cộng dồn từng người (quà combo nhỏ cũng tới mốc); người tặng đang chờ thì được đưa về trước, rồi tới người
+# chờ lâu nhất. Không có ai chờ thì xu giữ lại tới khi có.
+RIDES = ((500, "plane", "✈️ Chuyến bay Tết", 0), (100, "coach", "🚍 Xe khách riêng", 20), (50, "van16", "🚌 Xe 16 chỗ", 8),
+         (30, "van7", "🚐 Xe 7 chỗ", 4), (20, "taxi", "🚕 Taxi", 2), (10, "xeom", "🛵 Xe ôm", 1))
+RIDE_TALK_GAP = 6.0
 PRIORITY_TALK_GAP = 8.0  # lơ xe báo «X tặng quà, lên đầu hàng» tối đa 8 giây / câu
 RULES_GAP = 180.0  # lơ xe đọc luật chơi mỗi 3 phút (anh báo 02/11: người xem chưa hiểu luật)
 RULES_MIN_GAP = 60.0  # có RULES_JOINS người mới vào phòng thì đọc sớm hơn, nhưng không dưới 1 phút
@@ -254,6 +261,8 @@ class Viewer:
     invited: bool = False  # buổi này lơ xe đã mời lên xe (thả tim nhiều mà chưa có vé)
     stage: float = 0.0  # điểm lên sóng trong buổi (quà / bình luận / tim) — xe tăng cường của người này được chiếu lâu hơn
     stage_comments: int = 0
+    gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
+    ride_credit: int = 0  # xu chưa dùng để gọi xe đưa người chờ về quê
     priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
 
 
@@ -362,6 +371,8 @@ class Engine:
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
         self.last_via_talk = -1e9
         self.last_priority_talk = -1e9
+        self.last_ride_talk = -1e9
+        self.patrons: list[str] = []  # uid «Chủ nhà xe», «Phó nhà xe» (xu tặng trong buổi)
         self.last_rules = now  # mới mở game: để cảnh đầu tiên chạy, đọc luật sau RULES_MIN_GAP nếu có người vào
         self.joins_since_rules = 0
         self.specials: list[str] = []
@@ -453,8 +464,9 @@ class Engine:
             return (f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn, gõ xe nào để coi vé, "
                     "hổng về thì gõ không về.")
         if key == "gift":
-            return (f"{name} hỏi quà hả, đang chờ chuyến sau mà tặng quà là được lên đầu hàng, đã có giường thì giường vàng, "
-                    "món nào cũng có hiệu ứng riêng, chỉ người từ 18 tuổi tặng.")
+            return (f"{name} hỏi quà hả, 10 xu gọi xe ôm đưa một người đang chờ về quê ngay, 20 xu taxi hai người, 30 xu bốn "
+                    "người, 50 xu tám người, 100 xu hai chục người, 500 xu cả bến về, người tặng đang chờ thì về trước, "
+                    "chỉ người từ 18 tuổi tặng.")
         if key == "station":
             return f"{name} muốn xe ra bến khác thì gõ từ Hà Nội hay bến Đà Nẵng, đủ {STATION_VOTES} người gọi là xe ra."
         if key == "newname":
@@ -548,6 +560,49 @@ class Engine:
         self.queued_at.pop(uid, None)
         if uid in self.viewers:
             self.viewers[uid].priority = False
+
+    def _send_rides(self, v: Viewer) -> str | None:
+        """Dùng xu của người tặng gọi xe đưa người đang chờ về quê ngay (mốc lớn nhất đủ xu, lặp tới khi hết xu / hết người).
+        Trả dòng mô tả cho thẻ quà, None nếu chưa gọi được xe nào."""
+        sent = []
+        while True:
+            waiting = sorted((self.queued_at.get(u, 0.0), u) for q in self.queues.values() for u in q)
+            order = [u for _, u in waiting]
+            if v.uid in order:  # người tặng đang chờ: về trước
+                order.remove(v.uid)
+                order.insert(0, v.uid)
+            ride = next((r for r in RIDES if v.ride_credit >= r[0]), None)
+            if not order or ride is None:
+                break
+            xu, key, label, cap = ride
+            v.ride_credit -= xu
+            uids = order if cap == 0 else order[:cap]
+            for uid in uids:
+                self._unqueue(uid)
+            by_prov: dict[str, list[str]] = {}
+            for uid in uids:
+                by_prov.setdefault(self.viewers[uid].province, []).append(uid)
+            people = []
+            for prov, group in by_prov.items():
+                people += [{**p, "province": BY_KEY[prov].name} for p in self._deliver(group, prov, 0)["people"]]
+            self.emit("ride_home", giver=v.name, hue=v.hue, vehicle=key, label=label, people=people, count=len(people),
+                      big=cap == 0)
+            names = ", ".join(p["name"] for p in people[:3]) + (f" và {len(people) - 3} người nữa" if len(people) > 3 else "")
+            if self.last_now - self.last_ride_talk >= RIDE_TALK_GAP:
+                self.last_ride_talk = self.last_now
+                self.talk("ride", name=v.name, label=label.split(" ", 1)[1], names=names)
+            sent.append(f"{label} đưa {len(people)} người về quê")
+        return " · ".join(sent) or None
+
+    def _update_patrons(self) -> None:
+        """«👑 Chủ nhà xe» / «Phó nhà xe»: hai người tặng nhiều xu nhất buổi; đổi chủ thì lơ xe báo (anh chọn 03/11)."""
+        top = sorted((v for v in self.viewers.values() if v.gift_session > 0), key=lambda v: -v.gift_session)[:2]
+        uids = [v.uid for v in top]
+        if uids and (not self.patrons or self.patrons[0] != uids[0]):
+            owner = self.viewers[uids[0]]
+            self.emit("patron", name=owner.name, hue=owner.hue, xu=owner.gift_session)
+            self.talk("new_owner", name=owner.name, xu=owner.gift_session)
+        self.patrons = uids
 
     def _prioritize(self, v: Viewer, lane: str) -> int:
         """Người đang chờ tặng quà (PLAN-144, anh chọn «quà giúp chính mình»): lên đầu hàng làn mình, sau những người tặng
@@ -808,7 +863,7 @@ class Engine:
     def _run_reliefs(self, dt: float) -> None:
         """Tự gọi xe tăng cường cho làn đủ một xe người chờ; xe chạy (đèo / hầm chậm lại), tới tỉnh nào thả khách tỉnh đó."""
         self._prune_queues()
-        if self.relief_auto:
+        if self.relief_auto and RELIEF_AUTO:
             for lane, queue in self.queues.items():
                 while len(queue) >= SEATS and self._dispatch_relief(lane):
                     pass
@@ -1790,13 +1845,15 @@ class Engine:
         tier = next(t for floor, t in GIFT_TIERS if total >= floor)
         tier_before = next((t for floor, t in GIFT_TIERS if before >= floor), 0)
         queued = self.lane_of_uid(v.uid)
-        relief = None
-        if queued and tier >= RELIEF_GIFT_TIER > tier_before:  # đang chờ xe sau + lên bậc băng rôn → bao xe tăng cường
-            relief = self._dispatch_relief(queued, sponsor=v)
+        relief = None  # PLAN-144 (anh 03/11): bỏ xe tăng cường — quà đưa người chờ về quê ngay, trên màn hình chỉ một xe
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
+        v.gift_session += diamonds
+        v.ride_credit += diamonds
+        ride = self._send_rides(v)
         moved = None
-        if queued and relief is None and not v.priority:
+        if queued and not ride and not v.priority and self.lane_of_uid(v.uid):
             moved = self._prioritize(v, queued)
+        self._update_patrons()
         if tier >= 1:
             v.vip = True
         if tier >= 2:
@@ -1815,8 +1872,10 @@ class Engine:
         v.parcels += int(parcel)
         fx, fx_n = gift_fx(gift, diamonds)
         perk = GIFT_LABELS[tier][0 if ticketed else 1]
-        if relief:
-            perk = f"🚌 xe tăng cường chạy ngay cho bà con {self.network.lane_by_key[relief.lane].label.lower()}"
+        if ride:
+            perk = ride
+        elif v.ride_credit >= RIDES[-1][0]:  # không ai chờ: xu giữ lại, nói rõ để người tặng biết quà không mất
+            perk = f"🎟 {v.ride_credit} xu giữ lại · có người chờ là gọi xe đưa về quê"
         elif moved:
             ln = self.network.lane_by_key[queued]
             perk = f"⚡ lên đầu hàng chờ {ln.arrow} {ln.label} · thứ {moved}"
@@ -1824,12 +1883,21 @@ class Engine:
                 self.last_priority_talk = self.last_now
                 self.talk("priority", name=v.name, dest=self._dest(queued), pos=moved)
         self.emit("gift", name=v.name, hue=v.hue, tier=tier, tier_up=tier > tier_before, gift=gift,
-                  diamonds=diamonds, total=total, perk=perk, next_tier=self._next_tier_hint(total, queued is not None),
+                  diamonds=diamonds, total=total, perk=perk, next_tier=self._next_ride_hint(v),
                   parcel=parcel, parcels=v.parcels, fx=fx, fx_n=fx_n)
         if self.phase == "REST" and v.uid not in self.treated:  # combo 30 hoa hồng chỉ «bao cả xe» một lần
             self.treated.add(v.uid)
             self.emit("treat", name=v.name)
             self.talk("treat", name=v.name)
+
+    @staticmethod
+    def _next_ride_hint(v: Viewer) -> str:
+        """Gợi ý mốc xe kế tiếp theo xu đang giữ (khớp bảng quà trên màn hình — PLAN-144)."""
+        nxt = min((r for r in RIDES if r[0] > v.ride_credit), key=lambda r: r[0], default=None)
+        if nxt is None or nxt[3] == 0 and v.gift_session >= 1000:
+            return ""
+        who = "cả bến" if nxt[3] == 0 else f"{nxt[3]} người"
+        return f"thêm {nxt[0] - v.ride_credit} xu → {nxt[2]} đưa {who} về quê"
 
     @staticmethod
     def _next_tier_hint(total: int, queued: bool = False) -> str:
@@ -1838,8 +1906,6 @@ class Engine:
         if total >= 1000:
             return ""
         floor, tier = min(((f, t) for f, t in GIFT_TIERS if f > total), key=lambda ft: ft[0])
-        if tier == RELIEF_GIFT_TIER and queued:  # đang chờ xe sau: mốc kế tiếp là gọi được xe cho cả làn mình
-            return f"thêm {floor - total} xu → xe tăng cường chạy ngay cho cả làn của bạn"
         return f"thêm {floor - total} xu → {GIFT_LABELS[tier][0]}"
 
     # ---- trạng thái cho overlay ----------------------------------------
@@ -1962,6 +2028,7 @@ class Engine:
             "staying_count": len(self.staying),
             "board": self._board_top(),
             "trip_likes": self.trip_likes,
+            "patrons": [{"name": self.viewers[u].name, "xu": self.viewers[u].gift_session} for u in self.patrons],
             "delivered": self.delivered,
             "days_to_tet": max(0, (season.TET_DAY - today).days),
             "season": season.view(today),

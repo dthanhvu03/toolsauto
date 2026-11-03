@@ -97,6 +97,7 @@ export interface State {
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
   fleet?: FleetBus[];  // mọi xe đang chạy
   trip_minutes?: number;
+  patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
 }
 
 /** Đồng hồ trên xe: giờ VN lúc xuất bến + giờ xe chạy (giờ trong ngày, «HH:MM», ngày thứ mấy từ hôm xuất bến). */
@@ -165,6 +166,7 @@ export interface GameEvent {
   sponsor?: string | null;  // xe tăng cường do ai tặng quà gọi
   fx?: string;  // quà: hiệu ứng riêng của món (petals | honk | hearts | firework | lixi | lantern — PLAN-142)
   fx_n?: number;
+  giver?: string; label?: string; vehicle?: string; big?: boolean; xu?: number;  // ride_home / patron (PLAN-144)
   promoted?: boolean;  // vé: người đang giữ chỗ vừa được xếp lên xe
   relief?: boolean;  // vé: lên xe tăng cường
   url?: string;  // speak: file giọng lơ xe đọc sẵn

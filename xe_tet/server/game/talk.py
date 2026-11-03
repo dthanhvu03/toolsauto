@@ -100,6 +100,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} tặng quà, Anh Tư cho lên đầu hàng xe {dest} liền, giờ thứ {pos} rồi đó.",
             "Cảm ơn {name}, chuyến {dest} kế tiếp {name} lên trước, thứ {pos} trong hàng.",
         ),
+        "ride": (  # quà = xe đưa người đang chờ về quê ngay (PLAN-144)
+            "{name} gọi {label} đưa {names} về quê liền, khỏi chờ, cảm ơn {name}.",
+            "Có {label} của {name} tới rồi, chở {names} về nhà ăn Tết luôn.",
+        ),
+        "new_owner": (  # người tặng nhiều nhất buổi
+            "{name} lên làm chủ nhà xe rồi bà con, {xu} xu, Anh Tư cúi đầu cảm ơn.",
+            "Nhà xe có chủ mới, {name} với {xu} xu, chịu chơi số một.",
+        ),
         "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
             "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
             "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
@@ -303,6 +311,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} tặng quà nên được lên đầu hàng xe {dest}, thứ {pos}, uy tín.",
             "Cảm ơn {name}, vé ưu tiên xe {dest}, giờ đứng thứ {pos} rồi.",
         ),
+        "ride": (
+            "{name} book {label} ship {names} về quê liền, uy tín.",
+            "{label} của {name} tới đón {names} rồi, về nhà ăn Tết thôi.",
+        ),
+        "new_owner": (
+            "{name} chính thức làm chủ nhà xe, {xu} xu, đỉnh nóc kịch trần.",
+            "Chủ nhà xe mới là {name} đó mấy bồ, {xu} xu, xịn xò.",
+        ),
         "parcels": (
             "Ship tận cổng thùng quà của {names}, uy tín luôn.",
             "Thùng quà của {names} hạ cánh an toàn, chuẩn đét.",
@@ -504,6 +520,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "priority": (
             "Cảm ơn {name}, được lên đầu hàng chờ xe {dest}, hiện là thứ {pos}.",
             "{name} tặng quà, chuyến {dest} sau được lên trước, thứ {pos} trong hàng.",
+        ),
+        "ride": (
+            "Cảm ơn {name} gọi {label} đưa {names} về quê, khỏi phải chờ.",
+            "{name} bao {label}, {names} về nhà ăn Tết sớm, chuẩn không cần chỉnh.",
+        ),
+        "new_owner": (
+            "Chúc mừng {name} lên làm chủ nhà xe với {xu} xu, cảm ơn nhiều.",
+            "{name} giờ là chủ nhà xe, {xu} xu, quá chất.",
         ),
         "parcels": (
             "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",

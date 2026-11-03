@@ -172,7 +172,7 @@ class LiveLog:
             row = self._minute(now)
             self._bump(row, "queued" if event.get("next") else "pickups" if event.get("pickup") else "seats")
             self.boarded.add(event.get("name", ""))  # thẻ vé chỉ mang tên hiển thị
-        elif kind in ("dropoff", "relief_dropoff"):
+        elif kind in ("dropoff", "relief_dropoff", "ride_home"):  # ride_home: quà đưa người chờ về quê (PLAN-144)
             self._minute(now)["delivered"] += len(event.get("people") or [])
 
     def take(self) -> tuple[dict, list[dict]] | None:

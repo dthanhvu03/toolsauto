@@ -142,10 +142,19 @@ html, body {
 .cta-main { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
 .cta-main b { color: #fff; background: var(--red); padding: 0 14px; border-radius: 12px; }
 .cta-sub { font-size: 34px; font-weight: 600; color: var(--ink); margin-top: 4px; white-space: nowrap; animation: fadein 0.5s ease; }
-/* cách chơi 3 bước luôn hiện (PLAN-142, anh: người xem chưa hiểu luật) */
-.cta-rules { font-size: 31px; font-weight: 700; color: var(--red-deep); margin-top: 6px; padding-top: 6px; white-space: nowrap;
-  border-top: 2px dashed rgba(198, 40, 40, 0.35); }
-.cta-rules b { color: var(--red); }
+/* bảng quà cố định (PLAN-144): 4 ô / hàng, ô cuối rộng gấp đôi */
+.gift-head { margin-top: 8px; padding-top: 8px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 30px; font-weight: 800;
+  color: var(--red-deep); }
+.gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+.gift-grid div { background: #fff; border: 2px solid #f1c56b; border-radius: 14px; padding: 6px 4px; display: grid;
+  grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; }
+.gift-grid div.wide { grid-column: span 2; }
+.gift-grid b { grid-column: 2; font-size: 28px; color: var(--red); line-height: 1.1; }
+.gift-grid i { grid-row: span 2; font-style: normal; font-size: 40px; line-height: 1; }
+.gift-grid span { grid-column: 2; font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.cta-foot { margin-top: 8px; font-size: 26px; font-weight: 700; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cta-foot b { color: var(--red); }
 
 /* màn hướng dẫn lớn 10 giây khi xe vào bến đón khách */
 #guide {
@@ -403,8 +412,8 @@ html, body {
 #title { top: calc(150px / var(--z)); }
 #route { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(32px / var(--z)); right: calc(32px / var(--z)); }
 #cta { top: calc((150px + 320px * var(--z)) / var(--z)); left: calc(32px / var(--z)); right: calc(32px / var(--z)); }
-#loxe { top: calc((150px + 530px * var(--z)) / var(--z)); left: calc(32px / var(--z)); }
-#toasts { top: calc((150px + 530px * var(--z)) / var(--z)); right: calc(24px / var(--z)); }
+#loxe { top: calc((150px + 800px * var(--z)) / var(--z)); left: calc(32px / var(--z)); }
+#toasts { top: calc((150px + 800px * var(--z)) / var(--z)); right: calc(24px / var(--z)); }
 #banner { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(40px / var(--z)); right: calc(40px / var(--z)); }
 #callout { top: calc(960px / var(--z)); }
 #guide { zoom: var(--z); top: calc(760px / var(--z)); left: calc(60px / var(--z)); right: calc(60px / var(--z)); }

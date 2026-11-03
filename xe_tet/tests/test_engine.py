@@ -332,7 +332,7 @@ def test_gifts_add_up_within_trip():
         e.handle({"type": "gift", "name": "An", "diamonds": 1}, 2)
     gifts = [ev for ev in e.drain() if ev["type"] == "gift"]
     assert [g["tier"] for g in gifts][-1] == 2 and gifts[-1]["total"] == 10
-    assert "thêm 90 xu" in gifts[-1]["next_tier"]
+    assert "thêm 10 xu → 🚕 Taxi" in gifts[-1]["next_tier"]  # PLAN-144: gợi ý mốc xe kế tiếp (đang giữ 10 xu)
     assert "thêm 9 xu" in gifts[0]["next_tier"]
 
 
@@ -710,7 +710,8 @@ def fill_lane(e, lane_province, n, t, prefix="Q"):
         comment(e, f"{prefix}{i}", lane_province, t)
 
 
-def test_relief_departs_when_lane_has_a_busload_waiting():
+def test_relief_departs_when_lane_has_a_busload_waiting(monkeypatch):
+    monkeypatch.setattr("xe_tet.server.game.engine.RELIEF_AUTO", True)  # PLAN-144: tắt mặc định, máy giữ cho admin
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)  # xe chính đón hướng Bắc
     fill_lane(e, "Cà Mau", SEATS, 2)  # đủ một xe hướng Nam đang chờ
@@ -720,7 +721,8 @@ def test_relief_departs_when_lane_has_a_busload_waiting():
     assert e.waiting() == 0 and len(e.reliefs) == 1 and e.snapshot()["reliefs"][0]["riders"] == SEATS
 
 
-def test_relief_drops_everyone_with_names_and_counts():
+def test_relief_drops_everyone_with_names_and_counts(monkeypatch):
+    monkeypatch.setattr("xe_tet.server.game.engine.RELIEF_AUTO", True)  # PLAN-144: tắt mặc định, máy giữ cho admin
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)
     fill_lane(e, "Cà Mau", SEATS, 2)
@@ -735,21 +737,42 @@ def test_relief_drops_everyone_with_names_and_counts():
     assert e.delivered == SEATS and all(e.viewers[f"q{i}"].province is None for i in range(SEATS))
 
 
-def test_queued_viewer_gift_100_calls_relief_and_rides_first():
+def test_gift_rides_send_waiting_people_home_giver_first():
+    """PLAN-144 (anh 03/11: bỏ xe tăng cường): quà = xe đưa người đang chờ về quê ngay — người tặng đang chờ về trước, rồi
+    người chờ lâu nhất; xu cộng dồn (combo nhỏ cũng tới mốc); không ai chờ thì xu giữ lại; không sinh xe tăng cường."""
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)
     fill_lane(e, "Cà Mau", 5, 2)
-    comment(e, "Út", "Bạc Liêu", 3)  # giữ chỗ cuối hàng hướng Nam
-    e.handle({"type": "gift", "name": "Út", "diamonds": 100}, 4)
+    comment(e, "Út", "Bạc Liêu", 3)  # cuối hàng
+    e.drain()
+    e.handle({"type": "gift", "name": "Út", "diamonds": 5}, 4)
+    e.handle({"type": "gift", "name": "Út", "diamonds": 15}, 5)  # cộng dồn 20 xu → taxi 2 người
     events = e.drain()
-    relief = [ev for ev in events if ev["type"] == "relief_depart"][0]
-    gift = [ev for ev in events if ev["type"] == "gift"][0]
-    assert relief["sponsor"] == "Út" and relief["names"][0] == "Út" and relief["count"] == 6
-    assert "xe tăng cường" in gift["perk"] and e.bus.banner is None  # tên nằm trên xe tăng cường, không dán xe chính
-    assert e.on_trip("út")  # đã lên xe: không đổi tỉnh nữa
+    (ride,) = [ev for ev in events if ev["type"] == "ride_home"]
+    assert ride["vehicle"] == "taxi" and ride["count"] == 2 and ride["people"][0]["name"] == "Út"
+    assert not e.reliefs and not [ev for ev in events if ev["type"] == "relief_depart"]
+    assert e.viewers["út"].home == "baclieu" and e.viewers["út"].trips == 1 and len(e.queues["south"]) == 4
+    e.handle({"type": "gift", "name": "Lạ", "diamonds": 500}, 6)  # chuyến bay: cả bến về
+    assert e.waiting() == 0
+    e.handle({"type": "gift", "name": "Khác", "diamonds": 10}, 7)  # không ai chờ: xu giữ lại
+    assert e.viewers["khác"].ride_credit == 10
+    comment(e, "Mới", "Cà Mau", 8)
+    e.handle({"type": "gift", "name": "Khác", "diamonds": 1}, 9)
+    assert e.viewers["mới"].home == "camau" and e.viewers["khác"].ride_credit == 1
 
 
-def test_relief_respects_limit_and_blocks_departure_switch():
+def test_top_gifters_are_owner_and_deputy():
+    e = Engine(0.0)
+    e.handle({"type": "gift", "name": "A", "diamonds": 5}, 1)
+    e.handle({"type": "gift", "name": "B", "diamonds": 9}, 2)
+    e.handle({"type": "gift", "name": "A", "diamonds": 7}, 3)
+    patrons = [ev for ev in e.drain() if ev["type"] == "patron"]
+    assert [p["name"] for p in patrons] == ["A", "B", "A"]  # đổi chủ thì báo
+    assert e.snapshot()["patrons"] == [{"name": "A", "xu": 12}, {"name": "B", "xu": 9}]
+
+
+def test_relief_respects_limit_and_blocks_departure_switch(monkeypatch):
+    monkeypatch.setattr("xe_tet.server.game.engine.RELIEF_AUTO", True)  # PLAN-144: tắt mặc định, máy giữ cho admin
     import pytest
     from xe_tet.server.game.engine import RELIEF_MAX
     e = Engine(0.0)
@@ -761,7 +784,8 @@ def test_relief_respects_limit_and_blocks_departure_switch():
         e.set_departure("dalat")
 
 
-def test_relief_rider_is_in_exactly_one_place():
+def test_relief_rider_is_in_exactly_one_place(monkeypatch):
+    monkeypatch.setattr("xe_tet.server.game.engine.RELIEF_AUTO", True)  # PLAN-144: tắt mặc định, máy giữ cho admin
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)
     fill_lane(e, "Cà Mau", SEATS, 2)
@@ -1467,7 +1491,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
         assert is_bad(text), text
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
-                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2)
+                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, label="Taxi", xu=20)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",

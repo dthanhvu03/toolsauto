@@ -26,20 +26,8 @@ const PILL: Record<State["phase"], string> = {
 const MAX_TOASTS = 3;
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
-const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
-// Bảng quà → hiệu ứng (PLAN-142), khớp `GIFT_FX_*` ở server/game/engine.py
 const SEATS_DEFAULT = 24;
-// bảng góc phải hẹp (340 px, ~15 chữ / dòng): tên quà bên trái, hiệu ứng in đỏ bên phải
-const GIFT_BOARD: [string, string][] = [
-  ["⚡ Đang chờ xe", "lên đầu hàng"], ["🌹 Hoa hồng", "hoa rơi"], ["🎵 TikTok", "bóp còi"], ["💗 Tim", "tim bay"],
-  ["🎆 10+ xu", "pháo hoa"], ["🧧 30+ xu", "lì xì"], ["🏮 100+ xu", "đèn lồng"],
-];
-const GIFT_TIPS = [
-  "🎁 Đang chờ chuyến sau? Tặng quà bất kỳ → lên đầu hàng",
-  "🎁 🌹 Hoa hồng → hoa mai, đào rơi · 🎵 TikTok → xe bóp còi",
-  "🎁 💗 Tim → tim bay · 🎆 10–29 xu → pháo hoa",
-  "🎁 🧧 30–99 xu → lì xì bay · 🏮 Từ 100 xu → đèn lồng · từ 18 tuổi",
-];
+const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
 const NAMED_KEEP = 500;  // nhớ lần gọi tên của 500 người gần nhất (có trần, không phình suốt buổi)
@@ -299,7 +287,10 @@ export class Hud {
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
     }
-    tips.push(...GIFT_TIPS);  // bảng quà → hiệu ứng (PLAN-142)
+    // chân bảng quà (PLAN-144): người đang chờ (quà đưa họ về) · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
+    const [owner, deputy] = s.patrons ?? [];
+    const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
+    setHTML("cta-foot", `⏳ <b>${s.waiting}</b> người đang chờ${crown} · từ 18 tuổi`);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
   }
@@ -317,11 +308,10 @@ export class Hud {
       ...(s.queue?.length ? ["queue", "queue"] : []),
       "fleet",
       ...(riders.length ? ["riders"] : []),
-      "gifts",
       "top",
     ];
     const mode = modes[this.boardTick % modes.length];
-    $("board").classList.toggle("gifts", mode === "gifts");
+    $("board").classList.remove("gifts");
     if (mode === "queue") {
       setText("board-title", "⏳ Chờ xe sau");
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
@@ -336,10 +326,6 @@ export class Hud {
         const on = b.featured ? "📺" : "";
         return `<li><span>${load}</span>${on}${b.arrow}${b.no} <small>${where}</small></li>`;
       }).join(""));
-    } else if (mode === "gifts") {  // bảng quà → hiệu ứng (PLAN-142)
-      setText("board-title", "🎁 Quà tặng");
-      setHTML("board-list", GIFT_BOARD.map(([gift, fx]) => `<li><span>${fx}</span>${gift}</li>`).join("")
-        + "<li><small>Từ 18 tuổi</small></li>");
     } else if (mode === "riders") {
       setText("board-title", `🚌 Trên xe số ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()
@@ -397,6 +383,16 @@ export class Hud {
         this.toast(`📺 Xe số ${e.bus_no}${owner} đang lên sóng`, who ? `Cảm ơn ${who} · ${esc(e.lane ?? "")}` : esc(e.lane ?? ""));
         break;
       }
+      case "ride_home": {  // quà = xe đưa người đang chờ về quê ngay (PLAN-144)
+        const who = (e.people ?? []).slice(0, 3).map((p) => esc(p.name)).join(", ");
+        const more = (e.count ?? 0) > 3 ? ` +${(e.count ?? 0) - 3} người` : "";
+        this.note(`${esc(e.label ?? "")} của ${esc(e.giver ?? "")} đưa ${who}${more} về quê!`,
+          `${e.count} người về tới quê ngay, khỏi chờ · cảm ơn ${esc(e.giver ?? "")}`);
+        break;
+      }
+      case "patron":
+        this.toast(`👑 ${name} lên làm Chủ nhà xe`, `${e.xu ?? 0} xu trong buổi`, "gift");
+        break;
       case "welcome":  // khách buổi trước quay lại (PLAN-134 D)
         this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
         break;
@@ -553,7 +549,7 @@ export class Hud {
         big = `🎫 ${esc(t.name)} giữ chỗ xe số ${t.bus} ${t.arrow} ${esc(t.lane)}`;
         small = t.passed
           ? `Xe vừa qua ${esc(t.passed)} rồi · lên xe sau${t.eta ? ` ~${t.eta} phút` : ""}`
-          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""} · 🎁 tặng quà để lên đầu hàng`;
+          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""} · 🎁 1 xu lên đầu hàng · 10 xu xe ôm về ngay`;
       } else if (t.pickup) {  // bắt xe dọc đường: ra điểm đón chờ (PLAN-136)
         big = `🚏 ${esc(t.name)} bắt xe số ${t.bus} dọc đường!`;
         small = `Ra điểm đón ${esc(t.pickup)} chờ${t.pickupIn ? ` · ~${clock(t.pickupIn)} xe tới` : ""} · về ${esc(t.province)}`;
