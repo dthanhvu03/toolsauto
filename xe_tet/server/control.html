@@ -66,6 +66,10 @@
   .zoom output { min-width:48px; text-align:center; font-weight:600; }
   #log, #tt-log { font:12px/1.5 ui-monospace, monospace; color:var(--muted); max-height:120px; overflow:auto; margin:8px 0 0; white-space:pre-wrap; }
   .paused { color:var(--red); }
+  ol.pax { margin: 6px 0 10px; padding-left: 0; list-style: none; columns: 2; font-size: 14px; }
+  ol.pax li { padding: 2px 6px; border-radius: 6px; break-inside: avoid; }
+  ol.pax li.on { background: #ffe08a; font-weight: 700; }
+  details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
 </style>
 </head>
 <body>
@@ -224,6 +228,16 @@
     <p class="hint">Khi có xe tăng cường: «📺 Chiếu xe này» = màn hình live theo xe đó (cảnh, đèo / hầm, tên trên xe, nhạc của
       xe đó; góc máy chọn ở phần Camera). Mỗi xe một đài nhạc chạy liên tục — chuyển xe là nghe đúng đoạn xe đó đang phát.
       Xe tăng cường tới bến cuối thì màn hình tự về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
+  </section>
+
+  <section>
+    <h2>🧾 Hành khách — ai ở xe nào</h2>
+    <div class="row">
+      <input id="pax-q" type="search" placeholder="Tìm tên người xem…" aria-label="Tìm tên người xem" style="flex:1;min-width:200px">
+    </div>
+    <div id="pax-found" class="hint" style="margin:8px 0"></div>
+    <div id="pax"></div>
+    <p class="hint">Mỗi xe: tên · tỉnh về · giường. Hàng chờ: thứ tự lên xe chuyến sau của từng làn. Cập nhật mỗi 2 giây.</p>
   </section>
 
   <section>
@@ -733,6 +747,41 @@ async function refresh() {
   } catch (e) { $("s-phase").textContent = "Mất kết nối"; }
 }
 setInterval(refresh, 1000);
+
+// ---- hành khách: ai ở xe nào (rà soát 02/11) ----
+let pax = { buses: [], queues: [] };
+function renderPax() {
+  const q = $("pax-q").value.trim().toLowerCase();
+  const hit = (p) => q && p.name.toLowerCase().includes(q);
+  const found = [];
+  const busHtml = pax.buses.map((b) => {
+    const title = `${b.featured ? "📺 " : ""}Xe số ${b.no} · ${b.main ? "xe chính" : "tăng cường"} ${b.arrow} ${esc(b.label)}` +
+      (b.sponsor ? ` · ${esc(b.sponsor)} bao xe` : "") + ` — ${b.riders.length} khách`;
+    const rows = b.riders.map((p) => {
+      if (hit(p)) found.push(`<b>${esc(p.name)}</b> → xe số ${b.no}${p.seat ? `, giường ${p.seat}` : ""}, về ${esc(p.province)}`);
+      return `<li class="${hit(p) ? "on" : ""}">${esc(p.name)} <small>· ${esc(p.province)}${p.seat ? ` · giường ${p.seat}` : ""}</small></li>`;
+    }).join("");
+    return `<details ${q || b.featured ? "open" : ""}><summary>${title}</summary><ol class="pax">${rows || "<li><small>trống</small></li>"}</ol></details>`;
+  }).join("");
+  const queueHtml = pax.queues.map((l) => {
+    const rows = l.people.map((p) => {
+      if (hit(p)) found.push(`<b>${esc(p.name)}</b> → giữ chỗ ${l.arrow} ${esc(l.label)}, thứ ${p.pos}, về ${esc(p.province)}`);
+      return `<li class="${hit(p) ? "on" : ""}">#${p.pos} ${esc(p.name)} <small>· ${esc(p.province)}</small></li>`;
+    }).join("");
+    return `<details ${q ? "open" : ""}><summary>⏳ Chờ ${l.arrow} ${esc(l.label)} — ${l.people.length} người</summary><ol class="pax">${rows}</ol></details>`;
+  }).join("");
+  setIfChanged($("pax"), busHtml + queueHtml);
+  setIfChanged($("pax-found"), q ? (found.length ? found.join("<br>") : `Không thấy «${esc(q)}» trên xe / hàng chờ (chưa gõ tỉnh, đã về quê hoặc đã rời phòng)`) : "");
+}
+async function refreshPax() {
+  try {
+    const res = await fetch("/api/passengers", { headers: HEADERS });
+    if (res.ok) { pax = await res.json(); renderPax(); }
+  } catch { /* mất mạng một nhịp: lần sau lấy lại */ }
+}
+$("pax-q").oninput = renderPax;
+setInterval(refreshPax, 2000);
+refreshPax();
 refresh();
 </script>
 </body>

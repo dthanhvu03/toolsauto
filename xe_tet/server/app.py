@@ -474,6 +474,12 @@ async def state() -> dict:
     return message
 
 
+@app.get("/api/passengers")
+async def passengers() -> dict:
+    """Ai ở xe nào / chờ làn nào (trang /control mục «Hành khách»)."""
+    return hub.engine.manifest()
+
+
 @app.post("/api/music")
 async def upload_music(request: Request, name: str = "") -> dict:
     """Tải một bài nhạc lên (thân request là nội dung file, `?name=` là tên file) — bảng điều khiển gửi từng file."""

@@ -67,6 +67,7 @@ interface Ticket {
   lane: string; arrow: string; km: number; departure: string; bus: number;
   pickup?: string; pickupIn?: number; passed?: string;  // bắt xe dọc đường / xe đã qua quê (PLAN-136)
   tripNo?: number;
+  promoted?: boolean; relief?: boolean;  // người đang giữ chỗ được xếp lên xe / lên xe tăng cường
 }
 
 // Trạng thái từng xe trên bảng «Xe khác» (PLAN-134 B: người xem không biết chuyến nào đang đón / chạy / sắp về).
@@ -363,7 +364,8 @@ export class Hud {
           this.tickets.push({ name: e.name ?? "", province: e.province ?? "", seat: e.seat ?? null,
             next: !!e.next, eta: e.eta_min, lane: e.lane ?? "", arrow: e.arrow ?? "",
             km: e.km ?? 0, departure: e.departure ?? "", bus: e.bus_no ?? 0,
-            pickup: e.pickup, pickupIn: e.pickup_in, passed: e.passed, tripNo: e.trip_no });
+            pickup: e.pickup, pickupIn: e.pickup_in, passed: e.passed, tripNo: e.trip_no,
+            promoted: !!e.promoted, relief: !!e.relief });
           this.pumpCallout();
         }
         break;
@@ -554,8 +556,13 @@ export class Hud {
       } else if (t.pickup) {  // bắt xe dọc đường: ra điểm đón chờ (PLAN-136)
         big = `🚏 ${esc(t.name)} bắt xe số ${t.bus} dọc đường!`;
         small = `Ra điểm đón ${esc(t.pickup)} chờ${t.pickupIn ? ` · ~${clock(t.pickupIn)} xe tới` : ""} · về ${esc(t.province)}`;
+      } else if (t.relief) {  // từ hàng chờ lên xe tăng cường (rà soát live 02/11: trước chỉ đọc 3 tên đầu)
+        big = `🎫 ${esc(t.name)} lên xe tăng cường số ${t.bus} về ${esc(t.province)}!`;
+        small = `${route} · xe chạy ngay, hết chờ`;
       } else {
-        big = `🎫 ${esc(t.name)} lên xe số ${t.bus} về ${esc(t.province)}!`;
+        big = t.promoted  // người đang giữ chỗ được xếp lên xe: phải báo, không thì thẻ cũ vẫn ghi «chuyến sau»
+          ? `🎫 ${esc(t.name)} hết chờ, lên xe số ${t.bus} về ${esc(t.province)}!`
+          : `🎫 ${esc(t.name)} lên xe số ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)}`
           + ((t.tripNo ?? 1) > 1 ? ` · chuyến thứ ${t.tripNo}` : "");
       }

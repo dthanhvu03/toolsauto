@@ -1057,6 +1057,55 @@ def test_every_booking_comment_gets_a_visible_answer():
     assert [ev["type"] for ev in e.drain()] == ["where"]
 
 
+def test_queued_rider_is_told_when_moved_onto_a_bus():
+    """Live 02/11: 45 người giữ chỗ chuyến sau được xếp lên xe trong im lặng — thẻ vẫn ghi «chuyến sau». Giờ: xếp lên xe chính
+    hay xe tăng cường đều có vé mới (promoted) cho đúng người."""
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    e.skip()
+    e.tick(3)
+    assert e.phase == "DRIVING"
+    e.drain()
+    comment(e, "Bình", "Cà Mau", 4)  # xe đang chạy hướng khác: giữ chỗ chuyến sau
+    (held,) = [ev for ev in e.drain() if ev["type"] == "ticket"]
+    assert held["next"] is True
+    relief = e.add_relief("south")
+    (moved,) = [ev for ev in e.drain() if ev["type"] == "ticket" and ev["name"] == "Bình"]
+    assert moved["relief"] and moved["promoted"] and not moved["next"] and moved["bus_no"] == relief.no
+    comment(e, "Chi", "Bạc Liêu", 5)  # khác hướng, không có xe tăng cường: chờ chuyến sau thật
+    e.drain()
+    run_until(e, "BOARDING", 6)  # chuyến sau vào bến (làn có người chờ) → Chi được xếp giường
+    boarded = [ev for ev in e.drain() if ev["type"] == "ticket" and ev["name"] == "Chi"]
+    assert e.bus.seat_of("chi") is not None
+    assert boarded and boarded[-1]["promoted"] and boarded[-1]["seat"] == e.bus.seat_of("chi") and not boarded[-1]["next"]
+
+
+def test_this_trip_reminder_skips_provinces_already_on_a_bus():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)  # khác hướng: vào danh sách nhắc
+    e.add_relief("south")  # Út lên xe tăng cường
+    e.drain()
+    e.tick(60)
+    assert not [ev for ev in e.drain() if ev["type"] == "loxe" and "Cà Mau" in ev["text"]]
+
+
+def test_manifest_shows_who_is_on_which_bus_and_queue():
+    """Rà soát 02/11: anh không biết người xem nào ở xe nào — /control đọc danh sách này."""
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    comment(e, "Ba", "Bạc Liêu", 3)
+    relief = e.add_relief("south")
+    comment(e, "Tư", "Cà Mau", 4)
+    m = e.manifest()
+    main, rel = m["buses"]
+    assert main["main"] and [r["name"] for r in main["riders"]] == ["An"] and main["riders"][0]["seat"] == 1
+    assert rel["no"] == relief.no and {r["name"] for r in rel["riders"]} == {"Út", "Ba"}
+    (q,) = m["queues"]
+    assert q["people"] == [{"name": "Tư", "province": "Cà Mau", "pos": 1}]
+
+
 # ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
 
 def test_where_question_is_not_a_booking():

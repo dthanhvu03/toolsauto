@@ -165,6 +165,8 @@ export interface GameEvent {
   sponsor?: string | null;  // xe tăng cường do ai tặng quà gọi
   fx?: string;  // quà: hiệu ứng riêng của món (petals | honk | hearts | firework | lixi | lantern — PLAN-142)
   fx_n?: number;
+  promoted?: boolean;  // vé: người đang giữ chỗ vừa được xếp lên xe
+  relief?: boolean;  // vé: lên xe tăng cường
   url?: string;  // speak: file giọng lơ xe đọc sẵn
   eta_min?: number; // vé xe sau: ước số phút tới lúc được lên xe
   // tra vé «xe nào / tới đâu rồi» (PLAN-134 B)

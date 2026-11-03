@@ -633,6 +633,9 @@ class Engine:
                 continue
             self._unqueue(uid)
             self.bus.seats[free] = uid
+            # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
+            # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
+            self._ticket(self.viewers[uid], free, changed=False, promoted=True)
 
     def _depart(self, now: float) -> None:
         """BR-3: ghé theo đường thật (`Network.plan`); trạm nghỉ ở giữa quãng (chuyến dài: 2 trạm, chuyến ngắn: không),
@@ -762,6 +765,13 @@ class Engine:
         for uid in riders:
             self._unqueue(uid)
         trip = self.network.plan(sorted({self.viewers[uid].province for uid in riders}))
+        ln_ = self.network.lane_by_key[lane]
+        for uid in riders:  # từng người biết mình lên xe tăng cường số mấy (trước chỉ đọc 3 tên đầu)
+            v = self.viewers[uid]
+            self.emit("ticket", name=v.name, hue=v.hue, province=BY_KEY[v.province].name, seat=None, changed=False,
+                      trip_no=v.trips + 1, lane=ln_.label, arrow=ln_.arrow, km=self.network.km(v.province),
+                      departure=self.network.departure.short, bus_no=self.bus_counter + 1, next=False, relief=True,
+                      promoted=True)
         self.bus_counter += 1
         relief = Relief(self.bus_counter, lane, riders, sponsor.name if sponsor else None, trip,
                         max(1e-3, trip.total) / self.drive_seconds(trip.total), datetime.now(VN))
@@ -970,6 +980,12 @@ class Engine:
         """«Đây là chuyến đi Hà Nội, ai đi Cà Mau, Đồng Tháp đợi chuyến sau» — anh dặn 02/11: người khác hướng comment liên tục
         mà không biết xe này không đi quê họ."""
         if not self.other_dirs or now - self.last_other_talk < OTHER_DIR_GAP:
+            return
+        # chỉ nhắc tỉnh còn người THẬT SỰ đang chờ làn khác (người đã được xếp lên xe này / xe tăng cường thì thôi)
+        waiting = {BY_KEY[self.viewers[u].province].name for lane, q in self.queues.items() if lane != self.bus.lane for u in q
+                   if self.viewers[u].province}
+        self.other_dirs = [p for p in self.other_dirs if p in waiting]
+        if not self.other_dirs:
             return
         self.last_other_talk = now
         names = ", ".join(self.other_dirs[-3:])
@@ -1536,6 +1552,24 @@ class Engine:
         nxt, odo = relief.trip.stops[relief.done]
         self.talk("screen_relief", no=relief.no, dest=self._dest(relief.lane), n=len(relief.riders),
                   next=BY_KEY[nxt].name, km=f"{max(1, round(odo - relief.odo)):,}".replace(",", "."))
+
+    def manifest(self) -> dict:
+        """Ai đang ở xe nào / chờ làn nào (rà soát 02/11: anh không biết người xem nào ở xe nào) — cho /control, gọi khi cần."""
+        def person(uid: str, **extra) -> dict:
+            v = self.viewers[uid]
+            return {"name": v.name, "province": BY_KEY[v.province].name if v.province else "", **extra}
+        lane = self.network.lane_by_key[self.bus.lane]
+        buses = [{"no": self.bus.no, "main": True, "label": lane.label, "arrow": lane.arrow, "phase": self._phase_now(),
+                  "featured": self.featured is None,
+                  "riders": [person(uid, seat=i + 1) for i, uid in enumerate(self.bus.seats) if uid]}]
+        for r in self.reliefs:
+            ln = self.network.lane_by_key[r.lane]
+            buses.append({"no": r.no, "main": False, "label": ln.label, "arrow": ln.arrow, "phase": "DRIVING",
+                          "featured": self.featured == r.no, "sponsor": r.sponsor,
+                          "riders": [person(uid) for uid in r.riders]})
+        queues = [{"label": self.network.lane_by_key[k].label, "arrow": self.network.lane_by_key[k].arrow,
+                   "people": [person(uid, pos=i + 1) for i, uid in enumerate(q)]} for k, q in self.queues.items() if q]
+        return {"buses": buses, "queues": queues}
 
     def ticket_of(self, v: Viewer) -> dict:
         """Vé của một người xem lúc này, trả lời khi họ hỏi «xe nào / tới đâu rồi» (PLAN-134 B): xe số mấy, giường, còn mấy
