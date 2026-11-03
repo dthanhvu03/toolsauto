@@ -2010,3 +2010,12 @@ def test_snack_words():
     assert [snack_of(x) for x in ("nem", "Bánh mì", "banh mi di", "bì", "mua bì", "bì cuốn", "xe bị gì", "bị kẹt xe rồi",
                                   "Hà Nội", "cho em một ổ bánh mì thịt nướng nữa nha")] == [
         "nem", "banh_mi", "banh_mi", "bi", "bi", "bi", None, None, None, None]
+
+
+def test_vendor_gets_off_when_bus_reaches_a_stop():
+    e, t = _driving_with_riders()
+    e.vendor_now()
+    e.vendor.update(stage="sell", until=t + 100)
+    e.phase = "REST"
+    e.tick(t + 1)
+    assert e.vendor is None and "vendor_end" in types(e.drain())

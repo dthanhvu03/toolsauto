@@ -958,7 +958,8 @@ class Engine:
                 and not self.vendor_done and self.trip is not None)
 
     def _vendor_tick(self, now: float) -> None:
-        if self.vendor and self.vendor["stage"] == "sell" and now >= self.vendor["until"]:
+        if self.vendor and self.vendor["stage"] == "sell" and (now >= self.vendor["until"]
+                                                               or self.phase in ("REST", "DROPOFF", "FINISH", "BOARDING")):
             sold = self.vendor["sold"]
             self.vendor = None
             self.emit("vendor_end", name=VENDOR_NAME, sold=sum(sold.values()))
