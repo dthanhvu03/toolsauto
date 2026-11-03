@@ -1323,26 +1323,26 @@ def test_bus_greets_provinces_it_passes(real_routes):
 
 
 def test_bus_picks_up_provinces_on_its_way(real_routes):
-    """PLAN-134 C: khách Huế (làn «Hướng Đà Nẵng») lên được xe «Hướng Hà Nội» còn giường — xe đi ngang Huế; người đã giữ chỗ
+    """PLAN-134 C: khách Đà Nẵng (làn «Hướng Đà Nẵng» qua Tây Nguyên) lên được xe «Hướng Hà Nội» còn giường — xe QL1 đi ngang Đà Nẵng; người đã giữ chỗ
     làn khác mà xe đi ngang quê họ cũng được xếp lên; tỉnh ngược đường (Cà Mau) vẫn chờ xe làn mình."""
     from xe_tet.server.game.network import Network
     net = Network(real_routes, "hcm_miendong")
-    assert net.lane_of("hue") != net.lane_of("hanoi") and "hue" in net.serves(net.lane_of("hanoi"))
+    assert net.lane_of("danang") != net.lane_of("hanoi") and "danang" in net.serves(net.lane_of("hanoi"))
     assert "camau" not in net.serves(net.lane_of("hanoi"))
     e = Engine(0.0, network=net)
     comment(e, "Cà", "Cà Mau", 1)  # xe quay đầu hướng Cà Mau
-    comment(e, "Huệ", "Huế", 2)  # khác đường: giữ chỗ
-    assert e.lane_of_uid("huệ") == net.lane_of("hue")
-    e.bus.lane = net.lane_of("hanoi")  # chuyến sau chạy hướng Hà Nội: người Huế đang giữ chỗ được xếp lên luôn
+    comment(e, "Huệ", "Đà Nẵng", 2)  # khác đường: giữ chỗ
+    assert e.lane_of_uid("huệ") == net.lane_of("danang")
+    e.bus.lane = net.lane_of("hanoi")  # chuyến sau chạy hướng Hà Nội: người Đà Nẵng đang giữ chỗ được xếp lên luôn
     e._fill_from_queue()
     assert e.bus.seat_of("huệ") is not None and e.lane_of_uid("huệ") is None
     e2 = Engine(0.0, network=net)
     comment(e2, "An", "Hà Nội", 1)
-    comment(e2, "Huệ", "Huế", 2)
+    comment(e2, "Huệ", "Đà Nẵng", 2)
     comment(e2, "Út", "Cà Mau", 3)
     seated = {e2.viewers[u].province for u in e2.bus.riders()}
-    assert seated == {"hanoi", "hue"} and e2.lane_of_uid("út") == net.lane_of("camau")
-    ticket = next(ev for ev in e2.drain() if ev["type"] == "ticket" and ev["province"] == "Huế")
+    assert seated == {"hanoi", "danang"} and e2.lane_of_uid("út") == net.lane_of("camau")
+    ticket = next(ev for ev in e2.drain() if ev["type"] == "ticket" and ev["province"] == "Đà Nẵng")
     assert ticket["lane"] == "Hướng Hà Nội" and not ticket["next"]
 
 
