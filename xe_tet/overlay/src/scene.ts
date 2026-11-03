@@ -12,7 +12,7 @@ import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
 import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor } from "./types";
 
 export const W = 1080;
 export const H = 1920;
@@ -219,6 +219,8 @@ export class World {
   private blockLeaving = false;
   private showCam = false;
   private focusSeat = -1;
+  private vendorWalker: Walker | null = null;
+  private vendorTag: CSS2DObject | null = null;
   private riderTag = label("", "lbl riders");  // bảng tên hành khách dưới thân xe (đủ tên dài)
   private windowTags: CSS2DObject[] = [];  // tên từng người ngay ô cửa sổ giường của mình (anh 03/11)
   private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
@@ -465,7 +467,7 @@ export class World {
       el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
-      el.textContent = s ? `${s.vip ? "⭐" : ""}${i === this.focusSeat ? s.name : short}` : "";
+      el.textContent = s ? `${s.vip ? "⭐" : ""}${i === this.focusSeat ? s.name : short}${s.snack ?? ""}` : "";
       this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
     const riders = seats.filter((x): x is Seat => !!x);
@@ -474,7 +476,7 @@ export class World {
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
     const shown = riders.slice(0, RIDER_TAG_MAX);
     el.innerHTML = `<b>🚌 Trên xe ${riders.length}/${seats.length}</b> `
-      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${r.vip ? "⭐" : ""}${esc(r.name)}</span>`).join(" · ")
+      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}</span>`).join(" · ")
       + (riders.length > shown.length ? ` · <i>+${riders.length - shown.length} người</i>` : "");
   }
 
@@ -485,7 +487,7 @@ export class World {
       b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
-      b.tag.element.textContent = s ? `${s.vip ? "⭐ " : ""}${s.name}` : `trống`;
+      b.tag.element.textContent = s ? `${s.vip ? "⭐ " : ""}${s.name}${s.snack ? ` ${s.snack}` : ""}` : `trống`;
     });
   }
 
@@ -526,6 +528,7 @@ export class World {
     this.wcLine = [];
     this.boardLine = [];
     this.roadside = [];
+    this.vendorWalker = null;
     this.dropBlock();
     this.dropBillboard();
     this.bus.group.position.set(0, 0, 0);
@@ -662,6 +665,37 @@ export class World {
       const want = this.blockLeaving ? 1.35 : 0;
       this.blockArm.rotation.x += (want - this.blockArm.rotation.x) * Math.min(1, dt * 4);
     }
+  }
+
+  /** Cô bán hàng (anh 03/11): xe tấp vào → cô đội nón lá ôm thúng từ lề bước lên cửa trước; lúc bán thì bảng «🧺 Cô Ba bán…»
+   * chạy dọc thân xe (cô đang đi giữa hai dãy giường). Dựng theo state: màn mở giữa chừng vẫn thấy. */
+  private updateVendor(v: Vendor | null): void {
+    const stop = v?.stage === "stop" && this.set === "road";
+    if (stop && !this.vendorWalker) {
+      const p = makePerson(25, `🧺 ${v!.name}`);  // màu 25: nón lá, không ba lô
+      const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.26, 12), mat(0x9c6b30));
+      basket.position.set(0.42, 0.95, 0.15);
+      const food = at(box(0.5, 0.12, 0.5, 0xf2c14e), 0.42, 1.12, 0.15);  // bánh mì, nem xếp trên thúng
+      p.add(basket, food);
+      const doorX = this.bus.doorSpot.x - 1.6;
+      p.position.set(doorX - 2.6, 0.1, 4.3);
+      this.vendorWalker = this.addWalker(p, [new THREE.Vector3(doorX, 0.1, 2.4), new THREE.Vector3(doorX, 0.1, 1.5)], 2.6,
+        () => { this.vendorWalker = null; }, 1.2);
+    }
+    if (!stop && this.vendorWalker) {
+      if (this.walkers.includes(this.vendorWalker)) this.removeWalker(this.vendorWalker);
+      this.vendorWalker = null;
+    }
+    const selling = v?.stage === "sell" && this.set === "road";
+    if (selling && !this.vendorTag) {
+      this.vendorTag = label(`🧺 ${v!.name} đang bán nem · bì · bánh mì`, "lbl sign");
+      this.bus.group.add(this.vendorTag);
+    }
+    if (!selling && this.vendorTag) {
+      this.vendorTag.removeFromParent();
+      this.vendorTag = null;
+    }
+    if (this.vendorTag) this.vendorTag.position.set(Math.sin(this.t * 0.35) * 3.2, 3.1, 1.2);  // đi tới đi lui trong xe
   }
 
   private buildBlock(kind: string): void {
@@ -1144,8 +1178,10 @@ export class World {
     this.t += dt;
     this.updateSky();
     const s = this.state;
-    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block;  // dừng đón / bị chặn: đứng yên
+    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block
+      && s?.vendor?.stage !== "stop";  // dừng đón / bị chặn / tấp vào cho cô bán hàng lên: đứng yên
     this.updateBlock(s?.block?.kind ?? null, dt);
+    this.updateVendor(s?.vendor ?? null);
     this.updateBillboard(s?.show ?? null);
     if (moving && this.roadside.length) {
       this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));

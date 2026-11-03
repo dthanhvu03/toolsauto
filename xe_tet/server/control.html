@@ -137,6 +137,14 @@
       <button data-block="toll">🚧 Trạm thu phí ngay</button>
       <button data-block="police">👮 Công an ngay</button>
     </div>
+    <h3>🧺 Cô bán hàng lên xe — nem, bì, bánh mì</h3>
+    <p class="hint live-line" id="vendor-now">Chưa ai góp.</p>
+    <div class="row">
+      <button id="vendor-call">🧺 Gọi cô bán hàng ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="vendor_on"> Bật</label>
+      <span>Góp</span><input type="number" id="vendor-xu" min="1" max="1000" step="1" aria-label="Số xu góp gọi cô bán hàng"><span>xu</span>
+      <button id="save-vendor">Lưu</button>
+    </div>
     <h3>📺 Bảng quảng cáo</h3>
     <p class="hint live-line" id="show-now">Đang không chiếu.</p>
     <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
@@ -848,6 +856,11 @@ $("save-roll").onclick = () => {
   setControl({ roll_idle_min: +$("roll-idle").value, roll_wait_s: +$("roll-wait").value });
   log("Đã lưu điểm danh");
 };
+$("vendor-call").onclick = () => admin({ action: "vendor" });
+$("save-vendor").onclick = () => {
+  setControl({ vendor_xu: +$("vendor-xu").value });
+  log("Đã lưu số xu gọi cô bán hàng");
+};
 $("save-blocks").onclick = () => {
   setControl({ toll_xu: +$("toll-xu").value, fine_xu: +$("fine-xu").value, cover_seconds: +$("cover-seconds").value });
   log("Đã lưu phí trạm / tiền phạt / tự bù lỗ");
@@ -970,6 +983,12 @@ async function refresh() {
     $("cover").disabled = !blk;
     $("block-now").classList.toggle("alert", !!blk);
     $("show-now").classList.toggle("alert", !!s.show);
+    const vd = s.vendor;
+    $("vendor-now").textContent = !vd ? (control.vendor_on === false ? "Đang tắt." : "Chưa tới lúc (cô lên lúc xe đang chạy, mỗi chuyến một lần).")
+      : vd.stage === "pool" ? `Đang góp gọi cô bán hàng: ${vd.paid}/${vd.goal} xu`
+      : vd.stage === "stop" ? `🧺 Xe tấp vào cho cô lên · ${vd.left} giây`
+      : `🧺 Cô đang bán trên xe · còn ${vd.left} giây · bán được ${vd.sold} phần`;
+    $("vendor-call").disabled = !!vd && vd.stage !== "pool";
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
     if (!timesLoaded) {  // không ghi đè khi admin đang gõ
       $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
@@ -980,6 +999,7 @@ async function refresh() {
       $("fine-xu").value = control.fine_xu ?? 10;
       $("cover-seconds").value = control.cover_seconds ?? 60;
       $("roll-idle").value = control.roll_idle_min ?? 15;
+      $("vendor-xu").value = control.vendor_xu ?? 10;
       $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;

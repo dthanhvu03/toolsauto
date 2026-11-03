@@ -1612,7 +1612,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45)
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1944,3 +1944,69 @@ def test_bus_waits_for_boarding_names_to_be_read_then_leaves():
         t += 0.5
         e2.tick(t)
     assert e2.phase == "DRIVING" and t <= 10 + NAME_HOLD_MAX + 2
+
+
+def _driving_with_riders():
+    e = Engine(0.0)
+    e.vendor_on = True
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Bình", "Hà Nội", 2)
+    t = run_until(e, "DRIVING", 3)
+    e.drain()
+    return e, t
+
+
+def test_room_chips_in_gifts_then_vendor_boards_and_sells_while_driving():
+    """Anh 03/11: góp quà cho cô bán hàng lên xe bán nem, bì, bánh mì."""
+    from xe_tet.server.game.engine import VENDOR_SELL_S, VENDOR_STOP_S
+    e, t = _driving_with_riders()
+    e.handle({"type": "gift", "name": "An", "diamonds": 4, "gift": "Hoa hồng"}, t + 1)
+    assert e.snapshot()["vendor"] == {"stage": "pool", "paid": 4, "goal": 10, "name": "Cô Ba"}
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 6, "gift": "Hoa hồng"}, t + 2)
+    e.tick(t + 2)
+    assert e.vendor["stage"] == "stop" and e.vendor["by"] == "Bình"
+    km = e.trip_km()
+    e.tick(t + 2 + VENDOR_STOP_S - 1)
+    assert e.trip_km() == km  # xe tấp vào lề cho cô lên
+    e.tick(t + 2 + VENDOR_STOP_S + 0.1)
+    assert e.vendor["stage"] == "sell"
+    e.tick(t + 2 + VENDOR_STOP_S + 3)
+    assert e.trip_km() > km  # cô bán trong lúc xe chạy
+    comment(e, "An", "2 bánh mì", t + 10)
+    comment(e, "Bình", "xe bị gì vậy", t + 11)  # «bị» không phải «bì»
+    seats = [s for s in e.snapshot()["bus"]["seats"] if s]
+    assert {s["name"]: s["snack"] for s in seats} == {"An": "🥖", "Bình": ""}
+    comment(e, "Bình", "nem", t + 12)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1, "gift": "Hoa hồng"}, t + 13)  # bao cả xe món mình chọn
+    assert all(s["snack"] == "🍢" for s in e.snapshot()["bus"]["seats"] if s)
+    out = types(e.drain())
+    assert "snack" in out and "vendor_treat" in out
+    e.tick(t + 2 + VENDOR_STOP_S + VENDOR_SELL_S + 1)
+    assert e.vendor is None and "vendor_end" in types(e.drain())
+    e.handle({"type": "gift", "name": "An", "diamonds": 50, "gift": "Hoa hồng"}, t + 60)
+    e.tick(t + 61)
+    assert e.vendor is None  # mỗi chuyến một lần
+
+
+def test_toll_takes_gifts_first_and_admin_can_call_vendor():
+    e, t = _driving_with_riders()
+    e.fee_auto = False  # phí cố định 20 xu
+    e.block_now("toll")
+    e.handle({"type": "gift", "name": "An", "diamonds": 3, "gift": "Hoa hồng"}, t + 1)
+    assert e.vendor_pool["paid"] == 0 and e.block["paid"] == 3
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    with pytest.raises(Refused):
+        e.vendor_now()  # đang bị chặn
+    e.cover()
+    e.vendor_now()
+    assert e.vendor["stage"] == "stop"
+    comment(e, "An", "bì", t + 2)
+    assert e.viewers["an"].snack == "bi"
+
+
+def test_snack_words():
+    from xe_tet.server.game.engine import snack_of
+    assert [snack_of(x) for x in ("nem", "Bánh mì", "banh mi di", "bì", "mua bì", "bì cuốn", "xe bị gì", "bị kẹt xe rồi",
+                                  "Hà Nội", "cho em một ổ bánh mì thịt nướng nữa nha")] == [
+        "nem", "banh_mi", "banh_mi", "bi", "bi", "bi", None, None, None, None]

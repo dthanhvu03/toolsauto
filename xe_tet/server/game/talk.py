@@ -140,6 +140,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Đủ tiền rồi, cảm ơn {name} với bà con góp quà, xe {what} chạy tiếp.",
             "Cảm ơn {name}, góp đủ rồi, Anh Tư {what} xong, lên đường.",
         ),
+        "vendor_pool": (
+            "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là cô Ba lên xe bán nem, bì, bánh mì.",
+            "Cảm ơn {name}, còn {left} xu nữa là có nem chua, bánh mì lên tận giường.",
+        ),
+        "vendor_board": (
+            "Nhờ {name} góp quà, xe tấp vô {prov} rước {vendor} bán nem, bì, bánh mì lên xe.",
+            "{vendor} lên xe rồi bà con, cảm ơn {name}, ai ăn gì gõ nem, bì hay bánh mì.",
+        ),
+        "vendor_board_admin": (
+            "Xe tấp vô {prov} cho {vendor} lên bán nem, bì, bánh mì.",
+            "{vendor} bán hàng rong lên xe rồi, ai đói gõ nem, bì, bánh mì.",
+        ),
+        "vendor_sell": (
+            "{name} đi dọc xe nè, gõ nem, bì hay bánh mì là có liền, tặng quà là bao cả xe.",
+            "Nem chua, bì cuốn, bánh mì nóng đây, gõ tên món là {name} đưa tận giường.",
+        ),
+        "vendor_treat": (
+            "{name} bao cả xe {item}, bà con cảm ơn {name} một tiếng.",
+            "Chịu chơi quá, {name} bao nguyên xe {item}.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cảm ơn bà con, cô xuống xe đây.",
+            "Hết hàng rồi, {name} xuống xe, chúc bà con ăn ngon thượng lộ bình an.",
+        ),
         "block_cover": (
             "Thôi Anh Tư bù lỗ {missing} xu {what} cho xe đi, về quê ăn Tết quan trọng hơn.",
             "Thiếu {missing} xu, Anh Tư móc túi bù lỗ luôn, xe đi tiếp bà con.",
@@ -411,6 +435,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Đủ rồi, {name} với ae uy tín, xe {what} chạy tiếp.",
             "{name} chốt đơn, góp đủ, {what} xong, lên đường.",
         ),
+        "vendor_pool": (
+            "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là có nem, bì, bánh mì lên xe.",
+            "Còn {left} xu là cô Ba lên xe bán đồ ăn, {name} mở bát rồi đó ae.",
+        ),
+        "vendor_board": (
+            "{name} góp đủ, {vendor} lên xe ở {prov}, ae gõ nem, bì, bánh mì để order.",
+            "Nhờ {name}, {vendor} lên xe bán đồ ăn, order bằng cách gõ tên món.",
+        ),
+        "vendor_board_admin": (
+            "{vendor} lên xe ở {prov} bán nem, bì, bánh mì, ae order liền.",
+            "Có {vendor} bán đồ ăn lên xe, gõ nem, bì hay bánh mì.",
+        ),
+        "vendor_sell": (
+            "{name} đang đi dọc xe, gõ nem, bì, bánh mì là có, tặng quà là bao cả xe.",
+            "Order đi ae, nem chua, bì cuốn, bánh mì, {name} giao tận giường.",
+        ),
+        "vendor_treat": (
+            "{name} bao cả xe {item}, đỉnh thật sự.",
+            "Ae ơi {name} bao nguyên xe {item}, cảm ơn {name}.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cô xuống xe đây ae.",
+            "Sold out, {name} xuống xe, ae ăn ngon.",
+        ),
         "block_cover": (
             "Thôi Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp, về quê là chính.",
             "Thiếu {missing} xu, Anh Tư tự bù lỗ, đi tiếp thôi ae.",
@@ -680,6 +728,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_paid": (
             "Cảm ơn {name} và mọi người, góp đủ rồi, xe {what} đi tiếp.",
             "Đủ tiền rồi, cảm ơn {name}, xe {what} lên đường.",
+        ),
+        "vendor_pool": (
+            "Cảm ơn {name}, thêm {left} xu nữa là cô bán hàng lên xe bán nem, bì, bánh mì.",
+            "{name} góp gọi cô bán hàng, còn {left} xu nữa.",
+        ),
+        "vendor_board": (
+            "Nhờ {name} góp quà, {vendor} lên xe ở {prov}, ai muốn ăn gõ nem, bì hoặc bánh mì.",
+            "{vendor} lên xe rồi, cảm ơn {name}, mọi người gõ tên món để mua.",
+        ),
+        "vendor_board_admin": (
+            "Xe dừng ở {prov} cho {vendor} lên bán nem, bì, bánh mì.",
+            "{vendor} lên xe bán đồ ăn, mọi người gõ tên món để mua.",
+        ),
+        "vendor_sell": (
+            "{name} đang đi dọc xe, gõ nem, bì hoặc bánh mì để mua, tặng quà để bao cả xe.",
+            "Có nem chua, bì cuốn, bánh mì, mọi người gõ tên món, {name} mang tới giường.",
+        ),
+        "vendor_treat": (
+            "Cảm ơn {name} đã bao cả xe {item}.",
+            "{name} bao cả xe {item}, mọi người cảm ơn {name} nhé.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cảm ơn mọi người, cô xuống xe.",
+            "Hết hàng, {name} xuống xe, chúc mọi người ngon miệng.",
         ),
         "block_cover": (
             "Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp cho kịp về quê.",

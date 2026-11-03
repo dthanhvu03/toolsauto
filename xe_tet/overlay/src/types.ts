@@ -49,6 +49,14 @@ export interface Seat {
   hue: number;
   vip: boolean;
   province: string;
+  snack?: string;  // món mua của cô bán hàng (emoji) — hiện cạnh tên
+}
+
+export interface Vendor {  // cô bán hàng lên xe (anh 03/11): góp quà → tấp vào lề cho cô lên → bán trong lúc xe chạy
+  stage: "pool" | "stop" | "sell";
+  name: string;
+  paid?: number; goal?: number;  // pool
+  left?: number; by?: string; sold?: number; treats?: string[];
 }
 
 export interface State {
@@ -99,6 +107,7 @@ export interface State {
   fleet?: FleetBus[];  // mọi xe đang chạy
   trip_minutes?: number;
   patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
+  vendor?: Vendor | null;
   name_hold?: boolean;  // hết giờ đón, xe chờ lơ xe đọc xong tên người lên xe
   rollcall?: { name: string; left: number }[];  // điểm danh: người tới lượt lên xe đang được gọi tên (anh 03/11)
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
@@ -168,6 +177,10 @@ export interface GameEvent {
   perk?: string;
   action?: string; // rest_action: food | wc | shop
   emoji?: string;
+  item?: string;  // snack / vendor_treat
+  stage?: string;  // vendor: stop | sell
+  riders?: number;  // vendor_treat: số người trên xe được bao
+  sold?: number;  // vendor_end
   people?: Person[];
   fireworks?: boolean;
   region?: Region;

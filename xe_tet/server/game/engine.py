@@ -82,6 +82,30 @@ RELIEF_MAX_GIFT = 6  # xe do quà được vượt mốc tự động
 RELIEF_GIFT_TIER = 3  # bậc băng rôn (100 xu): người đang giữ chỗ đạt bậc này → xe tăng cường chạy ngay làn của họ
 STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
+VENDOR_XU = 10  # anh 03/11: cả phòng góp đủ chừng này xu → cô bán hàng lên xe bán nem, bì, bánh mì (một lần mỗi chuyến)
+VENDOR_STOP_S = 5.0  # xe tấp vào lề cho cô lên
+VENDOR_SELL_S = 40.0  # cô đi dọc xe bán trong lúc xe vẫn chạy (không đứng thêm)
+VENDOR_NAME = "Cô Ba"
+SNACKS = {"nem": ("Nem chua", "🍢"), "bi": ("Bì cuốn", "🌯"), "banh_mi": ("Bánh mì", "🥖")}
+VENDOR_REMIND_GAP = 90.0  # lơ xe nhắc góp gọi cô bán hàng tối đa một lần / chừng này giây
+
+
+def snack_of(text: str) -> str | None:
+    """«nem», «2 bánh mì», «bì cuốn» → món; câu dài / «xe bị gì» thì không («bị» bỏ dấu cũng là «bi»)."""
+    words = normalize(text).split()
+    if not words or len(words) > 5:
+        return None
+    norm = " ".join(words)
+    if "banh mi" in norm or "banhmi" in words:
+        return "banh_mi"
+    if "nem" in words:
+        return "nem"
+    # «bì» và «bị» bỏ dấu đều là «bi»: có dấu huyền mới tính; gõ không dấu thì phải đúng «bi» / «bi cuon» / «mua bi»
+    if "bi" in words and ("bì" in text.lower() or "bi cuon" in norm or norm in ("bi", "mua bi", "cho bi", "lay bi")):
+        return "bi"
+    return None
+
+
 NAME_HOLD_MAX = 25.0  # hết giờ đón mà lơ xe còn đọc tên người lên xe: xe chờ đọc xong, tối đa chừng này giây (anh 03/11)
 ROLL_IDLE = 15 * 60.0  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng quá chừng này → lơ xe gọi tên trước khi xếp giường
 ROLL_WAIT = 45.0  # giây chờ người được gọi tên thả tim / bình luận; giường giữ cho họ trong lúc chờ
@@ -328,6 +352,7 @@ class Viewer:
     stage_comments: int = 0
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
     prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
+    snack: str | None = None  # món mua của cô bán hàng chuyến này (nem / bì / bánh mì) — hiện cạnh tên trên xe
     roll_missed: int = 0  # số lần lỡ điểm danh liên tiếp (có tương tác lại thì về 0)
     roll_skip: int = -1  # lỡ điểm danh ở chuyến số này → chuyến đó không xếp giường nữa (lùi xuống chuyến sau)
     priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
@@ -417,6 +442,12 @@ class Engine:
         self.roll_idle = ROLL_IDLE
         self.roll_wait = ROLL_WAIT
         self.rollcalls: dict[str, float] = {}
+        self.vendor_on = False  # server bật theo cài đặt (vendor_on); test cũ về tốc độ không bị cô bán hàng chen vào
+        self.vendor_xu = VENDOR_XU
+        self.vendor: dict | None = None  # cô bán hàng đang lên xe ({stage: stop|sell, until, sold, treats})
+        self.vendor_pool: dict = {"paid": 0, "givers": {}}  # quà góp gọi cô bán hàng (chuyến này)
+        self.vendor_done = False  # chuyến này cô đã lên rồi
+        self.last_vendor_remind = -1e9
         self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
         self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
@@ -755,9 +786,13 @@ class Engine:
         self.trip_gifted = False
         for v in self.viewers.values():
             v.likes_trip = 0
+            v.snack = None
             v.gift_trip = 0
             v.switched = False
         self.name_hold_from = None
+        self.vendor = None
+        self.vendor_done = False
+        self.vendor_pool = {"paid": 0, "givers": {}}
         self._set_phase("BOARDING", now, 0.0)
         self._fill_from_queue()  # sau khi vào pha đón: người im lặng lâu được điểm danh trước khi xếp giường
         self.phase_until = now + self._board_time()  # giờ đón theo số giường còn trống sau khi xếp
@@ -914,6 +949,83 @@ class Engine:
             # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
             # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
             self._ticket(self.viewers[uid], free, changed=False, promoted=True)
+
+    # ---- cô bán hàng lên xe (anh 03/11) ---------------------------------------------------------------------
+
+    def _vendor_ready(self) -> bool:
+        """Cô lên được lúc xe đang chạy đường bình thường (không bị chặn / đón / xem video / chen cảnh)."""
+        return (self.phase == "DRIVING" and not self.block and not self.halt and not self.show and not self.vendor
+                and not self.vendor_done and self.trip is not None)
+
+    def _vendor_tick(self, now: float) -> None:
+        if self.vendor and self.vendor["stage"] == "sell" and now >= self.vendor["until"]:
+            sold = self.vendor["sold"]
+            self.vendor = None
+            self.emit("vendor_end", name=VENDOR_NAME, sold=sum(sold.values()))
+            self.talk("vendor_end", name=VENDOR_NAME, n=sum(sold.values()), main=True)
+        elif self.vendor_on and self.vendor_pool["paid"] >= self.vendor_xu and self._vendor_ready():
+            givers = self.vendor_pool["givers"]
+            self._start_vendor(max(givers.items(), key=lambda kv: kv[1])[0] if givers else "", now)
+
+    def vendor_now(self) -> None:
+        """/control «Gọi cô bán hàng»: lên xe ngay (không cần góp), xe phải đang chạy đường."""
+        if self.vendor:
+            raise Refused("Cô bán hàng đang trên xe rồi.")
+        if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
+            raise Refused("Chỉ gọi được lúc xe đang chạy đường (không dừng đón / bị chặn / xem video).")
+        self.vendor_done = False
+        self._start_vendor("", self.last_now)
+
+    def _start_vendor(self, by: str, now: float) -> None:
+        self.vendor_done = True
+        self.vendor_pool = {"paid": 0, "givers": {}}
+        self.vendor = {"stage": "stop", "until": now + VENDOR_STOP_S, "by": by, "sold": Counter(), "treats": []}
+        place = BY_KEY[self._where()[0]].name
+        self.emit("vendor", stage="stop", name=VENDOR_NAME, by=by, place=place, seconds=round(VENDOR_STOP_S))
+        self.talk("vendor_board" if by else "vendor_board_admin", name=by, vendor=VENDOR_NAME, prov=place, main=True)
+
+    def _pay_vendor(self, v: Viewer, diamonds: int) -> str:
+        """Quà (khi không bị chặn): cô đang bán → người tặng bao cả xe món mình gõ gần nhất; chưa lên → góp gọi cô."""
+        if not self.vendor_on:
+            return ""
+        if self.vendor and self.vendor["stage"] == "sell":
+            item = v.snack or "banh_mi"
+            label, emoji = SNACKS[item]
+            for uid in self.bus.riders():
+                self.viewers[uid].snack = item
+            self.vendor["sold"][item] += len(self.bus.riders())
+            self.vendor["treats"].append(v.name)
+            self.emit("vendor_treat", name=v.name, item=label, emoji=emoji, riders=len(self.bus.riders()))
+            self.talk("vendor_treat", name=v.name, item=label.lower(), main=True)
+            return f"{emoji} bao cả xe {label.lower()}"
+        if self.vendor or self.vendor_done or self.phase in ("FINISH", "DROPOFF") or not self.bus.riders():
+            return ""
+        pool = self.vendor_pool
+        pool["paid"] += diamonds
+        pool["givers"][v.name] = pool["givers"].get(v.name, 0) + diamonds
+        if pool["paid"] >= self.vendor_xu:
+            return "🧺 góp đủ, cô bán hàng sắp lên xe"
+        if self.last_now - self.last_vendor_remind >= VENDOR_REMIND_GAP:
+            self.last_vendor_remind = self.last_now
+            self.talk("vendor_pool", name=v.name, left=self.vendor_xu - pool["paid"], main=True)
+        return f"🧺 góp gọi cô bán hàng · {pool['paid']}/{self.vendor_xu}"
+
+    def _buy_snack(self, v: Viewer, item: str) -> None:
+        if v.snack == item:
+            return
+        v.snack = item
+        self.vendor["sold"][item] += 1
+        label, emoji = SNACKS[item]
+        self.emit("snack", name=v.name, hue=v.hue, item=label, emoji=emoji)
+
+    def _vendor_view(self) -> dict | None:
+        if self.vendor:
+            vd = self.vendor
+            return {"stage": vd["stage"], "left": round(max(0.0, vd["until"] - self.last_now)), "name": VENDOR_NAME,
+                    "by": vd["by"], "sold": sum(vd["sold"].values()), "treats": vd["treats"][-3:]}
+        if self.vendor_on and not self.vendor_done and self.phase == "DRIVING" and self.bus.riders():
+            return {"stage": "pool", "paid": self.vendor_pool["paid"], "goal": self.vendor_xu, "name": VENDOR_NAME}
+        return None
 
     def _wait_names(self, now: float) -> bool:
         if not (self.names_pending and self.bus.riders()):
@@ -1334,12 +1446,15 @@ class Engine:
                 self.show["started"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
             if self.halt:
                 self.halt["until"] += dt  # đang đón người ven đường: bỏ tạm dừng xong vẫn đủ giờ cho họ lên xe
+            if self.vendor:
+                self.vendor["until"] += dt
             for uid in self.rollcalls:
                 self.rollcalls[uid] += dt  # đang gọi tên: tạm dừng không ăn vào giờ trả lời
             return
         self._run_reliefs(dt)
         if self.rollcalls:
             self._expire_rolls()
+        self._vendor_tick(now)
         self._remind_direction(now)
         self._remind_rules(now)
         if self.specials and self.phase in SPECIAL_FROM:
@@ -1363,6 +1478,11 @@ class Engine:
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
+        elif self.phase == "DRIVING" and self.vendor and self.vendor["stage"] == "stop":
+            if now >= self.vendor["until"]:  # cô lên rồi: xe chạy tiếp, cô bán trong lúc xe chạy
+                self.vendor.update(stage="sell", until=now + VENDOR_SELL_S)
+                self.emit("vendor", stage="sell", name=VENDOR_NAME, seconds=round(VENDOR_SELL_S))
+                self.talk("vendor_sell", name=VENDOR_NAME, main=True)
         elif self.phase == "DRIVING" and self.show:
             if now >= self.show["until"]:
                 self._end_show()
@@ -1705,6 +1825,9 @@ class Engine:
         return True
 
     def _on_comment(self, v: Viewer, text: str, now: float) -> None:
+        if self.vendor and self.bus.seat_of(v.uid) is not None and (item := snack_of(text)):
+            self._buy_snack(v, item)  # cô bán hàng đang trên xe: khách gõ «nem», «bánh mì»… là mua
+            return
         cmd = parse(text, at_rest_stop=self.phase == "REST")
         if cmd.station:
             self._vote_station(v, cmd.station, now)
@@ -2387,7 +2510,7 @@ class Engine:
         self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
         self._advance_goal(v, diamonds)
         self._race(v, diamonds * RACE_PER_XU)
-        paid = self._pay_block(v, diamonds)
+        paid = self._pay_block(v, diamonds) or self._pay_vendor(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
         self.turbo_by = v.name
@@ -2495,7 +2618,7 @@ class Engine:
         out = []
         for uid in uids:
             v = self.viewers.get(uid) if uid else None
-            out.append({"name": v.name, "hue": v.hue, "vip": v.vip,
+            out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "snack": SNACKS[v.snack][1] if v.snack else "",
                         "province": BY_KEY[v.province].name if v.province else ""} if v else None)
         return out
 
@@ -2562,6 +2685,7 @@ class Engine:
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
+            "vendor": self._vendor_view(),
             "name_hold": self.phase == "BOARDING" and self.name_hold_from is not None,
             "rollcall": [{"name": self.viewers[u].name, "left": round(max(0.0, t - self.last_now))}
                          for u, t in self.rollcalls.items()][:5],

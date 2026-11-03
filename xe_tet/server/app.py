@@ -138,6 +138,8 @@ class Hub:
         engine.toll_xu = self.settings["toll_xu"]
         engine.fine_xu = self.settings["fine_xu"]
         engine.cover_seconds = float(self.settings["cover_seconds"]) if self.settings["cover_on"] else 0.0
+        engine.vendor_on = self.settings["vendor_on"]
+        engine.vendor_xu = self.settings["vendor_xu"]
         engine.roll_on = self.settings["roll_on"]
         engine.roll_idle = self.settings["roll_idle_min"] * 60.0
         engine.roll_wait = float(self.settings["roll_wait_s"])
@@ -467,6 +469,8 @@ async def _admin(body: dict) -> dict:
         engine.block_now(str(body.get("kind") or ""))
     elif action == "cover":  # «Anh Tư bù lỗ»: xe đang bị chặn đi tiếp luôn
         engine.cover()
+    elif action == "vendor":  # gọi cô bán hàng lên xe ngay (không cần góp)
+        engine.vendor_now()
     elif action == "focus":  # zoom máy quay vào một khách trên xe (giường, 0 = bỏ)
         engine.focus_seat(as_int(body.get("seat"), 0))
     elif action == "next_lane":  # chọn hướng cho chuyến kế tiếp ("" = về thứ tự đặt vé)

@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { Block, FleetBus, GameEvent, Route, State } from "./types";
+import type { Block, FleetBus, GameEvent, Route, State, Vendor } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -210,6 +210,7 @@ export class Hud {
     if (s.show) return [`📺 ${s.show.title}`, `còn ${clock(s.show.left)}`];  // dừng xem video bảng quảng cáo
     if (s.block) return [s.block.kind === "toll" ? `🚧 Trạm thu phí ${s.block.place}` : `👮 ${s.block.reason}`,
       `góp ${s.block.paid}/${s.block.goal} xu`];  // PLAN-148
+    if (s.vendor?.stage === "stop") return [`🧺 Tấp vào cho ${s.vendor.name} lên xe`, `${s.vendor.left ?? 0}s`];
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
@@ -332,6 +333,9 @@ export class Hud {
         tips.unshift(`⏳ Chuyến sau: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
+      if (s.vendor?.stage === "pool") {  // góp quà gọi cô bán hàng: gợi ý luôn đứng đầu lúc xe đang chạy
+        tips.unshift(`🧺 Góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên xe bán nem, bì, bánh mì`);
+      }
     }
     // chân bảng quà: người đang chờ · xe đang chạy x2 nhờ ai · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
     const [owner, deputy] = s.patrons ?? [];
@@ -344,7 +348,7 @@ export class Hud {
     setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
-    this.renderBlock(s.block ?? null);
+    this.renderBlock(s.block ?? null, s.vendor ?? null);
     const f = s.focus;
     if (f && f.name !== this.focusName) {  // anh bấm vào khách trên /control: thẻ giới thiệu người đó
       const where = f.stops_before ? `còn ${f.stops_before} điểm nữa tới ${esc(f.province)}` : `điểm kế là ${esc(f.province)}`;
@@ -361,10 +365,17 @@ export class Hud {
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
-  private renderBlock(b: Block | null): void {
-    $("cta-block").classList.toggle("hidden", !b);
-    $("cta-main").classList.toggle("hidden", !!b);
-    $("cta-sub").classList.toggle("hidden", !!b);
+  private renderBlock(b: Block | null, v: Vendor | null = null): void {
+    const selling = !b && (v?.stage === "sell" || v?.stage === "stop");
+    $("cta-block").classList.toggle("hidden", !b && !selling);
+    $("cta-main").classList.toggle("hidden", !!b || selling);
+    $("cta-sub").classList.toggle("hidden", !!b || selling);
+    if (selling) {  // cô bán hàng trên xe: hai dòng như thẻ bị chặn — cách mua + giờ còn lại
+      const treat = v!.treats?.length ? ` · 🎉 ${v!.treats.slice(-2).map((n) => esc(n)).join(", ")} bao cả xe` : "";
+      setHTML("cta-block", `<div class="blk-title">🧺 ${esc(v!.name).toUpperCase()} LÊN XE BÁN HÀNG · ${v!.left ?? 0}s</div>`
+        + `<div class="blk-bar"><span>Gõ <b>NEM</b> · <b>BÌ</b> · <b>BÁNH MÌ</b> để mua · 🎁 tặng quà bao cả xe${treat}</span></div>`);
+      return;
+    }
     if (!b) return;
     // hai dòng (cao bằng «Gõ tên tỉnh» + dòng gợi ý): không đẩy bảng quà xuống đè lơ xe
     const title = b.kind === "toll" ? `🚧 TRẠM THU PHÍ ${esc(b.place).toUpperCase()}`
@@ -493,6 +504,21 @@ export class Hud {
         break;
       case "rollcall_drop":
         this.toast(`👋 ${name} nhường vé`, "Quay lại gõ tỉnh để đặt lại");
+        break;
+      case "vendor":
+        if (e.stage === "stop") {
+          this.flash("🧺 CÔ BÁN HÀNG LÊN XE");
+          this.note(`🧺 ${name} lên xe bán nem, bì, bánh mì`, e.by ? `Nhờ ${esc(e.by)} góp quà · gõ tên món để mua` : "Gõ tên món để mua");
+        }
+        break;
+      case "snack":
+        this.toast(`${e.emoji ?? "🥖"} ${name} mua ${esc((e.item ?? "").toLowerCase())}`, "");
+        break;
+      case "vendor_treat":
+        this.toast(`🎉 ${name} bao cả xe ${esc((e.item ?? "").toLowerCase())} ${e.emoji ?? ""}`, `${e.riders ?? 0} người trên xe`, "gift");
+        break;
+      case "vendor_end":
+        this.toast(`👋 ${name} xuống xe`, `Bán được ${e.sold ?? 0} phần`);
         break;
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
         this.toast(`🚏 Xe đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
