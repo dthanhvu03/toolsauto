@@ -19,6 +19,8 @@ export const W = 1080;
 export const H = 1920;
 const BASE_SPEED = 14; // đơn vị / giây khi speed = 1
 const escHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const HUNGRY = 30;  // % no bụng dưới chừng này: «sắp đói» (khớp server)
+const hungry = (s: Seat) => s.full != null && s.full < HUNGRY;
 const VENDOR_WALK = 3.2;  // cô bán hàng đi trong khoang (đơn vị / giây)
 const INSIDE_X = 500; // khoang trong xe đặt riêng một chỗ, camera riêng
 
@@ -446,11 +448,17 @@ export class World {
       this.focusSeat = fseat;
       this.seatsKey = "";  // vẽ lại tên (người focus hiện đủ tên)
     }
-    const key = JSON.stringify(state.bus.seats);
+    // % no bụng đổi vài giây một lần: chỉ sửa số % trên giường, không dựng lại nhãn (ảnh đại diện khỏi tải lại / nháy)
+    const key = JSON.stringify(state.bus.seats.map((x) => x && { ...x, full: hungry(x) }));
     if (key !== this.seatsKey) {
       this.seatsKey = key;
       this.refreshBerths(state.bus.seats);
       this.refreshRiderTag(state.bus.seats);
+    } else {
+      state.bus.seats.forEach((x, i) => {
+        const el = x && this.berths[i]?.tag.element.querySelector("small.full");
+        if (el && x.full != null) el.textContent = `${hungry(x) ? "😋 sắp đói" : "🍚"} ${x.full}%`;
+      });
     }
     this.bus.setBanner(state.bus.banner);
     if (state.care) this.bus.setDirt(state.care.dirt);
@@ -472,7 +480,7 @@ export class World {
       el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
-      el.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐" : ""}${escHtml(i === this.focusSeat ? s.name : short)}${s.snack ?? ""}` : "";
+      el.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐" : ""}${escHtml(i === this.focusSeat ? s.name : short)}${s.snack ?? ""}${hungry(s) ? "😋" : ""}` : "";
       this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
     const riders = seats.filter((x): x is Seat => !!x);
@@ -481,7 +489,7 @@ export class World {
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
     const shown = riders.slice(0, RIDER_TAG_MAX);
     el.innerHTML = `<b>🚌 Trên xe ${riders.length}/${seats.length}</b> `
-      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${avatarImg(r.avatar)}${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}</span>`).join(" · ")
+      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${avatarImg(r.avatar)}${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}${hungry(r) ? "😋" : ""}</span>`).join(" · ")
       + (riders.length > shown.length ? ` · <i>+${riders.length - shown.length} người</i>` : "");
   }
 
@@ -492,7 +500,8 @@ export class World {
       b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
-      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}` : `trống`;
+      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}`
+        + (s.full != null ? `<small class="${hungry(s) ? "full hungry" : "full"}">${hungry(s) ? "😋 sắp đói" : "🍚"} ${s.full}%</small>` : "") : `trống`;
     });
   }
 
@@ -704,7 +713,11 @@ export class World {
       this.vendorTag.removeFromParent();
       this.vendorTag = null;
     }
-    if (this.vendorTag) this.vendorTag.position.set(Math.sin(this.t * 0.35) * 3.2, 3.1, 1.2);  // đi tới đi lui trong xe
+    if (this.vendorTag) {  // đi tới đi lui suốt dọc thân xe (anh 03/11), từ cửa sổ đầu tới cửa sổ cuối
+      const xs = this.bus.windowSpots.map((w) => w.x);
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      this.vendorTag.position.set(lo + (hi - lo) * (0.5 + 0.5 * Math.sin(this.t * 0.25)), 3.1, 1.2);
+    }
   }
 
   /** Trong khoang xe (góc «trong xe», anh 03/11): cô Ba ôm thúng đi qua đi lại ở lối giữa hai tầng giường; ai gõ mua thì cô

@@ -333,7 +333,13 @@ export class Hud {
         tips.unshift(`⏳ Chuyến sau: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
-      if (s.vendor?.stage === "pool") {  // góp quà gọi cô bán hàng: gợi ý luôn đứng đầu lúc xe đang chạy
+      const hungry = s.bus.seats.filter((x) => x && x.full != null && x.full < 30).length;
+      if (s.vendor?.stage === "sell") {  // cô Ba đang bán: cách mua luôn đứng đầu, kèm số người sắp đói
+        tips.unshift(`🧺 ${esc(s.vendor.name)} đang bán · gõ NEM · BÌ · BÁNH MÌ${hungry ? ` · 😋 ${hungry} người sắp đói` : ""} · 🎁 quà = bao cả xe`);
+      } else if (hungry && s.vendor?.stage === "pool") {
+        tips.unshift(`😋 ${hungry} người sắp đói · góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên bán đồ ăn`);
+      }
+      if (s.vendor?.stage === "pool" && !hungry) {  // góp quà gọi cô bán hàng: gợi ý luôn đứng đầu lúc xe đang chạy
         tips.unshift(`🧺 Góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên xe bán nem, bì, bánh mì`);
       }
     }
@@ -366,13 +372,17 @@ export class Hud {
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
   private renderBlock(b: Block | null, v: Vendor | null = null): void {
-    const selling = !b && (v?.stage === "sell" || v?.stage === "stop");
+    // cô Ba bán suốt chuyến: thẻ lớn chỉ lúc cô lên + 20 giây đầu, sau đó nhường chỗ «Gõ tên tỉnh», cách mua nằm ở dòng gợi ý
+    if (v?.stage === "stop") this.vendorSince = 0;
+    else if (v?.stage === "sell" && !this.vendorSince) this.vendorSince = Date.now();
+    else if (!v || v.stage === "pool") this.vendorSince = 0;
+    const selling = !b && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
     $("cta-block").classList.toggle("hidden", !b && !selling);
     $("cta-main").classList.toggle("hidden", !!b || selling);
     $("cta-sub").classList.toggle("hidden", !!b || selling);
     if (selling) {  // cô bán hàng trên xe: hai dòng như thẻ bị chặn — cách mua + giờ còn lại
       const treat = v!.treats?.length ? ` · 🎉 ${v!.treats.slice(-2).map((n) => esc(n)).join(", ")} bao cả xe` : "";
-      setHTML("cta-block", `<div class="blk-title">🧺 ${esc(v!.name).toUpperCase()} LÊN XE BÁN HÀNG · ${v!.left ?? 0}s</div>`
+      setHTML("cta-block", `<div class="blk-title">🧺 ${esc(v!.name).toUpperCase()} LÊN XE · BÁN SUỐT CHUYẾN</div>`
         + `<div class="blk-bar"><span>Gõ <b>NEM</b> · <b>BÌ</b> · <b>BÁNH MÌ</b> để mua · 🎁 tặng quà bao cả xe${treat}</span></div>`);
       return;
     }
@@ -747,6 +757,7 @@ export class Hud {
   }
 
   private eventAvatar = "";
+  private vendorSince = 0;
 
   private toast(title: string, sub = "", kind = "", key = ""): void {
     const list = $("toasts");

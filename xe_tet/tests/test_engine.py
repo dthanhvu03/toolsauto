@@ -1958,7 +1958,7 @@ def _driving_with_riders():
 
 def test_room_chips_in_gifts_then_vendor_boards_and_sells_while_driving():
     """Anh 03/11: góp quà cho cô bán hàng lên xe bán nem, bì, bánh mì."""
-    from xe_tet.server.game.engine import VENDOR_SELL_S, VENDOR_STOP_S
+    from xe_tet.server.game.engine import VENDOR_STOP_S
     e, t = _driving_with_riders()
     e.handle({"type": "gift", "name": "An", "diamonds": 4, "gift": "Hoa hồng"}, t + 1)
     assert e.snapshot()["vendor"] == {"stage": "pool", "paid": 4, "goal": 10, "name": "Cô Ba"}
@@ -1981,11 +1981,10 @@ def test_room_chips_in_gifts_then_vendor_boards_and_sells_while_driving():
     assert all(s["snack"] == "🍢" for s in e.snapshot()["bus"]["seats"] if s)
     out = types(e.drain())
     assert "snack" in out and "vendor_treat" in out
-    e.tick(t + 2 + VENDOR_STOP_S + VENDOR_SELL_S + 1)
-    assert e.vendor is None and "vendor_end" in types(e.drain())
-    e.handle({"type": "gift", "name": "An", "diamonds": 50, "gift": "Hoa hồng"}, t + 60)
-    e.tick(t + 61)
-    assert e.vendor is None  # mỗi chuyến một lần
+    e.tick(t + 2 + VENDOR_STOP_S + 300)
+    assert e.vendor["stage"] == "sell" and e.snapshot()["vendor"]["left"] is None  # anh 03/11: bán suốt chuyến
+    e.handle({"type": "gift", "name": "An", "diamonds": 50, "gift": "Hoa hồng"}, t + 400)
+    assert e.vendor_pool["paid"] == 0  # đang bán: quà là bao cả xe, không gọi thêm cô nữa
 
 
 def test_toll_takes_gifts_first_and_admin_can_call_vendor():
@@ -2012,13 +2011,50 @@ def test_snack_words():
         "nem", "banh_mi", "banh_mi", "bi", "bi", "bi", None, None, None, None]
 
 
-def test_vendor_gets_off_when_bus_reaches_a_stop():
+def test_vendor_stays_whole_trip_and_gets_off_at_the_end():
+    import math
     e, t = _driving_with_riders()
     e.vendor_now()
-    e.vendor.update(stage="sell", until=t + 100)
-    e.phase = "REST"
+    e.vendor.update(stage="sell", until=math.inf)
+    e.phase = "REST"  # trạm dừng chân / thả khách giữa đường: cô vẫn ở trên xe
     e.tick(t + 1)
+    assert e.vendor is not None
+    e.phase = "FINISH"  # hết chuyến: cô xuống
+    e.tick(t + 2)
     assert e.vendor is None and "vendor_end" in types(e.drain())
+
+
+def test_riders_get_hungry_while_driving_and_food_fills_them():
+    """Anh 03/11: «% cơ thể … sắp đói» — mỗi khách một thanh no bụng, tụt khi xe chạy; dưới 30% thì nhắc; mua món là no lại."""
+    from xe_tet.server.game.engine import HUNGER_PER_MIN, HUNGRY
+    e, t = _driving_with_riders()
+    driving = 0.0
+    out = []
+    while e.viewers["an"].full >= HUNGRY:
+        t += 1
+        driving += e.phase == "DRIVING"
+        e.tick(t)
+        out += e.drain()
+        assert e.phase not in ("FINISH", "BOARDING"), "chuyến quá ngắn để thử"
+    assert abs(driving - (100 - HUNGRY) / HUNGER_PER_MIN * 60) < 3  # chỉ đói lúc xe chạy (trạm nghỉ không tính)
+    while not out or out[-1]["type"] != "loxe":
+        t += 1
+        e.tick(t)
+        out += e.drain()
+        if len([x for x in out if x["type"] == "hungry"]) == 2 and any(x["type"] == "loxe" and "Bình" in x["text"] for x in out):
+            break
+    assert [ev["name"] for ev in out if ev["type"] == "hungry"] == ["An", "Bình"]
+    loxe = [ev["text"] for ev in out if ev["type"] == "loxe"]
+    assert any("An" in x and "Bình" in x for x in loxe)  # một câu gọi cả hai, chưa có cô Ba: rủ góp quà gọi cô
+    seat = next(s for s in e.snapshot()["bus"]["seats"] if s and s["name"] == "An")
+    assert seat["full"] < HUNGRY
+    while e.phase != "DRIVING" or e.block or e.halt:
+        t += 1
+        e.tick(t)
+    e.vendor_now()
+    e.tick(t + 10)
+    comment(e, "An", "bánh mì", t + 11)
+    assert e.viewers["an"].full == 100 and not e.viewers["an"].hungry_told
 
 
 def test_tiktok_avatar_kept_and_shown_with_name():

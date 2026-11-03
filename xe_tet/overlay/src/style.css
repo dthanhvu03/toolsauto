@@ -464,3 +464,5 @@ html, body {
 img.av { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; vertical-align: -0.2em; margin-right: 0.25em;
   box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9); background: #eee; }
 .lbl.win img.av { width: 1em; height: 1em; margin-right: 0.15em; }
+.lbl.berth small.full { display: block; font-size: 0.62em; font-weight: 700; color: #4e7d32; }
+.lbl.berth small.full.hungry { color: #c62828; }

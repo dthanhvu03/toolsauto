@@ -50,6 +50,7 @@ export interface Seat {
   vip: boolean;
   province: string;
   avatar?: string;  // ảnh đại diện TikTok
+  full?: number;  // % no bụng (dưới 30: sắp đói)
   snack?: string;  // món mua của cô bán hàng (emoji) — hiện cạnh tên
 }
 
@@ -57,7 +58,7 @@ export interface Vendor {  // cô bán hàng lên xe (anh 03/11): góp quà → 
   stage: "pool" | "stop" | "sell";
   name: string;
   paid?: number; goal?: number;  // pool
-  left?: number; by?: string; sold?: number; treats?: string[];
+  left?: number | null; by?: string; sold?: number; treats?: string[];
 }
 
 export interface State {

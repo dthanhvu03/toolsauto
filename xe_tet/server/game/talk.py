@@ -140,6 +140,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Đủ tiền rồi, cảm ơn {name} với bà con góp quà, xe {what} chạy tiếp.",
             "Cảm ơn {name}, góp đủ rồi, Anh Tư {what} xong, lên đường.",
         ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi đó, gõ nem, bì hay bánh mì cho {vendor} mang tới giường.",
+            "Coi bộ {name} đói bụng rồi, {vendor} đang đi bán nè, gõ tên món là có.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, bà con góp quà gọi {vendor} lên xe bán nem, bì, bánh mì.",
+            "Bụng {name} kêu rồi đó, ai góp quà gọi {vendor} lên bán đồ ăn.",
+        ),
         "vendor_pool": (
             "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là cô Ba lên xe bán nem, bì, bánh mì.",
             "Cảm ơn {name}, còn {left} xu nữa là có nem chua, bánh mì lên tận giường.",
@@ -435,6 +443,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Đủ rồi, {name} với ae uy tín, xe {what} chạy tiếp.",
             "{name} chốt đơn, góp đủ, {what} xong, lên đường.",
         ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi, gõ nem, bì, bánh mì để {vendor} ship tận giường.",
+            "{name} hết pin bụng rồi, order liền đi, {vendor} đang trên xe.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, ae góp quà gọi {vendor} lên bán đồ ăn.",
+            "Bụng {name} biểu tình rồi, góp quà gọi {vendor} lên xe đi ae.",
+        ),
         "vendor_pool": (
             "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là có nem, bì, bánh mì lên xe.",
             "Còn {left} xu là cô Ba lên xe bán đồ ăn, {name} mở bát rồi đó ae.",
@@ -728,6 +744,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_paid": (
             "Cảm ơn {name} và mọi người, góp đủ rồi, xe {what} đi tiếp.",
             "Đủ tiền rồi, cảm ơn {name}, xe {what} lên đường.",
+        ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi, gõ nem, bì hoặc bánh mì để {vendor} mang tới.",
+            "{name} đói bụng rồi, {vendor} đang bán trên xe, gõ tên món để mua.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, mọi người góp quà gọi {vendor} lên xe bán đồ ăn.",
+            "{name} đói bụng rồi, góp quà để {vendor} lên xe bán nem, bì, bánh mì.",
         ),
         "vendor_pool": (
             "Cảm ơn {name}, thêm {left} xu nữa là cô bán hàng lên xe bán nem, bì, bánh mì.",

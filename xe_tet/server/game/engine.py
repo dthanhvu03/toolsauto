@@ -84,7 +84,10 @@ STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
 VENDOR_XU = 10  # anh 03/11: cả phòng góp đủ chừng này xu → cô bán hàng lên xe bán nem, bì, bánh mì (một lần mỗi chuyến)
 VENDOR_STOP_S = 5.0  # xe tấp vào lề cho cô lên
-VENDOR_SELL_S = 40.0  # cô đi dọc xe bán trong lúc xe vẫn chạy (không đứng thêm)
+# anh 03/11: gọi một lần là cô ở trên xe bán suốt chuyến (tới điểm thả khách cuối), xe vẫn chạy bình thường
+HUNGER_PER_MIN = 12.0  # % no bụng tụt mỗi phút xe chạy (chuyến ~8 phút: giữa chuyến bắt đầu có người «sắp đói»)
+HUNGRY = 30.0  # dưới chừng này % là «sắp đói»: hiện 😋 cạnh tên, lơ xe gọi tên nhắc mua đồ ăn
+HUNGER_TALK_GAP = 60.0  # lơ xe nhắc người sắp đói tối đa một lần / chừng này giây (gom tên)
 VENDOR_NAME = "Cô Ba"
 SNACKS = {"nem": ("Nem chua", "🍢"), "bi": ("Bì cuốn", "🌯"), "banh_mi": ("Bánh mì", "🥖")}
 VENDOR_REMIND_GAP = 90.0  # lơ xe nhắc góp gọi cô bán hàng tối đa một lần / chừng này giây
@@ -359,6 +362,8 @@ class Viewer:
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
     prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
     avatar: str = ""  # ảnh đại diện TikTok (https)
+    full: float = 100.0  # % no bụng lúc đang trên xe (anh 03/11: «% cơ thể … sắp đói»)
+    hungry_told: bool = False
     snack: str | None = None  # món mua của cô bán hàng chuyến này (nem / bì / bánh mì) — hiện cạnh tên trên xe
     roll_missed: int = 0  # số lần lỡ điểm danh liên tiếp (có tương tác lại thì về 0)
     roll_skip: int = -1  # lỡ điểm danh ở chuyến số này → chuyến đó không xếp giường nữa (lùi xuống chuyến sau)
@@ -456,6 +461,8 @@ class Engine:
         self.vendor_pool: dict = {"paid": 0, "givers": {}}  # quà góp gọi cô bán hàng (chuyến này)
         self.vendor_done = False  # chuyến này cô đã lên rồi
         self.last_vendor_remind = -1e9
+        self.hungry_new: list[str] = []  # người vừa «sắp đói», chờ lơ xe gom tên nhắc
+        self.last_hunger_talk = -1e9
         self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
         self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
@@ -797,6 +804,8 @@ class Engine:
         for v in self.viewers.values():
             v.likes_trip = 0
             v.snack = None
+            v.full = 100.0
+            v.hungry_told = False
             v.gift_trip = 0
             v.switched = False
         self.name_hold_from = None
@@ -968,8 +977,7 @@ class Engine:
                 and not self.vendor_done and self.trip is not None)
 
     def _vendor_tick(self, now: float) -> None:
-        if self.vendor and self.vendor["stage"] == "sell" and (now >= self.vendor["until"]
-                                                               or self.phase in ("REST", "DROPOFF", "FINISH", "BOARDING")):
+        if self.vendor and self.vendor["stage"] == "sell" and self.phase in ("FINISH", "BOARDING"):  # hết chuyến: cô xuống
             sold = self.vendor["sold"]
             self.vendor = None
             self.emit("vendor_end", name=VENDOR_NAME, sold=sum(sold.values()))
@@ -977,6 +985,30 @@ class Engine:
         elif self.vendor_on and self.vendor_pool["paid"] >= self.vendor_xu and self._vendor_ready():
             givers = self.vendor_pool["givers"]
             self._start_vendor(max(givers.items(), key=lambda kv: kv[1])[0] if givers else "", now)
+
+    def _hunger_tick(self, dt: float) -> None:
+        """Xe chạy thì khách đói dần; vừa xuống dưới HUNGRY thì lơ xe gom tên nhắc (cô Ba trên xe: gõ món; chưa có: góp gọi cô)."""
+        drop = HUNGER_PER_MIN * dt / 60.0
+        for uid in self.bus.riders():
+            v = self.viewers[uid]
+            v.full = max(0.0, v.full - drop)
+            if v.full < HUNGRY and not v.hungry_told:
+                v.hungry_told = True
+                self.hungry_new.append(v.name)
+                self.emit("hungry", name=v.name, seat=self.bus.seat_of(uid), full=round(v.full))
+        if self.hungry_new and self.last_now - self.last_hunger_talk >= HUNGER_TALK_GAP:
+            self.last_hunger_talk = self.last_now
+            names, self.hungry_new = self.hungry_new, []
+            shown = names[:3]
+            who = (", ".join(shown) + (f" và {len(names) - 3} người nữa" if len(names) > 3 else "")) if len(names) > 3 \
+                else (shown[0] if len(shown) == 1 else ", ".join(shown[:-1]) + f" và {shown[-1]}")
+            self.talk("hungry_vendor" if self.vendor else "hungry_call", name=who, vendor=VENDOR_NAME, main=True)
+
+    def _feed(self, v: Viewer) -> None:
+        v.full = 100.0
+        v.hungry_told = False
+        if v.name in self.hungry_new:
+            self.hungry_new.remove(v.name)
 
     def vendor_now(self) -> None:
         """/control «Gọi cô bán hàng»: lên xe ngay (không cần góp), xe phải đang chạy đường."""
@@ -1004,6 +1036,7 @@ class Engine:
             label, emoji = SNACKS[item]
             for uid in self.bus.riders():
                 self.viewers[uid].snack = item
+                self._feed(self.viewers[uid])
             self.vendor["sold"][item] += len(self.bus.riders())
             self.vendor["treats"].append(v.name)
             self.emit("vendor_treat", name=v.name, item=label, emoji=emoji, riders=len(self.bus.riders()))
@@ -1022,8 +1055,9 @@ class Engine:
         return f"🧺 góp gọi cô bán hàng · {pool['paid']}/{self.vendor_xu}"
 
     def _buy_snack(self, v: Viewer, item: str) -> None:
-        if v.snack == item:
-            return
+        if v.snack == item and v.full >= HUNGRY:
+            return  # vừa mua món này, còn no
+        self._feed(v)
         v.snack = item
         self.vendor["sold"][item] += 1
         label, emoji = SNACKS[item]
@@ -1032,7 +1066,8 @@ class Engine:
     def _vendor_view(self) -> dict | None:
         if self.vendor:
             vd = self.vendor
-            return {"stage": vd["stage"], "left": round(max(0.0, vd["until"] - self.last_now)), "name": VENDOR_NAME,
+            left = round(max(0.0, vd["until"] - self.last_now)) if vd["stage"] == "stop" else None
+            return {"stage": vd["stage"], "left": left, "name": VENDOR_NAME,
                     "by": vd["by"], "sold": sum(vd["sold"].values()), "treats": vd["treats"][-3:]}
         if self.vendor_on and not self.vendor_done and self.phase == "DRIVING" and self.bus.riders():
             return {"stage": "pool", "paid": self.vendor_pool["paid"], "goal": self.vendor_xu, "name": VENDOR_NAME}
@@ -1466,6 +1501,8 @@ class Engine:
         if self.rollcalls:
             self._expire_rolls()
         self._vendor_tick(now)
+        if self.phase == "DRIVING":
+            self._hunger_tick(dt)
         self._remind_direction(now)
         self._remind_rules(now)
         if self.specials and self.phase in SPECIAL_FROM:
@@ -1491,8 +1528,8 @@ class Engine:
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
         elif self.phase == "DRIVING" and self.vendor and self.vendor["stage"] == "stop":
             if now >= self.vendor["until"]:  # cô lên rồi: xe chạy tiếp, cô bán trong lúc xe chạy
-                self.vendor.update(stage="sell", until=now + VENDOR_SELL_S)
-                self.emit("vendor", stage="sell", name=VENDOR_NAME, seconds=round(VENDOR_SELL_S))
+                self.vendor.update(stage="sell", until=math.inf)  # bán suốt chuyến
+                self.emit("vendor", stage="sell", name=VENDOR_NAME)
                 self.talk("vendor_sell", name=VENDOR_NAME, main=True)
         elif self.phase == "DRIVING" and self.show:
             if now >= self.show["until"]:
@@ -1869,6 +1906,7 @@ class Engine:
             v.last_rest = now
             if cmd.kind == "food":
                 self.rest_orders[cmd.item] += 1
+                self._feed(v)  # ăn ở trạm dừng chân cũng no lại
                 self.emit("rest_action", name=v.name, hue=v.hue, action="food",
                           item=cmd.item, emoji=FOOD_EMOJI[cmd.item])
             elif cmd.kind == "wc":
@@ -2633,6 +2671,7 @@ class Engine:
         for uid in uids:
             v = self.viewers.get(uid) if uid else None
             out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "snack": SNACKS[v.snack][1] if v.snack else "",
+                        "full": math.floor(v.full),  # làm tròn xuống: 29,9% là «sắp đói» (dưới 30)
                         "avatar": v.avatar,
                         "province": BY_KEY[v.province].name if v.province else ""} if v else None)
         return out
