@@ -176,6 +176,12 @@ GIFT_RATE_CAP = 50
 # Phòng ít quà thì ít bị chặn: giữ mỗi điểm chặn đã định với xác suất theo lượng quà (≥ BLOCK_FULL_RATE xu / phút: giữ hết),
 # không dưới BLOCK_KEEP_MIN — phí đã xuống 1 xu mà phòng 0,3 quà / phút vẫn chờ ~3 phút mỗi lần
 BLOCK_FULL_RATE = 1.0
+# Mục tiêu buổi live (anh 03/11 «1 giờ phải kiếm được 100k»: ~1.000 xu ≈ 100.000 đ người live nhận): một thanh chung cả phòng,
+# mỗi mốc mở một cảnh vui cho TẤT CẢ người xem (mục tiêu tập thể + tiến độ thấy được — kiểu «LIVE goal» quen thuộc trên
+# TikTok); đủ thì cả xe chúc Tết rồi sang vòng mới. Không hứa gì riêng cho người tặng ngoài cảm ơn tên.
+GOAL_STEPS = ((0.1, "lixi", "🧧 mưa lì xì cả màn hình"), (0.3, "lantern", "🏮 thả đèn lồng"),
+              (0.6, "firework", "🎆 pháo hoa lớn"), (1.0, "party", "🎉 cả xe dừng lại chúc Tết"))
+MONEY_WINDOW = 3600.0  # bảng doanh thu /control: quà trong 1 giờ gần nhất
 BLOCK_KEEP_MIN = 0.3
 BLOCK_CLEAR_KM = 12.0  # điểm chặn không đặt sát điểm thả khách / trạm nghỉ
 BLOCK_GAP_KM = 40.0
@@ -378,6 +384,11 @@ class Engine:
         self.cover_seconds = 0.0  # 0: chờ tới khi góp đủ (admin bấm bù lỗ); > 0: tự bù lỗ sau chừng này giây
         self.block_rng = random.Random()
         self.last_block_remind = -1e9
+        self.goal_xu = 1000  # mục tiêu buổi (xu), admin đặt
+        self.goal_have = 0  # xu đã góp vào vòng mục tiêu hiện tại
+        self.goal_round = 0
+        self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
+        self.started_at = now
         self.fee_auto = True  # phí trạm / phạt tự theo lượng quà của phòng (tối đa toll_xu / fine_xu)
         self.gift_log: list[tuple[float, int]] = []  # (giờ, xu) quà trong GIFT_RATE_WINDOW giây gần nhất
         self.seated_at: list[float] = []  # giờ từng người có giường ở bến (giữ xe đủ lâu để đọc tên)
@@ -1231,6 +1242,40 @@ class Engine:
         else:
             self.talk("speeding" if speeding else "police", reason=reason, goal=goal, main=True)
 
+    def _advance_goal(self, v: Viewer, diamonds: int) -> None:
+        """Thanh mục tiêu buổi: qua mốc nào thì cả phòng được cảnh vui đó; đủ 100 % thì chúc Tết + sang vòng mới."""
+        goal = max(1, self.goal_xu)
+        before, self.goal_have = self.goal_have, self.goal_have + diamonds
+        for frac, fx, label in GOAL_STEPS:
+            mark = goal * frac
+            if before < mark <= self.goal_have:
+                self.emit("goal_step", fx=fx, label=label, xu=round(mark), goal=goal, name=v.name, round=self.goal_round + 1)
+                self.talk("goal_step", label=label.split(" ", 1)[1], xu=round(mark), name=v.name)
+                if fx == "party" and v.gift_trip < 1000:  # quà ≥ 1000 xu tự có cảnh chúc Tết: không chiếu hai lần
+                    self.specials.append("cả phòng")
+        if self.goal_have >= goal:
+            self.goal_have -= goal
+            self.goal_round += 1
+
+    def _goal_view(self) -> dict:
+        goal = max(1, self.goal_xu)
+        nxt = next(((round(goal * f), label) for f, _, label in GOAL_STEPS if goal * f > self.goal_have), (goal, GOAL_STEPS[-1][2]))
+        return {"xu": self.goal_have, "goal": goal, "round": self.goal_round + 1, "next_xu": nxt[0], "next": nxt[1]}
+
+    def money(self) -> dict:
+        """Doanh thu cho /control: quà 1 giờ gần nhất, 10 phút gần nhất, người tặng, ước cả giờ theo nhịp hiện tại."""
+        hour = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW]
+        ten = sum(x for t, x, _ in hour if t >= self.last_now - 600)
+        by: dict[str, int] = {}
+        for _, x, name in hour:
+            by[name] = by.get(name, 0) + x
+        span = min(MONEY_WINDOW, max(60.0, self.last_now - self.started_at))
+        xu = sum(x for _, x, _ in hour)
+        # ước cả giờ: chia cho ít nhất 10 phút — vài quà phút đầu không thành «750k / giờ»
+        return {"hour_xu": xu, "ten_xu": ten, "gifts": len(hour), "gifters": len(by), "span_min": round(span / 60),
+                "pace_xu": round(xu * MONEY_WINDOW / max(600.0, span)), "top": [{"name": n, "xu": x} for n, x in
+                                                                 sorted(by.items(), key=lambda kv: -kv[1])[:5]]}
+
     def _fee(self, cap: int) -> int:
         """Phí / phạt: cố định `cap`, hoặc (fee_auto) theo lượng xu phòng hay tặng trong BLOCK_TARGET_MIN phút."""
         if not self.fee_auto:
@@ -2037,6 +2082,8 @@ class Engine:
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
         v.gift_session += diamonds
         self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
+        self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
+        self._advance_goal(v, diamonds)
         paid = self._pay_block(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
@@ -2205,6 +2252,7 @@ class Engine:
             "progress": round(self.progress, 4),
             "speed": 0.0 if self.halt or self.block else round(self.speed(), 3),
             "block": self._block_view(),
+            "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
             "halt": {"place": self.halt["place"], "people": self.halt["people"],
                      "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,

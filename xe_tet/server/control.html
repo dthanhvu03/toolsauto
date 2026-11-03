@@ -49,6 +49,8 @@
   .stat { background:var(--soft); border-radius:10px; padding:8px 10px; }
   .stat b { display:block; font-size:18px; white-space:nowrap; }
   .stat span { color:var(--muted); font-size:12px; }
+  .track { height:10px; margin-top:10px; background:var(--soft); border-radius:999px; overflow:hidden; }
+  .track i { display:block; height:100%; width:0; background:linear-gradient(90deg, #f6b73c, #d93b2b); transition:width .5s; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
   .bus { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); }
   .bus:first-child { border-top:0; }
@@ -97,6 +99,29 @@
       <a href="/" target="_blank"><button>Mở màn hình live</button></a>
       <a id="report-link" href="/report" target="_blank"><button>📊 Báo cáo buổi live</button></a>
     </div>
+  </section>
+
+  <section>
+    <h2>💰 Doanh thu — mục tiêu mỗi giờ</h2>
+    <div class="stats">
+      <div class="stat"><b id="m-vnd">–</b><span id="m-target">1 giờ gần nhất</span></div>
+      <div class="stat"><b id="m-pace">–</b><span>Ước cả giờ theo nhịp này</span></div>
+      <div class="stat"><b id="m-ten">–</b><span>10 phút gần nhất</span></div>
+      <div class="stat"><b id="m-who">–</b><span>Người tặng / lượt quà</span></div>
+      <div class="stat"><b id="m-goal">–</b><span>Thanh mục tiêu trên live</span></div>
+    </div>
+    <div class="track"><i id="m-bar"></i></div>
+    <p class="hint" id="m-top"></p>
+    <div class="row">
+      <span>Mục tiêu tiền / giờ</span><input type="number" id="target-vnd" min="1000" step="10000" aria-label="Mục tiêu tiền mỗi giờ (đồng)"><span>đ</span>
+      <span>1 xu ≈</span><input type="number" id="vnd-per-xu" min="1" max="1000" step="10" aria-label="Tiền nhận mỗi xu (đồng)"><span>đ</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>Thanh mục tiêu trên live</span><input type="number" id="goal-xu" min="10" max="100000" step="50" aria-label="Mục tiêu buổi live (xu)"><span>xu</span>
+      <button id="save-money">Lưu</button>
+    </div>
+    <p class="hint">Tính mọi quà vào game (cả quà thử trên trang này). Số chính xác của TikTok xem trong app. Thanh mục tiêu: mốc
+      10 % mưa lì xì · 30 % đèn lồng · 60 % pháo hoa lớn · 100 % cả xe chúc Tết rồi sang vòng mới — cảnh vui cho cả phòng.</p>
   </section>
 
   <section>
@@ -290,9 +315,10 @@
       <span>Phí trạm tối đa</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
       <span>Phạt tối đa</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
     </div>
+    <label class="toggle"><input type="checkbox" data-show="cover_on"> Tự bù lỗ — góp chưa đủ thì Anh Tư bù phần thiếu cho xe đi (tắt: chờ tới khi góp đủ hoặc anh bấm tay)</label>
     <div class="row" style="margin-top:8px">
-      <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="0" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
-      <span>giây (0 = chờ tới khi góp đủ)</span>
+      <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="10" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
+      <span>giây</span>
       <button id="save-blocks">Lưu</button>
     </div>
     <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy x2 nhờ quà mà gặp công an thì «quá tốc độ», phạt gấp 3 (giây chạy nhanh còn lại giữ nguyên).
@@ -684,6 +710,10 @@ $("save-blocks").onclick = () => {
   setControl({ toll_xu: +$("toll-xu").value, fine_xu: +$("fine-xu").value, cover_seconds: +$("cover-seconds").value });
   log("Đã lưu phí trạm / tiền phạt / tự bù lỗ");
 };
+$("save-money").onclick = () => {
+  setControl({ target_vnd: +$("target-vnd").value, vnd_per_xu: +$("vnd-per-xu").value, goal_xu: +$("goal-xu").value });
+  log("Đã lưu mục tiêu doanh thu / thanh mục tiêu");
+};
 $("rotate-seconds").onchange = () => setControl({ rotate_seconds: +$("rotate-seconds").value });
 
 // ---- màn hình ----
@@ -767,6 +797,16 @@ async function refresh() {
       for (const d of s.departures || []) sel.append(new Option(d.name, d.key));
     }
     if (document.activeElement !== sel) sel.value = s.departure?.key || "";
+    const m = s.money || {}, rate = control.vnd_per_xu || 100, target = control.target_vnd || 100000;
+    const vnd = (xu) => `${Math.round(xu * rate).toLocaleString("vi-VN")}đ`;
+    $("m-vnd").textContent = vnd(m.hour_xu || 0);
+    $("m-target").textContent = `${m.span_min < 60 ? `${m.span_min} phút qua` : "1 giờ gần nhất"} · mục tiêu ${target.toLocaleString("vi-VN")}đ`;
+    $("m-pace").textContent = vnd(m.pace_xu || 0);
+    $("m-ten").textContent = `${m.ten_xu || 0} xu`;
+    $("m-who").textContent = `${m.gifters || 0} / ${m.gifts || 0}`;
+    $("m-goal").textContent = s.goal ? `${s.goal.xu}/${s.goal.goal}` : "–";
+    $("m-bar").style.width = `${Math.min(100, Math.round(((m.pace_xu || 0) * rate / target) * 100))}%`;
+    $("m-top").textContent = (m.top || []).length ? "Tặng nhiều nhất giờ này: " + m.top.map((t) => `${t.name} ${t.xu} xu`).join(" · ") : "Chưa có quà trong giờ này.";
     const blk = s.block;
     $("block-now").textContent = blk
       ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : "👮 Công an đang chặn"} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
@@ -781,7 +821,10 @@ async function refresh() {
       $("trip-minutes").value = control.trip_minutes ?? 8;
       $("toll-xu").value = control.toll_xu ?? 20;
       $("fine-xu").value = control.fine_xu ?? 10;
-      $("cover-seconds").value = control.cover_seconds ?? 0;
+      $("cover-seconds").value = control.cover_seconds ?? 60;
+      $("target-vnd").value = control.target_vnd ?? 100000;
+      $("vnd-per-xu").value = control.vnd_per_xu ?? 100;
+      $("goal-xu").value = control.goal_xu ?? 1000;
       timesLoaded = true;
     }
   } catch (e) { $("s-phase").textContent = "Mất kết nối"; }

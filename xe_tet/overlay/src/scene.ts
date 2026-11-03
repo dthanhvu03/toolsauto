@@ -489,6 +489,10 @@ export class World {
       case "ticket":
         if (!e.next && this.set === "ben" && !e.changed) this.boardWalk(e.name ?? "", e.hue ?? 0);
         break;
+      case "goal_step":  // mục tiêu buổi live qua mốc: cảnh vui to cho cả phòng (chúc Tết do server chen cảnh)
+        if (e.fx === "lixi" || e.fx === "lantern") this.giftFx(e.fx, 6);
+        else if (e.fx === "firework") for (let i = 0; i < 5; i++) window.setTimeout(() => this.fireworks(SHOW_SKY, 2), i * 500);
+        break;
       case "speak":  // lơ xe đọc tên người lên xe: đúng người đó bước lên
         if (e.names?.length && this.set === "ben") this.callNames(e.names, e.seconds ?? 3);
         break;

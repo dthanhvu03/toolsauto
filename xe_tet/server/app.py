@@ -128,11 +128,12 @@ class Hub:
         return engine
 
     def apply_blocks(self, engine: Engine) -> None:
+        engine.goal_xu = self.settings["goal_xu"]
         engine.blocks_on = self.settings["blocks_on"]
         engine.fee_auto = self.settings["fee_auto"]
         engine.toll_xu = self.settings["toll_xu"]
         engine.fine_xu = self.settings["fine_xu"]
-        engine.cover_seconds = float(self.settings["cover_seconds"])
+        engine.cover_seconds = float(self.settings["cover_seconds"]) if self.settings["cover_on"] else 0.0
 
     def maybe_answer(self, now: float) -> None:
         """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""
@@ -218,6 +219,7 @@ class Hub:
 
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
+                "money": self.engine.money(),
                 "screens": sorted(self.screens.values(), key=lambda sc: sc["id"]), "audio_screen": self.audio_screen(),
                 "ai": {"key": self.ai_key, "answered": self.ai_answered, "error": self.ai_error, "reused": self.ai_cache_hits,
                        "waiting": len(self.engine.questions)},

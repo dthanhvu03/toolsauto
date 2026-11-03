@@ -100,7 +100,8 @@ export interface State {
   patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
   turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
-  block?: Block | null;  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
+  block?: Block | null;
+  goal?: { xu: number; goal: number; round: number; next_xu: number; next: string };  // mục tiêu buổi live  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
 }
 
 /** Đồng hồ trên xe: giờ VN lúc xuất bến + giờ xe chạy (giờ trong ngày, «HH:MM», ngày thứ mấy từ hôm xuất bến). */
@@ -165,6 +166,7 @@ export interface GameEvent {
   region?: Region;
   specialty?: string;
   place?: string;  // trạm dừng chân: tỉnh có trạm
+  label?: string; round?: number;  // goal_step
   kind?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;  // block / block_end
   total?: number;
   board?: { province: string; count: number }[];

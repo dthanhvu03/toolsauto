@@ -1509,7 +1509,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", left=5, what="qua trạm", missing=5)
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1692,3 +1692,20 @@ def test_block_edge_cases_turn_off_pause_and_gift_credit_once():
     comment(f, "Lạ", "không về", 5)
     comment(f, "Lạ", "Cà Mau", 6)
     assert f.queues["south"][-1] == "lạ"
+
+
+def test_session_goal_steps_unlock_fun_for_everyone_and_money_panel():
+    """Anh 03/11 «1 giờ 100k»: thanh mục tiêu buổi (1000 xu) — mốc 10 / 30 / 60 / 100 % mở cảnh vui cho cả phòng, đủ thì
+    chúc Tết + vòng mới; /control thấy doanh thu giờ này."""
+    e = Engine(0.0)
+    e.goal_xu = 100
+    e.handle({"type": "gift", "name": "A", "diamonds": 35}, 1)
+    steps = [x for x in e.drain() if x["type"] == "goal_step"]
+    assert [s["fx"] for s in steps] == ["lixi", "lantern"]
+    assert e.snapshot()["goal"] == {"xu": 35, "goal": 100, "round": 1, "next_xu": 60, "next": "🎆 pháo hoa lớn"}
+    e.handle({"type": "gift", "name": "B", "diamonds": 70}, 2)
+    steps = [x for x in e.drain() if x["type"] == "goal_step"]
+    assert [s["fx"] for s in steps] == ["firework", "party"] and e.specials == ["cả phòng"]
+    assert e.snapshot()["goal"]["xu"] == 5 and e.snapshot()["goal"]["round"] == 2
+    m = e.money()
+    assert m["hour_xu"] == 105 and m["gifters"] == 2 and m["top"][0] == {"name": "B", "xu": 70}

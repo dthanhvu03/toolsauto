@@ -52,10 +52,14 @@ DEFAULTS: dict = {
     "hud_scale": 0.8,  # cỡ chữ + khung trên live (PLAN-133): 0,6 nhỏ → 1,2 to
     "talk_style": "mix",  # kiểu nói lơ xe (PLAN-131): mix | ben (bến xe) | genz | geny
     "blocks_on": True,  # trạm thu phí / công an chặn xe, góp quà đi tiếp (PLAN-148)
+    "goal_xu": 1000,  # mục tiêu buổi live (xu) — thanh chung cả phòng, mỗi mốc mở cảnh vui (anh 03/11: 100k / giờ)
+    "vnd_per_xu": 100,  # quy đổi để /control báo tiền (người live nhận ~100 đ / xu)
+    "target_vnd": 100000,  # mục tiêu tiền / giờ trên bảng doanh thu
     "fee_auto": True,  # phí / phạt tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua), tối đa toll_xu / fine_xu
     "toll_xu": 20,  # phí qua trạm (xu)
     "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
-    "cover_seconds": 0,  # 0: chờ tới khi góp đủ (admin bấm «Anh Tư bù lỗ»); > 0: tự bù lỗ sau chừng này giây
+    "cover_on": True,  # tự bù lỗ: góp chưa đủ sau cover_seconds giây thì Anh Tư bù phần thiếu, xe đi (anh 03/11: 60 giây)
+    "cover_seconds": 60,
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -66,7 +70,7 @@ HUD_SCALE = (0.6, 1.2)
 ROTATE_RANGE = (20, 300)  # giây
 MIXES = ("balanced", "music", "voice")
 BLOCK_XU = (1, 1000)
-COVER_RANGE = (0, 600)
+COVER_RANGE = (10, 600)
 log = logging.getLogger("xe_tet")
 
 
@@ -108,10 +112,14 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(BOARD_RANGE[1], max(BOARD_RANGE[0], float(value))))
         elif key == "rest_seconds":
             out[key] = int(min(REST_RANGE[1], max(REST_RANGE[0], float(value))))
+        elif key == "goal_xu":
+            out[key] = int(min(100000, max(10, float(value))))
+        elif key in ("vnd_per_xu", "target_vnd"):
+            out[key] = int(min(10_000_000, max(1, float(value))))
         elif key in ("toll_xu", "fine_xu"):
             out[key] = int(min(BLOCK_XU[1], max(BLOCK_XU[0], float(value))))
-        elif key == "cover_seconds":
-            out[key] = int(min(COVER_RANGE[1], max(COVER_RANGE[0], float(value))))
+        elif key == "cover_seconds":  # bản trước: 0 = chờ tới khi đủ (giờ là công tắc cover_on) → về mặc định 60
+            out[key] = int(min(COVER_RANGE[1], max(COVER_RANGE[0], float(value)))) if float(value) > 0 else DEFAULTS[key]
         elif key == "tiktok_user":
             text = str(value or "")
             out[key] = text if re.fullmatch(r"[A-Za-z0-9._]{0,24}", text) else out[key]

@@ -303,6 +303,11 @@ export class Hud {
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
     this.renderBlock(s.block ?? null);
+    const g = s.goal;
+    if (g) {
+      const pct = Math.min(100, Math.round((g.xu / Math.max(1, g.goal)) * 100));
+      setHTML("goal-bar", `<i style="width:${pct}%"></i><span>🎯 Mục tiêu buổi live ${g.xu}/${g.goal} xu · tới ${g.next_xu} xu: ${esc(g.next)}</span>`);
+    }
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
@@ -397,6 +402,10 @@ export class Hud {
         break;
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
+        break;
+      case "goal_step":  // mục tiêu buổi live qua mốc: cả phòng được cảnh vui
+        this.flash(`🎯 ${e.xu} xu · ${e.label ?? ""}`);
+        this.note(`🎯 Cả phòng đạt ${e.xu} xu · ${esc(e.label ?? "")}`, `Cảm ơn ${esc(e.name ?? "")} và mọi người đã tặng quà`);
         break;
       case "block":  // trạm thu phí / công an chặn xe (PLAN-148)
         this.flash(e.kind === "toll" ? "🚧 TRẠM THU PHÍ" : e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA");

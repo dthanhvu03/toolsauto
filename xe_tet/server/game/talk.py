@@ -128,6 +128,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Thôi Anh Tư bù lỗ {missing} xu {what} cho xe đi, về quê ăn Tết quan trọng hơn.",
             "Thiếu {missing} xu, Anh Tư móc túi bù lỗ luôn, xe đi tiếp bà con.",
         ),
+        "goal_step": (  # mục tiêu buổi live: qua mốc (anh 03/11)
+            "Mục tiêu buổi live tới {xu} xu rồi, cảm ơn {name} với bà con, {label} cho cả phòng.",
+            "Qua mốc {xu} xu, {label} nè bà con, cảm ơn {name}.",
+        ),
         "new_owner": (  # người tặng nhiều nhất buổi
             "{name} lên làm chủ nhà xe rồi bà con, {xu} xu, Anh Tư cúi đầu cảm ơn.",
             "Nhà xe có chủ mới, {name} với {xu} xu, chịu chơi số một.",
@@ -363,6 +367,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Thôi Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp, về quê là chính.",
             "Thiếu {missing} xu, Anh Tư tự bù lỗ, đi tiếp thôi ae.",
         ),
+        "goal_step": (
+            "Mốc {xu} xu done, {label} cho cả phòng, {name} uy tín.",
+            "Cả phòng góp tới {xu} xu, mở khoá {label}, cảm ơn {name}.",
+        ),
         "new_owner": (
             "{name} chính thức làm chủ nhà xe, {xu} xu, đỉnh nóc kịch trần.",
             "Chủ nhà xe mới là {name} đó mấy bồ, {xu} xu, xịn xò.",
@@ -596,6 +604,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_cover": (
             "Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp cho kịp về quê.",
             "Thiếu {missing} xu, Anh Tư bù lỗ, xe đi tiếp.",
+        ),
+        "goal_step": (
+            "Mục tiêu buổi live đạt {xu} xu, {label} cho mọi người, cảm ơn {name}.",
+            "Đã tới mốc {xu} xu, {label}, cảm ơn {name} và mọi người.",
         ),
         "new_owner": (
             "Chúc mừng {name} lên làm chủ nhà xe với {xu} xu, cảm ơn nhiều.",

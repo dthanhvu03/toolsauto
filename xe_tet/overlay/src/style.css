@@ -163,6 +163,11 @@ html, body {
 .cta-block .blk-bar span { position: relative; display: block; text-align: center; font-size: 28px; font-weight: 800; line-height: 40px;
   color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 12px; }
 .cta-block.alarm { animation: pop 0.35s ease; }
+.goal-bar { position: relative; height: 38px; margin-top: 8px; background: #fff; border: 2px solid #f1c56b; border-radius: 999px;
+  overflow: hidden; }
+.goal-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ffe082, #ffb300); transition: width 0.6s ease; }
+.goal-bar span { position: relative; display: block; padding: 0 14px; font-size: 25px; font-weight: 800; line-height: 34px; color: var(--red-deep);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cta-foot { margin-top: 8px; font-size: 26px; font-weight: 700; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cta-foot b { color: var(--red); }
 
