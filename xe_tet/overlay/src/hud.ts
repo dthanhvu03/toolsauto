@@ -163,6 +163,21 @@ export class Hud {
     toasts.style.maxHeight = `${Math.max(120, 1270 - bottom) / z}px`;  // không chạm bảng góc phải (1290 px)
   }
 
+  /** Thẻ vé giữa màn: thường đè tạm lên khung «Gõ tên tỉnh»; khung đang là câu đố / trạm / sự cố / cô Ba thì hạ xuống ngay
+   *  dưới thanh góp quà — chỉ che tạm bảng quà, không che câu hỏi (anh 03/11 «bị che mất câu đố»). */
+  private placeCallout(): void {
+    const el = $("callout") as HTMLElement;
+    const block = $("cta-block");
+    const stage = $("hud").getBoundingClientRect();
+    const rect = block.getBoundingClientRect();
+    if (block.classList.contains("hidden") || !stage.width || !rect.height) {
+      el.style.top = "";
+      return;
+    }
+    const z = parseFloat(getComputedStyle($("hud")).getPropertyValue("--z")) || HUD_SCALE;
+    el.style.top = `${((rect.bottom - stage.top) / (stage.width / 1080) + 10) / z}px`;
+  }
+
   update(s: State): void {
     const prevPhase = this.state?.phase;
     this.state = s;
@@ -396,6 +411,7 @@ export class Hud {
     $("cta-block").classList.toggle("quiz", quiz);
     $("cta-main").classList.toggle("hidden", card);
     $("cta-sub").classList.toggle("hidden", card);
+    if (this.calloutBusy) this.placeCallout();  // câu đố / trạm hiện ra giữa lúc thẻ vé đang đứng
     if (quiz) {  // đố vui: câu hỏi + ba đáp án; hết giờ thì đáp án đúng + người trả lời nhanh nhất
       const opts = q!.options.map((o, i) => q!.done && i !== q!.answer ? "" : `<b>${"ABC"[i]}</b> ${esc(o)}`).filter(Boolean).join(" · ");
       const tail = q!.done
@@ -769,6 +785,7 @@ export class Hud {
       }
     }
     el.innerHTML = `<div class="big">${big}</div><div class="small">${small}</div>`;
+    this.placeCallout();
     el.classList.remove("hidden", "show");
     void el.offsetWidth;
     el.classList.add("show");
