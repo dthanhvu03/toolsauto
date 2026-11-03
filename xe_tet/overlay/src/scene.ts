@@ -496,6 +496,7 @@ export class World {
         break;
       case "honk":
         for (const w of this.walkers) {
+          (w.obj.userData.food as THREE.Object3D | undefined)?.removeFromParent();  // còi giục: bỏ dở tô phở, không mang lên xe
           w.wait = 0;
           w.hold = false;
           w.onDone = undefined;
@@ -632,10 +633,13 @@ export class World {
       const icon = label(e.emoji ?? "🍜", "lbl emoji");
       icon.position.y = 3;
       p.add(icon);
-      w.onDone = () => {
-        w.path = [this.bus.doorSpot.clone()];
+      p.userData.food = icon;
+      w.onDone = () => {  // tới chỗ ngồi: ăn 16 giây, ăn xong để tô / ly lại quán rồi mới về xe (anh 03/11: đem đồ ăn lên xe)
         w.wait = 16;
-        w.onDone = undefined;
+        w.onDone = () => {
+          icon.removeFromParent();
+          w.path = [this.bus.doorSpot.clone()];
+        };
       };
     } else if (e.action === "wc") {
       const w = this.addWalker(p, [this.rest.wcQueue(this.wcLine.length)], 4);
