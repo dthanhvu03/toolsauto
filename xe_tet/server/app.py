@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -191,7 +191,11 @@ class Hub:
         live = self.live.take()
         if live:
             try:
-                self.live.saved(await asyncio.to_thread(self.live_store.save, *live))
+                sid = await asyncio.to_thread(self.live_store.save, *live)
+                self.live.saved(sid)
+                comments = self.live.take_comments()
+                if comments:
+                    await asyncio.to_thread(self.live_store.save_comments, sid, comments)
             except Exception:
                 log.exception("ghi số liệu báo cáo buổi live lỗi")
         rows = self.engine.take_dirty()
@@ -583,6 +587,14 @@ async def delete_video(name: str) -> dict:
 @app.get("/control")
 async def control() -> FileResponse:
     return FileResponse(HERE / "control.html")
+
+
+@app.get("/report/comments.csv")
+async def live_comments_csv(id: int) -> Response:
+    """Toàn bộ bình luận một buổi live (anh 03/11: tải về xem nên xử lý thêm trường hợp nào)."""
+    body = await asyncio.to_thread(report.comments_csv, hub.live_store, id)
+    return Response(body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=binh-luan-buoi-{id}.csv"})
 
 
 @app.get("/report")

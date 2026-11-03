@@ -53,14 +53,25 @@ NAMES_READ = 3  # đọc tối đa 3 tên, còn lại «và N người nữa»
 SAY_AS = (("TP.HCM", "Thành phố Hồ Chí Minh"), ("km", "ki-lô-mét"), ("BR-VT", "Bà Rịa Vũng Tàu"))
 # đọc đều, không nhấn nhá (anh dặn 01/11): «!» đọc như dấu chấm, kể cả câu admin gõ
 _EXCLAIM = re.compile(r"!+")
+# Chữ Anh / viết tắt trong câu lơ xe (kiểu Gen Z) → tiếng Việt khi ĐỌC (anh 03/11: «chưa đọc thuần tiếng Việt, còn lơ lớ»);
+# chữ trên màn hình giữ nguyên. Không phân biệt hoa thường, chỉ khớp nguyên từ.
+SAY_WORDS = (("ae", "anh em"), ("team", "hội"), ("win", "thắng"), ("top một", "đứng đầu"), ("top 1", "đứng đầu"),
+             ("done", "xong"), ("chill", "thảnh thơi"), ("check", "xem"), ("hot", "nổi"), ("live", "lai"),
+             ("tiktok", "tích tóc"), ("vip", "víp"), ("wc", "vệ sinh"), ("x2", "gấp đôi"), ("x3", "gấp ba"),
+             ("ship", "chở"), ("book", "đặt"), ("ok", "ô kê"), ("oke", "ô kê"), ("bro", "ông bạn"))
+_SAY_WORDS = [(re.compile(rf"(?<!\w){re.escape(a)}(?!\w)", re.IGNORECASE), b) for a, b in SAY_WORDS]
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D]+")  # biểu tượng: máy đọc ra tiếng lạ
 _NOT_NAME = re.compile(r"[^\w\s'-]", re.UNICODE)  # tên TikTok: bỏ emoji / ký tự trang trí
 
 
 def speakable(text: str) -> str:
     for short, full in SAY_AS:
         text = re.sub(rf"\b{re.escape(short)}\b", full, text)
+    for pattern, said in _SAY_WORDS:
+        text = pattern.sub(said, text)
+    text = _EMOJI.sub(" ", text)
     text = _EXCLAIM.sub(".", text)
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+([,.?])", r"\1", re.sub(r"\s+", " ", text)).strip()
 
 
 def spoken_name(name: str) -> str:

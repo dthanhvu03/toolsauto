@@ -14,6 +14,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import store
+from .game.answers import faq, is_question
+from .game.parser import normalize, parse
 
 VN = ZoneInfo("Asia/Ho_Chi_Minh")
 SESSION_GAP = 120.0  # rớt kết nối quá lâu mới tính là hết buổi
@@ -23,6 +25,21 @@ PHASE_LABEL = {"BOARDING": "Đón khách ở bến", "DRIVING": "Xe chạy", "RE
                "FINISH": "Về bến", "SPECIAL": "Chúc Tết"}
 
 SCHEMA = """
+-- Bình luận thật (anh 03/11 «tải dữ liệu bình luận về để xem mình nên xử lý những trường hợp nào»): nội dung + game hiểu là
+-- gì lúc đó (kind: province / stay / food / where / question / chat…). Chỉ lưu buổi live thật, ở máy anh, không gửi đi đâu.
+CREATE TABLE IF NOT EXISTS live_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    ts REAL NOT NULL,
+    minute INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    uid TEXT NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS live_comments_session ON live_comments (session_id, kind);
 CREATE TABLE IF NOT EXISTS live_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started REAL NOT NULL,          -- giờ máy (epoch giây)
@@ -83,6 +100,7 @@ class LiveLog:
         self.phase_now = "BOARDING"
         self.phase_stats: dict[str, dict] = {}
         self.last_update: float | None = None
+        self.comments: list[dict] = []  # bình luận chờ ghi
 
     @property
     def active(self) -> bool:
@@ -145,6 +163,10 @@ class LiveLog:
         kind = event.get("type")
         if kind == "comment":
             self._bump(row, "comments")
+            text = str(event.get("text") or "").strip()[:300]
+            if text:
+                self.comments.append({"ts": now, "minute": row["minute"], "phase": self.phase_now, "uid": uid,
+                                      "name": str(event.get("name") or "")[:60], "text": text, **classify(text)})
             self.uniq_minute[row["minute"]].add(uid)
             self.commenters.add(uid)
         elif kind == "like":
@@ -192,9 +214,24 @@ class LiveLog:
             self.session = None
         return session, rows
 
+    def take_comments(self) -> list[dict]:
+        out, self.comments = self.comments, []
+        return out
+
     def saved(self, session_id: int) -> None:
         if self.session is not None and self.session["id"] is None:
             self.session["id"] = session_id
+
+
+def classify(text: str) -> dict:
+    """Game hiểu bình luận này là gì (cùng bộ đọc với engine): lệnh / tỉnh / câu hỏi có trả lời sẵn / hỏi AI / trò chuyện."""
+    cmd = parse(text)
+    if cmd.kind != "chat":
+        return {"kind": cmd.kind, "detail": cmd.province.name if cmd.province else cmd.item or cmd.station}
+    if is_question(text):
+        key = faq(text)
+        return {"kind": "question", "detail": f"faq:{key}" if key else "ai"}
+    return {"kind": "chat", "detail": ""}
 
 
 class LiveStore:
@@ -235,6 +272,20 @@ class LiveStore:
                 [(sid, phase, *(v[c] for c in pcols)) for phase, v in session.get("phases", {}).items()])
             self._db.commit()
         return sid
+
+    def save_comments(self, session_id: int, comments: list[dict]) -> None:
+        with self._lock:
+            self._db.executemany(
+                "INSERT INTO live_comments (session_id, ts, minute, phase, uid, name, text, kind, detail) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [(session_id, c["ts"], c["minute"], c["phase"], c["uid"], c["name"], c["text"], c["kind"], c["detail"])
+                 for c in comments])
+            self._db.commit()
+
+    def comments(self, session_id: int) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM live_comments WHERE session_id = ? ORDER BY ts", (session_id,)).fetchall()
+        return [dict(r) for r in rows]
 
     def sessions(self, limit: int = 30) -> list[dict]:
         with self._lock:

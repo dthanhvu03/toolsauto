@@ -229,3 +229,10 @@ def test_stale_lines_are_dropped_so_voice_matches_screen():
     assert a.next_fresh(born + 60) is None and a.stale == 2
     a.offer("câu mới", voice.LOXE)
     assert a.next_fresh(a.queue[0][4] + 3)[2].startswith("câu mới")
+
+
+def test_speech_says_english_slang_in_vietnamese():
+    """Anh 03/11 «talk chưa đọc thuần tiếng Việt, còn lơ lớ»: chữ Anh / viết tắt đổi sang tiếng Việt khi đọc, bỏ biểu tượng."""
+    said = speakable("Bay quá ae ơi, team Hà Nội win rồi 🎉, xe chạy x2, đi WC, xem live TikTok, Ok.")
+    assert said == "Bay quá anh em ơi, hội Hà Nội thắng rồi, xe chạy gấp đôi, đi vệ sinh, xem lai tích tóc, ô kê."
+    assert speakable("Chào Thảo, nhà ở Bến Tre") == "Chào Thảo, nhà ở Bến Tre"  # «ae» trong tên / chữ khác không đụng

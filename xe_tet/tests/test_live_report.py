@@ -92,3 +92,23 @@ def test_short_dropoff_scene_keeps_its_own_gifts(tmp_path):
     db.save(session, rows)
     html = report.render(db, None)
     assert "Thả khách" in html.split("Theo cảnh")[1]
+
+
+def test_comments_saved_classified_and_exported(tmp_path):
+    """Anh 03/11 «tải dữ liệu bình luận về để xem mình nên xử lý những trường hợp nào»: lưu từng câu + game hiểu là gì; báo cáo
+    gom câu game chưa làm gì / câu hỏi phải hỏi AI; tải CSV."""
+    log = live_log.LiveLog()
+    db = live_log.LiveStore(tmp_path / "x.db")
+    t0 = 1_800_000_000.0
+    log.update(True, "kenh", t0, "BOARDING", 50)
+    for i, (uid, text) in enumerate([("a", "Huế"), ("b", "xe nào"), ("c", "chào cả nhà"), ("d", "Chào cả nhà!"),
+                                     ("e", "tặng quà sao vậy"), ("f", "ủa sao xe hổng chạy")]):
+        log.raw({"type": "comment", "uid": uid, "name": uid.upper(), "text": text}, t0 + i)
+    sid = db.save(*log.take())
+    db.save_comments(sid, log.take_comments())
+    rows = db.comments(sid)
+    assert [r["kind"] for r in rows] == ["province", "where", "chat", "chat", "question", "question"]
+    html = report.render(db, sid)
+    assert "Câu game chưa làm gì" in html and "chào cả nhà" in html.lower() and "comments.csv" in html
+    csv_text = report.comments_csv(db, sid)
+    assert csv_text.startswith("﻿") and "chào cả nhà" in csv_text and "Gõ tỉnh (đặt vé)" in csv_text

@@ -1,9 +1,14 @@
 """Trang /report (PLAN-143): đọc lại từng buổi live từ `live_log.LiveStore` — phút nào, cảnh nào người xem tặng quà / bình luận /
 lên xe nhiều. HTML tự đủ (không thư viện ngoài), biểu đồ vẽ bằng SVG."""
 
+import csv
+import io
+from collections import Counter
+from datetime import datetime
 from html import escape
 
-from .live_log import PHASE_LABEL, LiveStore, clock
+from .game.parser import normalize
+from .live_log import PHASE_LABEL, VN, LiveStore, clock
 
 PHASE_COLOR = {"BOARDING": "#b39ddb", "DRIVING": "#7fb2e5", "REST": "#9ccc8a", "DROPOFF": "#f29a76", "FINISH": "#c7b8a6",
                "SPECIAL": "#e57fb0"}
@@ -126,6 +131,51 @@ def _notes(s: dict, minutes: list[dict], phases: list[dict]) -> list[str]:
     return notes
 
 
+KIND_LABEL = {"province": "Gõ tỉnh (đặt vé)", "board": "Muốn lên xe (chưa ghi tỉnh)", "stay": "Không về", "food": "Gọi món ở trạm",
+              "wc": "WC", "gift_shop": "Mua quà", "where": "Hỏi vé / xe nào", "station": "Gọi xe ra bến khác",
+              "fuel": "Đổ xăng", "wash": "Rửa xe", "question": "Câu hỏi", "chat": "Trò chuyện (game không làm gì)"}
+
+
+def _comments_html(live: LiveStore, sid: int, q: str) -> str:
+    """Bình luận thật của buổi (anh 03/11): game hiểu được bao nhiêu, câu nào game chưa làm gì — gom câu giống nhau."""
+    rows = live.comments(sid)
+    if not rows:
+        return ("<h2>💬 Bình luận</h2><p class='muted'>Buổi này chưa lưu nội dung bình luận (lưu từ bản 03/11 trở đi).</p>")
+    kinds = Counter(r["kind"] for r in rows)
+    kind_rows = "".join(f"<tr><td>{KIND_LABEL.get(k, k)}</td><td>{_fmt(n)}</td><td>{round(100 * n / len(rows))} %</td></tr>"
+                        for k, n in kinds.most_common())
+
+    def grouped(pick, limit: int) -> str:
+        groups: dict[str, list[dict]] = {}
+        for r in rows:
+            if pick(r):
+                groups.setdefault(normalize(r["text"]), []).append(r)
+        top = sorted(groups.values(), key=lambda g: -len(g))[:limit]
+        return "".join(f"<tr><td>{escape(g[0]['text'])}</td><td>{len(g)}</td><td>{len({x['uid'] for x in g})}</td>"
+                       f"<td>{PHASE_LABEL.get(g[0]['phase'], g[0]['phase'])}</td></tr>" for g in top) \
+            or "<tr><td colspan='4'>Không có.</td></tr>"
+    head = "<tr><th>Câu (gom câu giống nhau)</th><th>Số lần</th><th>Số người</th><th>Cảnh</th></tr>"
+    return (f"<h2>💬 Bình luận · {_fmt(len(rows))} câu</h2>"
+            f"<p><a href='/report/comments.csv?id={sid}{q}'>⬇ Tải toàn bộ bình luận (CSV, mở bằng Excel)</a></p>"
+            f"<div class='wrap'><table><tr><th>Game hiểu là</th><th>Số câu</th><th>Tỉ lệ</th></tr>{kind_rows}</table></div>"
+            "<h2>Câu game chưa làm gì (nên xử lý thêm?)</h2>"
+            f"<div class='wrap'><table>{head}{grouped(lambda r: r['kind'] == 'chat', 40)}</table></div>"
+            "<h2>Câu hỏi chưa có trả lời sẵn (đang phải hỏi AI)</h2>"
+            f"<div class='wrap'><table>{head}{grouped(lambda r: r['kind'] == 'question' and r['detail'] == 'ai', 25)}</table></div>")
+
+
+def comments_csv(live: LiveStore, session_id: int) -> str:
+    """Toàn bộ bình luận một buổi — CSV có BOM để Excel đọc đúng tiếng Việt."""
+    out = io.StringIO()
+    out.write("\ufeff")
+    w = csv.writer(out)
+    w.writerow(["giờ", "phút thứ", "cảnh", "tên", "bình luận", "game hiểu là", "chi tiết"])
+    for r in live.comments(session_id):
+        w.writerow([datetime.fromtimestamp(r["ts"], VN).strftime("%H:%M:%S"), r["minute"], PHASE_LABEL.get(r["phase"], r["phase"]),
+                    r["name"], r["text"], KIND_LABEL.get(r["kind"], r["kind"]), r["detail"]])
+    return out.getvalue()
+
+
 def render(live: LiveStore, session_id: int | None, token: str = "") -> str:
     sessions = live.sessions()
     q = f"&token={escape(token)}" if token else ""
@@ -170,5 +220,6 @@ def render(live: LiveStore, session_id: int | None, token: str = "") -> str:
             "<h2>Theo cảnh (trung bình mỗi phút)</h2><div class='wrap'><table><tr><th>Cảnh</th><th>Số phút</th><th>Xu</th>"
             f"<th>Bình luận</th><th>Tim</th><th>Lên xe</th><th>Vào phòng</th></tr>{phase_rows}</table></div>"
             "<h2>5 phút nhiều quà nhất</h2><div class='wrap'><table><tr><th>Giờ</th><th>Cảnh</th><th>Xu</th><th>Lượt quà</th>"
-            f"<th>Bình luận</th><th>Người xem</th></tr>{top_rows}</table></div>")
+            f"<th>Bình luận</th><th>Người xem</th></tr>{top_rows}</table></div>"
+            + _comments_html(live, s["id"], q))
     return head + body + table + "</main></body></html>"
