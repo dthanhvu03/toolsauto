@@ -15,6 +15,16 @@ from cashback_bot.admin.ui.glossary import (
     _BANK_STATE,
     _ENTRY_ADMIN,
     ADMIN_KEEP_NOTE,
+    FUND_LEFT,
+    IN_WALLET,
+    MONEY_HOME,
+    OWED_BACK,
+    OWNER_REAL,
+    OWNER_SOON,
+    PAID_OUT,
+    RESERVED,
+    WAIT_HOLD,
+    WAIT_SHOPEE,
     PAYOUT_STATUS,
     PAYOUT_TEXT_MAX,
     STEP_HELP,
@@ -23,6 +33,14 @@ from cashback_bot.admin.ui.glossary import (
 from cashback_bot.db import SCRUB_AFTER_SEND_MARK
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
+
+
+_MONEY = html.escape(MONEY_HOME)  # tiêu đề là HTML; nút bấm dùng chữ thường
+
+
+def _lower(label: str) -> str:
+    """Tên gọi chung đặt giữa câu: chỉ hạ chữ đầu («Chờ Shopee trả» → «chờ Shopee trả»)."""
+    return label[:1].lower() + label[1:]
 
 
 def _title(*path: str) -> str:
@@ -58,30 +76,57 @@ def home_text(
     lines += ["", f"💰 Báo giá đang chạy: {quote}",
               "👛 Ví khách: " + ("đang bật" if wallet_on else "đang tắt (bot chưa chi trả)")]
     if pending:
-        lines.append(f"🟡 Bản nháp chính sách chờ kích hoạt: <b>{pending}</b> (⚙️ Cài đặt → 💰 Chính sách)")
+        lines.append(f"🟡 Bản nháp chính sách chờ kích hoạt: <b>{pending}</b> (💰 Tiền &amp; ví → ⚙️ Cài đặt tiền → 💰 % hoàn)")
     return "\n".join(lines)
 
 
-def money_text(position, requests: int) -> str:
-    """Màn «💰 Tiền & ví»: tóm tắt tiền của anh, ví khách, yêu cầu rút. position: payouts.OwnerPosition."""
-    lines = ["⚙️ Quản trị › <b>Tiền &amp; ví</b>", ""]
-    if position.batches:
-        lines.append(f"💼 Anh thực nhận: <b>{format_vnd(position.owner_vnd)}</b> (sau phí, thuế, trả khách)")
-    else:
-        lines.append("💼 Anh thực nhận: chưa có kỳ Shopee nào đối soát khớp")
-    for item in position.upcoming:
-        if item.expected_vnd is not None:
-            lines.append(f"⏳ Sắp về kỳ {html.escape(item.period)}: {format_vnd(item.expected_vnd)} · "
-                         f"anh ~{format_vnd(item.expected_vnd - item.customer_vnd)}")
-    lines += [
-        f"👛 Khách: trong ví {format_vnd(position.in_wallet_vnd)} · chờ ngày giữ {format_vnd(position.waiting_vnd)}",
-        f"📤 Yêu cầu rút cần xử lý: <b>{requests}</b>",
-        "",
-        "• 💼 Ví của anh: hoa hồng → phí → thuế → trả khách → thực nhận.",
-        "• 👛 Ví khách: bật / tắt ví, duyệt yêu cầu rút, số dư từng khách.",
-        "• 💳 Đối soát Shopee: kỳ Shopee trả, xác nhận tiền về, khoản chênh lệch.",
-        "• 💹 Dòng tiền: hoa hồng, biên, chi phí theo kỳ.",
+def customer_money_lines(customers, fund=None) -> list[str]:
+    """Khối «tiền hoàn của khách» dùng chung: Tiền & ví, Ví khách, Dòng tiền. customers: money_flow.Customers."""
+    wait = f"⏳ {WAIT_SHOPEE}: <b>{format_vnd(customers.waiting_shopee_vnd)}</b>"
+    if customers.waiting_hold_vnd:
+        wait += f" · {_lower(WAIT_HOLD)}: {format_vnd(customers.waiting_hold_vnd)}"
+    lines = [
+        wait,
+        f"✅ {IN_WALLET}: <b>{format_vnd(customers.in_wallet_vnd)}</b>"
+        + (f" · {_lower(OWED_BACK)}: {format_vnd(customers.owed_back_vnd)}" if customers.owed_back_vnd else ""),
+        f"📤 {RESERVED}: <b>{format_vnd(customers.reserved_vnd)}</b> ({customers.open_requests} yêu cầu)",
+        f"💸 {PAID_OUT}: <b>{format_vnd(customers.paid_vnd)}</b>",
     ]
+    if fund is not None:
+        lines.append(f"🏦 {FUND_LEFT}: <b>{format_vnd(fund.headroom_vnd)}</b>" if fund.verified
+                     else f"🏦 {FUND_LEFT}: chưa có kỳ Shopee nào khớp")
+    return lines
+
+
+def money_todo(snap) -> list[str]:
+    """Việc tiền cần anh làm. snap: money_flow.Snapshot."""
+    items = []
+    if snap.customers.open_requests:
+        items.append(f"📤 {snap.customers.open_requests} yêu cầu rút cần xử lý (👛 Ví khách)")
+    for p in snap.upcoming:
+        if p.received_vnd is None and p.payout_vnd is not None:
+            items.append(f"🏦 Kỳ {html.escape(p.period)}: tiền về {format_vnd(p.payout_vnd)} thì xác nhận "
+                         "(💳 Kỳ thanh toán Shopee)")
+        elif p.received_vnd is not None:
+            items.append(f"🔍 Kỳ {html.escape(p.period)}: đã nhận tiền nhưng chưa khớp (💳 Kỳ thanh toán Shopee)")
+    if snap.open_adjustments:
+        items.append(f"🔁 {snap.open_adjustments} điều chỉnh chưa đóng (💳 Kỳ thanh toán Shopee → 🔍)")
+    return items
+
+
+def money_text(snap) -> str:
+    """Màn «💰 Tiền & ví». snap: money_flow.Snapshot."""
+    lines = [_title(_MONEY).rstrip("\n"), "", "💼 <b>Phần của anh</b>"]
+    if snap.settled:
+        lines.append(f"• {OWNER_REAL}: <b>{format_vnd(snap.owner_vnd)}</b> ({len(snap.settled)} kỳ đã về)")
+    else:
+        lines.append(f"• {OWNER_REAL}: chưa có kỳ Shopee nào khớp")
+    for p in snap.upcoming:
+        if p.owner_vnd is not None:
+            lines.append(f"• {OWNER_SOON}: ~{format_vnd(p.owner_vnd)} (kỳ {html.escape(p.period)})")
+    lines += ["", "👛 <b>Tiền hoàn của khách</b>", *customer_money_lines(snap.customers, snap.fund)]
+    todo = money_todo(snap)
+    lines += ["", "📌 <b>Cần làm</b>", *(f"• {t}" for t in todo)] if todo else ["", "✅ Không có việc tiền cần làm."]
     return "\n".join(lines)
 
 
@@ -91,7 +136,20 @@ def more_text() -> str:
         "• 📈 Tăng trưởng · 🎯 Mục tiêu · 🔍 Tìm khách / đơn\n"
         "• 🛒 Shopee · 🎵 TikTok: kết nối, đồng bộ đơn\n"
         "• 🛠 Vận hành: tình trạng bot, link giao khách\n"
-        "• ⚙️ Cài đặt: chính sách, thuế &amp; phí, điều khoản, thông báo"
+        "• ⚙️ Cài đặt: hạng thành viên, điều khoản, thông báo, thuật ngữ\n\n"
+        "ⓘ Cài đặt về tiền (% hoàn, dự phòng thuế &amp; phí, giữ tiền, rút tối thiểu) ở 💰 Tiền &amp; ví → ⚙️ Cài đặt tiền."
+    )
+
+
+def money_settings_text() -> str:
+    return (
+        f"{_title(_MONEY, 'Cài đặt tiền')}"
+        "• 💰 % hoàn: tỷ lệ chia cho khách, áp cho link mới.\n"
+        "• 🧾 Dự phòng thuế &amp; phí: bot trừ khi báo giá (ước tính, không phải thuế Shopee giữ thật).\n"
+        "• 👛 Giữ tiền &amp; rút: số ngày giữ, rút tối thiểu, hạn mức rút.\n"
+        "• ✍️ Chi phí vận hành: để tính lãi và hoà vốn.\n"
+        "• 🧪 Mô phỏng · 🧮 Hoà vốn: thử số, không đổi gì.\n"
+        "• ⚖️ Sẵn sàng chi trả: điều kiện mở ví, chỉ xem."
     )
 
 
@@ -99,11 +157,12 @@ def settings_text(*, rate_percent: int, membership_on: bool, calculator: str, pe
     v12 = calculator == "V1.2"
     pending_line = "không đọc được" if pending is None else str(pending)
     return (
-        "⚙️ Quản trị › <b>Cài đặt</b>\n\n"
-        f"• Báo giá: {quote_label(rate_percent, v12)} · cách tính {'V1.2' if v12 else 'V1.1 (chưa bật V1.2)'}\n"
+        "⚙️ Quản trị › Thêm › <b>Cài đặt</b>\n\n"
         f"• Hạng thành viên: {'Đã bật' if membership_on else 'Chưa bật'}\n"
-        f"• Bản nháp chính sách đang chờ: <b>{pending_line}</b>\n\n"
-        "ⓘ Sửa cấu hình không đổi báo giá khách cho tới khi kích hoạt. Báo giá đã lưu không tự tính lại."
+        f"• Báo giá đang chạy: {quote_label(rate_percent, v12)} · cách tính {'V1.2' if v12 else 'V1.1 (chưa bật V1.2)'} "
+        f"· bản nháp chờ: <b>{pending_line}</b>\n\n"
+        "ⓘ % hoàn, dự phòng thuế &amp; phí, giữ tiền và rút: 💰 Tiền &amp; ví → ⚙️ Cài đặt tiền. "
+        "Sửa cấu hình không đổi báo giá khách cho tới khi kích hoạt. Báo giá đã lưu không tự tính lại."
     )
 
 
@@ -153,7 +212,7 @@ def policy_text(
             f"• Phần khách ({rate_percent}% phần còn lại): <b>{format_vnd(customer_vnd)}</b>\n"
         )
     return (
-        _title("Chính sách")
+        _title(_MONEY, "Cài đặt tiền", "% hoàn")
         + _notice(notice)
         + "🟢 <b>ĐANG ÁP DỤNG</b>\n"
         + applied
@@ -215,7 +274,7 @@ def fee_text(
     """Mức dự phòng khách đang nhận (ADR-047). since None: mặc định cấu hình."""
     source = f"từ {since}" if since else "mặc định cấu hình"
     lines = [
-        _title("Thuế &amp; phí dự phòng") + _notice(notice) + "<i>ESTIMATE RESERVE</i>",
+        _title(_MONEY, "Cài đặt tiền", "Dự phòng thuế &amp; phí") + _notice(notice) + "<i>ESTIMATE RESERVE</i>",
         "",
         "🟢 <b>ĐANG ÁP DỤNG CHO KHÁCH</b>",
         f"• Loại hình: <b>{kind or 'Chưa khai báo'}</b>",
@@ -241,7 +300,7 @@ def fee_text(
 
 def simulation_prompt_text(error: str = "") -> str:
     return (
-        _title("Mô phỏng", "Nhập hoa hồng")
+        _title(_MONEY, "Cài đặt tiền", "Mô phỏng", "Nhập hoa hồng")
         + (f"⚠️ {error}\n\n" if error else "")
         + "Gửi hoa hồng giả định của một đơn, ví dụ <code>150000</code>, <code>150.000</code>, "
         "<code>150k</code> hoặc <code>1,5tr</code>.\n\n"
@@ -297,7 +356,7 @@ def simulation_text(
     diff = live.cashback_vnd - other.cashback_vnd
     sign = "+" if diff > 0 else ("-" if diff < 0 else "")
     lines = [
-        _title("Mô phỏng").rstrip("\n"),
+        _title(_MONEY, "Cài đặt tiền", "Mô phỏng").rstrip("\n"),
         "",
         "🟢 <b>ĐANG ÁP DỤNG CHO LINK MỚI</b>",
         f"• Báo giá: <b>{quote}</b>",
@@ -383,7 +442,7 @@ def rank_preview_text(
 
 
 def _share_title(step: str) -> str:
-    return _title("Chính sách", "Tỷ lệ chia", step)
+    return _title(_MONEY, "Cài đặt tiền", "% hoàn", "Tỷ lệ chia", step)
 
 
 def share_value_text(*, current: str, error: str = "") -> str:
@@ -439,7 +498,7 @@ def share_preview_text(
 
 
 def _reserve_title(step: str) -> str:
-    return _title("Thuế &amp; phí dự phòng", step)
+    return _title(_MONEY, "Cài đặt tiền", "Dự phòng thuế &amp; phí", step)
 
 
 def reserve_kind_text(*, current: str | None) -> str:
@@ -764,13 +823,10 @@ def _who_short(user_id: int, username: str | None) -> str:
     return f"@{username}" if username else str(user_id)
 
 
-def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, groups=None, problems=None) -> str:
-    """fund: payouts.FundPosition; groups: {nhãn: số yêu cầu}; problems: vi phạm bất biến (PLAN-078)."""
+def wallet_admin_text(settings, snap, requests, notice: str = "", groups=None, problems=None) -> str:
+    """Màn «👛 Ví khách». snap: money_flow.Snapshot; groups: {nhãn: số yêu cầu}; problems: vi phạm bất biến."""
     state = "🟢 <b>ĐANG BẬT</b>" if settings.enabled else "⚪ <b>ĐANG TẮT</b> · khách chưa thấy ví"
-    lines = [
-        _title("Ví khách").rstrip("\n"),
-        "",
-    ]
+    lines = [_title(_MONEY, "Ví khách").rstrip("\n"), ""]
     if notice:
         lines += [notice, ""]
     lines += [f"Trạng thái: {state}"]
@@ -779,25 +835,17 @@ def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, g
             "",
             "🔒 <b>KHOÁ TÀI CHÍNH</b> · không bật ví, không tạo yêu cầu rút, không duyệt chi hay xác nhận chuyển khoản",
             *(f"• {html.escape(reason)}" for reason in settings.locked_reasons if not reason.startswith("Chưa đạt:")),
-            *([f"• Còn {sum(r.startswith('Chưa đạt:') for r in settings.locked_reasons)} điều kiện chi trả PLAN-078 "
-               "chưa đạt (xem ⚖️ Sẵn sàng chi trả)"] if any(r.startswith("Chưa đạt:") for r in settings.locked_reasons) else []),
-            "ⓘ Bot vẫn tạo link, đồng bộ đơn và ghi tiền chờ duyệt bình thường.",
+            *([f"• Còn {sum(r.startswith('Chưa đạt:') for r in settings.locked_reasons)} điều kiện chi trả "
+               "chưa đạt (⚙️ Cài đặt tiền → ⚖️ Sẵn sàng chi trả)"]
+              if any(r.startswith("Chưa đạt:") for r in settings.locked_reasons) else []),
+            "ⓘ Bot vẫn tạo link, đồng bộ đơn và ghi tiền hoàn bình thường.",
         ]
     lines += [
-        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành, và chỉ vào ví khi Shopee đã duyệt, kỳ đã đối soát "
-        f"khớp · Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
+        f"• Tiền hoàn vào ví khi đơn nằm trong kỳ Shopee đã khớp, sau {settings.hold_days} ngày giữ · "
+        f"rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
         "",
-        f"⏳ Chờ duyệt: <b>{format_vnd(totals.pending_vnd)}</b>"
-        + (f" (trong đó đang giữ {format_vnd(totals.held_vnd)})" if getattr(totals, "held_vnd", 0) else ""),
-        f"✅ Trong ví chưa rút: <b>{format_vnd(max(0, totals.withdrawable_vnd))}</b>",
-        f"📤 Đang giữ cho yêu cầu rút: <b>{format_vnd(totals.requested_vnd)}</b> ({len(requests)} yêu cầu)",
-        f"💸 Đã trả (có chứng từ): <b>{format_vnd(totals.paid_vnd)}</b>",
+        *customer_money_lines(snap.customers, snap.fund),
     ]
-    if fund is not None:
-        lines.append(
-            f"🏦 Quỹ có chứng từ còn: <b>{format_vnd(fund.headroom_vnd)}</b>" if fund.verified
-            else "🏦 Quỹ có chứng từ: <b>Chưa xác minh</b> (chưa có kỳ Shopee đối soát khớp)"
-        )
     if groups:
         lines += ["", "📋 " + " · ".join(f"{label} {count}" for label, count in groups.items())]
     if problems:
@@ -807,65 +855,58 @@ def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, g
     return "\n".join(lines)
 
 
-def wallet_owner_text(position) -> str:
-    """position: payouts.OwnerPosition. Từ hoa hồng Shopee báo tới tiền thực nhận sau cùng của chủ bot."""
-    lines = [_title("Ví khách", "Ví của anh").rstrip("\n"), ""]
-    if not position.batches:
-        lines.append("Chưa có kỳ Shopee nào đối soát khớp (tiền về tài khoản khớp báo cáo Shopee).")
+def wallet_owner_text(snap) -> str:
+    """Màn «💼 Ví của anh»: từ hoa hồng Shopee báo tới thực nhận. snap: money_flow.Snapshot."""
+    lines = [_title(_MONEY, "Ví của anh").rstrip("\n"), ""]
+    if not snap.settled:
+        lines.append("Chưa có kỳ Shopee nào khớp (báo cáo Shopee khớp tiền về tài khoản).")
     else:
-        bot_kept = position.bot_commission_vnd - position.customer_vnd
+        kept = snap.bot_commission_vnd - snap.customer_vnd
+        costs = snap.fee_vnd + snap.tax_vnd
         lines += [
-            f"💼 <b>Thực nhận sau cùng: {format_vnd(position.owner_vnd)}</b>",
+            f"💼 <b>{OWNER_REAL}: {format_vnd(snap.owner_vnd)}</b>",
             "",
-            f"<b>1. Shopee trả</b> ({position.batches} kỳ đã về tài khoản, đối soát khớp)",
+            f"<b>1. Shopee trả</b> ({len(snap.settled)} kỳ đã về tài khoản, khớp)",
             _aligned([
-                ("Hoa hồng Shopee báo", position.commission_vnd, ""),
-                ("− Phí dịch vụ", position.fee_vnd, ""),
-                ("− Thuế Shopee giữ", position.tax_vnd, "TNCN + VAT"),
-                ("= Về tài khoản anh", position.received_vnd, ""),
+                ("Hoa hồng Shopee báo", snap.commission_vnd, ""),
+                ("− Phí dịch vụ", snap.fee_vnd, ""),
+                ("− Thuế Shopee giữ", snap.tax_vnd, "TNCN + VAT"),
+                ("= Về tài khoản anh", snap.received_vnd, ""),
             ]),
             "<b>2. Chia hoa hồng</b> (trước phí, thuế)",
             _aligned([
-                ("Đơn qua bot", position.bot_commission_vnd, ""),
-                ("  Trả khách", position.customer_vnd, ""),
-                ("  Anh giữ lại", bot_kept, ""),
-                ("Đơn riêng của anh", position.own_orders_vnd, ""),
+                ("Đơn qua bot", snap.bot_commission_vnd, ""),
+                ("  Tiền hoàn khách", snap.customer_vnd, ""),
+                ("  Anh giữ lại", kept, ""),
+                ("Đơn riêng của anh", snap.own_commission_vnd, ""),
             ]),
-            "<b>3. Thực nhận</b>",
+            f"<b>3. {OWNER_REAL}</b>",
             _aligned([
-                ("Về tài khoản anh", position.received_vnd, ""),
-                ("− Trả khách", position.customer_vnd, ""),
-                ("= Thực nhận", position.owner_vnd, ""),
+                ("Về tài khoản anh", snap.received_vnd, ""),
+                ("− Tiền hoàn khách", snap.customer_vnd, ""),
+                (f"= {OWNER_REAL}", snap.owner_vnd, ""),
             ]),
-            f"ⓘ = anh giữ lại {format_vnd(bot_kept)} + đơn riêng {format_vnd(position.own_orders_vnd)} − phí, thuế "
-            f"{format_vnd(position.costs_vnd)} (anh chịu cả phí, thuế của kỳ).",
-            "",
-            "<b>Tiền trả khách đang ở đâu</b>",
-            _aligned([
-                ("Chờ đủ ngày giữ", position.waiting_vnd, ""),
-                ("Trong ví khách", position.in_wallet_vnd, ""),
-                ("Đang chờ chuyển", position.reserved_vnd, ""),
-                ("Đã chuyển khách", position.paid_vnd, ""),
-            ]),
+            f"ⓘ = anh giữ lại {format_vnd(kept)} + đơn riêng {format_vnd(snap.own_commission_vnd)} − phí, thuế "
+            f"{format_vnd(costs)}. Phí, thuế cả kỳ trừ vào phần anh; khách nhận đúng số đã báo. "
+            "Tiền hoàn đang ở đâu: xem 👛 Ví khách.",
         ]
-    if position.upcoming:
-        lines += ["", "⏳ <b>Sắp về</b> (chưa tính vào thực nhận)"]
-        for item in position.upcoming:
-            head = f"• Kỳ {html.escape(item.period)}"
-            if item.expected_vnd is None:
-                lines.append(f"{head}: Shopee chưa báo số · trả khách {format_vnd(item.customer_vnd)}")
+    if snap.upcoming:
+        lines += ["", f"⏳ <b>{OWNER_SOON}</b> (chưa tính vào {_lower(OWNER_REAL)})"]
+        for p in snap.upcoming:
+            head = f"• Kỳ {html.escape(p.period)}"
+            if p.amount_vnd is None:
+                lines.append(f"{head}: Shopee chưa báo số · tiền hoàn khách {format_vnd(p.customer_vnd)}")
                 continue
             parts = []
-            if item.commission_vnd is not None:
-                parts.append(f"hoa hồng {format_vnd(item.commission_vnd)}")
-            if item.fee_vnd is not None:
-                parts.append(f"phí {format_vnd(item.fee_vnd)}")
-            parts.append("thuế chưa rõ" if item.tax_vnd is None else f"thuế ~{format_vnd(item.tax_vnd)}")
-            state = "đã về, chờ đối soát" if item.received else "chưa về"
+            if p.commission_vnd is not None:
+                parts.append(f"hoa hồng {format_vnd(p.commission_vnd)}")
+            if p.fee_vnd is not None:
+                parts.append(f"phí {format_vnd(p.fee_vnd)}")
+            parts.append("thuế chưa rõ" if p.tax_vnd is None else f"thuế ~{format_vnd(p.tax_vnd)}")
+            state = "đã về, chờ khớp" if p.received_vnd is not None else "chưa về"
             lines += [
-                f"{head} ({state}): " + " − ".join(parts) + f" = <b>{format_vnd(item.expected_vnd)}</b>",
-                f"  trả khách {format_vnd(item.customer_vnd)} · anh thực nhận "
-                f"~<b>{format_vnd(item.expected_vnd - item.customer_vnd)}</b>",
+                f"{head} ({state}): " + " − ".join(parts) + f" = <b>{format_vnd(p.amount_vnd)}</b>",
+                f"  tiền hoàn khách {format_vnd(p.customer_vnd)} · anh ~<b>{format_vnd(p.owner_vnd)}</b>",
             ]
     return "\n".join(lines)
 
@@ -885,7 +926,7 @@ def wallet_settings_text(settings, limits=None, notice: str = "") -> str:
             f"<b>{format_vnd(limits.daily_total_vnd)}</b>/ngày · <b>{format_vnd(limits.monthly_total_vnd)}</b>/tháng\n"
         )
     return (
-        _title("Ví khách", "Cài đặt")
+        _title(_MONEY, "Cài đặt tiền", "Giữ tiền &amp; rút")
         + (f"{notice}\n\n" if notice else "")
         + f"• Giữ tiền: <b>{settings.hold_days} ngày</b> sau khi đơn hoàn thành\n"
         f"• Rút tối thiểu: <b>{format_vnd(settings.min_withdraw_vnd)}</b>\n"
@@ -898,25 +939,25 @@ def wallet_settings_text(settings, limits=None, notice: str = "") -> str:
 
 
 def wallet_members_text(members) -> str:
-    lines = [_title("Ví khách", "Thành viên").rstrip("\n"), ""]
+    lines = [_title(_MONEY, "Ví khách", "Thành viên").rstrip("\n"), ""]
     if not members:
         return "\n".join(lines + ["Chưa có khách nào có đơn khớp link bot."])
     for rank, member in enumerate(members, start=1):
         balance = member["balance"]
         lines.append(
-            f"{rank}. {html.escape(_who_short(member['telegram_user_id'], member['username']))} · "
-            f"rút được <b>{format_vnd(balance.withdrawable_vnd)}</b> · chờ {format_vnd(balance.pending_vnd)} · "
-            f"đã nhận {format_vnd(balance.paid_vnd)} · {member['orders']} đơn"
+            f"{rank}. {html.escape(member['label'])} · {_lower(IN_WALLET)} <b>{format_vnd(balance.withdrawable_vnd)}</b> · "
+            f"{_lower(WAIT_SHOPEE)} {format_vnd(balance.pending_vnd)} · {_lower(PAID_OUT)} {format_vnd(balance.paid_vnd)} · "
+            f"{member['orders']} đơn"
         )
     return "\n".join(lines)
 
 
-def wallet_member_text(user_id: int, username: str | None, balance, entries, bank) -> str:
+def wallet_member_text(label: str, balance, entries, bank) -> str:
     lines = [
-        _title("Ví khách", _who_short(user_id, username)).rstrip("\n"),
+        _title(_MONEY, "Ví khách", html.escape(label)).rstrip("\n"),
         "",
-        f"✅ Rút được: <b>{format_vnd(balance.withdrawable_vnd)}</b> · ⏳ Chờ: {format_vnd(balance.pending_vnd)}",
-        f"📤 Chờ chuyển: {format_vnd(balance.requested_vnd)} · 💸 Đã nhận: {format_vnd(balance.paid_vnd)}",
+        f"✅ {IN_WALLET}: <b>{format_vnd(balance.withdrawable_vnd)}</b> · ⏳ {WAIT_SHOPEE}: {format_vnd(balance.pending_vnd)}",
+        f"📤 {RESERVED}: {format_vnd(balance.requested_vnd)} · 💸 {PAID_OUT}: {format_vnd(balance.paid_vnd)}",
         # Che số tài khoản ở màn xem khách (PLAN-077). Số đầy đủ chỉ hiện ở màn yêu cầu rút, nơi cần để chuyển khoản.
         "🏦 " + (f"{html.escape(bank.masked)} · {html.escape(bank.account_name)}" if bank else "Chưa khai"),
         "",
@@ -936,7 +977,7 @@ def payout_text(payout, username, bank_name: str, *, allocations, conditions, ev
     """Chi tiết một yêu cầu rút. Số tài khoản đầy đủ chỉ hiện ở bước Đang chuyển (show_account)."""
     amount = int(payout["amount_vnd"])
     account = payout["account_no"] if show_account else f"••••{payout['account_no'][-4:]}"
-    lines = [_title("Ví khách", payout["transfer_note"] or f"#{payout['id']}").rstrip("\n"), ""]
+    lines = [_title(_MONEY, "Ví khách", payout["transfer_note"] or f"#{payout['id']}").rstrip("\n"), ""]
     if notice:
         lines += [notice, ""]
     lines += [
@@ -961,9 +1002,9 @@ def payout_text(payout, username, bank_name: str, *, allocations, conditions, ev
     head, lines = lines, []
     lines += ["", "🔐 <b>Điều kiện</b>"] + [f"{'✅' if c.ok else '❌'} {html.escape(c.label)}" for c in conditions]
     if fund.verified:
-        lines.append(f"Quỹ có chứng từ còn: {format_vnd(fund.headroom_vnd)}")
+        lines.append(f"{FUND_LEFT}: {format_vnd(fund.headroom_vnd)}")
     else:
-        lines.append("Quỹ có chứng từ: <b>Chưa xác minh</b> (chưa có kỳ đối soát khớp)")
+        lines.append(f"{FUND_LEFT}: <b>chưa có kỳ Shopee nào khớp</b>")
     if show_account:
         lines += ["", f"{SCRUB_AFTER_SEND_MARK}: đúng số tiền, đúng nội dung. Kiểm tên người nhận app hiện ra trùng Chủ TK."]
         if qr_sent:

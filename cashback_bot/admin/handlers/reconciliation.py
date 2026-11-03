@@ -1,8 +1,8 @@
-"""Màn /admin → 🔗 Shopee Affiliate → 🧾 Đơn cần đối soát (PLAN-081). Chỉ đọc.
+"""Màn /admin → 🧾 Đơn & hoa hồng → 🔎 Theo dõi đơn (PLAN-081). Chỉ đọc.
 
 Liệt kê đơn qua bot đang chờ Shopee xác minh, tuổi theo giờ mua, lần cuối bot thấy đơn trong nguồn, nhãn theo dõi,
 lý do và việc cần làm. Không có nút đổi trạng thái hoa hồng, thanh toán hay sổ ví: kết luận chỉ đến từ dữ liệu Shopee
-thật hoặc chứng từ ở 🧾 Đối soát thanh toán (PLAN-075).
+thật hoặc chứng từ ở 💰 Tiền & ví → 💳 Kỳ thanh toán Shopee (PLAN-075).
 """
 
 from __future__ import annotations
@@ -52,14 +52,14 @@ class ReconciliationAdmin:
     def route(self, data: str, now: datetime | None = None) -> BotReply:
         if data == "c:rc:home":
             return self.home(now or datetime.now(timezone.utc))
-        return BotReply("Nút này không còn hiệu lực.", inline_keyboard=((("◀️ Đơn cần đối soát", "c:rc:home"),),))
+        return BotReply("Nút này không còn hiệu lực.", inline_keyboard=((("◀️ Theo dõi đơn", "c:rc:home"),),))
 
     def home(self, now: datetime) -> BotReply:
         rows = backlog(self.repo)
         counts: dict[str, int] = {}
         for row in rows:
             counts[row["tracking_status"]] = counts.get(row["tracking_status"], 0) + 1
-        lines = ["⚙️ Quản trị › Shopee Affiliate › <b>Đơn cần đối soát</b>", ""]
+        lines = ["⚙️ Quản trị › Đơn &amp; hoa hồng › <b>Theo dõi đơn</b>", ""]
         if not rows:
             lines.append("Chưa có đơn qua bot nào đang chờ Shopee xác minh.")
         else:
@@ -87,7 +87,7 @@ class ReconciliationAdmin:
             scope + "Đơn ngoài khung giữ nguyên số tiền và trạng thái; bot không tự kết luận Shopee đã duyệt, từ chối hay huỷ.",
         ]
         keyboard = (
-            (("🧾 Đối soát thanh toán", "c:sm:home"),),
-            (("◀️ Shopee Affiliate", "c:menu:shopee"),),
+            (("💳 Kỳ thanh toán Shopee", "c:sm:home"),),
+            (("◀️ Đơn & hoa hồng", "c:menu:orders"),),
         )
         return BotReply("\n".join(lines), inline_keyboard=keyboard)

@@ -1,4 +1,4 @@
-"""Màn /admin → 🔗 Shopee Affiliate → 🧾 Đối soát thanh toán (PLAN-075).
+"""Màn /admin → 💰 Tiền & ví → 💳 Kỳ thanh toán Shopee (PLAN-075; số tiền đọc từ money_flow).
 
 Xem kỳ thanh toán, chứng từ, đối chiếu tiền nhận, chênh lệch, đơn thuộc kỳ, lịch sử. Thao tác ghi:
 "👁 Đã xem chứng từ" (không phải xác minh), "🔄 Đối soát lại" (tính lại từ chứng từ đã có) và, từ PLAN-101 (chủ bot
@@ -14,22 +14,25 @@ import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from cashback_bot import shopee_payout
+from cashback_bot import money_flow, shopee_payout
 from cashback_bot.admin.notify.admin_notify import short_order
-from cashback_bot.commission_validation import PENDING, UNKNOWN
+from cashback_bot.admin.ui.glossary import MONEY_HOME
+from cashback_bot.admin.ui.views import money_todo
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot.settlement import MATCHED, REVERSED, EvidenceError, SettlementEngine
+from cashback_bot.settlement import REVERSED, EvidenceError, SettlementEngine
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 HOME = "c:sm:home"
-BACK_SHOPEE = (("◀️ Shopee Affiliate", "c:menu:shopee"),)
-BACK_HOME = (("◀️ Đối soát thanh toán", HOME),)
+MONEY = html.escape(MONEY_HOME)
+SECTION = "Kỳ thanh toán Shopee"
+BACK_MONEY = (("◀️ Tiền & ví", "c:menu:money"),)
+BACK_HOME = ((f"◀️ {SECTION}", HOME),)
 NOT_VERIFIED = "Chưa xác minh"
-LOCK_NOTE = (
-    "ⓘ «Chứng từ khớp» chỉ nói chứng từ Shopee, số học và tiền ngân hàng khớp nhau. "
-    "Ví khách vẫn khoá; thuế người nhận: <b>chưa duyệt</b>."
+MATCH_NOTE = (
+    "ⓘ «Khớp» = báo cáo Shopee, phép tính và tiền về tài khoản khớp nhau. Chỉ kỳ khớp mới tính vào "
+    "💼 Thực nhận và Quỹ chi trả; đơn trong kỳ khớp mới vào ví khách."
 )
 IMPORT_NOTE = (
     "📥 Nhập chứng từ bằng công cụ trên máy chủ: <code>python -m cashback_bot.settlement_import</code> "
@@ -41,7 +44,7 @@ STATUS_LABELS = {
     "DRAFT": "📝 Bản nháp",
     "EVIDENCE_PENDING": "⏳ Chờ chứng từ",
     "PARTIALLY_MATCHED": "🟡 Khớp một phần",
-    "MATCHED": "✅ Chứng từ khớp",
+    "MATCHED": "✅ Khớp",
     "DISPUTED": "🔴 Có chênh lệch",
     "REVERSED": "↩️ Đã đảo",
 }
@@ -99,6 +102,15 @@ def _title(*path: str) -> str:
     return "⚙️ Quản trị › " + " › ".join(path[:-1] + (f"<b>{path[-1]}</b>",))
 
 
+def _period_line(p: money_flow.Period) -> str:
+    label = STATUS_LABELS.get(p.status, p.status)
+    if p.received_vnd is not None:
+        money = f"Shopee báo {_money(p.payout_vnd)} · về tài khoản {format_vnd(p.received_vnd)}"
+    else:
+        money = f"Shopee báo {_money(p.payout_vnd)} · chưa về"
+    return f"• Kỳ <b>{html.escape(p.period)}</b> {label} · {money}"
+
+
 def _table(rows: list[tuple[str, str]]) -> str:
     width = max(len(label) for label, _ in rows)
     value_width = max(len(value) for _, value in rows)
@@ -150,7 +162,7 @@ class SettlementAdmin:
                     return BotReply(text, inline_keyboard=(BACK_HOME,))
                 return self.batch_detail(batch_id, f"⚠️ {text}")
             label = STATUS_LABELS.get(result.status, result.status)
-            return self.batch_detail(batch_id, f"✅ Đã ghi tài khoản nhận {format_vnd(amount)}. Kỳ: {label}. Ví khách vẫn khoá.")
+            return self.batch_detail(batch_id, f"✅ Đã ghi tài khoản nhận {format_vnd(amount)}. Kỳ: {label}.")
         adjust = _ADJUST.fullmatch(data)
         if adjust:
             return self._adjustment(admin_id, int(adjust.group(1)), bool(adjust.group(2)))
@@ -170,58 +182,33 @@ class SettlementAdmin:
 
     def home(self) -> BotReply:
         with self.repo.connect() as conn:
-            pending = conn.execute(
-                "SELECT COALESCE(SUM(net_commission_vnd), 0), COUNT(*) FROM shopee_conversions "
-                f"WHERE matched_link_id IS NOT NULL AND validation_status IN ('{PENDING}', '{UNKNOWN}')"
-            ).fetchone()
-            latest = conn.execute(
-                "SELECT * FROM settlement_batches WHERE status != 'REVERSED' ORDER BY period DESC, id DESC LIMIT 1"
-            ).fetchone()
-            review = int(conn.execute(
-                "SELECT (SELECT COUNT(*) FROM settlement_adjustments WHERE status = 'OPEN') + "
-                "(SELECT COUNT(*) FROM settlement_batches WHERE status IN ('DISPUTED', 'PARTIALLY_MATCHED'))"
-            ).fetchone()[0])
-            approved = None
-            if latest is not None:
-                row = conn.execute(
-                    "SELECT SUM(approved_vnd), COUNT(approved_vnd) FROM settlement_items i "
-                    "JOIN settlement_evidence e ON e.id = i.evidence_id "
-                    "WHERE i.batch_id = ? AND e.kind = 'shopee_validation_report' AND e.verification != 'SUPERSEDED'",
-                    (latest["id"],),
-                ).fetchone()
-                approved = row[0] if row[1] else None
-        result = None if latest is None else self.engine.evaluate(int(latest["id"]))
-        if latest is None:
-            head = "Chưa có kỳ thanh toán nào được nhập."
-        else:
-            head = f"Kỳ gần nhất: <b>{latest['period']}</b> · {STATUS_LABELS.get(latest['status'], latest['status'])}"
-        gap = None
-        if latest is not None and latest["shopee_payout_vnd"] is not None and latest["bank_received_vnd"] is not None:
-            gap = int(latest["bank_received_vnd"]) - int(latest["shopee_payout_vnd"])
-        rows = [
-            ("HH chờ xác minh (bot)", f"{format_vnd(int(pending[0]))} · {pending[1]} đơn"),
-            ("Shopee báo đã duyệt", _money(approved) + (" (chưa đối chiếu)" if approved is not None else "")),
-            ("Shopee báo thanh toán", _money(None if latest is None else latest["shopee_payout_vnd"])),
-            ("Tiền thực nhận", _money(None if latest is None else latest["bank_received_vnd"])),
-            ("Thuộc đơn Cashback Bot", _money(None if result is None or result.status != MATCHED else result.bot_vnd)),
-            ("Chênh lệch nhận/Shopee", "—" if gap is None else format_vnd(gap)),
-            ("Khoản cần kiểm tra", str(review)),
-        ]
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán"), "", head, _table(rows), LOCK_NOTE]
-        if latest is None:
-            lines += ["", IMPORT_NOTE]
+            snap = money_flow.snapshot(conn)
+        lines = [_title(MONEY, SECTION), ""]
+        if not snap.periods:
+            lines += ["Chưa có kỳ thanh toán nào.", "", IMPORT_NOTE]
+        lines += [_period_line(p) for p in reversed(snap.periods)]
+        todo = [t for t in money_todo(snap) if "Kỳ" in t or "điều chỉnh" in t]
+        if todo:
+            lines += ["", "📌 <b>Cần làm</b>", *(f"• {t}" for t in todo)]
+        lines += ["", MATCH_NOTE]
+        buttons = tuple(
+            ((f"{STATUS_LABELS.get(p.status, p.status).split(' ', 1)[0]} Kỳ {p.period} · {_money(p.amount_vnd)}",
+              f"c:sm:b:{p.batch_id}"),)
+            for p in reversed(snap.periods)
+        )
+        diff = f"🔍 Khoản chênh lệch ({snap.open_adjustments})" if snap.open_adjustments else "🔍 Khoản chênh lệch"
         keyboard = (
-            (("📅 Kỳ thanh toán", "c:sm:bl"), ("📄 Chứng từ", "c:sm:ev")),
-            (("🏦 Đối chiếu tiền nhận", "c:sm:bank"), ("🔍 Khoản chênh lệch", "c:sm:diff")),
-            (("🕘 Lịch sử đối soát", "c:sm:h"),),
-            BACK_SHOPEE,
+            *buttons,
+            ((diff, "c:sm:diff"), ("📄 Chứng từ", "c:sm:ev")),
+            (("🕘 Lịch sử", "c:sm:h"),),
+            BACK_MONEY,
         )
         return BotReply("\n".join(lines), inline_keyboard=keyboard)
 
     def batches(self) -> BotReply:
         with self.repo.connect() as conn:
             rows = conn.execute("SELECT * FROM settlement_batches ORDER BY period DESC, id DESC LIMIT 10").fetchall()
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Kỳ thanh toán"), ""]
+        lines = [_title(MONEY, SECTION, "Kỳ thanh toán"), ""]
         if not rows:
             lines += ["Chưa có kỳ nào.", "", IMPORT_NOTE]
         buttons = tuple(
@@ -240,10 +227,10 @@ class SettlementAdmin:
             ("Điều chỉnh", _money(batch["adjustments_vnd"])),
             ("Phí dịch vụ", _money(batch["fee_vnd"])),
             ("VAT trên phí", _money(batch["fee_vat_vnd"])),
-            ("Thuế khấu trừ", _money(batch["tax_withheld_vnd"])),
+            ("Thuế Shopee giữ", _money(batch["tax_withheld_vnd"])),
             ("Shopee báo chuyển", _money(batch["shopee_payout_vnd"])),
-            ("Số học kỳ phải là", _money(result.expected_payout_vnd)),
-            ("Ngân hàng nhận", _money(batch["bank_received_vnd"])),
+            ("Tính lại HH−phí−thuế", _money(result.expected_payout_vnd)),
+            ("Về tài khoản", _money(batch["bank_received_vnd"])),
         ]
         split = [
             ("Đơn qua bot (khớp)", format_vnd(result.bot_vnd)),
@@ -252,7 +239,7 @@ class SettlementAdmin:
             ("Cần kiểm tra", format_vnd(result.review_vnd)),
             ("Chưa phân bổ", _money(result.unallocated_vnd)),
         ]
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", f"Kỳ {batch['period']}"), ""]
+        lines = [_title(MONEY, SECTION, f"Kỳ {batch['period']}"), ""]
         if notice:
             lines += [notice, ""]
         lines += [
@@ -264,20 +251,33 @@ class SettlementAdmin:
             "💼 <b>Phân bổ</b>",
             _table(split),
         ]
-        if result.eligible_fund_vnd is not None:
-            lines.append(f"Quỹ có chứng từ của đơn bot: <b>{format_vnd(result.eligible_fund_vnd)}</b> (chưa phải tiền khách được rút)")
+        with self.repo.connect() as conn:
+            period = next((p for p in money_flow.snapshot(conn).periods if p.batch_id == batch_id), None)
+            approved = conn.execute(
+                "SELECT SUM(approved_vnd), COUNT(approved_vnd) FROM settlement_items i "
+                "JOIN settlement_evidence e ON e.id = i.evidence_id "
+                "WHERE i.batch_id = ? AND e.kind = 'shopee_validation_report' AND e.verification != 'SUPERSEDED'",
+                (batch_id,),
+            ).fetchone()
+        if approved[1]:
+            lines.append(f"Shopee báo đã duyệt (báo cáo xác thực): {format_vnd(int(approved[0]))} (chưa đối chiếu)")
+        if period is not None and period.owner_vnd is not None:
+            lines.append(
+                f"Tiền hoàn khách của kỳ: <b>{format_vnd(period.customer_vnd)}</b> · phần anh"
+                + ("" if period.matched else " (dự kiến)") + f": <b>{format_vnd(period.owner_vnd)}</b>"
+            )
         if result.discrepancies:
             lines += ["", "🔍 <b>Chênh lệch</b>"]
             for item in result.discrepancies[:12]:
                 amount = "" if item.amount_vnd is None else f" · {format_vnd(item.amount_vnd)}"
                 ref = f" · <code>{html.escape(short_order(item.detail))}</code>" if item.detail else ""
                 lines.append(f"• {DISCREPANCY_LABELS.get(item.code, item.code)}{amount}{ref}")
-        lines += ["", LOCK_NOTE]
+        lines += ["", MATCH_NOTE]
         keyboard = (
             shopee_payout.confirm_buttons(batch),
             (("📦 Đơn thuộc kỳ", f"c:sm:items:{batch_id}"), ("📄 Chứng từ kỳ", f"c:sm:ev:{batch_id}")),
             ((("🔄 Đối soát lại", f"c:sm:rc:{batch_id}"),) if batch["status"] != REVERSED else ()),
-            (("◀️ Kỳ thanh toán", "c:sm:bl"),),
+            BACK_HOME,
         )
         return BotReply("\n".join(lines), inline_keyboard=tuple(row for row in keyboard if row))
 
@@ -288,7 +288,7 @@ class SettlementAdmin:
                 "WHERE i.batch_id = ? AND e.verification != 'SUPERSEDED' ORDER BY i.is_bot DESC, i.id LIMIT 20",
                 (batch_id,),
             ).fetchall()
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Đơn thuộc kỳ"), ""]
+        lines = [_title(MONEY, SECTION, "Đơn thuộc kỳ"), ""]
         if not rows:
             lines.append("Kỳ này chưa có khoản theo đơn.")
         for row in rows:
@@ -308,7 +308,7 @@ class SettlementAdmin:
         where, args = ("WHERE batch_id = ?", (batch_id,)) if batch_id else ("", ())
         with self.repo.connect() as conn:
             rows = conn.execute(f"SELECT * FROM settlement_evidence {where} ORDER BY id DESC LIMIT 10", args).fetchall()
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Chứng từ"), ""]
+        lines = [_title(MONEY, SECTION, "Chứng từ"), ""]
         if not rows:
             lines += ["Chưa có chứng từ nào.", "", IMPORT_NOTE]
         buttons = tuple(
@@ -325,7 +325,7 @@ class SettlementAdmin:
             ).fetchone()
         if row is None:
             return BotReply("Không tìm thấy chứng từ này.", inline_keyboard=(BACK_HOME,))
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Chứng từ"), ""]
+        lines = [_title(MONEY, SECTION, "Chứng từ"), ""]
         if notice:
             lines += [notice, ""]
         lines += [
@@ -351,7 +351,7 @@ class SettlementAdmin:
             rows = conn.execute(
                 "SELECT * FROM settlement_batches WHERE status != 'REVERSED' ORDER BY period DESC, id DESC LIMIT 10"
             ).fetchall()
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Đối chiếu tiền nhận"), ""]
+        lines = [_title(MONEY, SECTION, "Đối chiếu tiền nhận"), ""]
         if not rows:
             lines += ["Chưa có kỳ nào để đối chiếu.", "", IMPORT_NOTE]
         for row in rows:
@@ -377,7 +377,7 @@ class SettlementAdmin:
             return self.differences("Điều chỉnh này đã được xử lý trước đó.")
         order = html.escape(short_order(row["order_sn"] or row["conversion_id"]))
         text = (
-            f"{_title('Shopee Affiliate', 'Đối soát thanh toán', 'Đóng điều chỉnh')}"
+            f"{_title(MONEY, SECTION, 'Đóng điều chỉnh')}"
             f"Đơn <code>{order}</code>: {format_vnd(int(row['old_vnd']))} → <b>{format_vnd(int(row['new_vnd']))}</b> "
             f"({format_vnd(int(row['delta_vnd']))})\n\n"
             "Đóng nghĩa là anh đã xem và chấp nhận số mới. Bot không đổi tiền khách ở bước này: Shopee giảm hoa hồng "
@@ -397,7 +397,7 @@ class SettlementAdmin:
                 "SELECT a.*, c.order_sn FROM settlement_adjustments a LEFT JOIN shopee_conversions c ON c.conversion_id = a.conversion_id "
                 "WHERE a.status = 'OPEN' ORDER BY a.id DESC LIMIT 10"
             ).fetchall()
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Khoản chênh lệch"), ""]
+        lines = [_title(MONEY, SECTION, "Khoản chênh lệch"), ""]
         if notice:
             lines += [notice, ""]
         if not batches and not adjustments:
@@ -430,7 +430,7 @@ class SettlementAdmin:
             "reconcile": "đối soát", "batch_reverse": "đảo kỳ", "adjustment_open": "ghi điều chỉnh",
             "adjustment_resolve": "đóng điều chỉnh",
         }
-        lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Lịch sử"), ""]
+        lines = [_title(MONEY, SECTION, "Lịch sử"), ""]
         if not rows:
             lines.append("Chưa có thao tác đối soát nào.")
         for row in rows:

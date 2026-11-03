@@ -26,7 +26,7 @@ from cashback_bot.admin.ui import (
     wallet_settings_keyboard,
     wallet_settings_text,
 )
-from cashback_bot import payout_readiness, payouts
+from cashback_bot import insights, money_flow, payout_readiness, payouts
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, payout_notice
 from cashback_bot.money import format_vnd
@@ -58,7 +58,7 @@ _ERRORS = {
     "locked": "Còn khoá tài chính.",
     "terms": "Khách chưa đồng ý điều khoản chi trả.",
     "bank_verified": "Tài khoản người nhận chưa xác minh.",
-    "fund": "Quỹ có chứng từ không đủ.",
+    "fund": "Quỹ chi trả không đủ.",
     "limits": "Vượt hạn mức hoặc hạn mức chưa duyệt.",
     "not_found": "Không tìm thấy yêu cầu này.",
     "source_changed": "Có khoản nguồn không còn trong ví (Shopee huỷ / giảm, hoặc kỳ bị đảo). Chuyển «Cần xử lý» "
@@ -135,10 +135,13 @@ class WalletAdmin:
             return self._settings(self._change_limits(admin_id, now, **{_LIMIT_FIELDS[limit.group(1)]: int(limit.group(2))}))
         if data == "c:wl:own":
             with self.repo.connect() as conn:
-                position = payouts.owner_position(conn)
-            return BotReply(wallet_owner_text(position), inline_keyboard=((MONEY_BACK[0], WALLET_ADMIN_BACK[0]),))
+                snap = money_flow.snapshot(conn)
+            return BotReply(wallet_owner_text(snap), inline_keyboard=((MONEY_BACK[0], WALLET_ADMIN_BACK[0]),))
         if data == "c:wl:members":
             members = self.wallet.members()
+            with self.repo.connect() as conn:
+                for member in members:
+                    member["label"] = insights.user_label(conn, member["telegram_user_id"])
             return BotReply(wallet_members_text(members), inline_keyboard=wallet_members_keyboard(members))
         member = _MEMBER.fullmatch(data)
         if member:
@@ -159,14 +162,14 @@ class WalletAdmin:
         settings = self.wallet.settings()
         requests = self.wallet.open_requests()
         with self.repo.connect() as conn:
-            fund = payouts.fund_position(conn)
+            snap = money_flow.snapshot(conn)
             problems = payouts.invariants(conn)
             groups = {
                 PAYOUT_STATUS.get(status, status): int(count)
                 for status, count in conn.execute("SELECT status, COUNT(*) FROM cashback_payouts GROUP BY status")
             }
         return BotReply(
-            wallet_admin_text(settings, self.wallet.totals(), requests, notice, fund=fund, groups=groups, problems=problems),
+            wallet_admin_text(settings, snap, requests, notice, groups=groups, problems=problems),
             inline_keyboard=wallet_admin_keyboard(settings, requests),
         )
 
@@ -197,11 +200,11 @@ class WalletAdmin:
         )
 
     def _member(self, user_id: int, notice: str = "") -> BotReply:
-        user = self.repo.get_user(user_id)
         bank = self.wallet.bank(user_id)
+        with self.repo.connect() as conn:
+            label = insights.user_label(conn, user_id)
         text = wallet_member_text(
-            user_id,
-            None if user is None else user["username"],
+            label,
             self.wallet.balance(user_id),
             self.wallet.entries(user_id, limit=10),
             bank,

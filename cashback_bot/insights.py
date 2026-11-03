@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from statistics import median
 
-from cashback_bot import payouts
+from cashback_bot import money_flow, payouts
 
 ICT = timezone(timedelta(hours=7))
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
@@ -130,7 +130,6 @@ class Money:
     reserve: int
     cancelled_orders: int
     cancelled_net: int
-    approved_net: int
     settled_net: int
     settled_cashback: int
     settled_reserve: int
@@ -179,8 +178,6 @@ def money(conn: sqlite3.Connection, since: datetime, days: int, user_id: int | N
           COUNT(DISTINCT CASE WHEN e.status = 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0
                               THEN e.conversion_id END) AS cancelled_orders,
           COALESCE(SUM(CASE WHEN e.status = 'cancelled' THEN e.commission_vnd END), 0) AS cancelled_net,
-          COALESCE(SUM(CASE WHEN e.status != 'cancelled' AND c.validation_status = 'APPROVED'
-                            THEN e.commission_vnd END), 0) AS approved_net,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' AND c.settlement_status = 'SETTLED'
                             THEN e.commission_vnd END), 0) AS settled_net,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' AND c.settlement_status = 'SETTLED'
@@ -208,51 +205,9 @@ def money(conn: sqlite3.Connection, since: datetime, days: int, user_id: int | N
     return Money(
         int(row["orders"]), int(row["customers"]), int(conv[0]), int(conv[1]), int(conv[2]), int(row["net"]),
         int(row["cashback"]), int(row["reserve"]), int(row["cancelled_orders"]), int(row["cancelled_net"]),
-        int(row["approved_net"]), int(row["settled_net"]), int(row["settled_cashback"]), int(row["settled_reserve"]),
+        int(row["settled_net"]), int(row["settled_cashback"]), int(row["settled_reserve"]),
         ops_cost_monthly(conn), days,
     )
-
-
-@dataclass(frozen=True)
-class Liabilities:
-    """Nghĩa vụ với khách tại một thời điểm, và tiền Shopee đã trả thật."""
-
-    pending: int
-    holding: int
-    in_wallet: int
-    requested: int
-    paid: int
-    negative: int
-    shopee_paid: int
-    fund_headroom: int | None
-    upcoming: int
-
-
-def liabilities(conn: sqlite3.Connection) -> Liabilities:
-    entry = conn.execute(
-        """
-        SELECT COALESCE(SUM(CASE WHEN status = 'pending' THEN cashback_vnd END), 0),
-               COALESCE(SUM(CASE WHEN status = 'holding' THEN cashback_vnd END), 0)
-        FROM cashback_entries
-        """
-    ).fetchone()
-    requested, paid = payouts.payout_totals(conn)
-    in_wallet = negative = 0
-    for (user,) in conn.execute("SELECT DISTINCT telegram_user_id FROM cashback_entries WHERE status = 'available'"):
-        left = payouts.withdrawable(conn, int(user))
-        in_wallet += max(0, left)
-        negative += min(0, left)
-    shopee = conn.execute(
-        "SELECT COALESCE(SUM(bank_received_vnd), 0) FROM settlement_batches WHERE status = 'MATCHED'"
-    ).fetchone()[0]
-    fund = payouts.fund_position(conn)
-    upcoming = conn.execute(
-        "SELECT COALESCE(SUM(e.commission_vnd), 0) FROM cashback_entries e JOIN shopee_conversions c "
-        "ON c.conversion_id = e.conversion_id WHERE e.status != 'cancelled' AND c.validation_status = 'APPROVED' "
-        "AND COALESCE(c.settlement_status, '') != 'SETTLED'"
-    ).fetchone()[0]
-    return Liabilities(int(entry[0]), int(entry[1]), in_wallet, requested, paid, -negative, int(shopee),
-                       fund.headroom_vnd if fund.verified else None, int(upcoming))
 
 
 @dataclass(frozen=True)
@@ -1334,7 +1289,7 @@ class Overview:
     period: str
     since: datetime
     money: Money
-    liabilities: Liabilities
+    money_flow: money_flow.Snapshot
     timing: CashTiming
     growth: Growth
     funnel: Funnel
@@ -1359,7 +1314,7 @@ def overview(conn: sqlite3.Connection, period: str, now: datetime, sync_interval
         channels[name] = (len(group), sum(c.orders for c in group), sum(c.margin for c in group))
     chart_since = since if period != "all" else now - timedelta(days=90)
     return Overview(
-        period, since, money(conn, since, days), liabilities(conn), cash_timing(conn), growth(conn, since, now),
+        period, since, money(conn, since, days), money_flow.snapshot(conn), cash_timing(conn), growth(conn, since, now),
         funnel(conn, since), concentration(people), sort_customers(people)[:5],
         top_categories(conn, since), top_categories(conn, since, "shop_name"), channels,
         daily(conn, chart_since, now), cohorts(conn, now), operations(conn, now, sync_interval_minutes),

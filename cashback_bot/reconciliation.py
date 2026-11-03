@@ -39,7 +39,7 @@ NEXT_ACTIONS = {
     "OBSERVED_RECENTLY": None,
     "APPROACHING_WINDOW": "Theo dõi; sau mốc 30 ngày bot không còn đọc được đơn này",
     "OUTSIDE_WINDOW_UNVERIFIED": "Kiểm tra trạng thái đơn trên Shopee Affiliate",
-    "RECONCILIATION_REQUIRED": "Đối soát đơn với Shopee; có chứng từ thì nhập ở 🧾 Đối soát thanh toán",
+    "RECONCILIATION_REQUIRED": "Đối soát đơn với Shopee; có chứng từ thì nhập ở 💰 Tiền & ví → 💳 Kỳ thanh toán Shopee",
     "RECONCILED": None,
 }
 
@@ -162,7 +162,7 @@ def _alerts(conn: sqlite3.Connection, repo: TrackingRepository, summary: Summary
             order = _order_ref(conn, conversion_id)
             text = (
                 f"🧾 <b>Đơn cần đối soát</b>\n\nĐơn {order}: {REASON_LABELS.get(reason, reason)}.\n"
-                "Bot không tự kết luận đơn bị từ chối hay huỷ. Xem /admin → 🔗 Shopee Affiliate → 🧾 Đơn cần đối soát."
+                "Bot không tự kết luận đơn bị từ chối hay huỷ. Xem /admin → 🧾 Đơn &amp; hoa hồng → 🔎 Theo dõi đơn."
                 if after == "RECONCILIATION_REQUIRED" else
                 f"✅ <b>Đã có kết quả cho đơn {order}</b>\n\nĐơn từng ngoài khung đồng bộ nay đã có dữ liệu Shopee / chứng từ."
             )
@@ -187,7 +187,7 @@ def _alerts(conn: sqlite3.Connection, repo: TrackingRepository, summary: Summary
         lines.append(f"• {counts['OUTSIDE_WINDOW_UNVERIFIED']} đơn đã ngoài khung, chưa có nguồn cập nhật mới.")
     if counts["RECONCILIATION_REQUIRED"]:
         lines.append(f"• {counts['RECONCILIATION_REQUIRED']} đơn cần đối soát.")
-    lines.append("\nXem /admin → 🔗 Shopee Affiliate → 🧾 Đơn cần đối soát.")
+    lines.append("\nXem /admin → 🧾 Đơn &amp; hoa hồng → 🔎 Theo dõi đơn.")
     enqueue_event(conn, event_key=f"recon_digest:{today}:{fingerprint}", event_type="RECON_DIGEST", chat_id=chat,
                   message_html="\n".join(lines), now=stamp)
     conn.execute(

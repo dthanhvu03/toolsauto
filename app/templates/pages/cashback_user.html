@@ -30,10 +30,9 @@
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
   <div class="cb-card">
-    <div class="cb-h">Tiền thực và hồ sơ</div>
-    <div class="cb-row"><span>✅ Thực (Shopee đã trả): ròng</span><span>{{ vnd(lifetime.settled_net) }}</span></div>
-    <div class="cb-row"><span>✅ Thực: biên</span><span>{{ vnd(lifetime.settled_margin) }}</span></div>
-    <div class="cb-row"><span>Shopee đã duyệt</span><span>{{ vnd(lifetime.approved_net) }}</span></div>
+    <div class="cb-h">Đơn Shopee đã trả và hồ sơ</div>
+    <div class="cb-row"><span>✅ Đơn Shopee đã trả (kỳ khớp): HH ròng</span><span>{{ vnd(lifetime.settled_net) }}</span></div>
+    <div class="cb-row"><span>✅ Biên ước tính của các đơn đó</span><span>{{ vnd(lifetime.settled_margin) }}</span></div>
     <div class="cb-row"><span>Mất do huỷ</span><span class="cb-bad">{{ vnd(lifetime.cancelled_net) }} ({{ lifetime.cancelled_orders }} đơn)</span></div>
     <div class="cb-row"><span>Tài khoản nhận tiền</span><span>{{ prof.bank or 'chưa khai' }}{% if prof.bank %} · {{ prof.bank_state }}{% endif %}</span></div>
     <div class="cb-row"><span>Điều khoản đã đồng ý</span><span>{{ prof.terms or 'chưa' }}</span></div>

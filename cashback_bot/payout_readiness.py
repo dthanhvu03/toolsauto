@@ -49,7 +49,7 @@ def system_conditions(conn: sqlite3.Connection, now: float | None = None) -> lis
         result.append(Condition(f"decision_{topic}", label, row is not None and row["status"] == "APPROVED", "system"))
     result.append(Condition("limits_active", "Bảng số hạn mức đã duyệt, đang dùng",
                             payouts.active_limits(conn) is not None, "system"))
-    result.append(Condition("settlement_matched", "Ít nhất một kỳ Shopee đối soát khớp (quỹ có chứng từ)",
+    result.append(Condition("settlement_matched", "Ít nhất một kỳ Shopee đối soát khớp (có quỹ chi trả)",
                             payouts.fund_position(conn).verified, "system"))
     row = conn.execute("SELECT value FROM bot_state WHERE key = 'backup_last_ok'").fetchone()
     try:
@@ -93,7 +93,7 @@ def payout_conditions(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime)
     limit = payouts.check_limits(conn, int(row["telegram_user_id"]), int(row["amount_vnd"]), now, exclude_id=int(row["id"]))
     return [
         Condition("bank_verified", "Tài khoản nhận tiền đã xác minh (không phải chỉ tạo được QR)", status == "VERIFIED", "payout"),
-        Condition("fund", "Quỹ có chứng từ còn đủ cho yêu cầu này", fund.verified and fund.headroom_vnd >= 0, "payout"),
+        Condition("fund", "Quỹ chi trả còn đủ cho yêu cầu này", fund.verified and fund.headroom_vnd >= 0, "payout"),
         Condition("limits", "Trong hạn mức rút", limit is None, "payout"),
         Condition("sources", "Các khoản nguồn còn trong ví (Shopee không huỷ / giảm, kỳ không bị đảo)",
                   payouts.sources_available(conn, int(row["id"])), "payout"),

@@ -2,7 +2,7 @@
 
 {% block title %}Cashback · Dòng tiền{% endblock %}
 {% block page_title %}Cashback · Dòng tiền & khách hàng{% endblock %}
-{% block page_subtitle %}Tạm tính = mọi đơn chưa huỷ. Thực = đơn Shopee đã trả, đối soát khớp. Chỉ đọc, cùng số với /admin Telegram.{% endblock %}
+{% block page_subtitle %}Ước tính = mọi đơn chưa huỷ, theo dự phòng. Theo chứng từ = các kỳ Shopee đã về tài khoản và khớp. Chỉ đọc, cùng số với /admin Telegram.{% endblock %}
 
 {% block head_extra %}
 <script src="{{ config.CDN_CHARTJS }}"></script>
@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block content %}
-{% set m = view.money %}{% set d = view.liabilities %}{% set g = view.growth %}{% set f = view.funnel %}
+{% set m = view.money %}{% set snap = view.money_flow %}{% set d = snap.customers %}{% set g = view.growth %}{% set f = view.funnel %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="cb-tabs flex flex-wrap gap-2">
     {% for key, label in periods.items() %}
@@ -87,7 +87,7 @@
   <div class="cb-card">
     <div class="cb-h">Từ hoa hồng tới túi anh</div>
     {% set steps = [("Hoa hồng gộp", m.gross), ("− Phí MCN", -m.mcn_fee), ("= Hoa hồng ròng", m.net),
-                    ("− Phần khách", -m.cashback), ("− Dự phòng thuế / phí", -m.reserve), ("= Biên", m.margin)] %}
+                    ("− Phần khách", -m.cashback), ("− Dự phòng thuế / phí", -m.reserve), ("= Biên (ước tính)", m.margin)] %}
     {% for label, value in steps %}
     <div class="cb-row"><span>{{ label }}</span><span class="{{ 'cb-bad' if value < 0 }}">{{ vnd(value) }}</span></div>
     {% endfor %}
@@ -95,21 +95,23 @@
     <div class="cb-row"><span>− Vận hành / hạ tầng</span><span class="cb-bad">{{ vnd(-m.ops_cost) }}</span></div>
     <div class="cb-row"><strong>= Lãi</strong><strong>{{ vnd(m.profit) }}</strong></div>
     {% endif %}
-    <div class="cb-row mt-3"><span>✅ Thực: ròng / biên</span><span>{{ vnd(m.settled_net) }} / {{ vnd(m.settled_margin) }}</span></div>
-    <div class="cb-row"><span>⏳ Shopee đã duyệt, chưa trả</span><span>{{ vnd(d.upcoming) }}</span></div>
+    <div class="cb-row mt-3"><span>💼 Thực nhận (theo chứng từ, mọi kỳ)</span><span>{{ vnd(snap.owner_vnd) if snap.settled else 'chưa có kỳ khớp' }}</span></div>
+    {% for p in snap.upcoming %}{% if p.amount_vnd is not none %}
+    <div class="cb-row"><span>⏳ Sắp về kỳ {{ p.period }} · anh ~{{ vnd(p.owner_vnd) }}</span><span>{{ vnd(p.amount_vnd) }}</span></div>
+    {% endif %}{% endfor %}
   </div>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-5">
   <div class="cb-card">
-    <div class="cb-h">Nghĩa vụ với khách (hiện tại)</div>
-    {% for label, value in [("Chờ Shopee duyệt", d.pending), ("Đang giữ, chờ đủ điều kiện", d.holding),
-                            ("Trong ví, chưa rút", d.in_wallet), ("Đang chờ chuyển", d.requested), ("Đã trả", d.paid),
-                            ("Đang trừ lại (thu hồi)", d.negative)] %}
+    <div class="cb-h">Tiền hoàn của khách (hiện tại)</div>
+    {% for label, value in [("Chờ Shopee trả", d.waiting_shopee_vnd), ("Chờ đủ ngày giữ", d.waiting_hold_vnd),
+                            ("Trong ví", d.in_wallet_vnd), ("Đang chờ chuyển", d.reserved_vnd), ("Đã chuyển", d.paid_vnd),
+                            ("Đang trừ lại", d.owed_back_vnd)] %}
     <div class="cb-row"><span>{{ label }}</span><span>{{ vnd(value) }}</span></div>
     {% endfor %}
-    <div class="cb-row"><span>Shopee đã trả về tài khoản</span><span>{{ vnd(d.shopee_paid) }}</span></div>
-    <div class="cb-row"><span>Quỹ có chứng từ còn</span><span>{{ 'chưa có kỳ khớp' if d.fund_headroom is none else vnd(d.fund_headroom) }}</span></div>
+    <div class="cb-row"><span>Shopee đã chuyển về tài khoản</span><span>{{ vnd(snap.received_vnd) }}</span></div>
+    <div class="cb-row"><span>Quỹ chi trả còn</span><span>{{ vnd(snap.fund.headroom_vnd) if snap.fund.verified else 'chưa có kỳ khớp' }}</span></div>
   </div>
   <div class="cb-card">
     <div class="cb-h">Phễu (khách tạo link trong kỳ)</div>
