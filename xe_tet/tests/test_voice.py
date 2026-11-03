@@ -306,3 +306,21 @@ def test_rollcall_read_as_one_priority_line_without_walking_people_on():
     a.observe({"type": "rollcall", "names": ["Minh Anh", "Thu Hà"], "name": "Minh Anh", "seconds": 45}, 0.0)
     (prio, _, text, names, _), = a.queue
     assert prio == BOARD and names == [] and "Minh Anh" in text and "Thu Hà" in text
+
+
+BOARD_WINDOW_S = voice.BOARD_WINDOW + 0.1
+
+
+def test_names_pending_until_every_boarding_name_is_read():
+    a = announcer()
+    assert not a.names_pending(0.0)
+    a.observe({"type": "ticket", "name": "An", "province": "Huế"}, 0.0)
+    assert a.names_pending(0.0)  # đang gom
+    a.tick(BOARD_WINDOW_S)
+    assert not a.boarding and a.names_pending(0.0)  # đã thành câu, đang chờ đọc
+    a.queue.clear()
+    a.names_until = 5.0
+    assert a.names_pending(4.0) and not a.names_pending(6.0)
+    off = announcer({"voice_on": False})
+    off.observe({"type": "ticket", "name": "An", "province": "Huế"}, 0.0)
+    assert not off.names_pending(0.0)

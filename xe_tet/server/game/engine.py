@@ -82,6 +82,7 @@ RELIEF_MAX_GIFT = 6  # xe do quà được vượt mốc tự động
 RELIEF_GIFT_TIER = 3  # bậc băng rôn (100 xu): người đang giữ chỗ đạt bậc này → xe tăng cường chạy ngay làn của họ
 STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
+NAME_HOLD_MAX = 25.0  # hết giờ đón mà lơ xe còn đọc tên người lên xe: xe chờ đọc xong, tối đa chừng này giây (anh 03/11)
 ROLL_IDLE = 15 * 60.0  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng quá chừng này → lơ xe gọi tên trước khi xếp giường
 ROLL_WAIT = 45.0  # giây chờ người được gọi tên thả tim / bình luận; giường giữ cho họ trong lúc chờ
 ROLL_MISS_MAX = 2  # lỡ điểm danh chừng này lần thì bỏ vé (lần đầu chỉ lùi xuống chuyến sau)
@@ -415,7 +416,9 @@ class Engine:
         self.roll_on = True  # anh bật / tắt điểm danh trên /control
         self.roll_idle = ROLL_IDLE
         self.roll_wait = ROLL_WAIT
-        self.rollcalls: dict[str, float] = {}  # uid đang được gọi tên → hết giờ chờ lúc này
+        self.rollcalls: dict[str, float] = {}
+        self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
+        self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
         self.race_leader: str | None = None
         self.race_winner: str | None = None
@@ -754,6 +757,7 @@ class Engine:
             v.likes_trip = 0
             v.gift_trip = 0
             v.switched = False
+        self.name_hold_from = None
         self._set_phase("BOARDING", now, 0.0)
         self._fill_from_queue()  # sau khi vào pha đón: người im lặng lâu được điểm danh trước khi xếp giường
         self.phase_until = now + self._board_time()  # giờ đón theo số giường còn trống sau khi xếp
@@ -910,6 +914,13 @@ class Engine:
             # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
             # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
             self._ticket(self.viewers[uid], free, changed=False, promoted=True)
+
+    def _wait_names(self, now: float) -> bool:
+        if not (self.names_pending and self.bus.riders()):
+            return False
+        if self.name_hold_from is None:
+            self.name_hold_from = now
+        return now - self.name_hold_from < NAME_HOLD_MAX
 
     def _needs_roll(self, uid: str) -> bool:
         """Điểm danh chỉ lúc tới lượt xếp giường ở bến (xe chính đang đón), với người im lặng lâu — im lặng vẫn có thể đang xem."""
@@ -1341,6 +1352,8 @@ class Engine:
             self._maybe_switch_station(now)
             if now >= self.phase_until and self._held_seats():
                 self.phase_until = min(self.rollcalls.values())  # đang chờ người được gọi tên: đợi hết giờ điểm danh rồi chạy
+            elif now >= self.phase_until and self._wait_names(now):
+                self.phase_until = now + 1.0  # lơ xe đọc chưa xong tên người lên xe: chờ đọc hết rồi mới chạy
             elif now >= self.phase_until:
                 if self.bus.riders():
                     self._depart(now)
@@ -2549,6 +2562,7 @@ class Engine:
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
+            "name_hold": self.phase == "BOARDING" and self.name_hold_from is not None,
             "rollcall": [{"name": self.viewers[u].name, "left": round(max(0.0, t - self.last_now))}
                          for u, t in self.rollcalls.items()][:5],
             "halt": {"place": self.halt["place"], "people": self.halt["people"],

@@ -1921,3 +1921,26 @@ def test_focus_on_a_rider_for_a_while():
     e.focus_seat(seat + 1)
     e.focus_seat(0)
     assert e.snapshot()["focus"] is None
+
+
+def test_bus_waits_for_boarding_names_to_be_read_then_leaves():
+    """Anh 03/11: «đọc chưa xong xe đã chạy» — hết giờ đón mà lơ xe còn đọc tên thì xe chờ, tối đa NAME_HOLD_MAX giây."""
+    from xe_tet.server.game.engine import NAME_HOLD_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Huế", 1)
+    e.names_pending = True
+    e.phase_until = 10.0
+    e.tick(10.5)
+    assert e.phase == "BOARDING"
+    e.names_pending = False
+    e.tick(12.0)
+    assert e.phase == "DRIVING"
+    e2 = Engine(0.0)
+    comment(e2, "An", "Huế", 1)
+    e2.names_pending = True  # giọng đọc kẹt: không chờ mãi
+    e2.phase_until = 10.0
+    t = 10.0
+    while e2.phase == "BOARDING" and t < 10 + NAME_HOLD_MAX + 5:
+        t += 0.5
+        e2.tick(t)
+    assert e2.phase == "DRIVING" and t <= 10 + NAME_HOLD_MAX + 2

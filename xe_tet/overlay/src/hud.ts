@@ -213,6 +213,7 @@ export class Hud {
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
+    if (s.name_hold) return ["📢 Đang đọc tên khách lên xe", "xe chạy liền"];
     if (s.rollcall?.length && s.phase === "BOARDING") {  // điểm danh: người im lặng lâu tới lượt lên xe
       const who = s.rollcall.slice(0, 2).map((r) => r.name).join(", ") + (s.rollcall.length > 2 ? ` +${s.rollcall.length - 2}` : "");
       return [`📣 Gọi ${who}`, `❤ giữ giường ${s.rollcall[0].left}s`];

@@ -101,6 +101,7 @@ class Announcer:
         self.seq = 0
         self.boarding: list[tuple[str, str]] = []  # (tên, tỉnh) chờ gom
         self.board_started = 0.0
+        self.names_until = 0.0  # câu đọc tên lên xe đang phát tới lúc này (monotonic)
         self.last_board = -1e9
         self.thanked: dict[str, float] = {}
         self.voice_list: list[dict] = []  # giọng VieNeu cho /control (refresh_voices cập nhật)
@@ -155,6 +156,12 @@ class Announcer:
         self.offer(line("board", style=self.style(), prov=provinces.pop(), names=names) if len(provinces) == 1
                    else line("board_mixed", style=self.style(), names=names), BOARD, raw)
 
+    def names_pending(self, now: float) -> bool:
+        """Còn tên người lên xe chưa đọc xong (đang gom / đang chờ đọc / đang phát) — xe chờ đọc hết rồi mới chạy (anh 03/11)."""
+        if not self.settings().get("voice_on", True):
+            return False
+        return bool(self.boarding) or now < self.names_until or any(item[0] == BOARD and item[3] for item in self.queue)
+
     def style(self) -> str:
         return self.settings().get("talk_style") or "mix"
 
@@ -190,6 +197,8 @@ class Announcer:
                 rate = float(self.settings().get("voice_rate") or 1.0)  # overlay phát nhanh / chậm theo tốc độ này
                 await self.emit({"kind": "event", "type": "speak", "url": f"/voice/{name}", "text": text,
                                  "seconds": round(seconds / rate, 2), "names": names})
+                if names:
+                    self.names_until = time.monotonic() + seconds / rate
                 if self.queue:  # đọc sẵn câu kế trong lúc câu này đang phát: không còn ~1,5 giây im giữa hai câu
                     self.render_once(self.queue[0][2])
                 await asyncio.sleep(seconds / rate + 0.3)  # đọc hết câu mới sang câu sau

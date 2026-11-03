@@ -280,6 +280,7 @@ class Hub:
                 self.handle(simulator.next_event(self.engine.phase))
                 next_sim = now + random.expovariate(self.sim_rate)
             self.engine.videos = video.videos()  # bảng quảng cáo: danh sách video (quét lại khi thư mục đổi)
+            self.engine.names_pending = self.voice.names_pending(now)
             self.engine.tick(now)
             if self.engine.network.departure.key != self.settings["departure"]:  # người xem gọi xe ra bến khác (PLAN-136)
                 self.update_settings({"departure": self.engine.network.departure.key})
