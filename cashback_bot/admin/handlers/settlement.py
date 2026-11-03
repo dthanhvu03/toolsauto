@@ -74,6 +74,7 @@ _BATCH = re.compile(r"^c:sm:(b|items|ev|rc):(\d{1,9})$")
 _EVIDENCE = re.compile(r"^c:sm:(e|seen):(\d{1,9})$")
 _CONFIRM = re.compile(r"^c:sm:bok:(\d{1,9}):(\d{1,12})$")
 _OTHER = re.compile(r"^c:sm:box:(\d{1,9})$")
+_ADJUST = re.compile(r"^c:sm:adj:(\d{1,9})(:ok)?$")
 OTHER_NOTE = (
     "⚠️ Bot chưa ghi gì. Anh gửi em ảnh trang «Đối soát vào ngày …» trên Shopee (Thanh toán → Lịch sử thanh toán → "
     "Xem chi tiết) và số tiền tài khoản thực nhận, em nhập tay."
@@ -150,6 +151,9 @@ class SettlementAdmin:
                 return self.batch_detail(batch_id, f"⚠️ {text}")
             label = STATUS_LABELS.get(result.status, result.status)
             return self.batch_detail(batch_id, f"✅ Đã ghi tài khoản nhận {format_vnd(amount)}. Kỳ: {label}. Ví khách vẫn khoá.")
+        adjust = _ADJUST.fullmatch(data)
+        if adjust:
+            return self._adjustment(admin_id, int(adjust.group(1)), bool(adjust.group(2)))
         other = _OTHER.fullmatch(data)
         if other:
             return BotReply(OTHER_NOTE, inline_keyboard=((("🧾 Xem kỳ", f"c:sm:b:{int(other.group(1))}"),), BACK_HOME))
@@ -359,7 +363,31 @@ class SettlementAdmin:
             )
         return BotReply("\n".join(lines), inline_keyboard=(BACK_HOME,))
 
-    def differences(self) -> BotReply:
+    def _adjustment(self, admin_id: int, adjustment_id: int, confirmed: bool) -> BotReply:
+        if confirmed:
+            done = self.engine.resolve_adjustment(adjustment_id, f"admin:{admin_id}")
+            return self.differences("✅ Đã đóng điều chỉnh. Đơn vào ví lại ở lần cập nhật ví kế tiếp." if done
+                                    else "Điều chỉnh này đã được xử lý trước đó.")
+        with self.repo.connect() as conn:
+            row = conn.execute(
+                "SELECT a.*, c.order_sn FROM settlement_adjustments a LEFT JOIN shopee_conversions c "
+                "ON c.conversion_id = a.conversion_id WHERE a.id = ? AND a.status = 'OPEN'", (adjustment_id,)
+            ).fetchone()
+        if row is None:
+            return self.differences("Điều chỉnh này đã được xử lý trước đó.")
+        order = html.escape(short_order(row["order_sn"] or row["conversion_id"]))
+        text = (
+            f"{_title('Shopee Affiliate', 'Đối soát thanh toán', 'Đóng điều chỉnh')}"
+            f"Đơn <code>{order}</code>: {format_vnd(int(row['old_vnd']))} → <b>{format_vnd(int(row['new_vnd']))}</b> "
+            f"({format_vnd(int(row['delta_vnd']))})\n\n"
+            "Đóng nghĩa là anh đã xem và chấp nhận số mới. Bot không đổi tiền khách ở bước này: Shopee giảm hoa hồng "
+            "thì ví khách đã tự trừ lại. Sau khi đóng, đơn không còn bị giữ vì điều chỉnh này."
+        )
+        return BotReply(text, inline_keyboard=(
+            (("✅ Đóng điều chỉnh", f"c:sm:adj:{adjustment_id}:ok"),), (("◀️ Khoản chênh lệch", "c:sm:diff"),),
+        ))
+
+    def differences(self, notice: str = "") -> BotReply:
         with self.repo.connect() as conn:
             batches = conn.execute(
                 "SELECT id, period, status FROM settlement_batches WHERE status IN ('DISPUTED', 'PARTIALLY_MATCHED', 'EVIDENCE_PENDING') "
@@ -370,6 +398,8 @@ class SettlementAdmin:
                 "WHERE a.status = 'OPEN' ORDER BY a.id DESC LIMIT 10"
             ).fetchall()
         lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Khoản chênh lệch"), ""]
+        if notice:
+            lines += [notice, ""]
         if not batches and not adjustments:
             lines.append("Không có khoản nào cần kiểm tra.")
         if batches:
@@ -386,6 +416,10 @@ class SettlementAdmin:
         buttons = tuple(
             ((f"{STATUS_LABELS.get(r['status'], r['status'])} · kỳ {r['period']}", f"c:sm:b:{r['id']}"),) for r in batches
         )
+        buttons += tuple(
+            ((f"✅ Đóng · {short_order(r['order_sn'] or r['conversion_id'])} ({format_vnd(int(r['delta_vnd']))})",
+              f"c:sm:adj:{r['id']}"),) for r in adjustments
+        )
         return BotReply("\n".join(lines), inline_keyboard=(*buttons, BACK_HOME))
 
     def history(self) -> BotReply:
@@ -394,6 +428,7 @@ class SettlementAdmin:
         labels = {
             "batch_create": "tạo kỳ", "evidence_import": "nhập chứng từ", "evidence_viewed": "admin đã xem chứng từ",
             "reconcile": "đối soát", "batch_reverse": "đảo kỳ", "adjustment_open": "ghi điều chỉnh",
+            "adjustment_resolve": "đóng điều chỉnh",
         }
         lines = [_title("Shopee Affiliate", "Đối soát thanh toán", "Lịch sử"), ""]
         if not rows:
