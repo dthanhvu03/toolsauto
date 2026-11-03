@@ -382,8 +382,10 @@ def test_follow_once_and_share_cooldown():
 
 
 def test_idle_queued_ticket_expires_active_one_rides():
-    from xe_tet.server.game.engine import TICKET_IDLE
+    """Chỉ khi anh bật giới hạn im lặng (ticket_idle > 0)."""
+    TICKET_IDLE = 30 * 60.0
     e = Engine(0.0)
+    e.ticket_idle = TICKET_IDLE
     for i in range(24):
         comment(e, f"K{i}", "Huế", 1)
     comment(e, "Ma", "Huế", 2)  # xếp hàng rồi rời phòng
@@ -398,6 +400,61 @@ def test_idle_queued_ticket_expires_active_one_rides():
     run_until(e, "BOARDING", t)
     assert e.bus.riders() == ["thật"] and "ma" not in e.queued_at
 
+
+
+def test_silent_watcher_keeps_ticket_by_default():
+    """Anh 03/11: im lặng vẫn là đang xem live — người chờ không bình luận gì cả tiếng vẫn giữ vé, tới lượt thì lên xe."""
+    e = Engine(0.0)
+    for i in range(24):
+        comment(e, f"K{i}", "Huế", 1)
+    comment(e, "Im", "Huế", 2)
+    t = run_until(e, "DRIVING", 3)
+    while e.phase != "FINISH":
+        t += 30
+        e.tick(t)
+    e.last_now = t = max(t, 2 * 3600)
+    run_until(e, "BOARDING", t)
+    assert e.bus.riders() == ["im"]
+
+
+def test_ticket_holder_rejoining_counts_as_watching():
+    e = Engine(0.0)
+    e.ticket_idle = 600.0
+    comment(e, "An", "Huế", 1)
+    e.handle({"type": "join", "name": "An"}, 500)
+    e.handle({"type": "join", "name": "Lạ"}, 500)
+    assert e.viewers["an"].last_seen == 500 and e.viewers["lạ"].last_seen == 0
+
+
+def test_big_gifts_do_not_queue_endless_specials():
+    """Rà soát 03/11: 30 quà 29.999 xu từng xếp 84 cảnh chúc Tết (~28 phút xe đứng)."""
+    from xe_tet.server.game.engine import SPECIALS_QUEUE_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Huế", 1)
+    for i in range(30):
+        e.handle({"type": "gift", "name": "An", "diamonds": 29999, "gift": "Vũ trụ"}, 2 + i)
+    assert len(e.specials) <= SPECIALS_QUEUE_MAX
+
+
+def test_next_lane_choice_dropped_when_its_queue_empties():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    lane = next(k for k, q in e.queues.items() if "út" in q)
+    e.set_next_lane(lane)
+    e._release(e.viewers["út"])
+    e._prune_queues()
+    assert e.next_lane is None
+
+
+def test_pause_holds_roadside_pickup():
+    e = Engine(0.0)
+    e.phase = "DRIVING"
+    e.halt = {"place": "Huế", "people": ["A"], "until": 10.0}
+    e.last_now = 5.0
+    e.paused = True
+    e.tick(60.0)
+    assert e.halt["until"] == 65.0
 
 
 # ---- tuyến thật: làn theo hướng, km thật (BRD-tuyen-xe.md) ------------------

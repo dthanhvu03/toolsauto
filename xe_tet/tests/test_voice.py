@@ -236,3 +236,65 @@ def test_speech_says_english_slang_in_vietnamese():
     said = speakable("Bay quá ae ơi, team Hà Nội win rồi 🎉, xe chạy x2, đi WC, xem live TikTok, Ok.")
     assert said == "Bay quá anh em ơi, hội Hà Nội thắng rồi, xe chạy gấp đôi, đi vệ sinh, xem lai tích tóc, ô kê."
     assert speakable("Chào Thảo, nhà ở Bến Tre") == "Chào Thảo, nhà ở Bến Tre"  # «ae» trong tên / chữ khác không đụng
+
+
+def test_failed_edge_render_never_caches_a_silent_file(tmp_path, monkeypatch):
+    """Rà soát 03/11: edge-tts rớt mạng giữa chừng để lại file 0 byte → câu đó câm mãi. Giờ: không để lại gì, lần sau đọc lại;
+    file rỗng / hỏng của bản cũ tự bị bỏ."""
+    monkeypatch.setattr(voice, "VOICE_DIR", tmp_path)
+    net = {"up": False}
+
+    class FlakyEdge:
+        def __init__(self, text, voice_name):
+            pass
+
+        async def save(self, path):
+            fh = open(path, "wb")  # như edge-tts thật: mở file trước khi có tiếng
+            if not net["up"]:
+                fh.close()
+                raise RuntimeError("NoAudioReceived")
+            fh.write(b"\0" * 12000)
+            fh.close()
+
+    monkeypatch.setattr(voice.edge_tts, "Communicate", FlakyEdge)
+
+    async def scenario():
+        a = announcer()
+        a.client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+        try:
+            await a.render("Trạm thu phí")
+        except RuntimeError:
+            pass
+        left = sorted(p.name for p in tmp_path.iterdir())
+        net["up"] = True
+        result = await a.render("Trạm thu phí")
+        (tmp_path / result[0]).write_bytes(b"")  # file rỗng của bản cũ trong bộ nhớ đệm
+        again = await a.render("Trạm thu phí")
+        await a.client.aclose()
+        return left, result, again
+
+    left, (name, seconds), (_, again) = asyncio.run(scenario())
+    assert left == [] and seconds == 2.0 and again == 2.0
+
+
+def test_vieneu_non_wav_body_falls_back_and_is_not_cached(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice, "VOICE_DIR", tmp_path)
+
+    class FakeEdge:
+        def __init__(self, text, voice_name):
+            pass
+
+        async def save(self, path):
+            open(path, "wb").write(b"\0" * 6000)
+
+    monkeypatch.setattr(voice.edge_tts, "Communicate", FakeEdge)
+
+    async def scenario():
+        a = announcer()
+        a.client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"<html>busy</html>")))
+        result = await a.render("Xe tới rồi")
+        await a.client.aclose()
+        return result
+
+    name, seconds = asyncio.run(scenario())
+    assert name.endswith(".mp3") and seconds == 1.0 and not list(tmp_path.glob("*.wav"))

@@ -11,6 +11,7 @@ import logging
 import os
 import random
 import time
+import uuid
 from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
@@ -512,6 +513,33 @@ async def passengers() -> dict:
     return hub.engine.manifest()
 
 
+async def receive_upload(request: Request, target: Path, max_bytes: int, what: str) -> JSONResponse | None:
+    """Ghi thân request ra file tạm riêng (hai tab tải cùng tên không ghi chồng), đủ mới đổi tên; lỗi / rớt mạng giữa chừng
+    thì xoá file tạm — không để lại file dở hàng trăm MB. None = xong."""
+    part = target.with_name(f"{target.name}.{uuid.uuid4().hex[:8]}.part")
+    size = 0
+    try:
+        with part.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError(f"{what} quá lớn (tối đa {max_bytes // 1024 // 1024} MB)")
+                fh.write(chunk)
+        if not size:
+            raise ValueError("File rỗng")
+        if target.exists():
+            raise ValueError("Trùng tên với file vừa tải xong, anh tải lại giúp em")
+        part.rename(target)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    except Exception as exc:  # trình duyệt ngắt giữa chừng / hết ổ đĩa
+        log.warning("tải %s lỗi: %s", target.name, exc)
+        return JSONResponse({"ok": False, "error": "Tải lên bị ngắt giữa chừng"}, status_code=400)
+    finally:
+        part.unlink(missing_ok=True)
+    return None
+
+
 @app.post("/api/music")
 async def upload_music(request: Request, name: str = "") -> dict:
     """Tải một bài nhạc lên (thân request là nội dung file, `?name=` là tên file) — bảng điều khiển gửi từng file."""
@@ -519,21 +547,8 @@ async def upload_music(request: Request, name: str = "") -> dict:
         target = music.upload_target(name)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    part = target.with_name(target.name + ".part")  # ghi xong mới đổi tên: danh sách không thấy file dở dang
-    size = 0
-    try:
-        with part.open("wb") as fh:
-            async for chunk in request.stream():
-                size += len(chunk)
-                if size > music.MAX_BYTES:
-                    raise ValueError(f"File quá lớn (tối đa {music.MAX_BYTES // 1024 // 1024} MB)")
-                fh.write(chunk)
-        if not size:
-            raise ValueError("File rỗng")
-        part.rename(target)
-    except ValueError as exc:
-        part.unlink(missing_ok=True)
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    if (err := await receive_upload(request, target, music.MAX_BYTES, "File")) is not None:
+        return err
     await hub.broadcast(hub.state_message())
     return {"ok": True, "name": target.name}
 
@@ -555,21 +570,8 @@ async def upload_video(request: Request, name: str = "") -> dict:
         target = video.upload_target(name)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    part = target.with_name(target.name + ".part")
-    size = 0
-    try:
-        with part.open("wb") as fh:
-            async for chunk in request.stream():
-                size += len(chunk)
-                if size > video.MAX_BYTES:
-                    raise ValueError(f"Video quá lớn (tối đa {video.MAX_BYTES // 1024 // 1024} MB)")
-                fh.write(chunk)
-        if not size:
-            raise ValueError("File rỗng")
-        part.rename(target)
-    except ValueError as exc:
-        part.unlink(missing_ok=True)
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    if (err := await receive_upload(request, target, video.MAX_BYTES, "Video")) is not None:
+        return err
     await hub.broadcast(hub.state_message())
     return {"ok": True, "name": target.name}
 

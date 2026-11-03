@@ -69,7 +69,7 @@ RUSH_REST_SECONDS = 45.0
 BOARD_AVG_START = 120.0  # ước lượng giờ đón / giờ chạy một chuyến trước khi đo được chuyến thật (ước giờ chờ trên vé)
 RUN_AVG_START = 600.0
 AVG_WEIGHT = 0.4  # trung bình trượt: chuyến mới đo chiếm 40 %
-TICKET_IDLE = 30 * 60.0  # người trong hàng chờ im lặng quá lâu (đã rời phòng) → bỏ vé, nhường chỗ người đang xem
+TICKET_IDLE = 0.0  # >0: người chờ im lặng quá chừng này giây thì bỏ vé. Anh 03/11: im lặng vẫn là đang xem live → mặc định không bỏ
 QUEUE_SHOW = 6  # số người chờ hiện tên trên màn hình
 STAYING_SHOW = 8
 REST_ORDERS_SHOW = 4
@@ -82,6 +82,7 @@ RELIEF_MAX_GIFT = 6  # xe do quà được vượt mốc tự động
 RELIEF_GIFT_TIER = 3  # bậc băng rôn (100 xu): người đang giữ chỗ đạt bậc này → xe tăng cường chạy ngay làn của họ
 STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
+SPECIALS_QUEUE_MAX = 3  # cảnh chúc Tết chờ chiếu tối đa (quà to dồn dập không làm xe đứng hàng chục phút)
 BOOST_MAX = 2.0
 BOOST_PER_LIKE = 0.01
 BOOST_HALF_LIFE = 6.0
@@ -405,6 +406,7 @@ class Engine:
         self.focus: dict | None = None  # {uid, until}: máy quay đang zoom vào khách này
         self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
         self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
+        self.ticket_idle = TICKET_IDLE
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
         self.race_leader: str | None = None
         self.race_winner: str | None = None
@@ -690,11 +692,21 @@ class Engine:
             self.board[v.province] -= 1
             v.province = None
 
+    def _queue_special(self, name: str) -> None:
+        if len(self.specials) < SPECIALS_QUEUE_MAX:
+            self.specials.append(name)
+
     def _prune_queues(self) -> None:
         """Vé ma (người chờ đã rời phòng quá lâu) không được tính vào chọn làn / cao điểm / số chờ."""
         for queue in self.queues.values():
-            for uid in [u for u in queue if self.last_now - self.viewers[u].last_seen > TICKET_IDLE]:
+            for uid in [u for u in queue if self._ghost(u)]:
                 self._release(self.viewers[uid])
+        if self.next_lane and not self.queues.get(self.next_lane):  # làn anh chọn đã hết người chờ: bỏ chọn, về thứ tự đặt vé
+            self.next_lane = None
+
+    def _ghost(self, uid: str) -> bool:
+        """Vé ma: chỉ khi anh bật giới hạn im lặng (ticket_idle > 0) — TikTok không báo ai rời phòng, im lặng vẫn là đang xem."""
+        return self.ticket_idle > 0 and self.last_now - self.viewers[uid].last_seen > self.ticket_idle
 
     def waiting(self) -> int:
         return sum(len(q) for q in self.queues.values())
@@ -860,7 +872,7 @@ class Engine:
         for uid in [*list(self.queues[self.bus.lane]), *(uid for _, uid in others)]:
             if (free := self.bus.free_seat()) is None:
                 return
-            if self.last_now - self.viewers[uid].last_seen > TICKET_IDLE:  # vé ma: không chở người đã rời phòng
+            if self._ghost(uid):  # vé ma: không chở người đã rời phòng
                 self._release(self.viewers[uid])
                 continue
             self._unqueue(uid)
@@ -1237,6 +1249,8 @@ class Engine:
             if self.show:
                 self.show["until"] += dt
                 self.show["started"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
+            if self.halt:
+                self.halt["until"] += dt  # đang đón người ven đường: bỏ tạm dừng xong vẫn đủ giờ cho họ lên xe
             return
         self._run_reliefs(dt)
         self._remind_direction(now)
@@ -1434,7 +1448,7 @@ class Engine:
                 self.emit("goal_step", fx=fx, label=label, xu=round(mark), goal=goal, name=v.name, round=self.goal_round + 1)
                 self.talk("goal_step", label=label.split(" ", 1)[1], xu=round(mark), name=v.name)
                 if fx == "party" and v.gift_trip < 1000:  # quà ≥ 1000 xu tự có cảnh chúc Tết: không chiếu hai lần
-                    self.specials.append("cả phòng")
+                    self._queue_special("cả phòng")
         if self.goal_have >= goal:
             self.goal_have -= goal
             self.goal_round += 1
@@ -1561,7 +1575,7 @@ class Engine:
         if not uid:
             return False
         v = self.viewer(uid, name)
-        if kind != "join":  # vào phòng chưa tính là đang xem (tránh giữ vé cho người lướt qua)
+        if kind != "join" or v.province:  # vào phòng chưa tính là đang xem (người lướt qua); người có vé quay lại thì tính
             v.last_seen = now
             self._seen_today(v, now)
         if kind == "comment":
@@ -2301,7 +2315,7 @@ class Engine:
         if tier >= 4:
             # mỗi lần vượt thêm một mốc 1000 xu = thêm một lần cả xe chúc Tết (tối đa 3 lần / lần tặng)
             for _ in range(min(SPECIALS_PER_GIFT, total // 1000 - before // 1000)):
-                self.specials.append(v.name)
+                self._queue_special(v.name)
         # quà Tết lên gầm xe: người có vé (đang ngồi / giữ chỗ / xe tăng cường) tặng quà → thêm một thùng mang tên mình
         parcel = (ticketed or any(v.uid in r.riders for r in self.reliefs)) and v.parcels < PARCELS_MAX
         v.parcels += int(parcel)

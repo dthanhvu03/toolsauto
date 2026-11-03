@@ -112,3 +112,14 @@ def test_comments_saved_classified_and_exported(tmp_path):
     assert "Câu game chưa làm gì" in html and "chào cả nhà" in html.lower() and "comments.csv" in html
     csv_text = report.comments_csv(db, sid)
     assert csv_text.startswith("﻿") and "chào cả nhà" in csv_text and "Gõ tỉnh (đặt vé)" in csv_text
+
+
+def test_comments_csv_neutralises_spreadsheet_formulas(tmp_path):
+    log = live_log.LiveLog()
+    db = live_log.LiveStore(tmp_path / "x.db")
+    log.update(True, "kenh", 1_800_000_000.0, "BOARDING", 5)
+    log.raw({"type": "comment", "uid": "a", "name": "=HACK()", "text": "=HYPERLINK(\"x\")"}, 1_800_000_001.0)
+    sid = db.save(*log.take())
+    db.save_comments(sid, log.take_comments())
+    csv_text = report.comments_csv(db, sid)
+    assert "'=HACK()" in csv_text and "'=HYPERLINK" in csv_text

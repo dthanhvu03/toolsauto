@@ -309,3 +309,17 @@ def test_only_one_screen_plays_sound(client):
         s = client.get("/api/state").json()
         assert [sc["id"] for sc in s["screens"]] == [first] and s["audio_screen"] == first
     client.post("/api/admin", json={"action": "audio_screen", "screen": 0})
+
+
+def test_interrupted_upload_leaves_no_part_file(tmp_path):
+    """Rà soát 03/11: trình duyệt ngắt giữa chừng từng để lại file .part tới 500 MB."""
+    import asyncio
+    from xe_tet.server import app as server
+
+    class Dropped:
+        async def stream(self):
+            yield b"x" * 100
+            raise RuntimeError("ClientDisconnect")
+
+    res = asyncio.run(server.receive_upload(Dropped(), tmp_path / "clip.mp4", 10_000, "Video"))
+    assert res.status_code == 400 and list(tmp_path.iterdir()) == []
