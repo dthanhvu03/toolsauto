@@ -100,6 +100,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} tặng quà, Anh Tư cho lên đầu hàng xe {dest} liền, giờ thứ {pos} rồi đó.",
             "Cảm ơn {name}, chuyến {dest} kế tiếp {name} lên trước, thứ {pos} trong hàng.",
         ),
+        "turbo": (  # quà = xe chạy nhanh gấp đôi (anh 03/11)
+            "{name} tặng quà, Anh Tư đạp ga chạy gấp đôi, xe về bến sớm đón người chờ.",
+            "Cảm ơn {name}, xe chạy nhanh gấp đôi thêm {secs} giây, chuyến sau tới sớm hơn.",
+        ),
         "new_owner": (  # người tặng nhiều nhất buổi
             "{name} lên làm chủ nhà xe rồi bà con, {xu} xu, Anh Tư cúi đầu cảm ơn.",
             "Nhà xe có chủ mới, {name} với {xu} xu, chịu chơi số một.",
@@ -307,6 +311,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} tặng quà nên được lên đầu hàng xe {dest}, thứ {pos}, uy tín.",
             "Cảm ơn {name}, vé ưu tiên xe {dest}, giờ đứng thứ {pos} rồi.",
         ),
+        "turbo": (
+            "{name} bơm xăng xịn, xe bay gấp đôi {secs} giây, chuyến sau tới sớm luôn.",
+            "{name} tặng quà, xe chạy gấp đôi, người chờ sắp được lên rồi.",
+        ),
         "new_owner": (
             "{name} chính thức làm chủ nhà xe, {xu} xu, đỉnh nóc kịch trần.",
             "Chủ nhà xe mới là {name} đó mấy bồ, {xu} xu, xịn xò.",
@@ -512,6 +520,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "priority": (
             "Cảm ơn {name}, được lên đầu hàng chờ xe {dest}, hiện là thứ {pos}.",
             "{name} tặng quà, chuyến {dest} sau được lên trước, thứ {pos} trong hàng.",
+        ),
+        "turbo": (
+            "Cảm ơn {name}, xe chạy nhanh gấp đôi, ai đang chờ sắp tới lượt rồi.",
+            "{name} tặng quà, xe tăng tốc thêm {secs} giây, về bến sớm đón bà con.",
         ),
         "new_owner": (
             "Chúc mừng {name} lên làm chủ nhà xe với {xu} xu, cảm ơn nhiều.",

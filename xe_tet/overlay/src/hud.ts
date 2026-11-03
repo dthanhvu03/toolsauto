@@ -181,7 +181,9 @@ export class Hud {
         return [s.bus.riders >= seatsOf(s) ? "Đủ khách!" : `Đi ${s.bus.to}`, `chạy sau ${clock(left)}`];
       case "DRIVING": {
         if (!leg) return ["", ""];
-        const fast = s.speed >= 1.15 ? ` ⚡x${s.speed.toFixed(1)}` : "";  // tim của người xem đang đẩy xe
+        const fast = s.turbo  // quà: xe chạy x2 (anh 03/11)
+          ? ` 🚀x${s.speed.toFixed(1)} · ${s.turbo.left}s`
+          : s.speed >= 1.15 ? ` ⚡x${s.speed.toFixed(1)}` : "";  // tim của người xem đang đẩy xe
         return [`Tới ${leg.label}`, `còn ${km(Math.max(1, leg.km - s.trip_km))} km${fast}`];
       }
       case "SPECIAL": return ["Cả xe dừng lại chúc Tết", ""];
@@ -288,10 +290,11 @@ export class Hud {
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
     }
-    // chân bảng quà (PLAN-144): người đang chờ (quà đưa họ về) · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
+    // chân bảng quà: người đang chờ · xe đang chạy x2 nhờ ai · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
     const [owner, deputy] = s.patrons ?? [];
     const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
-    setHTML("cta-foot", `⏳ <b>${s.waiting}</b> người đang chờ${crown} · từ 18 tuổi`);
+    const turbo = s.turbo ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}` : "";
+    setHTML("cta-foot", `⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
   }

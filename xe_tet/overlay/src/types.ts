@@ -97,8 +97,9 @@ export interface State {
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
   fleet?: FleetBus[];  // mọi xe đang chạy
   trip_minutes?: number;
-  patrons?: { name: string; xu: number }[];
-  halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)  // Chủ nhà xe, Phó nhà xe (PLAN-144)
+  patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
+  halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
+  turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
 }
 
 /** Đồng hồ trên xe: giờ VN lúc xuất bến + giờ xe chạy (giờ trong ngày, «HH:MM», ngày thứ mấy từ hôm xuất bến). */

@@ -66,7 +66,8 @@ function radiusFor(wind: number): number {
   return R_GENTLE * Math.pow(R_TIGHT / R_GENTLE, t);
 }
 const MAX_BUBBLES = 6;
-const BOARD_STEP_S = 1.0;  // bến: mỗi giây một người bước lên xe
+const BOARD_STEP_S = 1.0;  // bến, khi tắt giọng lơ xe: mỗi giây một người bước lên xe
+const BOARD_FALLBACK_S = 14;  // đứng đầu hàng quá lâu mà chưa nghe đọc tên (giọng lỗi / bị cắt) thì vẫn lên
 const LINE_COLS = 8;  // hàng chờ ở cửa xe gập dòng sau 8 người
 const PICKUP_STEP_S = 1.3;  // dừng đón bên đường: khớp PICKUP_STOP_STEP của server
 const BUBBLE_MS = 5000;
@@ -158,6 +159,9 @@ interface Walker {
   hold: boolean; // hết đường thì đứng yên (hàng WC) thay vì biến mất
   onDone?: () => void;
   onRemove?: () => void;  // rời cảnh (về tới xe, đổi cảnh, quá trần): trả chỗ ăn
+  name?: string;  // hàng lên xe ở bến: tên người (khớp tên lơ xe đọc)
+  queuedAt?: number;  // lúc đứng vào hàng
+  callAt?: number;  // lúc lơ xe đọc tới tên mình → bước lên
 }
 
 // ---- thế giới ---------------------------------------------------------------
@@ -481,6 +485,9 @@ export class World {
       case "ticket":
         if (!e.next && this.set === "ben" && !e.changed) this.boardWalk(e.name ?? "", e.hue ?? 0);
         break;
+      case "speak":  // lơ xe đọc tên người lên xe: đúng người đó bước lên
+        if (e.names?.length && this.set === "ben") this.callNames(e.names, e.seconds ?? 3);
+        break;
       case "pickup_stop":  // người hẹn đứng chờ sẵn bên lề / ở trạm, lên xe từng người (PLAN-145)
         this.roadsidePickup(e);
         break;
@@ -580,14 +587,16 @@ export class World {
     window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
   }
 
-  /** Bến: người có vé xếp hàng ở cửa xe, mỗi BOARD_STEP_S giây một người bước lên (anh 03/11 «lên xe là phải xếp hàng lên
-   * từ từ, đọc tên là lên xe»). Hàng dài thì gập hai dòng. */
+  /** Bến: người có vé xếp hàng ở cửa xe, lơ xe đọc tới tên ai thì người đó bước lên (anh 03/11 «lên xe là phải xếp hàng lên
+   * từ từ, đọc tên là lên xe»; «đồng bộ chỗ này»). Hàng dài thì gập hai dòng. */
   private boardWalk(name: string, hue: number): void {
     const p = makePerson(hue, name);
     const { x0, x1, z0, z1 } = this.ben.waiting;
     p.position.set(x0 + Math.random() * (x1 - x0), 0.1, z0 + Math.random() * (z1 - z0));
     const w = this.addWalker(p, [this.lineSpot(this.boardLine.length)], 4.2);
     w.hold = true;
+    w.name = name;
+    w.queuedAt = this.t;
     this.boardLine.push(w);
   }
 
@@ -596,14 +605,26 @@ export class World {
     return new THREE.Vector3(door.x + 1.1 + (k % LINE_COLS) * 0.75, 0.1, door.z - 1.6 - Math.floor(k / LINE_COLS) * 0.8);
   }
 
+  /** Câu lơ xe đọc tên người lên xe vừa phát (`speak` kèm `names`): hẹn từng người bước lên rải theo độ dài câu. */
+  private callNames(names: string[], seconds: number): void {
+    names.forEach((name, i) => {
+      const w = this.boardLine.find((x) => x.name === name && x.callAt === undefined);
+      if (w) w.callAt = this.t + seconds * (i + 1) / (names.length + 1);
+    });
+  }
+
   private stepBoardLine(dt: number): void {
     if (!this.boardLine.length) return;
     this.boardTimer += dt;
-    if (this.boardTimer < BOARD_STEP_S) return;
+    const voiceOff = this.state?.control?.voice_on === false;
+    let go = this.boardLine.find((w) => w.callAt !== undefined && this.t >= w.callAt);
+    const head = this.boardLine[0];
+    if (!go && this.boardTimer >= BOARD_STEP_S && (voiceOff || this.t - (head.queuedAt ?? 0) > BOARD_FALLBACK_S)) go = head;
+    if (!go) return;
     this.boardTimer = 0;
-    const head = this.boardLine.shift()!;
-    head.hold = false;
-    head.path = [this.bus.doorSpot.clone()];  // tới cửa thì lên xe (hết đường đi → gỡ khỏi cảnh)
+    this.boardLine = this.boardLine.filter((w) => w !== go);
+    go.hold = false;
+    go.path = [this.bus.doorSpot.clone()];  // tới cửa thì lên xe (hết đường đi → gỡ khỏi cảnh)
     this.boardLine.forEach((w, i) => { w.path = [this.lineSpot(i)]; });
   }
 

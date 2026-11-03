@@ -142,6 +142,13 @@ PICKUP_JOIN = 0.4  # điểm đón sắp tới còn ≥ 40 % PICKUP_LEAD giây �
 # quá LANE_MAX_WAIT giây thì tuyến của người đó được đi trước — đông mà không ai bị bỏ quên
 LANE_MAX_WAIT = 600.0  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
 PRIORITY_TALK_GAP = 8.0  # lơ xe báo «X tặng quà, lên đầu hàng» tối đa 8 giây / câu
+# Quà = xe chạy nhanh (anh chọn 03/11 «tặng quà để xe trước đi nhanh hơn», mỗi xu cộng giây): mỗi xu thêm TURBO_PER_XU giây
+# chạy gấp TURBO_MULT, cộng dồn tối đa TURBO_MAX giây; chỉ trừ lúc xe đang chạy — xe tới quê / về bến sớm, chuyến sau tới sớm
+TURBO_PER_XU = 3.0
+TURBO_MAX = 180.0
+TURBO_MULT = 2.0
+TURBO_SPEED_CAP = 4.0  # tim + xăng đầy + quà cùng lúc: không vượt x4 (cảnh trôi còn nhìn được)
+TURBO_TALK_GAP = 10.0
 RULES_GAP = 180.0  # lơ xe đọc luật chơi mỗi 3 phút (anh báo 02/11: người xem chưa hiểu luật)
 RULES_MIN_GAP = 60.0  # có RULES_JOINS người mới vào phòng thì đọc sớm hơn, nhưng không dưới 1 phút
 RULES_JOINS = 3  # câu nhỏ của xe chính: xe chính không lên màn hình thì lơ xe khỏi nói
@@ -326,6 +333,9 @@ class Engine:
         self.trip_likes = 0
         self.trip_gifted = False  # chuyến này đã có người mở hàng tặng quà chưa
         self.boost = 0.0
+        self.turbo = 0.0  # giây xe còn chạy gấp đôi nhờ quà
+        self.turbo_by = ""  # người tặng gần nhất
+        self.last_turbo_talk = -1e9
         self.bus_counter = 0
         self.trip: Trip | None = None
         self.reliefs: list[Relief] = []
@@ -464,7 +474,8 @@ class Engine:
             return (f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn, gõ xe nào để coi vé, "
                     "hổng về thì gõ không về.")
         if key == "gift":
-            return (f"{name} hỏi quà hả, nhà xe chỉ có một xe 24 giường thôi, tặng một xu là lên đầu hàng chuyến sau, có "
+            return (f"{name} hỏi quà hả, nhà xe chỉ có một xe 24 giường thôi, mỗi xu xe chạy nhanh gấp đôi thêm ba giây cho "
+                    "chuyến sau tới sớm, tặng một xu là lên đầu hàng chuyến sau, có "
                     "giường thì giường vàng, mười xu pháo hoa, trăm xu băng rôn tên mình trên xe, ngàn xu cả xe dừng chúc "
                     "Tết, ai tặng nhiều nhất làm chủ nhà xe, chỉ người từ 18 tuổi tặng.")
         if key == "station":
@@ -1073,6 +1084,7 @@ class Engine:
             pass  # đang dừng bên đường: người chờ lên từng người, xe đứng yên
         elif self.phase == "DRIVING":
             self.halt = None
+            self.turbo = max(0.0, self.turbo - dt)
             km_before = self.trip_km()
             self.progress += (dt * self.speed() / self.leg_seconds
                               * self._pace(self.trip, self.trip_km(), self._kmps(self.trip.total)))
@@ -1103,7 +1115,8 @@ class Engine:
                 self._enter_boarding(now)
 
     def speed(self) -> float:
-        return (1.0 + self.boost) * self.trip_bonus
+        base = (1.0 + self.boost) * self.trip_bonus
+        return min(base * TURBO_MULT, max(base, TURBO_SPEED_CAP)) if self.turbo > 0 else base
 
     # ---- admin ---------------------------------------------------------
 
@@ -1841,6 +1854,9 @@ class Engine:
         relief = None  # PLAN-144 (anh 03/11): bỏ xe tăng cường; chỉ một xe 24 chỗ — quà không gọi xe nào khác
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
         v.gift_session += diamonds
+        added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
+        self.turbo += added
+        self.turbo_by = v.name
         moved = None
         if queued and not v.priority:
             moved = self._prioritize(v, queued)
@@ -1869,6 +1885,11 @@ class Engine:
             if self.last_now - self.last_priority_talk >= PRIORITY_TALK_GAP:
                 self.last_priority_talk = self.last_now
                 self.talk("priority", name=v.name, dest=self._dest(queued), pos=moved)
+        if added >= 1:
+            perk = f"🚀 xe chạy x2 thêm {round(added)} giây · " + perk
+            if not moved and self.last_now - self.last_turbo_talk >= TURBO_TALK_GAP:
+                self.last_turbo_talk = self.last_now
+                self.talk("turbo", name=v.name, secs=round(self.turbo))
         self.emit("gift", name=v.name, hue=v.hue, tier=tier, tier_up=tier > tier_before, gift=gift,
                   diamonds=diamonds, total=total, perk=perk, next_tier=self._next_tier_hint(total),
                   parcel=parcel, parcels=v.parcels, fx=fx, fx_n=fx_n)
@@ -1995,6 +2016,7 @@ class Engine:
             "leg_index": self.leg_index,
             "progress": round(self.progress, 4),
             "speed": 0.0 if self.halt else round(self.speed(), 3),
+            "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
             "halt": {"place": self.halt["place"], "people": self.halt["people"],
                      "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,
             "leg_seconds": self.leg_seconds,

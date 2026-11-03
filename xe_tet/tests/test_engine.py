@@ -941,10 +941,11 @@ def test_manual_feature_pauses_director_and_rotate_mode_cycles():
     e.auto_feature("off", 10)
 
 
-def test_on_air_by_stage_score_gifter_bus_shown_longer_and_others_get_turns():
+def test_on_air_by_stage_score_gifter_bus_shown_longer_and_others_get_turns(monkeypatch):
     """PLAN-141: xe chính chỉ đang chạy → chiếu xe tăng cường nhiều điểm (quà 3 / xu, bình luận 1, tim 50 = 1) trước và lâu hơn
     (15 giây + điểm, tối đa SHOW_MAX), về xe chính ≥ FEATURE_MIN_SECONDS, rồi xe ít điểm cũng tới lượt; cảnh xe chính vẫn ưu tiên."""
     from xe_tet.server.game.engine import FEATURE_MIN_SECONDS, SHOW_BASE, SHOW_MAX
+    monkeypatch.setattr("xe_tet.server.game.engine.TURBO_PER_XU", 0.0)  # quà tăng tốc xe chính làm lệch giờ của bài thử này
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)
     comment(e, "Út", "Cà Mau", 1)
@@ -1503,7 +1504,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
         assert is_bad(text), text
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
-                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, label="Taxi", xu=20)
+                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1545,3 +1546,25 @@ def test_fuel_and_wash_while_waiting_give_small_bonus():
     comment(e, "Dũng", "Huế", t + 20)
     run_until(e, "DRIVING", t + 20)
     assert e.trip_bonus == 1.0  # thiếu xăng, bẩn: vẫn chạy, chỉ không có thưởng
+
+
+def test_gift_makes_bus_run_twice_as_fast_for_seconds_per_xu():
+    """Anh 03/11 «tặng quà để xe trước đi nhanh hơn», chọn «mỗi xu cộng giây»: mỗi xu thêm 3 giây chạy x2, cộng dồn tối đa
+    3 phút, chỉ trừ lúc xe chạy; thẻ quà ghi rõ."""
+    from xe_tet.server.game.engine import TURBO_MAX, TURBO_PER_XU
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    base = e.speed()
+    e.handle({"type": "gift", "name": "Bé", "diamonds": 5}, 2)
+    gift = [ev for ev in e.drain() if ev["type"] == "gift"][-1]
+    assert e.turbo == 5 * TURBO_PER_XU and "x2 thêm 15 giây" in gift["perk"]
+    assert e.speed() == base * 2 and e.snapshot()["turbo"] == {"left": 15, "by": "Bé"}
+    e.tick(3)  # đang ở bến: không trừ
+    assert e.turbo == 15
+    e.handle({"type": "gift", "name": "Bé", "diamonds": 900}, 4)
+    assert e.turbo == TURBO_MAX
+    e.tick(5)
+    assert e.turbo == TURBO_MAX  # vẫn ở bến
+    e._depart(5)
+    e.tick(15)
+    assert e.turbo == TURBO_MAX - 10

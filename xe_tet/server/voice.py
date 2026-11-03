@@ -37,11 +37,12 @@ CACHE_KEEP = 600  # giữ 600 câu gần nhất (~ vài chục MB)
 VOICES_REFRESH = 60.0
 
 # mức ưu tiên: số nhỏ đọc trước; hàng đợi dài quá QUEUE_SOFT thì bỏ câu từ mức LOW trở đi
-ADMIN, DROPOFF, GIFT, LOXE, BOARD = range(5)
+ADMIN, DROPOFF, BOARD, GIFT, LOXE = range(5)  # đọc tên lên xe không bao giờ bị bỏ (người trong hàng chờ nghe tên mới bước lên)
 LOW = LOXE
 QUEUE_SOFT = 3
 BOARD_WINDOW = 3.0  # gom tên người lên xe trong 3 giây thành một câu
-BOARD_GAP = 8.0  # hai câu đọc tên lên xe cách nhau tối thiểu 8 giây
+BOARD_GAP = 5.0  # hai câu đọc tên lên xe cách nhau tối thiểu 5 giây (chưa tới thì gom tiếp, không bỏ ai)
+BOARD_NAMES = 5  # một câu đọc tối đa 5 tên người lên xe; còn lại câu sau đọc tiếp
 GIFT_COOLDOWN = 30.0  # mỗi người được cảm ơn quà tối đa một lần / 30 giây
 NAMES_READ = 3  # đọc tối đa 3 tên, còn lại «và N người nữa»
 
@@ -64,9 +65,9 @@ def spoken_name(name: str) -> str:
     return clean[:24] or "bạn"
 
 
-def names_phrase(names: list[str]) -> str:
+def names_phrase(names: list[str], limit: int = NAMES_READ) -> str:
     """«Minh Anh, Thu Hà và Bé Na» / «Minh Anh, Thu Hà, Bé Na và 5 người nữa»."""
-    named = [spoken_name(n) for n in names[:NAMES_READ]]
+    named = [spoken_name(n) for n in names[:limit]]
     more = len(names) - len(named)
     if more > 0:
         return f"{', '.join(named)} và {more} người nữa"
@@ -79,7 +80,7 @@ class Announcer:
     def __init__(self, emit: Callable[[dict], Awaitable[None]], settings: Callable[[], dict]):
         self.emit = emit
         self.settings = settings
-        self.queue: list[tuple[int, int, str]] = []  # (ưu tiên, thứ tự, câu)
+        self.queue: list[tuple[int, int, str, list[str]]] = []  # (ưu tiên, thứ tự, câu, tên người lên xe được đọc)
         self.wake = asyncio.Event()
         self.seq = 0
         self.boarding: list[tuple[str, str]] = []  # (tên, tỉnh) chờ gom
@@ -106,6 +107,8 @@ class Announcer:
             if not self.boarding:
                 self.board_started = now
             self.boarding.append((event.get("name", ""), event.get("province", "")))
+        elif kind == "depart":  # xe đã chạy: người chưa kịp đọc tên thì thôi (màn hình đã sang cảnh đường)
+            self.boarding = []
         elif kind == "gift" and event.get("tier_up") and "xe tăng cường" not in (event.get("perk") or ""):
             name = event.get("name", "")
             if now - self.thanked.get(name, -1e9) >= GIFT_COOLDOWN:  # quà bao xe tăng cường: lơ xe đã nói rồi
@@ -120,29 +123,29 @@ class Announcer:
                 self.offer(text, GIFT)
 
     def tick(self, now: float) -> None:
-        """Gom xong tên người lên xe (sau BOARD_WINDOW giây) thì soạn một câu."""
-        if not self.boarding or now - self.board_started < BOARD_WINDOW:
+        """Gom tên người lên xe (BOARD_WINDOW giây) thành một câu, tối đa BOARD_NAMES tên; phòng đông thì câu sau đọc tiếp —
+        ai cũng được đọc tên. Overlay cho người trong hàng bước lên đúng lúc tên mình được đọc (sự kiện `speak` kèm `names`)."""
+        if not self.boarding or now - self.board_started < BOARD_WINDOW or now - self.last_board < BOARD_GAP:
             return
-        people, self.boarding = self.boarding, []
-        if now - self.last_board < BOARD_GAP:
-            return  # phòng đông: bỏ lượt này, thẻ trên màn hình vẫn hiện tên
+        people, self.boarding = self.boarding[:BOARD_NAMES], self.boarding[BOARD_NAMES:]
         self.last_board = now
         provinces = {p for _, p in people}
-        names = names_phrase([n for n, _ in people])
+        raw = [n for n, _ in people]
+        names = names_phrase(raw, BOARD_NAMES)
         self.offer(line("board", style=self.style(), prov=provinces.pop(), names=names) if len(provinces) == 1
-                   else line("board_mixed", style=self.style(), names=names), BOARD)
+                   else line("board_mixed", style=self.style(), names=names), BOARD, raw)
 
     def style(self) -> str:
         return self.settings().get("talk_style") or "mix"
 
-    def offer(self, text: str, priority: int) -> None:
+    def offer(self, text: str, priority: int, names: list[str] | None = None) -> None:
         text = speakable(text)
         if not text or not self.settings().get("voice_on", True):
             return
         if priority >= LOW and len(self.queue) >= QUEUE_SOFT:
             return  # đang dồn: bỏ câu ít quan trọng
         self.seq += 1
-        self.queue.append((priority, self.seq, text))
+        self.queue.append((priority, self.seq, text, names or []))
         self.queue.sort()
         self.wake.set()
 
@@ -157,7 +160,7 @@ class Announcer:
                     self.wake.clear()
                     await self.wake.wait()
                     continue
-                _, _, text = self.queue.pop(0)
+                _, _, text, names = self.queue.pop(0)
                 try:
                     name, seconds = await self.render(text)
                 except Exception:
@@ -165,7 +168,7 @@ class Announcer:
                     continue
                 rate = float(self.settings().get("voice_rate") or 1.0)  # overlay phát nhanh / chậm theo tốc độ này
                 await self.emit({"kind": "event", "type": "speak", "url": f"/voice/{name}", "text": text,
-                                 "seconds": round(seconds / rate, 2)})
+                                 "seconds": round(seconds / rate, 2), "names": names})
                 await asyncio.sleep(seconds / rate + 0.3)  # đọc hết câu mới sang câu sau
 
     async def render(self, text: str) -> tuple[str, float]:

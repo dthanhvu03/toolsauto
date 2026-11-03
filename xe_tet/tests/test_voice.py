@@ -17,7 +17,7 @@ def announcer(settings=None):
 
 
 def texts(a):
-    return [t for _, _, t in a.queue]
+    return [t for _, _, t, _ in a.queue]
 
 
 def test_text_is_made_speakable():
@@ -47,19 +47,26 @@ def test_relief_dropoff_read_only_when_on_screen():
     assert "Cà Mau" in said and "Út" in said
 
 
-def test_boarding_names_are_batched_and_rate_limited():
+def test_boarding_names_are_batched_and_everyone_is_read():
+    """Anh 03/11 «ở bến lên xe cần phải đọc tên»: gom tên thành câu (tối đa 5 tên), phòng đông thì câu sau đọc tiếp — không
+    bỏ ai; câu mang theo tên để overlay cho đúng người bước lên lúc được đọc; xe chạy rồi thì thôi."""
     a = announcer()
-    for name in ("An", "Bình", "Chi", "Dũng"):
+    for name in ("An", "Bình", "Chi", "Dũng", "Em", "Gấm", "Hà"):
         a.observe({"type": "ticket", "name": name, "province": "Huế"}, 0)
     a.tick(1)
     assert not a.queue  # còn đang gom
     a.tick(3.5)
     (said,) = texts(a)
-    assert "An, Bình, Chi và 1 người nữa" in said and "Huế" in said
+    assert "An, Bình, Chi, Dũng và Em" in said and "Huế" in said and a.queue[0][3] == ["An", "Bình", "Chi", "Dũng", "Em"]
     a.queue.clear()
-    a.observe({"type": "ticket", "name": "Em", "province": "Huế"}, 5)
-    a.tick(9)  # chưa đủ 8 giây từ câu trước
+    a.tick(6)  # chưa đủ BOARD_GAP: chờ, không bỏ
     assert not a.queue
+    a.tick(9)
+    assert a.queue[0][3] == ["Gấm", "Hà"]
+    a.observe({"type": "ticket", "name": "Ích", "province": "Huế"}, 10)
+    a.observe({"type": "depart"}, 11)
+    a.tick(20)
+    assert len(a.queue) == 1
 
 
 def test_queued_and_pickup_tickets_are_not_read_as_boarding():
@@ -90,9 +97,10 @@ def test_queue_keeps_important_lines_and_admin_first():
     a = announcer()
     for i in range(3):
         a.offer(f"câu lơ xe {i}", voice.LOXE)
-    a.offer("tên lên xe", BOARD)  # hàng đã dồn 3 câu: bỏ
+    a.offer("thêm câu lơ xe", voice.LOXE)  # hàng đã dồn 3 câu: bỏ câu thường
+    a.offer("tên lên xe", BOARD)  # đọc tên lên xe thì không bỏ (người trong hàng chờ nghe tên mới bước lên)
     a.offer("Chào bà con!", ADMIN)  # admin luôn vào, đọc trước
-    assert texts(a)[0] == "Chào bà con." and "tên lên xe" not in texts(a)
+    assert texts(a)[:2] == ["Chào bà con.", "tên lên xe"] and "thêm câu lơ xe" not in texts(a)
     off = announcer({"voice_on": False})
     off.offer("không đọc", ADMIN)
     assert not off.queue
@@ -192,7 +200,7 @@ def test_every_talk_line_fills_its_fields():
     from xe_tet.server.game.talk import LINES, STYLES, TALK_STYLES, hours_phrase, line, options
     fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
                   prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình",
-                  lunar="26 Chạp", other="Bình", need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, label="Taxi", xu=20)
+                  lunar="26 Chạp", other="Bình", need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30)
     kinds = set(LINES[STYLES[0]])
     assert all(set(LINES[style]) == kinds for style in STYLES)  # kiểu nào cũng đủ mọi tình huống
     for style in TALK_STYLES:
