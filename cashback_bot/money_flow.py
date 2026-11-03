@@ -25,6 +25,17 @@ from cashback_bot import payouts
 CLAWBACK_TAG = ":clawback:"
 MATCHED = "MATCHED"
 
+# Tên gọi tiền dùng chung cho admin, khách (Telegram, Zalo) và web. Đổi chữ ở đây, không viết lại ở từng màn.
+WAIT_SHOPEE = "Chờ Shopee trả"
+WAIT_HOLD = "Chờ đủ ngày giữ"
+IN_WALLET = "Trong ví"
+OWED_BACK = "Đang trừ lại"
+RESERVED = "Đang chờ chuyển"
+PAID_OUT = "Đã chuyển"
+FUND_LEFT = "Quỹ chi trả còn"
+OWNER_REAL = "Thực nhận"
+OWNER_SOON = "Sắp về"
+
 
 @dataclass(frozen=True)
 class Period:

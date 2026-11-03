@@ -115,7 +115,7 @@ def test_07_08_09_trang_thai_co_y_nghia(tmp_path):
     texts = [e["message_html"] for e in _events(bot)]
     assert len(texts) == 4
     assert "Người mua đã thanh toán đơn" in texts[1]
-    assert "Đơn hàng đã hoàn thành" in texts[2] and "đang chờ Shopee xác minh" in texts[2] and "đã được Shopee duyệt" not in texts[2]
+    assert "Đơn hàng đã hoàn thành" in texts[2] and "đang chờ Shopee duyệt và trả" in texts[2] and "Shopee đã duyệt hoa hồng" not in texts[2]
     assert "Đơn đã huỷ" in texts[3] and "/hotro" in texts[3]
 
 
@@ -193,7 +193,7 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     bot.refresh_wallet(datetime(2026, 10, 22, tzinfo=timezone.utc))
     page = bot.handle_text(USER, "b", "/donhang", update_id=801, now=QUOTE_NOW)
     assert "Đã ghi nhận <b>2</b> đơn qua link của bạn" in page.text
-    assert "⏳ 2 chờ xác minh" in page.text and "đã duyệt" not in page.text, "chỉ hiện số khác 0"
+    assert "⏳ 2 chờ Shopee trả" in page.text and "Shopee đã trả" not in page.text, "chỉ hiện số khác 0"
     assert "💰 Hoàn tạm tính: <b>13.117đ</b>" in page.text
     assert "Chưa có khoản nào vào ví." in page.text
     assert "<b>1. Áo Polo Nam</b>" in page.text and "🛒 Mua 21/10/2026 · Đang xử lý" in page.text
@@ -202,8 +202,8 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     assert "📦 <b>Áo Polo Nam</b>" in detail.text and "mua 21/10/2026" in detail.text
     assert "💰 Hoàn tạm tính: <b>12.157đ</b>" in detail.text and "V1.1" not in detail.text
     assert "✅ Shopee ghi nhận đơn qua link của bạn" in detail.text and "⏳ Đơn đang được xử lý" in detail.text
-    assert "⏳ Chờ Shopee duyệt hoa hồng" in detail.text and "✅ Shopee đã duyệt" not in detail.text
-    assert "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình" in detail.text and "Tiền hoàn chưa vào ví" in detail.text
+    assert "⏳ Chờ Shopee trả hoa hồng (Shopee trả theo kỳ)" in detail.text and "✅ Shopee đã duyệt" not in detail.text
+    assert "Shopee đã duyệt và trả hoa hồng" not in detail.text and "Tiền hoàn chưa vào ví" in detail.text
     assert "raw" not in detail.text.lower() and "SN-o1" not in detail.text
     assert "u:h:c:amount" in [d for row in detail.inline_keyboard for _l, d in row]
 
@@ -222,7 +222,7 @@ def test_chi_tiet_don_huy_va_da_thanh_toan(tmp_path):
     _order(bot, sub, status="CANCELLED", commission=10_000, cid="huy")
     done = _callback(bot, USER, "u:o:d:ok").text
     assert "✅ Người mua đã thanh toán đơn" in done and "✅ Đơn hàng đã hoàn thành" in done
-    assert "⏳ Chờ Shopee duyệt hoa hồng" in done, "hoàn thành chưa phải đã duyệt"
+    assert "⏳ Chờ Shopee trả hoa hồng (Shopee trả theo kỳ)" in done, "hoàn thành chưa phải Shopee đã trả"
     cancelled = _callback(bot, USER, "u:o:d:huy").text
     assert "❌ Đơn đã huỷ" in cancelled and "không được tính" in cancelled and "Hoàn tạm tính" not in cancelled
     assert "⏳" not in cancelled, "đơn huỷ không hiện các bước chờ"
