@@ -125,8 +125,8 @@ def snack_of(text: str) -> str | None:
 
 # ---- đổi gió cho live đỡ lặp (anh 03/11: «game lặp đi lặp lại chán», TikTok hạn chế vì tưởng phát video quay sẵn) ----
 QUIZ_GAP = 180.0  # giây giữa hai câu đố (admin đặt trên /control)
-QUIZ_SECONDS = 25.0  # giây người xem gõ A / B / C
-QUIZ_RESULT_S = 8.0  # thẻ đáp án còn trên màn hình chừng này giây
+QUIZ_SECONDS = 40.0  # giây người xem gõ A / B / C (lơ xe đọc câu hỏi đã mất ~10 giây — anh 03/11 «chưa đọc kịp»)
+QUIZ_RESULT_S = 12.0  # thẻ đáp án còn trên màn hình chừng này giây
 QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đua tỉnh
 QUIZ_RACE = 3
 QUIZ_RECENT = 12  # không đố lại tỉnh vừa đố
@@ -1044,7 +1044,7 @@ class Engine:
     def _vendor_ready(self) -> bool:
         """Cô lên được lúc xe đang chạy đường bình thường (không bị chặn / đón / xem video / chen cảnh)."""
         return (self.phase == "DRIVING" and not self.block and not self.halt and not self.show and not self.vendor
-                and not self.vendor_done and self.trip is not None)
+                and not self.vendor_done and self.trip is not None and not self.quiz)
 
     def _vendor_tick(self, now: float) -> None:
         if self.vendor and self.vendor["stage"] == "sell" and self.phase in ("FINISH", "BOARDING"):  # hết chuyến: cô xuống
@@ -1574,7 +1574,7 @@ class Engine:
         if self.rollcalls:
             self._expire_rolls()
         self._vendor_tick(now)
-        self._quiz_tick(now)
+        self._quiz_tick(now, dt)
         self._ad_tick(now)
         if self.phase == "DRIVING":
             self._hunger_tick(dt)
@@ -1676,8 +1676,9 @@ class Engine:
         return keep
 
     def _check_blocks(self, now: float) -> None:
-        if self.block or self.halt or self.show or not self.block_plan or self.trip_km() < self.block_plan[0][0]:
-            return
+        if (self.block or self.halt or self.show or self.quiz or not self.block_plan
+                or self.trip_km() < self.block_plan[0][0]):
+            return  # đang đố vui: trạm / công an / sự cố chờ câu đố xong (không thay mất thẻ câu hỏi giữa chừng)
         _, kind = self.block_plan.pop(0)
         self._start_block(kind, now)
 
@@ -1725,8 +1726,10 @@ class Engine:
         return (self.quiz_on and self.phase == "DRIVING" and self.trip is not None and not self.block and not self.halt
                 and not self.show and not (self.vendor and self.vendor["stage"] == "stop"))
 
-    def _quiz_tick(self, now: float) -> None:
+    def _quiz_tick(self, now: float, dt: float = 0.0) -> None:
         q = self.quiz
+        if q and not q["done"] and (self.block or self.show or (self.vendor and self.vendor["stage"] == "stop")):
+            q["until"] += dt  # anh bấm tay chặn xe / chiếu video giữa câu đố: thẻ câu hỏi bị thay → đồng hồ đứng chờ
         if q and now >= q["until"]:
             if q["done"]:
                 self.quiz = None
@@ -1865,7 +1868,7 @@ class Engine:
         pending = self.show_pending
         if self.show or self.block or self.halt or not self.videos or self._in_pass():
             return
-        if pending is None and (not self.shows_on or now < self.next_show
+        if pending is None and (not self.shows_on or now < self.next_show or self.quiz
                                 or not SHOW_LEG_WINDOW[0] <= self.progress <= SHOW_LEG_WINDOW[1]):
             return  # tự chiếu: chỉ giữa chặng
         self.show_pending = None

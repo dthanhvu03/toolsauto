@@ -2109,6 +2109,36 @@ def test_quiz_answers_first_try_only_and_names_fastest_three():
     assert e.quiz is None
 
 
+def test_quiz_not_cut_off_by_toll_or_vendor():
+    """Anh 03/11 «chưa đọc câu đố đã chuyển sang thông báo khác»: trạm / công an / sự cố / cô Ba tự tới phải chờ câu đố
+    (cả thẻ đáp án) xong; anh bấm tay chặn xe giữa câu đố thì đồng hồ câu đố đứng chờ."""
+    import random as _random
+    from xe_tet.server.game.engine import QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.rng = _random.Random(3)
+    e.quiz_now()
+    e.block_plan = [(0.0, "toll")]  # trạm tới ngay
+    e._check_blocks(t + 1)
+    assert e.block is None and e.block_plan
+    assert not e._vendor_ready()
+    e.tick(t + QUIZ_SECONDS + 1)  # hết giờ trả lời: thẻ đáp án vẫn giữ chỗ
+    e._check_blocks(t + QUIZ_SECONDS + 1)
+    assert e.block is None
+    e.tick(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.quiz is None
+    e._check_blocks(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.block and e.block["kind"] == "toll"
+    # bấm tay chặn giữa câu đố: câu đố không hết giờ trong lúc bị che
+    e2, t2 = _driving_with_riders()
+    e2.quiz_on = True
+    e2.quiz_now()
+    until = e2.quiz["until"]
+    e2.block_now("toll")
+    e2.tick(t2 + 30)
+    assert e2.quiz["until"] >= until + 29 and not e2.quiz["done"]
+
+
 def test_quiz_comes_by_itself_only_while_driving():
     e = Engine(0.0)
     e.quiz_on = True
