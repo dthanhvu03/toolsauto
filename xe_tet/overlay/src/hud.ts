@@ -31,10 +31,11 @@ const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bế
 const SEATS_DEFAULT = 24;
 // bảng góc phải hẹp (340 px, ~15 chữ / dòng): tên quà bên trái, hiệu ứng in đỏ bên phải
 const GIFT_BOARD: [string, string][] = [
-  ["🌹 Hoa hồng", "hoa rơi"], ["🎵 TikTok", "bóp còi"], ["💗 Tim", "tim bay"],
+  ["⚡ Đang chờ xe", "lên đầu hàng"], ["🌹 Hoa hồng", "hoa rơi"], ["🎵 TikTok", "bóp còi"], ["💗 Tim", "tim bay"],
   ["🎆 10+ xu", "pháo hoa"], ["🧧 30+ xu", "lì xì"], ["🏮 100+ xu", "đèn lồng"],
 ];
 const GIFT_TIPS = [
+  "🎁 Đang chờ chuyến sau? Tặng quà bất kỳ → lên đầu hàng",
   "🎁 🌹 Hoa hồng → hoa mai, đào rơi · 🎵 TikTok → xe bóp còi",
   "🎁 💗 Tim → tim bay · 🎆 10–29 xu → pháo hoa",
   "🎁 🧧 30–99 xu → lì xì bay · 🏮 Từ 100 xu → đèn lồng · từ 18 tuổi",
@@ -552,7 +553,7 @@ export class Hud {
         big = `🎫 ${esc(t.name)} giữ chỗ xe số ${t.bus} ${t.arrow} ${esc(t.lane)}`;
         small = t.passed
           ? `Xe vừa qua ${esc(t.passed)} rồi · lên xe sau${t.eta ? ` ~${t.eta} phút` : ""}`
-          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""}`;
+          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""} · 🎁 tặng quà để lên đầu hàng`;
       } else if (t.pickup) {  // bắt xe dọc đường: ra điểm đón chờ (PLAN-136)
         big = `🚏 ${esc(t.name)} bắt xe số ${t.bus} dọc đường!`;
         small = `Ra điểm đón ${esc(t.pickup)} chờ${t.pickupIn ? ` · ~${clock(t.pickupIn)} xe tới` : ""} · về ${esc(t.province)}`;

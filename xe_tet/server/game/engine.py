@@ -133,6 +133,7 @@ SHOW_MAX = 60.0  # tối đa một lượt (anh chọn 60)
 SHOW_AGAIN = 90.0  # xe vừa lên sóng thì 90 giây sau mới tới lượt lại — xe khác (ít điểm) cũng có lượt
 ON_AIR_NAMES = 3
 OFFSCREEN_SKIP = {"via", "honk"}
+PRIORITY_TALK_GAP = 8.0  # lơ xe báo «X tặng quà, lên đầu hàng» tối đa 8 giây / câu
 RULES_GAP = 180.0  # lơ xe đọc luật chơi mỗi 3 phút (anh báo 02/11: người xem chưa hiểu luật)
 RULES_MIN_GAP = 60.0  # có RULES_JOINS người mới vào phòng thì đọc sớm hơn, nhưng không dưới 1 phút
 RULES_JOINS = 3  # câu nhỏ của xe chính: xe chính không lên màn hình thì lơ xe khỏi nói
@@ -161,7 +162,7 @@ STAY_MESSAGES = (
 GIFT_TIERS = ((1000, 4), (100, 3), (10, 2), (1, 1))
 # (có vé, chưa có vé) — chỉ hứa đúng cái sẽ thấy trên màn hình
 GIFT_LABELS = {
-    1: ("⭐ VIP: tên viền vàng trên xe", "⭐ VIP khi lên xe — comment tên tỉnh nha"),
+    1: ("⭐ giường vàng + tên viền vàng trên xe", "⭐ giường vàng khi lên xe — gõ tên tỉnh quê"),
     2: ("pháo hoa ngay + khi về tới quê", "pháo hoa mừng"),
     3: ("băng rôn «Xe Tết của bạn»", "băng rôn «Xe Tết của bạn»"),
     4: ("cả xe dừng lại chúc Tết", "cả xe dừng lại chúc Tết"),
@@ -253,6 +254,7 @@ class Viewer:
     invited: bool = False  # buổi này lơ xe đã mời lên xe (thả tim nhiều mà chưa có vé)
     stage: float = 0.0  # điểm lên sóng trong buổi (quà / bình luận / tim) — xe tăng cường của người này được chiếu lâu hơn
     stage_comments: int = 0
+    priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
 
 
 @dataclass
@@ -359,6 +361,7 @@ class Engine:
         self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
         self.last_via_talk = -1e9
+        self.last_priority_talk = -1e9
         self.last_rules = now  # mới mở game: để cảnh đầu tiên chạy, đọc luật sau RULES_MIN_GAP nếu có người vào
         self.joins_since_rules = 0
         self.specials: list[str] = []
@@ -450,8 +453,8 @@ class Engine:
             return (f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn, gõ xe nào để coi vé, "
                     "hổng về thì gõ không về.")
         if key == "gift":
-            return (f"{name} hỏi quà hả, mỗi món một kiểu, hoa hồng thì hoa rơi, TikTok thì xe bóp còi, tim thì tim bay, "
-                    "quà lớn có lì xì, đèn lồng, pháo hoa, chỉ người từ 18 tuổi tặng.")
+            return (f"{name} hỏi quà hả, đang chờ chuyến sau mà tặng quà là được lên đầu hàng, đã có giường thì giường vàng, "
+                    "món nào cũng có hiệu ứng riêng, chỉ người từ 18 tuổi tặng.")
         if key == "station":
             return f"{name} muốn xe ra bến khác thì gõ từ Hà Nội hay bến Đà Nẵng, đủ {STATION_VOTES} người gọi là xe ra."
         if key == "newname":
@@ -543,6 +546,21 @@ class Engine:
             if uid in q:
                 q.remove(uid)
         self.queued_at.pop(uid, None)
+        if uid in self.viewers:
+            self.viewers[uid].priority = False
+
+    def _prioritize(self, v: Viewer, lane: str) -> int:
+        """Người đang chờ tặng quà (PLAN-144, anh chọn «quà giúp chính mình»): lên đầu hàng làn mình, sau những người tặng
+        trước; cũng được ưu tiên khi xe làn khác chạy ngang quê. Trả thứ tự mới (1 = đầu hàng)."""
+        q = self.queues[lane]
+        q.remove(v.uid)
+        at = 0
+        while at < len(q) and self.viewers[q[at]].priority:
+            at += 1
+        q.insert(at, v.uid)
+        v.priority = True
+        self.queued_at[v.uid] = min(self.queued_at.values(), default=0.0) - 1.0
+        return at + 1
 
     def _release(self, v: Viewer) -> None:
         """Bỏ vé hiện có (giường hoặc chỗ chờ): giường trống thì kéo người chờ cùng làn lên ngay."""
@@ -1776,6 +1794,9 @@ class Engine:
         if queued and tier >= RELIEF_GIFT_TIER > tier_before:  # đang chờ xe sau + lên bậc băng rôn → bao xe tăng cường
             relief = self._dispatch_relief(queued, sponsor=v)
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
+        moved = None
+        if queued and relief is None and not v.priority:
+            moved = self._prioritize(v, queued)
         if tier >= 1:
             v.vip = True
         if tier >= 2:
@@ -1796,6 +1817,12 @@ class Engine:
         perk = GIFT_LABELS[tier][0 if ticketed else 1]
         if relief:
             perk = f"🚌 xe tăng cường chạy ngay cho bà con {self.network.lane_by_key[relief.lane].label.lower()}"
+        elif moved:
+            ln = self.network.lane_by_key[queued]
+            perk = f"⚡ lên đầu hàng chờ {ln.arrow} {ln.label} · thứ {moved}"
+            if self.last_now - self.last_priority_talk >= PRIORITY_TALK_GAP:
+                self.last_priority_talk = self.last_now
+                self.talk("priority", name=v.name, dest=self._dest(queued), pos=moved)
         self.emit("gift", name=v.name, hue=v.hue, tier=tier, tier_up=tier > tier_before, gift=gift,
                   diamonds=diamonds, total=total, perk=perk, next_tier=self._next_tier_hint(total, queued is not None),
                   parcel=parcel, parcels=v.parcels, fx=fx, fx_n=fx_n)

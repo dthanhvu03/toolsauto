@@ -96,6 +96,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} muốn lên xe thì gõ tên tỉnh quê vô, ví dụ Nghệ An hay Cà Mau, Anh Tư xếp giường liền.",
             "Lên xe thì gõ tên tỉnh {name} ơi, gõ Huế là về Huế, gõ Thanh Hóa là về Thanh Hóa.",
         ),
+        "priority": (  # người đang chờ tặng quà → lên đầu hàng (PLAN-144)
+            "{name} tặng quà, Anh Tư cho lên đầu hàng xe {dest} liền, giờ thứ {pos} rồi đó.",
+            "Cảm ơn {name}, chuyến {dest} kế tiếp {name} lên trước, thứ {pos} trong hàng.",
+        ),
         "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
             "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
             "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
@@ -295,6 +299,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} gõ tên tỉnh quê là lên xe liền, ví dụ Nghệ An, dễ ợt.",
             "Muốn lên xe thì gõ tên tỉnh {name} ơi, gõ Huế là về Huế.",
         ),
+        "priority": (
+            "{name} tặng quà nên được lên đầu hàng xe {dest}, thứ {pos}, uy tín.",
+            "Cảm ơn {name}, vé ưu tiên xe {dest}, giờ đứng thứ {pos} rồi.",
+        ),
         "parcels": (
             "Ship tận cổng thùng quà của {names}, uy tín luôn.",
             "Thùng quà của {names} hạ cánh an toàn, chuẩn đét.",
@@ -492,6 +500,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "board_hint": (
             "{name} muốn lên xe thì gõ tên tỉnh quê mình, ví dụ Nghệ An, Cà Mau.",
             "Lên xe đơn giản lắm {name}, gõ tên tỉnh quê vào bình luận là có giường.",
+        ),
+        "priority": (
+            "Cảm ơn {name}, được lên đầu hàng chờ xe {dest}, hiện là thứ {pos}.",
+            "{name} tặng quà, chuyến {dest} sau được lên trước, thứ {pos} trong hàng.",
         ),
         "parcels": (
             "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",

@@ -415,7 +415,7 @@ export class World {
     seats.forEach((s, i) => {
       const b = this.berths[i];
       if (!b) return;
-      b.blanket.material = mat(s ? hueColor(s.hue, 0.55) : 0xb0a596);
+      b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
       b.tag.element.textContent = s ? `${s.vip ? "⭐ " : ""}${s.name}` : `trống`;

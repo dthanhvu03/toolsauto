@@ -257,7 +257,7 @@ def test_gift_perk_text_matches_ticket():
     comment(e, "An", "Huế", 1)
     e.handle({"type": "gift", "name": "An", "diamonds": 1}, 2)
     perks = [ev["perk"] for ev in e.drain() if ev["type"] == "gift"]
-    assert "comment tên tỉnh" in perks[0] and "trên xe" in perks[1]
+    assert "gõ tên tỉnh" in perks[0] and "trên xe" in perks[1]
 
 
 def test_moderation_masks_names_and_drops_bad_chat():
@@ -1106,6 +1106,27 @@ def test_manifest_shows_who_is_on_which_bus_and_queue():
     assert q["people"] == [{"name": "Tư", "province": "Cà Mau", "pos": 1}]
 
 
+def test_waiting_gifter_jumps_to_front_once_until_boarding():
+    """PLAN-144 (anh chọn «quà giúp chính mình»): đang chờ chuyến sau mà tặng quà → lên đầu hàng làn mình, sau người tặng
+    trước; tặng thêm không nhảy nữa; đã có giường mà tặng → VIP (giường vàng)."""
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    for i, name in enumerate(("Ba", "Bốn", "Năm")):
+        comment(e, name, "Cà Mau", 2 + i)
+    q = e.queues["south"]
+    assert q == ["ba", "bốn", "năm"]
+    e.handle({"type": "gift", "name": "Năm", "diamonds": 1}, 6)
+    assert q == ["năm", "ba", "bốn"]
+    gift = [ev for ev in e.drain() if ev["type"] == "gift"][-1]
+    assert "lên đầu hàng" in gift["perk"] and "thứ 1" in gift["perk"]
+    e.handle({"type": "gift", "name": "Bốn", "diamonds": 1}, 7)
+    assert q == ["năm", "bốn", "ba"]  # sau người tặng trước
+    e.handle({"type": "gift", "name": "Bốn", "diamonds": 5}, 8)
+    assert q == ["năm", "bốn", "ba"]  # một lần tới khi lên xe
+    e.handle({"type": "gift", "name": "An", "diamonds": 1}, 9)
+    assert e.viewers["an"].vip
+
+
 # ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
 
 def test_where_question_is_not_a_booking():
@@ -1446,7 +1467,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
         assert is_bad(text), text
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
-                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120")
+                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
