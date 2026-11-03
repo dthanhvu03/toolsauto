@@ -145,6 +145,10 @@ html, body {
 /* bảng quà cố định (PLAN-144): 4 ô / hàng, ô cuối rộng gấp đôi */
 .gift-head { margin-top: 8px; padding-top: 8px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 30px; font-weight: 800;
   color: var(--red-deep); }
+.gift-line { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 25px; font-weight: 800;
+  color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cta:not(.gifts-open) .gift-head, #cta:not(.gifts-open) .gift-grid { display: none; }
+#cta.gifts-open .gift-line { display: none; }
 .gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
 .gift-grid div { background: #fff; border: 2px solid #f1c56b; border-radius: 14px; padding: 6px 4px; display: grid;
   grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; }

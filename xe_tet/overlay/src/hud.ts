@@ -24,6 +24,8 @@ const PILL: Record<State["phase"], string> = {
   FINISH: "Về bến", SPECIAL: "Chúc Tết",
 };
 const MAX_TOASTS = 3;
+const GIFTS_OPEN_MS = 10_000;
+const GIFTS_EVERY_MS = 45_000;
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
 const SEATS_DEFAULT = 24;
@@ -123,6 +125,32 @@ export class Hud {
   constructor() {
     window.setInterval(() => { this.ctaTick++; this.renderCta(); }, CTA_ROTATE_MS);
     window.setInterval(() => { this.boardTick++; this.renderBoard(); }, BOARD_ROTATE_MS);
+    // bảng quà đầy đủ chỉ mở lúc cần (anh 03/11 «che hết rồi»): mỗi GIFTS_EVERY_MS mở GIFTS_OPEN_MS cho người mới thấy
+    window.setInterval(() => this.openGifts(GIFTS_OPEN_MS), GIFTS_EVERY_MS);
+    // lơ xe + thông báo bám ngay dưới khung kêu gọi: khung gọn lại thì nhích lên, chừa cảnh xe
+    new ResizeObserver(() => this.placeUnderCta()).observe($("cta"));
+  }
+
+  private giftsTimer = 0;
+
+  private openGifts(ms: number): void {
+    $("cta").classList.add("gifts-open");
+    window.clearTimeout(this.giftsTimer);
+    this.giftsTimer = window.setTimeout(() => $("cta").classList.remove("gifts-open"), ms);
+  }
+
+  /** Đặt lơ xe / cột thông báo ngay dưới đáy khung kêu gọi (đơn vị thiết kế 1080×1920, chia cho cỡ chữ --z). */
+  private placeUnderCta(): void {
+    const stage = $("hud").getBoundingClientRect();
+    const cta = $("cta").getBoundingClientRect();
+    if (!stage.width || !cta.height) return;
+    const ratio = stage.width / 1080;
+    const z = parseFloat(getComputedStyle($("hud")).getPropertyValue("--z")) || HUD_SCALE;
+    const bottom = (cta.bottom - stage.top) / ratio + 14;  // px thiết kế
+    ($("loxe") as HTMLElement).style.top = `${bottom / z}px`;
+    const toasts = $("toasts") as HTMLElement;
+    toasts.style.top = `${bottom / z}px`;
+    toasts.style.maxHeight = `${Math.max(120, 1270 - bottom) / z}px`;  // không chạm bảng góc phải (1290 px)
   }
 
   update(s: State): void {
@@ -134,7 +162,10 @@ export class Hud {
     const c = s.control;
     const hud = $("hud");
     const scale = String(c?.hud_scale ?? HUD_SCALE);
-    if (hud.style.getPropertyValue("--z") !== scale) hud.style.setProperty("--z", scale);  // cỡ chữ trên live (admin chỉnh)
+    if (hud.style.getPropertyValue("--z") !== scale) {  // cỡ chữ trên live (admin chỉnh)
+      hud.style.setProperty("--z", scale);
+      requestAnimationFrame(() => this.placeUnderCta());
+    }
     hud.classList.toggle("hide-route", c?.show_route === false);
     hud.classList.toggle("hide-loxe", c?.show_loxe === false);
     hud.classList.toggle("hide-toasts", c?.show_toasts === false);
@@ -459,6 +490,7 @@ export class Hud {
         this.toast(`🏠 ${name} ở ngay ${esc(e.province ?? "")}`, "Đi bộ về nhà nha!", "stay");
         break;
       case "gift":
+        this.openGifts(GIFTS_OPEN_MS);  // vừa có quà: mở bảng quà cho người khác thấy quà làm được gì
         if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
         if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
