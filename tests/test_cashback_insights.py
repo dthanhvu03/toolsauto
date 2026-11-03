@@ -16,7 +16,7 @@ from app.features.cashback_insights.router import router as cashback_router
 from cashback_bot import insights, ops_watch
 from cashback_bot.admin_insights import parse_cost, parse_goal
 from cashback_bot.admin_notify import AdminNotifier
-from cashback_bot.admin_ui import MENU_KEYBOARD
+from cashback_bot.admin_ui import MENU_KEYBOARD, MONEY_MENU_KEYBOARD, MORE_MENU_KEYBOARD
 from cashback_bot.db import TrackingRepository
 from tests.test_cashback_payout_lifecycle import T as PAY_T
 from tests.test_cashback_payout_lifecycle import _available, _b3, _ready
@@ -122,7 +122,7 @@ def test_dong_thoi_gian_khach_khong_lo_so_tai_khoan(tmp_path):
 
 
 def test_menu_admin_co_4_man_moi():
-    data = [d for row in MENU_KEYBOARD for _label, d in row]
+    data = [d for menu in (MENU_KEYBOARD, MONEY_MENU_KEYBOARD, MORE_MENU_KEYBOARD) for row in menu for _label, d in row]
     assert {"c:in:m:30d", "c:in:g:30d", "c:in:o", "c:in:u:margin:1"} <= set(data)
 
 
@@ -291,7 +291,7 @@ def test_muc_tieu_so_that_trang_thai_va_moc(tmp_path):
 
 def test_man_muc_tieu_telegram_nhap_bo_va_lich_su(tmp_path):
     bot = _bot(tmp_path)
-    assert "c:in:t" in [d for row in MENU_KEYBOARD for _label, d in row]
+    assert "c:in:t" in [d for row in MORE_MENU_KEYBOARD for _label, d in row]
     screen = _callback(bot, ADMIN, "c:in:t")
     assert "Giai đoạn" in screen.text and "chưa đặt" in screen.text and "c:in:t:completed" in str(screen.inline_keyboard)
     ask = _callback(bot, ADMIN, "c:in:t:completed")
@@ -387,7 +387,7 @@ def test_tim_ticket_va_yeu_cau_rut(tmp_path):
 def test_man_tim_telegram_lenh_va_nut(tmp_path):
     bot = _bot(tmp_path)
     sub = _link(bot)
-    assert "c:in:f" in [d for row in MENU_KEYBOARD for _label, d in row]
+    assert "c:in:f" in [d for row in MORE_MENU_KEYBOARD for _label, d in row]
     reply = bot.handle_text(ADMIN, "admin", f"/tim {sub}", update_id=77, now=NOW)
     assert "1 kết quả" in reply.text and "c:in:l:" in str(reply.inline_keyboard)
     target = next(d for row in reply.inline_keyboard for _l, d in row if d.startswith("c:in:l:"))

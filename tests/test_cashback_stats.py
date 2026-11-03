@@ -91,7 +91,9 @@ def test_man_thong_ke_trong_admin(tmp_path):
     _seed(tmp_path)
     bot = service(tmp_path, FakeClient(payload()), admin_user_ids=frozenset({ADMIN}))
     home = bot.admin_panel.menu(ADMIN, NOW)
-    assert home.inline_keyboard[0] == (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t"))
+    assert home.inline_keyboard[0] == (("💰 Tiền & ví", "c:menu:money"),)
+    money = bot.admin_panel.handle_callback(ADMIN, "c:menu:money", "private", NOW)
+    assert ("💹 Dòng tiền", "c:in:m:30d") in [b for row in money.inline_keyboard for b in row]
     orders = bot.admin_panel.handle_callback(ADMIN, "c:menu:orders", "private", NOW)
     assert ("🗓 Thống kê Shopee 7 ngày", "c:st:7d") in [b for row in orders.inline_keyboard for b in row]
 
