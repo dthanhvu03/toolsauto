@@ -27,6 +27,9 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
   side: [4.5, 8.0, 27.5, 0.0, 2.3, -4.5], // ngang xe: góc thấp điện ảnh thấy trọn thân xe + nhà ngói 3 gian + núi xa
   close: [14.2, 8.4, 21.5, 0.4, 2.1, -1.5], // cận xe (góc trước 3/4 nhìn trọn đầu xe + thân xe + 2 bánh xe + cảnh quê)
 };
+// đang chiếu video bảng quảng cáo: máy quay ngước lên khung bảng (sau xe), xe vẫn trong khung dưới
+const SHOW_CAM: [number, number, number, number, number, number] = [3.5, 8.5, 25, 0.5, 6.2, -8.5];
+const BOARD_H = 9.5;  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
 // ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
@@ -211,7 +214,9 @@ export class World {
   private roadside: Walker[] = [];
   private blockProp: THREE.Group | null = null;  // trạm thu phí / chốt công an trước đầu xe (PLAN-148)
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
-  private blockLeaving = false;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
+  private blockLeaving = false;
+  private showCam = false;
+  private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
   private boardTimer = 0;
   private fx = new Fireworks();
   private dust = new Puffs(72);
@@ -230,6 +235,7 @@ export class World {
   private bendSweep = 0;
   private fade: HTMLElement;
   onView?: (view: View) => void;
+  onVideo?: (video: HTMLVideoElement | null) => void;  // bảng quảng cáo: tiếng video đi qua bộ trộn âm thanh
 
   private state: State | null = null;
   private set: SetName = "ben";
@@ -473,6 +479,7 @@ export class World {
     this.boardLine = [];
     this.roadside = [];
     this.dropBlock();
+    this.dropBillboard();
     this.bus.group.position.set(0, 0, 0);
     const early = this.early;
     this.early = [];
@@ -636,6 +643,62 @@ export class World {
     this.scene.add(g);
     this.blockProp = g;
     this.blockLeaving = false;
+  }
+
+  /** Bảng quảng cáo bên đường (anh 03/11): xe dừng, bảng LED lớn phía sau xe chiếu video anh tải lên, xong thì dỡ. Bắt đầu
+   * đúng chỗ server đang chiếu (màn mở giữa chừng vẫn khớp). Video dọc (TikTok) hay ngang đều co theo khung. */
+  private updateBillboard(show: { url: string; seconds: number; left: number } | null): void {
+    if (!show || this.set !== "road") {
+      if (this.board) this.dropBillboard();
+      return;
+    }
+    if (this.board?.url === show.url) return;
+    this.dropBillboard();
+    const video = document.createElement("video");
+    video.src = show.url;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.crossOrigin = "anonymous";
+    const tex = new THREE.VideoTexture(video);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const g = new THREE.Group();
+    const H = BOARD_H;  // rộng theo tỉ lệ video (dọc TikTok hay ngang)
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    screen.scale.set(H * 16 / 9, H, 1);
+    screen.position.set(0, 2.2 + H / 2, 0.08);
+    const frame = at(box(1, 1, 0.3, 0x263238), 0, 2.2 + H / 2, -0.1);
+    frame.scale.set(H * 16 / 9 + 0.6, H + 0.6, 0.3);
+    g.add(screen, frame, at(box(0.4, 2.4, 0.4, 0x546e7a), -2, 1.2, -0.2), at(box(0.4, 2.4, 0.4, 0x546e7a), 2, 1.2, -0.2));
+    const tag = label("📺 BẢNG QUẢNG CÁO", "lbl sign");
+    tag.position.set(0, 2.2 + H + 0.9, 0);
+    g.add(tag);
+    g.position.set(0.5, 0, -8.5);  // lề bên kia đường, sau thân xe: cao hơn nóc xe nên không bị che
+    video.addEventListener("loadedmetadata", () => {
+      const ratio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+      screen.scale.set(H * ratio, H, 1);
+      frame.scale.set(H * ratio + 0.6, H + 0.6, 0.3);
+      video.currentTime = Math.max(0, show.seconds - show.left);  // khớp chỗ server đang chiếu
+    }, { once: true });
+    this.scene.add(g);
+    this.board = { group: g, video, tex, url: show.url };
+    this.onVideo?.(video);
+    video.play().catch(() => {  // trình duyệt chặn tự phát có tiếng: phát câm (hình vẫn chạy)
+      video.muted = true;
+      void video.play().catch(() => undefined);
+    });
+  }
+
+  private dropBillboard(): void {
+    if (!this.board) return;
+    const { group, video, tex } = this.board;
+    this.board = null;
+    this.onVideo?.(null);
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    tex.dispose();
+    dropLabels(group);
+    this.scene.remove(group);
   }
 
   private dropBlock(): void {
@@ -1034,6 +1097,7 @@ export class World {
     const s = this.state;
     const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block;  // dừng đón / bị chặn: đứng yên
     this.updateBlock(s?.block?.kind ?? null, dt);
+    this.updateBillboard(s?.show ?? null);
     if (moving && this.roadside.length) {
       this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));
       this.roadside = [];
@@ -1119,7 +1183,16 @@ export class World {
 
     // góc nhìn do admin chọn (?view= trên URL ghi đè khi thử); camera trượt mượt tới góc mới
     const view: View = (URL_PARAMS.get("view") as View | null) ?? this.control.view;
-    const k = Math.min(1, dt * 3);
+    const showing = !!this.board && view === "outside";
+    if (showing) {  // xem video: ngước máy quay lên bảng quảng cáo
+      const [cx, cy, cz, lx, ly, lz] = SHOW_CAM;
+      this.camLookTo.set(lx, ly, lz);
+      this.camPosTo.set(cx, cy, cz);
+    } else if (this.showCam) {
+      this.aimCamera(false);  // hết video: về góc máy admin chọn
+    }
+    this.showCam = showing;
+    const k = Math.min(1, dt * (showing ? 1.5 : 3));
     this.camPos.lerp(this.camPosTo, k);
     this.camLook.lerp(this.camLookTo, k);
     this.camOut.position.copy(this.camPos);

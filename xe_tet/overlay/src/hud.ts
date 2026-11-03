@@ -139,12 +139,13 @@ export class Hud {
     hud.classList.toggle("hide-loxe", c?.show_loxe === false);
     hud.classList.toggle("hide-toasts", c?.show_toasts === false);
     hud.classList.toggle("hide-board", c?.show_board === false);
+    hud.classList.toggle("showing", !!s.show);  // xem video bảng quảng cáo: ẩn khung kêu gọi / lơ xe / thông báo cho thấy bảng
     // tháng Chạp → mùng 10: ghi ngày âm lịch («26 Chạp · còn 4 ngày nữa là Tết», «Giao thừa», «Mùng 2 Tết») — PLAN-134 C
     const lunar = s.season?.lunar;
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    setText("phase-pill", s.paused ? "Tạm dừng" : s.block ? (s.block.kind === "toll" ? "Trạm thu phí" : "Công an")
+    setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (s.block.kind === "toll" ? "Trạm thu phí" : "Công an")
       : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
@@ -174,6 +175,7 @@ export class Hud {
   /** [phần đầu, phần đuôi] của dòng trạng thái. */
   private statusText(s: State): [string, string] {
     if (s.paused) return ["Xe dừng chờ xíu nha", ""];
+    if (s.show) return [`📺 ${s.show.title}`, `còn ${clock(s.show.left)}`];  // dừng xem video bảng quảng cáo
     if (s.block) return [s.block.kind === "toll" ? `🚧 Trạm thu phí ${s.block.place}` : `👮 ${s.block.reason}`,
       `góp ${s.block.paid}/${s.block.goal} xu`];  // PLAN-148
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
@@ -283,7 +285,8 @@ export class Hud {
     } else {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn",
-        "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»"];
+        "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»",
+        "⚔️ Đua tỉnh: bình luận, thả tim, tặng quà · tỉnh thắng đi chuyến sau"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
         tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
@@ -359,11 +362,11 @@ export class Hud {
       setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()
         .map((r) => `<li>${r.vip ? "⭐ " : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
-    } else {
-      setText("board-title", "🏆 Tỉnh dẫn đầu");
-      setHTML("board-list", s.board.length
-        ? s.board.slice(0, 5).map((b) => `<li>${esc(b.province)} <span>${b.count}</span></li>`).join("")
-        : "<li>Chưa ai lên xe</li>");
+    } else {  // đua tỉnh (anh 03/11): tỉnh thắng có người chờ được đi chuyến sau
+      setText("board-title", "⚔️ Đua tỉnh · thắng đi trước");
+      setHTML("board-list", s.race?.length
+        ? s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join("")
+        : "<li>Bình luận · thả tim · tặng quà</li><li><small>kéo tỉnh mình lên đầu</small></li>");
     }
   }
 
@@ -402,6 +405,10 @@ export class Hud {
         break;
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
+        break;
+      case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
+        this.flash(`⚔️ ${e.province ?? ""} thắng đua tỉnh!`);
+        this.note(`⚔️ ${esc(e.province ?? "")} thắng đua tỉnh · ${e.points} điểm`, `Chuyến này đi hướng ${esc(e.province ?? "")} · vòng mới bắt đầu`);
         break;
       case "goal_step":  // mục tiêu buổi live qua mốc: cả phòng được cảnh vui
         this.flash(`🎯 ${e.xu} xu · ${e.label ?? ""}`);

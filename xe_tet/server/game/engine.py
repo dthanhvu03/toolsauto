@@ -182,6 +182,16 @@ BLOCK_FULL_RATE = 1.0
 GOAL_STEPS = ((0.1, "lixi", "🧧 mưa lì xì cả màn hình"), (0.3, "lantern", "🏮 thả đèn lồng"),
               (0.6, "firework", "🎆 pháo hoa lớn"), (1.0, "party", "🎉 cả xe dừng lại chúc Tết"))
 MONEY_WINDOW = 3600.0  # bảng doanh thu /control: quà trong 1 giờ gần nhất
+# Đua tỉnh (anh 03/11 duyệt): bình luận + tim + quà cộng điểm cho tỉnh quê; mỗi chuyến một vòng — tỉnh nhiều điểm nhất mà có
+# người đang chờ thì chuyến mới đi hướng tỉnh đó (sau luật «chờ quá 10 phút đi trước»). Trộn hành động miễn phí: không thành
+# game «chấm điểm chỉ bằng quà» (TikTok hạn chế), người không tặng vẫn kéo được tỉnh mình lên.
+RACE_PER_COMMENT = 1
+RACE_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây (không spam lấy điểm)
+RACE_LIKES_PER_POINT = 20
+RACE_PER_XU = 5
+RACE_TALK_GAP = 30.0
+# Bảng quảng cáo bên đường (anh 03/11): video anh tải lên; xe đang chạy dừng lại xem hết rồi chạy tiếp
+SHOW_LEG_WINDOW = (0.15, 0.8)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
 BLOCK_KEEP_MIN = 0.3
 BLOCK_CLEAR_KM = 12.0  # điểm chặn không đặt sát điểm thả khách / trạm nghỉ
 BLOCK_GAP_KM = 40.0
@@ -282,6 +292,8 @@ class Viewer:
     vip: bool = False
     fireworks: bool = False
     likes_trip: int = 0
+    race_at: float = -1e9  # lần cuối bình luận được điểm đua tỉnh
+    race_likes: int = 0  # tim lẻ chưa đủ một điểm đua tỉnh
     trips: int = 0
     followed: bool = False
     switched: bool = False
@@ -389,6 +401,17 @@ class Engine:
         self.goal_round = 0
         self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
         self.started_at = now
+        self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
+        self.race_leader: str | None = None
+        self.race_winner: str | None = None
+        self.last_race_talk = -1e9
+        self.videos: list[dict] = []  # video bảng quảng cáo (server cập nhật từ thư mục)
+        self.show: dict | None = None  # đang dừng xem video
+        self.shows_on = False  # server bật theo cài đặt; engine trần (test) không tự chiếu
+        self.show_every = 600.0
+        self.show_max = 120.0
+        self.show_index = 0
+        self.next_show = now + self.show_every
         self.fee_auto = True  # phí trạm / phạt tự theo lượng quà của phòng (tối đa toll_xu / fine_xu)
         self.gift_log: list[tuple[float, int]] = []  # (giờ, xu) quà trong GIFT_RATE_WINDOW giây gần nhất
         self.seated_at: list[float] = []  # giờ từng người có giường ở bến (giữ xe đủ lâu để đọc tên)
@@ -684,7 +707,14 @@ class Engine:
         self.boarding_started = now
         self.seated_at = []
         self.bus_counter += 1
+        self.race_winner = None
         self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
+        if self.race_winner:  # vòng đua tỉnh này có tỉnh thắng: báo rồi sang vòng mới
+            win = BY_KEY[self.race_winner].name
+            self.emit("race_win", province=win, points=self.race[self.race_winner])
+            self.talk("race_win", prov=win, main=True)
+        self.race.clear()
+        self.race_leader = None
         self.next_banner = None
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
@@ -730,6 +760,13 @@ class Engine:
         def load(lane: str) -> int:
             served = self.network.serves(lane)
             return sum(1 for prov in people if prov in served)
+        # đua tỉnh: tỉnh nhiều điểm nhất (có người đang chờ) quyết hướng chuyến này
+        contenders = [(pts, key) for key, pts in self.race.items() if pts > 0 and key in people]
+        for _, key in sorted(contenders, reverse=True):
+            lanes = [lane for lane in waiting if key in self.network.serves(lane)]
+            if lanes:
+                self.race_winner = key
+                return max(lanes, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
         return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
 
     def drive_seconds(self, total_km: float, rush: bool = False) -> float:
@@ -1127,7 +1164,10 @@ class Engine:
         if self.paused:
             self.phase_until += dt  # đồng hồ pha đứng yên, xe không chạy
             if self.block:
-                self.block["since"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
+                self.block["since"] += dt
+            if self.show:
+                self.show["until"] += dt
+                self.show["started"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
             return
         self._run_reliefs(dt)
         self._remind_direction(now)
@@ -1149,6 +1189,9 @@ class Engine:
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
+        elif self.phase == "DRIVING" and self.show:
+            if now >= self.show["until"]:
+                self._end_show()
         elif self.phase == "DRIVING" and self.block:
             self._block_tick(now)  # bị chặn: đứng yên tới khi góp đủ quà / Anh Tư bù lỗ
         elif self.phase == "DRIVING" and self.halt and now < self.halt["until"]:
@@ -1167,6 +1210,7 @@ class Engine:
                 self._check_pickups()
                 self._watch_place(now)
                 self._check_blocks(now)
+                self._check_show(now)
             self._wear(self.trip_km() - km_before)
         elif self.phase == "SPECIAL":
             if now >= self.phase_until:
@@ -1209,7 +1253,7 @@ class Engine:
         return keep
 
     def _check_blocks(self, now: float) -> None:
-        if self.block or self.halt or not self.block_plan or self.trip_km() < self.block_plan[0][0]:
+        if self.block or self.halt or self.show or not self.block_plan or self.trip_km() < self.block_plan[0][0]:
             return
         _, kind = self.block_plan.pop(0)
         self._start_block(kind, now)
@@ -1218,8 +1262,8 @@ class Engine:
         """Admin bấm «Trạm thu phí» / «Công an» trên /control: chặn xe ngay (xe phải đang chạy đường)."""
         if kind not in ("toll", "police"):
             raise ValueError(kind)
-        if self._phase_now() != "DRIVING" or self.block or self.halt:
-            raise Refused("Chỉ chặn được lúc xe đang chạy đường (không đang dừng đón / đang bị chặn).")
+        if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
+            raise Refused("Chỉ chặn được lúc xe đang chạy đường (không đang dừng đón / bị chặn / xem video).")
         self._start_block(kind, self.last_now)
 
     def _start_block(self, kind: str, now: float) -> None:
@@ -1241,6 +1285,61 @@ class Engine:
             self.talk("toll", place=place, goal=goal, main=True)
         else:
             self.talk("speeding" if speeding else "police", reason=reason, goal=goal, main=True)
+
+    # ---- đua tỉnh -------------------------------------------------------------------------------
+
+    def _race(self, v: Viewer, points: int) -> None:
+        """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước)."""
+        key = v.province or v.home
+        if not key or points <= 0:
+            return
+        self.race[key] += points
+        leader = self.race.most_common(1)[0][0]
+        if leader != self.race_leader:
+            self.race_leader = leader
+            if self.last_now - self.last_race_talk >= RACE_TALK_GAP:
+                self.last_race_talk = self.last_now
+                self.talk("race_lead", prov=BY_KEY[leader].name)
+
+    # ---- bảng quảng cáo: dừng xe xem video ----------------------------------------------------
+
+    def _check_show(self, now: float) -> None:
+        if (not self.shows_on or not self.videos or self.show or self.block or self.halt or now < self.next_show
+                or not SHOW_LEG_WINDOW[0] <= self.progress <= SHOW_LEG_WINDOW[1]):
+            return
+        video = self.videos[self.show_index % len(self.videos)]
+        self.show_index += 1
+        self._start_show(video, now)
+
+    def show_now(self, name: str = "") -> None:
+        """Admin bấm «Chiếu ngay» (một video cụ thể hoặc video kế tiếp): xe phải đang chạy đường."""
+        if not self.videos:
+            raise Refused("Chưa có video nào — tải video lên trước.")
+        if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
+            raise Refused("Chỉ chiếu được lúc xe đang chạy đường (không đang dừng đón / bị chặn / đang chiếu).")
+        video = next((x for x in self.videos if x["name"] == name), None)
+        if video is None:
+            video = self.videos[self.show_index % len(self.videos)]
+            self.show_index += 1
+        self._start_show(video, self.last_now)
+
+    def _start_show(self, video: dict, now: float) -> None:
+        seconds = max(3.0, min(float(video.get("seconds") or 30), self.show_max))
+        self.show = {"url": video["url"], "title": video["title"], "seconds": round(seconds, 1), "until": now + seconds,
+                     "started": now}
+        self.emit("show", url=video["url"], title=video["title"], seconds=round(seconds, 1))
+        self.talk("show_start", title=video["title"], main=True)
+
+    def stop_show(self) -> None:
+        if not self.show:
+            raise Refused("Đang không chiếu video.")
+        self._end_show()
+
+    def _end_show(self) -> None:
+        self.show = None
+        self.next_show = self.last_now + self.show_every
+        self.emit("show_end")
+        self.talk("show_end", main=True)
 
     def _advance_goal(self, v: Viewer, diamonds: int) -> None:
         """Thanh mục tiêu buổi: qua mốc nào thì cả phòng được cảnh vui đó; đủ 100 % thì chúc Tết + sang vòng mới."""
@@ -1346,6 +1445,7 @@ class Engine:
         if self.phase == "DRIVING":
             self.progress = 1.0
             self.block = None
+            self.show = None
         self.phase_until = self.last_now
 
     def set_departure(self, key: str) -> None:
@@ -1387,6 +1487,9 @@ class Engine:
                 v.stage_comments += 1
                 v.stage += 1
             self._on_comment(v, str(event.get("text") or ""), now)
+            if now - v.race_at >= RACE_COMMENT_GAP:
+                v.race_at = now
+                self._race(v, RACE_PER_COMMENT)
         elif kind == "like":
             count = max(1, min(LIKE_MAX, as_int(event.get("count"))))
             v.likes += count
@@ -1795,6 +1898,10 @@ class Engine:
         self.trip_likes += count
         v.likes_trip += count
         self.boost = min(BOOST_MAX, self.boost + count * BOOST_PER_LIKE)
+        v.race_likes += count
+        if v.race_likes >= RACE_LIKES_PER_POINT:
+            self._race(v, v.race_likes // RACE_LIKES_PER_POINT)
+            v.race_likes %= RACE_LIKES_PER_POINT
         for mark in LIKE_MILESTONES:
             if before < mark <= self.trip_likes:
                 self.emit("like_milestone", total=mark)
@@ -2084,6 +2191,7 @@ class Engine:
         self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
         self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
         self._advance_goal(v, diamonds)
+        self._race(v, diamonds * RACE_PER_XU)
         paid = self._pay_block(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
@@ -2250,7 +2358,10 @@ class Engine:
             "terrain": terrain,
             "leg_index": self.leg_index,
             "progress": round(self.progress, 4),
-            "speed": 0.0 if self.halt or self.block else round(self.speed(), 3),
+            "speed": 0.0 if self.halt or self.block or self.show else round(self.speed(), 3),
+            "show": {"url": self.show["url"], "title": self.show["title"], "seconds": self.show["seconds"],
+                     "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
+            "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,

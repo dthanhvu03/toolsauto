@@ -1509,7 +1509,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5)
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1709,3 +1709,54 @@ def test_session_goal_steps_unlock_fun_for_everyone_and_money_panel():
     assert e.snapshot()["goal"]["xu"] == 5 and e.snapshot()["goal"]["round"] == 2
     m = e.money()
     assert m["hour_xu"] == 105 and m["gifters"] == 2 and m["top"][0] == {"name": "B", "xu": 70}
+
+
+def test_province_race_decides_next_trip_and_resets_each_trip(monkeypatch):
+    """Đua tỉnh (anh 03/11): bình luận (1 điểm / 15 giây / người) + tim (20 tim = 1) + quà (1 xu = 5) cộng cho tỉnh quê; tỉnh
+    nhiều điểm nhất có người chờ thì chuyến mới đi hướng đó; mỗi chuyến một vòng."""
+    monkeypatch.setattr("xe_tet.server.game.engine.LANE_MAX_WAIT", 1e9)  # chuyến Hà Nội dài: tắt luật «chờ quá 10 phút»
+    e = Engine(0.0)
+    fill_lane(e, "Cà Mau", SEATS, 1)  # chuyến 1 hướng nam, đầy
+    comment(e, "Tây1", "Bạc Liêu", 2)  # hướng nam: hết giường → chờ
+    fill_lane(e, "Hà Nội", 3, 3, prefix="B")  # hướng bắc đông người chờ hơn
+    e.drain()
+    tay = e.viewers["tây1"].province
+    for t in (4, 5, 6):  # bình luận dồn: chỉ 1 điểm / 15 giây (lúc gõ tên tỉnh đã được 1)
+        comment(e, "Tây1", "chào cả nhà", t)
+    assert e.race[tay] == 1
+    e.handle({"type": "like", "name": "Tây1", "count": 45}, 7)
+    e.handle({"type": "like", "name": "Tây1", "count": 100}, 8)  # chỉ tim (không quà): vẫn kéo tỉnh mình lên được
+    assert {"province": "Bạc Liêu", "points": 8} in e.snapshot()["race"]  # Cà Mau nhiều điểm hơn nhưng đã ngồi hết trên xe
+    t = 9.0
+    while e.bus.no == 1:  # chạy hết chuyến 1 → chuyến 2: Bạc Liêu thắng dù hướng bắc đông người chờ hơn
+        t += 1
+        e.tick(t)
+    wins = [x for x in e.drain() if x["type"] == "race_win"]
+    assert wins and wins[-1]["province"] == "Bạc Liêu" and e.bus.seat_of("tây1") is not None
+    assert not e.race  # vòng mới
+
+
+def test_billboard_video_stops_bus_then_continues():
+    """Bảng quảng cáo (anh 03/11): xe đang chạy dừng lại xem video anh tải lên rồi chạy tiếp; tự chiếu theo lịch."""
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    e = Engine(0.0)
+    with pytest.raises(Refused):
+        e.show_now()
+    e.videos = [{"name": "a.mp4", "title": "Video A", "url": "/videos/a.mp4", "seconds": 20.0}]
+    _driving(e)
+    e.show_now("a.mp4")
+    (ev,) = [x for x in e.drain() if x["type"] == "show"]
+    assert ev["url"] == "/videos/a.mp4" and e.snapshot()["speed"] == 0.0 and e.snapshot()["show"]["title"] == "Video A"
+    km = e.trip_km()
+    e.tick(15)
+    assert e.show and e.trip_km() == km
+    e.tick(22)
+    assert e.show is None and [x for x in e.drain() if x["type"] == "show_end"]
+    e.tick(25)
+    assert e.trip_km() > km
+    # tự chiếu: tới giờ, giữa chặng
+    e.shows_on, e.next_show = True, 0.0
+    e.progress = 0.5
+    e.tick(26)
+    assert e.show and e.show["title"] == "Video A"

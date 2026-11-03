@@ -286,6 +286,7 @@ html, body {
 /* Admin tắt từng phần (bảng điều khiển → Màn hình) */
 #hud.hide-route #route, #hud.hide-route #cta, #hud.hide-loxe #loxe, #hud.hide-toasts #toasts,
 #hud.hide-board #board, #hud.hide-board #rest-card { display: none !important; }
+#hud.showing #cta, #hud.showing #loxe, #hud.showing #toasts, #hud.showing #callout { display: none !important; }
 
 /* ---- thẻ bên (góc phải, ngoài khung comment TikTok) ---- */
 .side { right: 20px; width: 340px; padding: 14px 18px; }

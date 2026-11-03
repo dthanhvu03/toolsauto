@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import ai_reply, live_log, music, report, settings, simulator, store, voice
+from . import ai_reply, live_log, music, report, settings, simulator, store, video, voice
 from .game.engine import LIKE_MAX, VN, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -129,6 +129,9 @@ class Hub:
 
     def apply_blocks(self, engine: Engine) -> None:
         engine.goal_xu = self.settings["goal_xu"]
+        engine.shows_on = self.settings["show_on"]
+        engine.show_every = self.settings["show_every_min"] * 60.0
+        engine.show_max = float(self.settings["show_max_seconds"])
         engine.blocks_on = self.settings["blocks_on"]
         engine.fee_auto = self.settings["fee_auto"]
         engine.toll_xu = self.settings["toll_xu"]
@@ -224,6 +227,7 @@ class Hub:
                 "ai": {"key": self.ai_key, "answered": self.ai_answered, "error": self.ai_error, "reused": self.ai_cache_hits,
                        "waiting": len(self.engine.questions)},
                 "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks(),
+                "videos": video.videos(),
                 "voices": self.voice.voice_list}
 
     def update_settings(self, changes: dict) -> None:
@@ -267,6 +271,7 @@ class Hub:
             if self.sim_rate > 0 and now >= next_sim:
                 self.handle(simulator.next_event(self.engine.phase))
                 next_sim = now + random.expovariate(self.sim_rate)
+            self.engine.videos = video.videos()  # bảng quảng cáo: danh sách video (quét lại khi thư mục đổi)
             self.engine.tick(now)
             if self.engine.network.departure.key != self.settings["departure"]:  # người xem gọi xe ra bến khác (PLAN-136)
                 self.update_settings({"departure": self.engine.network.departure.key})
@@ -453,6 +458,10 @@ async def _admin(body: dict) -> dict:
         engine.block_now(str(body.get("kind") or ""))
     elif action == "cover":  # «Anh Tư bù lỗ»: xe đang bị chặn đi tiếp luôn
         engine.cover()
+    elif action == "show":  # bảng quảng cáo: dừng xe chiếu video ngay (tên file, trống = video kế tiếp)
+        engine.show_now(str(body.get("name") or ""))
+    elif action == "show_stop":
+        engine.stop_show()
     elif action == "departure":
         hub.engine.set_departure(str(body.get("key") or ""))  # BR-8: bến chưa trống → ValueError → 400
         hub.update_settings({"departure": hub.engine.network.departure.key})
@@ -531,6 +540,42 @@ async def delete_music(name: str) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/video")
+async def upload_video(request: Request, name: str = "") -> dict:
+    """Tải một video bảng quảng cáo lên (thân request là nội dung file, `?name=` là tên file)."""
+    try:
+        target = video.upload_target(name)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    part = target.with_name(target.name + ".part")
+    size = 0
+    try:
+        with part.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > video.MAX_BYTES:
+                    raise ValueError(f"Video quá lớn (tối đa {video.MAX_BYTES // 1024 // 1024} MB)")
+                fh.write(chunk)
+        if not size:
+            raise ValueError("File rỗng")
+        part.rename(target)
+    except ValueError as exc:
+        part.unlink(missing_ok=True)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    await hub.broadcast(hub.state_message())
+    return {"ok": True, "name": target.name}
+
+
+@app.delete("/api/video/{name}")
+async def delete_video(name: str) -> dict:
+    try:
+        video.remove(name)
+    except FileNotFoundError:
+        return JSONResponse({"ok": False, "error": "Không có video này"}, status_code=404)
+    await hub.broadcast(hub.state_message())
+    return {"ok": True}
+
+
 @app.get("/control")
 async def control() -> FileResponse:
     return FileResponse(HERE / "control.html")
@@ -544,6 +589,8 @@ async def live_report(id: int | None = None, token: str = "") -> HTMLResponse:
 
 music.MUSIC_DIR.mkdir(parents=True, exist_ok=True)  # thư mục nhạc của anh (thả file vào là có trong danh sách)
 app.mount("/music", StaticFiles(directory=music.MUSIC_DIR), name="music")
+video.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/videos", StaticFiles(directory=video.VIDEO_DIR), name="videos")
 voice.VOICE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/voice", StaticFiles(directory=voice.VOICE_DIR), name="voice")
 if OVERLAY_DIST.exists():

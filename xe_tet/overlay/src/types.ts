@@ -24,7 +24,8 @@ export interface Control {
   music_auto?: boolean;  // hết bài tự qua bài (server đổi bài, overlay chỉ phát)
   music_volume?: number;
   sfx_volume?: number;
-  voice_on?: boolean;  // giọng Anh Tư lơ xe (PLAN-128)
+  voice_on?: boolean;
+  show_sound?: boolean;  // bảng quảng cáo: phát tiếng video  // giọng Anh Tư lơ xe (PLAN-128)
   voice_volume?: number;
   voice_rate?: number;  // tốc độ đọc 0,8 – 1,6
   trip_minutes?: number;  // chuyến xa nhất chạy bao nhiêu phút (PLAN-130)
@@ -101,6 +102,9 @@ export interface State {
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
   turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
   block?: Block | null;
+  show?: { url: string; title: string; seconds: number; left: number } | null;  // đang dừng xem video bảng quảng cáo
+  race?: { province: string; points: number }[];  // đua tỉnh vòng này
+  videos?: { name: string; title: string; url: string; seconds: number }[];
   goal?: { xu: number; goal: number; round: number; next_xu: number; next: string };  // mục tiêu buổi live  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
 }
 
@@ -167,6 +171,7 @@ export interface GameEvent {
   specialty?: string;
   place?: string;  // trạm dừng chân: tỉnh có trạm
   label?: string; round?: number;  // goal_step
+  points?: number;  // race_win
   kind?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;  // block / block_end
   total?: number;
   board?: { province: string; count: number }[];

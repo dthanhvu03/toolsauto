@@ -47,6 +47,8 @@ export class Sound {
   private sfx = this.ctx.createGain();
   private voice = this.ctx.createGain();
   private duck = this.ctx.createGain();
+  private videoGain = this.ctx.createGain();  // tiếng video bảng quảng cáo
+  private videoSrc: MediaElementAudioSourceNode | null = null;
   private speaking = 0;  // số câu đang phát (server đã giãn cách, phòng hờ chồng nhau)
   private rate = 1;  // tốc độ đọc (admin chỉnh), phát nhanh hơn mà giữ cao độ
   private tunnel = this.ctx.createBiquadFilter();
@@ -74,6 +76,7 @@ export class Sound {
     this.vehicleDuck.connect(this.sfx);
     this.sfx.connect(this.master);
     this.voice.connect(this.master);
+    this.videoGain.connect(this.master);
     this.master.connect(glue).connect(this.ctx.destination);
     // lốp + gió: tiếng ồn nâu lặp vòng qua lọc thấp, to theo tốc độ
     const rumble = this.ctx.createBufferSource();
@@ -99,6 +102,19 @@ export class Sound {
     window.setTimeout(() => this.onLock?.(this.ctx.state !== "running"), 500);
   }
 
+  /** Video bảng quảng cáo: tiếng đi qua bộ trộn (màn không phát tiếng thì im theo master, nhạc nhỏ lại khi video nói). */
+  attachVideo(video: HTMLVideoElement | null): void {
+    this.videoSrc?.disconnect();
+    this.videoSrc = null;
+    if (!video) return;
+    try {
+      this.videoSrc = this.ctx.createMediaElementSource(video);
+      this.videoSrc.connect(this.videoGain);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   setScreen(screen: number | null): void {
     this.screen = screen;
   }
@@ -112,7 +128,10 @@ export class Sound {
     this.master.gain.setTargetAtTime(silent ? 0 : 1, now, 0.05);
     const mix = MIXES[c?.mix ?? "balanced"] ?? MIXES.balanced;
     this.duckLevel = mix.duck;
-    this.music.gain.setTargetAtTime((c?.music_volume ?? 0.5) * mix.music, now, 0.2);
+    // đang chiếu video có tiếng: nhạc trong xe nhỏ hẳn lại cho nghe rõ video
+    const videoLoud = !!s.show && c?.show_sound !== false;
+    this.videoGain.gain.setTargetAtTime(videoLoud ? 1 : 0, now, 0.2);
+    this.music.gain.setTargetAtTime((c?.music_volume ?? 0.5) * mix.music * (videoLoud ? 0.12 : 1), now, 0.2);
     this.sfx.gain.setTargetAtTime((c?.sfx_volume ?? 0.6) * mix.sfx, now, 0.2);
     this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : (c?.voice_volume ?? 0.9) * mix.voice, now, 0.2);
     this.rate = c?.voice_rate ?? 1;

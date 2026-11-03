@@ -60,6 +60,7 @@ async function start(): Promise<void> {
   sound.onLock = (locked) => document.getElementById("sound-lock")!.classList.toggle("hidden", !locked);
   // Trong xe: tên đã nằm trên giường → ẩn thông báo + bảng tỉnh để không che tầng trên.
   world.onView = (view) => document.getElementById("hud")!.classList.toggle("inside", view === "inside");
+  world.onVideo = (video) => sound.attachVideo(video);
 
   function connect(): void {
     const proto = location.protocol === "https:" ? "wss" : "ws";

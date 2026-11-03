@@ -302,6 +302,26 @@
   </section>
 
   <section>
+    <h2>📺 Bảng quảng cáo — video nổi bật</h2>
+    <label class="toggle"><input type="checkbox" data-show="show_on"> Xe đang chạy tự dừng lại xem video trên bảng quảng cáo bên đường (xoay vòng danh sách)</label>
+    <label class="toggle"><input type="checkbox" data-show="show_sound"> Phát tiếng video (nhạc trong xe nhỏ lại khi chiếu)</label>
+    <div class="row" style="margin-top:8px">
+      <span>Mỗi</span><input type="number" id="show-every" min="1" max="120" step="1" aria-label="Mỗi bao nhiêu phút chiếu một video"><span>phút một video</span>
+      <span>· tối đa</span><input type="number" id="show-max" min="5" max="900" step="5" aria-label="Chiếu tối đa bao nhiêu giây"><span>giây / video</span>
+      <button id="save-show">Lưu</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="file" id="video-file" accept=".mp4,.webm,video/mp4,video/webm" multiple aria-label="Chọn video" style="flex:1;min-width:0">
+      <button id="video-upload" class="primary">⬆ Tải video lên</button>
+    </div>
+    <p class="hint" id="show-now">Đang không chiếu.</p>
+    <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
+    <ul id="video-files" class="files"></ul>
+    <p class="hint">Video mp4 / webm, tối đa 500 MB / file (video iPhone .mov đổi sang mp4 trước). Chỉ chiếu lúc xe đang chạy
+      đường, dừng giữa chặng. Anh tự chịu trách nhiệm quyền dùng video — video có nhạc bản quyền có thể bị TikTok tắt tiếng.</p>
+  </section>
+
+  <section>
     <h2>🚧 Trạm thu phí & công an</h2>
     <label class="toggle"><input type="checkbox" data-show="blocks_on"> Dọc đường gặp trạm thu phí / công an — xe đứng chờ người xem tặng quà góp đủ mới đi</label>
     <div class="row" style="margin-top:8px">
@@ -565,6 +585,54 @@ $("music-files").onclick = async (e) => {
   if (!data.ok) notice(data.error || "Không xoá được");
   refresh();
 };
+// ---- bảng quảng cáo: video ----
+$("video-upload").onclick = async () => {
+  const files = [...$("video-file").files];
+  if (!files.length) { $("video-file").click(); return; }
+  const btn = $("video-upload");
+  btn.disabled = true;
+  let done = 0;
+  for (const f of files) {
+    btn.textContent = `Đang tải ${done + 1}/${files.length}…`;
+    try {
+      const res = await fetch(`/api/video?name=${encodeURIComponent(f.name)}`, { method: "POST", headers: HEADERS, body: f });
+      const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+      if (!data.ok) { notice(`${f.name}: ${data.error}`); continue; }
+      done++;
+      log(`Đã tải video «${data.name}»`);
+    } catch { notice(`${f.name}: mất kết nối khi tải`); }
+  }
+  btn.disabled = false;
+  btn.textContent = "⬆ Tải video lên";
+  $("video-file").value = "";
+  if (done) notice(`Đã tải ${done} video — xe sẽ dừng xem theo lịch, hoặc bấm «Chiếu ngay»`, true);
+  refresh();
+};
+$("video-files").onclick = async (e) => {
+  const play = e.target.closest("button[data-play]");
+  if (play) { admin({ action: "show", name: play.dataset.play }); return; }
+  const b = e.target.closest("button[data-vdel]");
+  if (!b || !confirm(`Xoá video «${b.dataset.vdel}»?`)) return;
+  const res = await fetch(`/api/video/${encodeURIComponent(b.dataset.vdel)}`, { method: "DELETE", headers: HEADERS });
+  const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+  if (!data.ok) notice(data.error || "Không xoá được");
+  refresh();
+};
+$("show-next").onclick = () => admin({ action: "show" });
+$("show-stop").onclick = () => admin({ action: "show_stop" });
+$("save-show").onclick = () => {
+  setControl({ show_every_min: +$("show-every").value, show_max_seconds: +$("show-max").value });
+  log("Đã lưu lịch chiếu video");
+};
+function renderVideos(s) {
+  const vids = s.videos || [];
+  setIfChanged($("video-files"), vids.length
+    ? vids.map((v) => `<li><span>🎬 ${esc(v.title)} <small>· ${Math.round(v.seconds)} giây</small></span>`
+      + `<button data-play="${esc(v.name)}">▶ Chiếu ngay</button><button data-vdel="${esc(v.name)}">🗑</button></li>`).join("")
+    : `<li><span class="hint" style="margin:0">Chưa có video nào — tải video lên ở trên</span></li>`);
+  $("show-now").textContent = s.show ? `📺 Đang chiếu «${s.show.title}» · còn ${Math.round(s.show.left)} giây` : "Đang không chiếu.";
+  $("show-stop").disabled = !s.show;
+}
 function renderFiles(s) {
   const files = (s.music_tracks || []).filter((t) => t.id.startsWith("file:"));
   setIfChanged($("music-files"), files.length
@@ -770,6 +838,7 @@ async function refresh() {
     renderAi(s);
     renderStations(s);
     renderFiles(s);
+    renderVideos(s);
     renderVoices(s);
     $("s-next").textContent = s.waiting;
     $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
@@ -825,6 +894,8 @@ async function refresh() {
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;
       $("goal-xu").value = control.goal_xu ?? 1000;
+      $("show-every").value = control.show_every_min ?? 10;
+      $("show-max").value = control.show_max_seconds ?? 120;
       timesLoaded = true;
     }
   } catch (e) { $("s-phase").textContent = "Mất kết nối"; }

@@ -55,6 +55,10 @@ DEFAULTS: dict = {
     "goal_xu": 1000,  # mục tiêu buổi live (xu) — thanh chung cả phòng, mỗi mốc mở cảnh vui (anh 03/11: 100k / giờ)
     "vnd_per_xu": 100,  # quy đổi để /control báo tiền (người live nhận ~100 đ / xu)
     "target_vnd": 100000,  # mục tiêu tiền / giờ trên bảng doanh thu
+    "show_on": True,  # bảng quảng cáo: xe đang chạy dừng xem video anh tải lên (anh 03/11)
+    "show_every_min": 10,  # mỗi bao nhiêu phút chiếu một video (xoay vòng danh sách)
+    "show_max_seconds": 120,  # video dài hơn thì chỉ chiếu chừng này giây
+    "show_sound": True,  # phát tiếng video (nhạc trong xe nhỏ lại)
     "fee_auto": True,  # phí / phạt tự theo lượng quà của phòng (phòng ít quà: 1 xu là qua), tối đa toll_xu / fine_xu
     "toll_xu": 20,  # phí qua trạm (xu)
     "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
@@ -112,6 +116,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(BOARD_RANGE[1], max(BOARD_RANGE[0], float(value))))
         elif key == "rest_seconds":
             out[key] = int(min(REST_RANGE[1], max(REST_RANGE[0], float(value))))
+        elif key == "show_every_min":
+            out[key] = int(min(120, max(1, float(value))))
+        elif key == "show_max_seconds":
+            out[key] = int(min(900, max(5, float(value))))
         elif key == "goal_xu":
             out[key] = int(min(100000, max(10, float(value))))
         elif key in ("vnd_per_xu", "target_vnd"):
