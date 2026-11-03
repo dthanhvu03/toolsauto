@@ -411,6 +411,7 @@ class Engine:
         self.show_every = 600.0
         self.show_max = 120.0
         self.show_index = 0
+        self.show_pending: str | None = None  # anh bấm «Chiếu» lúc xe trong hầm: chiếu khi ra chỗ thoáng ("" = video kế tiếp)
         self.next_show = now + self.show_every
         self.fee_auto = True  # phí trạm / phạt tự theo lượng quà của phòng (tối đa toll_xu / fine_xu)
         self.gift_log: list[tuple[float, int]] = []  # (giờ, xu) quà trong GIFT_RATE_WINDOW giây gần nhất
@@ -1304,12 +1305,22 @@ class Engine:
 
     # ---- bảng quảng cáo: dừng xe xem video ----------------------------------------------------
 
+    def _in_pass(self) -> bool:
+        """Xe đang trong hầm / trên đèo: vách hầm, sườn núi che mất bảng quảng cáo (anh báo 03/11 «chiếu không hết video»)."""
+        return self.trip is not None and self.network.pass_at(*self.trip.at(self.trip_km())) is not None
+
     def _check_show(self, now: float) -> None:
-        if (not self.shows_on or not self.videos or self.show or self.block or self.halt or now < self.next_show
-                or not SHOW_LEG_WINDOW[0] <= self.progress <= SHOW_LEG_WINDOW[1]):
+        pending = self.show_pending
+        if self.show or self.block or self.halt or not self.videos or self._in_pass():
             return
-        video = self.videos[self.show_index % len(self.videos)]
-        self.show_index += 1
+        if pending is None and (not self.shows_on or now < self.next_show
+                                or not SHOW_LEG_WINDOW[0] <= self.progress <= SHOW_LEG_WINDOW[1]):
+            return  # tự chiếu: chỉ giữa chặng
+        self.show_pending = None
+        video = next((x for x in self.videos if x["name"] == pending), None) if pending else None
+        if video is None:
+            video = self.videos[self.show_index % len(self.videos)]
+            self.show_index += 1
         self._start_show(video, now)
 
     def show_now(self, name: str = "") -> None:
@@ -1318,6 +1329,9 @@ class Engine:
             raise Refused("Chưa có video nào — tải video lên trước.")
         if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
             raise Refused("Chỉ chiếu được lúc xe đang chạy đường (không đang dừng đón / bị chặn / đang chiếu).")
+        if self._in_pass():
+            self.show_pending = name or ""  # trong hầm / trên đèo: hẹn, ra chỗ thoáng là chiếu
+            raise Refused("Xe đang trong hầm / trên đèo (vách che mất bảng) — đã hẹn, ra khỏi hầm / đèo xe tự dừng chiếu.")
         video = next((x for x in self.videos if x["name"] == name), None)
         if video is None:
             video = self.videos[self.show_index % len(self.videos)]

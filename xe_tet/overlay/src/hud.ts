@@ -299,7 +299,9 @@ export class Hud {
     // chân bảng quà: người đang chờ · xe đang chạy x2 nhờ ai · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
     const [owner, deputy] = s.patrons ?? [];
     const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
-    const turbo = s.turbo ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}` : "";
+    const turbo = !s.turbo ? "" : s.phase === "DRIVING"
+      ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}`
+      : ` · 🚀 <b>${s.turbo.left}s</b> x2 để dành lúc xe chạy · nhờ ${esc(s.turbo.by)}`;  // đứng ở bến: chưa chạy nhanh
     const thanks = s.block?.top.length  // đang bị chặn: chân bảng cảm ơn người góp
       ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")} · ` : "";
     setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
@@ -336,9 +338,8 @@ export class Hud {
     const riders = s.bus.seats.filter((x): x is NonNullable<typeof x> => !!x);
     const fleet: FleetBus[] = s.fleet ?? [];
     // bảng góc phải luân phiên (rà soát 02/11: thêm bảng quà + danh sách MỌI xe kèm số khách, xe trống ghi rõ còn giường)
-    const modes = [
+    const modes = [  // chỉ một xe (PLAN-145): bỏ bảng «Các xe»
       ...(s.queue?.length ? ["queue", "queue"] : []),
-      "fleet",
       ...(riders.length ? ["riders"] : []),
       "top",
     ];
@@ -461,9 +462,11 @@ export class Hud {
         if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
         if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
-          const hint = e.next_tier ? `<br>🎯 ${esc(e.next_tier)}` : "";
-          const parcel = e.parcel ? "<br>📦 Thùng quà Tết lên gầm xe, tới quê giao tận cổng" : "";
-          this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(e.perk ?? "")}${parcel}${hint}`, "gift", `gift:${e.name}`);
+          // gọn 2 dòng (anh báo 03/11: thẻ quà 4 dòng đè nhau, tràn xuống bảng góc phải): việc quà làm được + mốc kế tiếp;
+          // thùng quà gầm xe đã hiện trên xe, không ghi lại
+          const perk = (e.perk ?? "").split(" · ").slice(0, 2).join(" · ");
+          const hint = e.next_tier ? ` · 🎯 ${esc(e.next_tier)}` : "";
+          this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(perk)}${hint}`, "gift", `gift:${e.name}`);
         }
         break;
       case "follow":

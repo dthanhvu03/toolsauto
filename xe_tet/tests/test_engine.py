@@ -1764,3 +1764,14 @@ def test_billboard_video_stops_bus_then_continues():
     e.progress = 0.5
     e.tick(26)
     assert e.show and e.show["title"] == "Video A"
+    # anh báo 03/11 «chiếu không hết video»: trong hầm vách che bảng → không chiếu, bấm tay thì hẹn ra khỏi hầm mới chiếu
+    e.stop_show()
+    e.shows_on = False
+    e._in_pass = lambda: True
+    with pytest.raises(Refused):
+        e.show_now("a.mp4")
+    e.tick(27)
+    assert e.show is None and e.show_pending == "a.mp4"
+    e._in_pass = lambda: False
+    e.tick(28)
+    assert e.show and e.show_pending is None
