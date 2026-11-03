@@ -774,6 +774,45 @@ def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, g
     return "\n".join(lines)
 
 
+def wallet_owner_text(position) -> str:
+    """position: payouts.OwnerPosition. Tiền Shopee đã về tài khoản chủ bot, phần khách và phần anh."""
+    lines = [_title("Ví khách", "Ví của anh").rstrip("\n"), ""]
+    if not position.batches:
+        lines.append("Chưa có kỳ Shopee nào đối soát khớp (tiền về tài khoản khớp báo cáo Shopee).")
+    else:
+        lines += [
+            f"💼 Tiền của anh: <b>{format_vnd(position.owner_vnd)}</b>",
+            "",
+            f"Từ {position.batches} kỳ Shopee đã về tài khoản, đã đối soát khớp:",
+            _aligned([
+                ("Shopee đã chuyển", position.received_vnd, ""),
+                ("− Phần khách", position.customer_vnd, ""),
+                ("= Phần anh", position.owner_vnd, ""),
+            ]),
+            "<b>Phần khách</b>",
+            _aligned([
+                ("Chờ đủ ngày giữ", position.waiting_vnd, ""),
+                ("Trong ví khách", position.in_wallet_vnd, ""),
+                ("Đang chờ chuyển", position.reserved_vnd, ""),
+                ("Đã chuyển khách", position.paid_vnd, ""),
+            ]),
+            f"ⓘ Phần anh gồm đơn riêng của anh ({format_vnd(position.own_orders_vnd)} trước phí, thuế) và phần anh giữ "
+            f"lại từ đơn qua bot; đã trừ phí + thuế Shopee giữ cả kỳ ({format_vnd(position.costs_vnd)}).",
+        ]
+    if position.upcoming:
+        lines += ["", "⏳ <b>Sắp về</b> (chưa tính vào tiền của anh)"]
+        for item in position.upcoming:
+            if item.expected_vnd is None:
+                lines.append(f"• Kỳ {html.escape(item.period)}: Shopee chưa báo số · phần khách {format_vnd(item.customer_vnd)}")
+                continue
+            state = "đã về, chờ đối soát" if item.received else "chưa về"
+            lines.append(
+                f"• Kỳ {html.escape(item.period)}: {format_vnd(item.expected_vnd)} ({state}) · phần khách "
+                f"{format_vnd(item.customer_vnd)} · phần anh ~{format_vnd(item.expected_vnd - item.customer_vnd)}"
+            )
+    return "\n".join(lines)
+
+
 def _limit_vnd(amount: int) -> str:
     """Nhãn nút gọn: 500k, 2tr (không «2,0tr»)."""
     return short_vnd(amount).replace(",0tr", "tr")

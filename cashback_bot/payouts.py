@@ -185,6 +185,90 @@ def fund_position(conn: sqlite3.Connection) -> FundPosition:
     return FundPosition(bool(batches), len(batches), bot, costs, non_bot, unknown, allocatable, reserved, paid)
 
 
+@dataclass(frozen=True)
+class OwnerPeriod:
+    """Một kỳ Shopee chưa khớp (chưa về hoặc chưa đối soát xong): số dự kiến, chưa phải tiền của anh."""
+
+    period: str
+    expected_vnd: int | None  # Shopee báo sẽ chuyển (sau phí, thuế); None: chưa có số
+    customer_vnd: int  # tiền hoàn của khách cho đơn bot trong kỳ
+    received: bool  # đã có chứng từ ngân hàng
+
+
+@dataclass(frozen=True)
+class OwnerPosition:
+    """Ví của chủ bot: tiền Shopee đã về tài khoản (các kỳ MATCHED) chia cho khách và cho chủ bot.
+
+    Chỉ đọc. Phần khách = tiền hoàn đã ghi sổ của đơn bot trong các kỳ đó (gồm dòng trừ lại, bỏ khoản huỷ);
+    phần anh = tiền về − phần khách (gồm đơn riêng của anh, đã trừ phí và thuế Shopee giữ của cả kỳ).
+    """
+
+    batches: int
+    received_vnd: int
+    own_orders_vnd: int  # đơn ngoài bot + không rõ đơn, trước phí / thuế
+    costs_vnd: int  # phí + VAT chưa gồm + thuế Shopee giữ
+    customer_vnd: int
+    waiting_vnd: int  # phần khách còn chờ đủ ngày giữ
+    reserved_vnd: int
+    paid_vnd: int
+    upcoming: tuple[OwnerPeriod, ...]
+
+    @property
+    def owner_vnd(self) -> int:
+        return self.received_vnd - self.customer_vnd
+
+    @property
+    def in_wallet_vnd(self) -> int:
+        return self.customer_vnd - self.waiting_vnd - self.reserved_vnd - self.paid_vnd
+
+
+def _customer_share(conn: sqlite3.Connection, conversion_ids: set[str]) -> tuple[int, int]:
+    """(tổng tiền hoàn chưa huỷ, phần còn chờ vào ví) của các đơn, tính cả dòng trừ lại «<id>:clawback:<n>»."""
+    total = waiting = 0
+    for row in conn.execute("SELECT conversion_id, cashback_vnd, status FROM cashback_entries WHERE status != 'cancelled'"):
+        if str(row["conversion_id"]).split(":clawback:")[0] in conversion_ids:
+            total += int(row["cashback_vnd"])
+            if row["status"] in ("pending", "holding"):
+                waiting += int(row["cashback_vnd"])
+    return total, waiting
+
+
+def _batch_items(conn: sqlite3.Connection, batch: sqlite3.Row) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT match_status, is_bot, conversion_id, settled_vnd, adjustment_vnd FROM settlement_items "
+        "WHERE batch_id = ? AND evidence_id = ?",
+        (batch["id"], batch["statement_evidence_id"]),
+    ).fetchall()
+
+
+def owner_position(conn: sqlite3.Connection) -> OwnerPosition:
+    received = own = costs = 0
+    settled_ids: set[str] = set()
+    matched = conn.execute("SELECT * FROM settlement_batches WHERE status = 'MATCHED' ORDER BY period, id").fetchall()
+    for batch in matched:
+        received += int(batch["bank_received_vnd"] or 0)
+        vat = 0 if batch["fee_includes_vat"] else int(batch["fee_vat_vnd"] or 0)
+        costs += int(batch["fee_vnd"] or 0) + vat + int(batch["tax_withheld_vnd"] or 0)
+        for item in _batch_items(conn, batch):
+            if item["is_bot"] and item["match_status"] == "MATCHED" and item["conversion_id"]:
+                settled_ids.add(str(item["conversion_id"]))
+            elif item["match_status"] in ("NOT_BOT", "UNKNOWN_ORDER"):
+                own += int(item["settled_vnd"] or 0) + int(item["adjustment_vnd"] or 0)
+    customer, waiting = _customer_share(conn, settled_ids)
+    upcoming = []
+    for batch in conn.execute(
+        "SELECT * FROM settlement_batches WHERE status NOT IN ('MATCHED', 'REVERSED') ORDER BY period, id"
+    ).fetchall():
+        ids = {str(i["conversion_id"]) for i in _batch_items(conn, batch) if i["is_bot"] and i["conversion_id"]}
+        expected = batch["bank_received_vnd"] if batch["bank_received_vnd"] is not None else batch["shopee_payout_vnd"]
+        upcoming.append(OwnerPeriod(
+            str(batch["period"]), None if expected is None else int(expected), _customer_share(conn, ids)[0],
+            batch["bank_received_vnd"] is not None,
+        ))
+    reserved, paid = payout_totals(conn)
+    return OwnerPosition(len(matched), received, own, costs, customer, waiting, reserved, paid, tuple(upcoming))
+
+
 def payout_totals(conn: sqlite3.Connection, user_id: int | None = None) -> tuple[int, int]:
     where, args = ("AND telegram_user_id = ?", (user_id,)) if user_id is not None else ("", ())
     marks_open = ", ".join("?" for _ in OPEN)
