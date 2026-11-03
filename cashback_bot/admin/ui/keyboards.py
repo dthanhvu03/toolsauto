@@ -11,13 +11,25 @@ Keyboard = tuple[tuple[tuple[str, str], ...], ...]
 HOME_TARGET = "c:menu:home"
 BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
-# Rà soát 2026-10-26 (đợt 4): việc hằng ngày ở trang chủ; đơn & hoa hồng và cài đặt gom vào hai menu con.
+# 2026-11-03: chủ bot thấy trang chủ rối → chỉ còn việc hằng ngày; tiền gom ở «Tiền & ví», phần còn lại ở «Thêm».
 MENU_KEYBOARD: Keyboard = (
-    (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t")),
-    (("👥 Khách hàng", "c:in:u:margin:1"), ("🔍 Tìm", "c:in:f"), ("📩 Hỗ trợ", "c:hp:home")),
+    (("💰 Tiền & ví", "c:menu:money"),),
     (("🧾 Đơn & hoa hồng", "c:menu:orders"),),
-    (("🛒 Shopee", "c:menu:shopee"), ("🎵 TikTok", "c:tk:home"), ("👛 Ví khách", "c:menu:wallet")),
+    (("📩 Hỗ trợ", "c:hp:home"), ("👥 Khách hàng", "c:in:u:margin:1")),
+    (("➕ Thêm", "c:menu:more"),),
+)
+MONEY_MENU_KEYBOARD: Keyboard = (
+    (("💼 Ví của anh", "c:wl:own"),),
+    (("👛 Ví khách & yêu cầu rút", "c:menu:wallet"),),
+    (("💳 Đối soát Shopee", "c:sm:home"), ("💹 Dòng tiền", "c:in:m:30d")),
+    BACK_HOME,
+)
+MONEY_BACK = (("◀️ Tiền & ví", "c:menu:money"),)
+MORE_MENU_KEYBOARD: Keyboard = (
+    (("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f")),
+    (("🛒 Shopee", "c:menu:shopee"), ("🎵 TikTok", "c:tk:home")),
     (("🛠 Vận hành", "c:in:o"), ("⚙️ Cài đặt", "c:menu:settings")),
+    BACK_HOME,
 )
 ORDERS_MENU_KEYBOARD: Keyboard = (
     (("🧾 Duyệt hoa hồng", "c:cv:home"),),

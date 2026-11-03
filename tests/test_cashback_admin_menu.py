@@ -12,7 +12,8 @@ from cashback_bot.admin_ui import MENU_KEYBOARD
 from cashback_bot.messages import fit_html, visible_len
 from tests.test_cashback_wallet import ADMIN, _bot, _callback
 
-# Mọi màn có trước đợt 4 phải còn đường vào từ trang chủ (tối đa 2 lần bấm).
+# Mọi màn có trước đợt 4 phải còn đường vào từ trang chủ. 2026-11-03: trang chủ chỉ còn việc hằng ngày, cài đặt
+# nằm trong «➕ Thêm» → tối đa 3 lần bấm.
 OLD_SCREENS = {
     "c:st:7d", "c:in:t", "c:in:f", "c:in:m:30d", "c:in:g:30d", "c:in:o", "c:in:u:margin:1", "c:menu:shopee",
     "c:tk:home", "c:menu:wallet", "c:menu:policy", "c:menu:rank", "c:menu:fee", "c:menu:sim", "c:menu:hist",
@@ -29,11 +30,13 @@ def test_trang_chu_gon_va_moi_man_cu_van_vao_duoc(tmp_path):
     bot = _bot(tmp_path)
     home = _callback(bot, ADMIN, "c:menu:home")
     assert "Việc cần làm" in home.text and "Hôm nay" in home.text and "Calculator" not in home.text
-    assert sum(len(row) for row in MENU_KEYBOARD) <= 13
-    reachable = set(_buttons(home))
-    for data in list(reachable):
-        if data.startswith("c:menu:"):
-            reachable |= set(_buttons(_callback(bot, ADMIN, data)))
+    assert sum(len(row) for row in MENU_KEYBOARD) <= 5
+    reachable, frontier, seen = set(_buttons(home)), set(_buttons(home)), {"c:menu:home"}
+    for _depth in range(2):
+        menus = {d for d in frontier if d.startswith("c:menu:") and d not in seen}
+        seen |= menus
+        frontier = {d for menu in menus for d in _buttons(_callback(bot, ADMIN, menu))}
+        reachable |= frontier
     assert OLD_SCREENS <= reachable, OLD_SCREENS - reachable
 
 
@@ -78,3 +81,16 @@ def test_bang_thuat_ngu_va_ticket_khong_ma_tho(tmp_path):
     detail = _callback(bot, ADMIN, f"c:hp:t:{ticket.id}")
     assert "Khách · mở yêu cầu" in detail.text and "Admin · đổi trạng thái 🆕 Mới → 🔎 Đang xử lý" in detail.text
     assert "user:" not in detail.text and "OPEN" not in detail.text
+
+
+def test_man_tien_va_vi_tom_tat_va_dan_toi_cac_man_tien(tmp_path):
+    bot = _bot(tmp_path)
+    home = _callback(bot, ADMIN, "c:menu:home")
+    assert _buttons(home)[0] == "c:menu:money"
+    money = _callback(bot, ADMIN, "c:menu:money")
+    assert "Anh thực nhận" in money.text and "Yêu cầu rút cần xử lý: <b>0</b>" in money.text
+    assert {"c:wl:own", "c:menu:wallet", "c:sm:home", "c:in:m:30d", "c:menu:home"} <= set(_buttons(money))
+    own = _callback(bot, ADMIN, "c:wl:own")
+    assert "c:menu:money" in _buttons(own)
+    more = _callback(bot, ADMIN, "c:menu:more")
+    assert {"c:menu:shopee", "c:tk:home", "c:in:o", "c:menu:settings"} <= set(_buttons(more))
