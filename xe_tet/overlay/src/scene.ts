@@ -217,7 +217,8 @@ export class World {
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
   private blockLeaving = false;
   private showCam = false;
-  private riderTag = label("", "lbl riders");  // bảng tên hành khách trên nóc xe
+  private riderTag = label("", "lbl riders");  // bảng tên hành khách dưới thân xe (đủ tên dài)
+  private windowTags: CSS2DObject[] = [];  // tên từng người ngay ô cửa sổ giường của mình (anh 03/11)
   private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
   private boardTimer = 0;
   private fx = new Fireworks();
@@ -318,6 +319,13 @@ export class World {
     this.riderTag.position.set(1.4, -0.2, 3.0);  // mặt đường ngay dưới thân xe phía máy quay: trên nóc thì lơ xe / khung chữ che
     this.riderTag.element.style.display = "none";
     this.bus.group.add(this.riderTag);
+    this.bus.windowSpots.forEach((spot) => {  // 2 tầng × 12 cửa phía máy quay
+      const tag = label("", "lbl win");
+      tag.position.copy(spot).add(new THREE.Vector3(0, -0.12, 0.1));
+      tag.element.style.display = "none";
+      this.bus.group.add(tag);
+      this.windowTags.push(tag);
+    });
     this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.fx.group,
       this.dust.group, this.lixi.group, this.skyLanterns.group, this.blossoms.group);
 
@@ -439,6 +447,15 @@ export class World {
   /** Bảng tên hành khách trên nóc xe (anh 03/11: «góc nhìn nào cũng phải có tên những người đang ở trong xe»): đi theo xe ở
    * mọi góc máy ngoài xe; trong xe thì tên đã nằm trên từng giường. Người tặng quà ⭐ viền vàng, đông quá thì «+N người». */
   private refreshRiderTag(seats: (Seat | null)[]): void {
+    seats.forEach((s, i) => {  // tên ngắn ngay cửa sổ giường (tên dài bị cắt «…» — tên đủ ở bảng dưới thân xe)
+      const el = this.windowTags[i]?.element;
+      if (!el) return;
+      el.style.display = s ? "" : "none";
+      el.className = s?.vip ? "lbl win vip" : "lbl win";
+      // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
+      const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
+      el.textContent = s ? `${s.vip ? "⭐" : ""}${short}` : "";
+    });
     const riders = seats.filter((x): x is Seat => !!x);
     const el = this.riderTag.element;
     el.style.display = riders.length ? "" : "none";
@@ -776,6 +793,7 @@ export class World {
     if (!spot) return;
     const l = label(text, "lbl chat");
     l.position.copy(spot);
+    if (!inside) l.position.y += 0.75;  // bong bóng nổi trên cửa sổ: không che tên người ngồi đó
     (inside ? this.inside : this.bus.group).add(l);
     this.bubbles.push(l);
     while (this.bubbles.length > MAX_BUBBLES) this.bubbles.shift()!.removeFromParent();  // chat dồn dập: không chồng lên nhau
@@ -1221,6 +1239,7 @@ export class World {
         this.view = view;
         this.inside.visible = view === "inside";
         this.riderTag.visible = view !== "inside";  // trong xe: tên đã nằm trên giường
+        for (const t of this.windowTags) t.visible = view !== "inside";
         this.onView?.(view);
       });
     }

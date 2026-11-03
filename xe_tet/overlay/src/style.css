@@ -385,6 +385,10 @@ html, body {
 .lbl.riders b { color: var(--red-deep); }
 .lbl.riders span.vip { color: #8a5a00; font-weight: 800; }
 .lbl.riders i { color: #6b4a33; font-style: normal; }
+/* tên ngay ô cửa sổ giường (ngoài xe): một cửa rộng ~60 px trên khung 1080 → chữ nhỏ, tên dài cắt «…» */
+.lbl.win { font-size: 16px; font-weight: 700; max-width: 86px; padding: 1px 4px; border-radius: 6px; text-overflow: clip;
+  background: rgba(255, 255, 255, 0.88); color: var(--ink); }
+.lbl.win.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }
 .lbl.berth { font-size: 26px; max-width: 150px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
 .lbl.berth.empty { background: rgba(255, 255, 255, 0.35); color: rgba(255, 255, 255, 0.9); font-weight: 400; }
 .lbl.berth.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }
