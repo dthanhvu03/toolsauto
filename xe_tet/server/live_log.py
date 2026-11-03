@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import store
 from .game.answers import faq, is_question
-from .game.parser import normalize, parse
+from .game.parser import parse
 
 VN = ZoneInfo("Asia/Ho_Chi_Minh")
 SESSION_GAP = 120.0  # rớt kết nối quá lâu mới tính là hết buổi

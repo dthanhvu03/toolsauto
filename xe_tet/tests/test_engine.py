@@ -1,7 +1,7 @@
 import itertools
 from datetime import date
 
-from xe_tet.server.game.engine import (BOARD_SECONDS, FULL_BUS_SECONDS, NOTICE_COOLDOWN, REST_MIN_KM, SEATS,
+from xe_tet.server.game.engine import (BOARD_SECONDS, NOTICE_COOLDOWN, REST_MIN_KM, SEATS,
                                        SPECIAL_SECONDS, Engine)
 from xe_tet.server.game.parser import normalize, parse
 from xe_tet.server.game.provinces import BY_KEY, PROVINCES
