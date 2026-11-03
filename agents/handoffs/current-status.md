@@ -1,13 +1,13 @@
-## Phiên 2026-11-03 (xe-tet) — PLAN-144…148: một xe 24 giường, dừng đón thật, quà tăng tốc, trạm thu phí / công an
+## Phiên 2026-11-03 (xe-tet) — PLAN-144…150: một xe 24 giường, quà tăng tốc, trạm thu phí / công an, mục tiêu 100k, đua tỉnh, bảng quảng cáo
 
-- System State: nhánh `feat/xe-tet`, 10 commit chưa push (a328185 … 514344f). 8810 vẫn chạy bản PLAN-143 (chưa nạp code mới —
-  chờ anh cho phép); overlay `dist` đã build bản mới nhất. 8811 đã tắt.
-- Done: PLAN-144 (quà lên đầu hàng / giường vàng, Chủ nhà xe), PLAN-145 (một xe; dừng hẳn bên đường đón người hẹn; bến xếp
-  hàng), PLAN-146 (bỏ xe ôm/taxi/máy bay; «chuyến N»; người chờ bên đường đứng phía camera), sửa ăn xong không mang đồ ăn lên
-  xe, PLAN-147 (mỗi xu xe x2 thêm 3 giây; đọc tên ai thì người đó bước lên), PLAN-148 (trạm thu phí / công an, góp quà, bù lỗ).
-  Proof: pytest 169, ảnh 8811 ghi trong từng PLAN.
-- Next Action: anh duyệt → khởi động lại 8810 (xem /api/state không đang live trước) + push `feat/xe-tet`; xem trên máy live
-  cảnh người bước lên đúng lúc đọc tên (máy thử vẽ chậm, chưa chụp được).
+- System State: nhánh `feat/xe-tet` đã push (tới 9ca6af2). 8810 đã khởi động lại 03/11 04:14 bằng bản mới (tmux `xetet`,
+  kiểm tra trước: TikTok «ended», 0 màn hình, xe trống). Cài đặt mới mặc định: chặn xe bật, phí theo phòng, tự bù lỗ 60 giây,
+  bảng quảng cáo tự chiếu 10 phút / video (chưa có video nào), mục tiêu buổi 1000 xu. 8811 đã tắt.
+- Done: PLAN-144…148 (xem PLAN), PLAN-149 (thanh mục tiêu buổi live, bảng doanh thu /control, tự bù lỗ bật / tắt 60 giây),
+  PLAN-150 (đua tỉnh; bảng quảng cáo chiếu video tải lên, xe dừng xem). Proof: pytest 174, fuzz 0 lỗi, ảnh 8811 trong PLAN.
+- Next Action: anh tải video lên /control «📺 Bảng quảng cáo»; sau buổi live tới xem /report + bảng doanh thu để chỉnh
+  (số liệu thật mới có 1 buổi 20 phút). Anh đọc luật TikTok trong app (Live Center > Rules and Guidance > Inauthentic Gift
+  Requests). Chưa xem trên máy live: người bước lên đúng lúc đọc tên, tiếng video bảng quảng cáo.
 ## Phiên 2026-11-02 (buffer-chk3) — Báo cáo Buffer: 3/4 kênh đăng bài mất file từ 31/10 (chỉ đọc log + DB)
 
 - PM2: Maintenance, Web_Dashboard, 9Router_Gateway online từ 31/10 14:21Z (WSL khởi động lại, `pm2 resurrect` tự lên). Không gọi API Buffer.
