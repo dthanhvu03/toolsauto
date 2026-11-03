@@ -10,9 +10,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { at, blob, GEO, mat, noiseTexture, post, rounded, slab, soft } from "./art";
-import { strip } from "./bend";
+import { bendTree, strip } from "./bend";
 import { BLENDER_MODELS } from "./models";
-import { blossomTree, kumquatPot, lantern, makeTree, plasticStools, SignBoard, tiledRoof } from "./props";
+import { blossomTree, kumquatPot, lantern, makeTree, plasticStools, SIGN_RED, SignBoard, tiledRoof } from "./props";
 import { Conveyor, WRAP } from "./road";
 import { blossomPot, chrysanthemumPot, DAO, flag, greetingBanner, MAI } from "./tet";
 import type { Region } from "./types";
@@ -21,6 +21,63 @@ const GROUND: Record<Region, number> = { bac: 0x67944b, trung: 0x9aa65e, taynguy
 const FAR_SPAN = 220;
 const FACADES = [0xf6d36b, 0x8fd3c8, 0xf4a6a0, 0xb5d38a, 0xf7f1e3, 0x9fc3f0];
 const REGIONS: Region[] = ["bac", "trung", "taynguyen", "nam"];
+// Anh 03/11 «các con đường lặp đi lặp lại»: dải sát đường từng là một vòng 160 đơn vị cố định (xe chạy nhanh: 5–10 giây
+// thấy lại y hệt). Nay mỗi vùng dựng sẵn một kho đoạn cảnh, đoạn trôi khỏi khung thì bốc ngẫu nhiên đoạn khác thế vào.
+const BLOCK_W = 16;
+type BlockKind = "field" | "village" | "street" | "pagoda" | "gas" | "market" | "school" | "flowers";
+// kho 28 đoạn mỗi vùng (trên màn chỉ cần 2·WRAP / BLOCK_W = 10 đoạn)
+const POOL_MIX: BlockKind[] = ["field", "field", "field", "field", "field", "field", "village", "village", "village", "village",
+  "village", "village", "street", "street", "street", "street", "street", "street", "pagoda", "pagoda", "gas", "gas",
+  "market", "market", "school", "school", "flowers", "flowers"];
+
+const SIGNS = new Map<string, SignBoard>();
+/** Bảng hiệu dùng chung texture theo chữ: kho đoạn cảnh lớn mà mỗi bảng một canvas 1024 px thì tốn cả trăm MB GPU. */
+function sign(text: string, w: number, h: number, colors = SIGN_RED): THREE.Mesh {
+  const key = `${text}|${w}|${h}|${colors.bg}`;
+  let board = SIGNS.get(key);
+  if (!board) SIGNS.set(key, board = new SignBoard(text, w, h, colors));
+  return board.mesh.clone();
+}
+const BLUE_SIGN = { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffd23f" };
+
+/** Băng chuyền đoạn cảnh: 10 ô trên màn, phần còn lại nằm chờ; ô trôi qua mép trái thì đổi sang một đoạn chờ ngẫu nhiên. */
+class BlockBelt {
+  private slots: THREE.Group[] = [];
+  private spare: THREE.Group[] = [];
+
+  constructor(private parent: THREE.Group, pool: THREE.Group[]) {
+    const n = Math.round((2 * WRAP) / BLOCK_W);
+    pool.forEach((b, i) => {
+      bendTree(b);  // đoạn chờ chưa nằm trong cảnh lúc quét uốn: uốn sẵn từ đầu
+      b.traverse((o) => { if (o !== b) { o.matrixAutoUpdate = false; o.updateMatrix(); } });  // đồ trong đoạn đứng yên
+      if (i < n) {
+        b.position.x = -WRAP + i * BLOCK_W;
+        parent.add(b);
+        this.slots.push(b);
+      } else {
+        this.spare.push(b);
+      }
+    });
+  }
+
+  advance(dx: number): void {
+    for (let i = 0; i < this.slots.length; i++) {
+      const b = this.slots[i];
+      b.position.x -= dx;
+      if (b.position.x >= -WRAP || !this.spare.length) {
+        if (b.position.x < -WRAP) b.position.x += 2 * WRAP;
+        continue;
+      }
+      const k = Math.floor(Math.random() * this.spare.length);
+      const next = this.spare[k];
+      this.spare[k] = b;
+      this.parent.remove(b);
+      next.position.x = b.position.x + 2 * WRAP;
+      this.parent.add(next);
+      this.slots[i] = next;
+    }
+  }
+}
 
 function paintGeo(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
@@ -81,7 +138,7 @@ function tubeHouse(color: number, floors: number, windows: THREE.Material, shop:
   tank.rotation.z = Math.PI / 2;
   g.add(tank);
 
-  if (shop) g.add(at(new SignBoard(shop, 2.8, 0.55, { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.45, 2.15));
+  if (shop) g.add(at(sign(shop, 2.8, 0.55, BLUE_SIGN), 0, 2.45, 2.15));
   const pole = at(flag(1.5), 1.35, h - 0.8, 2.08);
   pole.rotation.x = 0.6;
   g.add(pole);
@@ -182,7 +239,7 @@ function roadStall(name: string, tarp: number): THREE.Group {
   awning.castShadow = true;
   g.add(awning);
   for (const x of [-1.7, 1.7]) g.add(at(post(0.05, 2.2, soft(0x8a8f96, 0.5, 0.5)), x, 1.1, 1.1));
-  g.add(at(new SignBoard(name, 3.0, 0.5, { bg: "#d32f2f", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.62, 1.22));
+  g.add(at(sign(name, 3.0, 0.5, { bg: "#d32f2f", fg: "#ffffff", rim: "#ffd23f" }), 0, 2.62, 1.22));
   g.add(at(rounded(1.3, 0.08, 0.8, 0.04, soft(0x1e6fd9, 0.4)), 0, 0.52, 0.3));
   g.add(at(slab(0.1, 0.5, 0.1, soft(0x1e6fd9, 0.4)), 0, 0.25, 0.3));
   g.add(plasticStools([new THREE.Vector3(-0.9, 0, 0.3), new THREE.Vector3(0.9, 0, 0.3), new THREE.Vector3(-0.3, 0, 1.0),
@@ -441,12 +498,137 @@ function regionField(region: Region, rnd: () => number): { obj: THREE.Object3D; 
 
 // ---- cảnh --------------------------------------------------------------------------------------
 
+/** Hàng cây xa quay vòng: mỗi lần vòng lại xoay + co giãn khác đi một chút, không thành hàng cây y hệt vòng trước. */
+function jitter(o: THREE.Object3D): void {
+  if (!o.userData.jitter) return;
+  const base = o.userData.jitter as number;
+  o.rotation.y = Math.random() * Math.PI * 2;
+  const s = base * (0.82 + Math.random() * 0.36);
+  o.scale.set(s, s * (0.9 + Math.random() * 0.2), s);
+  o.position.z = o.userData.z0 + (Math.random() - 0.5) * 4;
+}
+
+// ---- chùa, cây xăng, chợ hoa Tết, trường học, đồng hoa (anh 03/11: đường đỡ lặp) -----------------
+
+/** Chùa làng: chính điện tường vàng hai tầng mái ngói cong, cổng tam quan, biển «CHÙA», đèn lồng. */
+function pagoda(windows: THREE.Material): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(mergeGeometries([
+    paintGeo(new THREE.BoxGeometry(7.2, 0.4, 5).translate(0, 0.2, 0), 0x8d8478),
+    paintGeo(new THREE.BoxGeometry(6.2, 2.8, 3.8).translate(0, 1.8, -0.2), 0xf2c14e),
+    paintGeo(new THREE.BoxGeometry(3.6, 1.3, 2.4).translate(0, 4.6, -0.2), 0xf2c14e),
+    paintGeo(new THREE.BoxGeometry(1.6, 2.1, 0.1).translate(0, 1.45, 1.72), 0x8b1a1a),
+    // cổng tam quan phía trước
+    paintGeo(new THREE.BoxGeometry(0.45, 3.2, 0.45).translate(-2.2, 1.6, 4.2), 0xe8d9b5),
+    paintGeo(new THREE.BoxGeometry(0.45, 3.2, 0.45).translate(2.2, 1.6, 4.2), 0xe8d9b5),
+    paintGeo(new THREE.BoxGeometry(0.35, 2.4, 0.35).translate(-0.9, 1.2, 4.2), 0xe8d9b5),
+    paintGeo(new THREE.BoxGeometry(0.35, 2.4, 0.35).translate(0.9, 1.2, 4.2), 0xe8d9b5),
+  ])!, ARCH_MAT);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+  g.add(new THREE.Mesh(mergeGeometries([
+    new THREE.BoxGeometry(0.9, 0.9, 0.08).translate(-2, 1.9, 1.72), new THREE.BoxGeometry(0.9, 0.9, 0.08).translate(2, 1.9, 1.72),
+  ])!, windows));
+  g.add(at(tiledRoof(7, 4.8, 1.3), 0, 3.2, -0.2), at(tiledRoof(4.4, 3.2, 1.0), 0, 5.25, -0.2), at(tiledRoof(5.4, 1.2, 0.5), 0, 3.25, 4.2));
+  g.add(at(sign("CHÙA", 2.2, 0.55, { bg: "#8b1a1a", fg: "#ffd23f", rim: "#ffd23f" }), 0, 2.75, 4.45));
+  for (const x of [-1.6, 1.6]) g.add(at(lantern(0.8), x, 2.6, 2.1));
+  g.add(blob(7.5, 6));
+  return g;
+}
+
+/** Cây xăng ven quốc lộ: mái che trắng viền đỏ, hai trụ bơm, cửa hàng nhỏ, bảng «XĂNG DẦU» trên cột cao. */
+function gasStation(): THREE.Group {
+  const g = new THREE.Group();
+  const parts = [
+    paintGeo(new THREE.BoxGeometry(8, 0.5, 4.4).translate(0, 3.4, 1), 0xf5f5f5),
+    paintGeo(new THREE.BoxGeometry(8.05, 0.2, 4.45).translate(0, 3.1, 1), 0xd32f2f),
+    paintGeo(new THREE.BoxGeometry(5, 2.6, 3).translate(1.2, 1.3, -3.2), 0xeceff1),
+    paintGeo(new THREE.BoxGeometry(5.1, 0.25, 3.1).translate(1.2, 2.7, -3.2), 0xd32f2f),
+    paintGeo(new THREE.BoxGeometry(8.4, 0.08, 5).translate(0, 0.04, 1), 0x9e9e9e),
+  ];
+  for (const x of [-3.2, 3.2]) parts.push(paintGeo(new THREE.BoxGeometry(0.3, 3.1, 0.3).translate(x, 1.55, 1), 0xbdbdbd));
+  for (const x of [-1.4, 1.4]) {
+    parts.push(paintGeo(new THREE.BoxGeometry(0.7, 1.5, 0.5).translate(x, 0.75, 1), 0xd32f2f),
+      paintGeo(new THREE.BoxGeometry(0.5, 0.4, 0.06).translate(x, 1.1, 1.27), 0x263238));
+  }
+  parts.push(paintGeo(new THREE.BoxGeometry(0.25, 5.5, 0.25).translate(-4.6, 2.75, 2.6), 0x9e9e9e));
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh);
+  g.add(at(sign("XĂNG DẦU", 2.6, 0.8, { bg: "#d32f2f", fg: "#ffffff", rim: "#ffffff" }), -4.6, 5.6, 2.75));
+  g.add(at(sign("CỬA HÀNG XĂNG DẦU", 5, 0.45, BLUE_SIGN), 0, 3.4, 3.25));
+  g.add(blob(8.5, 6));
+  return g;
+}
+
+/** Chợ hoa Tết ven đường: dãy sạp mái bạt, chậu mai / đào / quất bày trước sạp, cổng «CHỢ HOA TẾT». */
+function flowerMarket(rnd: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const names = ["HOA TẾT", "BÁNH CHƯNG", "MỨT TẾT", "CÂU ĐỐI", "TRÁI CÂY", "LÁ DONG"];
+  const tarps = [0xd32f2f, 0x1e6fd9, 0x2e7d32, 0xf9a825];
+  for (let k = 0; k < 3; k++) {
+    g.add(at(roadStall(names[Math.floor(rnd() * names.length)], tarps[(k + Math.floor(rnd() * 4)) % 4]), -4.6 + k * 4.6, 0, -0.6));
+  }
+  for (let k = 0; k < 6; k++) {
+    const r = rnd();
+    const pot = r < 0.4 ? blossomPot(MAI) : r < 0.7 ? blossomPot(DAO) : kumquatPot();
+    pot.scale.setScalar(0.75);
+    g.add(at(pot, -6 + k * 2.3 + rnd() * 0.6, 0, 1.6 + rnd() * 0.5));
+  }
+  g.add(at(sign("CHỢ HOA TẾT", 4, 0.6), 0, 3.4, 1.0));
+  for (const x of [-2.1, 2.1]) g.add(at(post(0.07, 3.4, soft(0x8a8f96, 0.5, 0.5)), x, 1.7, 1.0));
+  return g;
+}
+
+/** Trường tiểu học: dãy nhà hai tầng tường vàng mái đỏ, hành lang, cột cờ giữa sân, bảng tên trường. */
+function school(windows: THREE.Material): THREE.Group {
+  const g = new THREE.Group();
+  const parts = [
+    paintGeo(new THREE.BoxGeometry(11, 4.4, 3).translate(0, 2.2, 0), 0xffd54f),
+    paintGeo(new THREE.BoxGeometry(11.4, 0.35, 3.6).translate(0, 4.55, 0), 0xc62828),
+    paintGeo(new THREE.BoxGeometry(11, 0.15, 0.9).translate(0, 2.2, 1.9), 0xeeeeee),
+    paintGeo(new THREE.BoxGeometry(11, 0.5, 0.08).translate(0, 2.55, 2.32), 0xeeeeee),
+    paintGeo(new THREE.BoxGeometry(12, 0.06, 4).translate(0, 0.03, 3.6), 0xb0a89a),  // sân
+  ];
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh);
+  const wins: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 5; k++) for (const y of [1.2, 3.4]) wins.push(new THREE.BoxGeometry(1.2, 0.9, 0.08).translate(-4.4 + k * 2.2, y, 1.52));
+  g.add(new THREE.Mesh(mergeGeometries(wins)!, windows));
+  g.add(at(sign("TRƯỜNG TIỂU HỌC", 5.4, 0.6, BLUE_SIGN), 0, 4.0, 1.6));
+  g.add(at(flag(4.5), 0, 0, 4.6));
+  g.add(blob(11.5, 7));
+  return g;
+}
+
+/** Đồng hoa cúc / vạn thọ chưng Tết: các luống hoa vàng cam (một khối gộp). */
+function flowerField(rnd: () => number, region: Region): THREE.Group {
+  const g = new THREE.Group();
+  const colors = region === "bac" ? [0xffd54f, 0xf48fb1, 0xffb300] : [0xffd54f, 0xff9800, 0xffb300];
+  const parts: THREE.BufferGeometry[] = [paintGeo(new THREE.BoxGeometry(14, 0.12, 8).translate(0, 0.06, 0), 0x6d4c33)];
+  for (let row = 0; row < 6; row++) {
+    const c = colors[row % colors.length];
+    for (let k = 0; k < 14; k++) {
+      const s = 0.32 + rnd() * 0.12;
+      parts.push(paintGeo(new THREE.SphereGeometry(s, 6, 4).translate(-6.4 + k * 0.98 + rnd() * 0.2, 0.32, -3.4 + row * 1.35), c));
+    }
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  mesh.receiveShadow = true;
+  g.add(mesh);
+  return g;
+}
+
 /** Đồ của một vùng ở ba lớp, mỗi lớp một băng chuyền trôi riêng. */
 interface RegionLayer {
   near: THREE.Group;
   mid: THREE.Group;
   far: THREE.Group;
-  belts: [Conveyor, Conveyor, Conveyor];
+  belts: [{ advance(dx: number): void }, Conveyor, Conveyor];
   paints: { tex: THREE.CanvasTexture; parallax: number }[];  // phông vẽ: trôi bằng dời ảnh, lớp xa chậm hơn
 }
 
@@ -521,7 +703,7 @@ export class Landscape {
   private build(region: Region): RegionLayer {
     const layer: RegionLayer = {
       near: new THREE.Group(), mid: new THREE.Group(), far: new THREE.Group(),
-      belts: [new Conveyor(1), new Conveyor(1), new Conveyor(0.12, FAR_SPAN)],
+      belts: [new Conveyor(1), new Conveyor(1, WRAP, jitter), new Conveyor(0.12, FAR_SPAN)],
       paints: [],
     };
     const rnd = rand(31 + REGIONS.indexOf(region) * 977);  // mỗi vùng một hạt giống riêng, dựng lại vẫn y hệt
@@ -535,45 +717,65 @@ export class Landscape {
   }
 
   /**
-   * Dải sát đường (z -10…-20) là phần trung cảnh chính phía sau xe khách:
-   * xen kẽ nhà ngói 3 gian truyền thống Việt Nam (villageTileHouse), cụm nhà ống phố huyện và đồng ruộng/đồi theo vùng.
+   * Dải sát đường (z -10…-20) là phần trung cảnh chính phía sau xe khách: kho 28 đoạn 16 đơn vị trộn nhà ngói 3 gian,
+   * phố huyện nhà ống, ruộng / đồi theo vùng, chùa, cây xăng, chợ hoa Tết, trường học, đồng hoa cúc — xáo trộn thứ tự.
    */
-  private buildNear(region: Region, rnd: () => number, { near, belts: [belt] }: RegionLayer): void {
-    const shops = ["TẠP HOÁ", "CƠM BÌNH DÂN", "SỬA XE", "BIA HƠI", "NHÀ NGHỈ", "RỬA XE", "BƠM VÁ XE"];
-    const stalls = ["TRÀ ĐÁ", "CƠM PHỞ", "BƠM VÁ XE", "NƯỚC MÍA", "BÁNH MÌ"];
-    let block = 0;
-    for (let x = -WRAP; x < WRAP; x += 16, block++) {
-      if (block % 2 === 0) {
-        for (const item of regionField(region, rnd)) near.add(belt.add(at(item.obj, x + item.x, 0, item.z)));
-        if (block % 4 === 0) near.add(belt.add(at(greetingBanner(), x, 0, -9.2)));  // băng rôn chúc Tết đầu làng
-        else near.add(belt.add(at(roadStall(stalls[Math.floor(rnd() * stalls.length)], [0x1e6fd9, 0xd32f2f, 0x2e7d32][block % 3]), x + 3, 0, -9.0)));
-        near.add(belt.add(at(haystack(), x - 6.2, 0, -11.2)));
-        continue;
-      }
-      // Tăng tần suất Nhà ngói 3 gian truyền thống Việt Nam để luôn hiện diện rõ trên hành trình qua làng quê
-      if (block % 4 === 1 || block % 4 === 3) {
-        const pot = blossomPot(blossomOf(region));
-        near.add(belt.add(at(villageTileHouse(this.windows, pot), x - 1.8, 0, -11.6)));
-        near.add(belt.add(at(blossomTree(blossomOf(region)), x + 3.6, 0, -10.8)));
-        if (block % 4 === 3) {
-          const sign = shops[Math.floor(rnd() * shops.length)];
-          const house = tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 2, this.windows, sign, kumquatPot());
-          near.add(belt.add(at(house, x + 6.8, 0, -11.2)));
-        }
-        near.add(belt.add(at(regionTree(region, rnd), x - 6.0, 0, -15.5)));
-        continue;
-      }
-      const houses = 1 + Math.floor(rnd() * 2);
+  private buildNear(region: Region, rnd: () => number, layer: RegionLayer): void {
+    const kinds = [...POOL_MIX];
+    for (let i = kinds.length - 1; i > 0; i--) {  // xáo: 10 đoạn đầu (lên màn trước) cũng mỗi vùng một kiểu
+      const j = Math.floor(rnd() * (i + 1));
+      [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
+    }
+    const pool = kinds.map((kind, i) => this.nearBlock(region, rnd, kind, i));
+    layer.belts[0] = new BlockBelt(layer.near, pool);
+  }
+
+  /** Một đoạn cảnh 16 đơn vị, toạ độ tương đối quanh gốc đoạn (x ∈ −7…+7). */
+  private nearBlock(region: Region, rnd: () => number, kind: BlockKind, i: number): THREE.Group {
+    const g = new THREE.Group();
+    const put = (obj: THREE.Object3D, x: number, z: number) => g.add(at(obj, x, 0, z));
+    const shops = ["TẠP HOÁ", "CƠM BÌNH DÂN", "SỬA XE", "BIA HƠI", "NHÀ NGHỈ", "RỬA XE", "BƠM VÁ XE", "HỚT TÓC", "ĐIỆN THOẠI",
+      "VẬT LIỆU XÂY DỰNG", "THUỐC TÂY", "QUẦN ÁO"];
+    const stalls = ["TRÀ ĐÁ", "CƠM PHỞ", "BƠM VÁ XE", "NƯỚC MÍA", "BÁNH MÌ", "BÚN BÒ", "CHÈ", "HỦ TIẾU"];
+    const shop = () => shops[Math.floor(rnd() * shops.length)];
+    if (kind === "field") {
+      for (const item of regionField(region, rnd)) put(item.obj, item.x, item.z);
+      if (i % 3 === 0) put(greetingBanner(), 0, -9.2);  // băng rôn chúc Tết đầu làng
+      else put(roadStall(stalls[Math.floor(rnd() * stalls.length)], [0x1e6fd9, 0xd32f2f, 0x2e7d32][i % 3]), 3, -9.0);
+      if (rnd() < 0.7) put(haystack(), -6.2, -11.2);
+    } else if (kind === "village") {
+      put(villageTileHouse(this.windows, blossomPot(blossomOf(region))), -1.8, -11.6);
+      put(blossomTree(blossomOf(region)), 3.6, -10.8);
+      if (rnd() < 0.5) put(tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 2, this.windows, shop(), kumquatPot()), 6.8, -11.2);
+      put(regionTree(region, rnd), -6.0, -15.5);
+    } else if (kind === "street") {
+      const houses = 1 + Math.floor(rnd() * 3);
       for (let h = 0; h < houses; h++) {
-        const sign = rnd() < 0.5 ? shops[Math.floor(rnd() * shops.length)] : null;
         const roll = rnd();
         const pot = roll < 0.45 ? blossomPot(blossomOf(region)) : roll < 0.75 ? kumquatPot() : null;
         const house = region === "nam" && rnd() < 0.35 ? stiltHouse()
-          : tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 1 + Math.floor(rnd() * 3), this.windows, sign, pot);
-        near.add(belt.add(at(house, x - 4 + h * 4.5, 0, -11.0 - rnd() * 1.5)));
+          : tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 1 + Math.floor(rnd() * 3), this.windows, rnd() < 0.6 ? shop() : null, pot);
+        put(house, -5 + h * 3.6, -11.0 - rnd() * 1.5);
       }
-      near.add(belt.add(at(regionTree(region, rnd), x + 5, 0, -16 - rnd() * 3)));
+      put(regionTree(region, rnd), 5.5, -16 - rnd() * 3);
+    } else if (kind === "pagoda") {
+      put(pagoda(this.windows), 0, -13.5);
+      put(blossomTree(blossomOf(region)), -6, -11.5);
+      put(regionTree(region, rnd), 6.2, -12);
+    } else if (kind === "gas") {
+      put(gasStation(), 0, -11.5);
+      put(regionTree(region, rnd), -6.5, -15);
+    } else if (kind === "market") {
+      put(flowerMarket(rnd), 0, -10.8);
+    } else if (kind === "school") {
+      put(school(this.windows), 0, -13);
+      put(regionTree(region, rnd), 6.5, -11.5);
+    } else {
+      put(flowerField(rnd, region), 0, -14);
+      put(regionTree(region, rnd), -6.4, -11.5);
+      if (rnd() < 0.6) put(haystack(), 6, -11);
     }
+    return g;
   }
 
   /** Hàng cây xa (thấy ở góc máy ngang / cận) + bụi cỏ thấp phía camera (KHÔNG đặt cây cao ở z > 0 để tránh che khuất xe chính!). */
@@ -581,6 +783,8 @@ export class Landscape {
     for (let x = -WRAP; x < WRAP; x += 6.5 + rnd() * 5.5) {
       const tree = regionTree(region, rnd);
       mid.add(belt.add(at(tree, x, 0, -25 - rnd() * 16)));
+      tree.userData.jitter = tree.scale.x;
+      tree.userData.z0 = tree.position.z;
       // Phía camera (z dương): chỉ đặt bụi cây thấp (bush) ở xa lề đường để tạo cảm giác tốc độ mà không bao giờ che thân xe
       if (rnd() < 0.35) {
         const lowBush = makeTree("bush");

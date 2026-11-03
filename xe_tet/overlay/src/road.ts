@@ -17,7 +17,7 @@ const POLE_Z = -6.8; // Đặt lùi vào lề trong (z = -6.8) để trụ và �
 export class Conveyor {
   readonly items: THREE.Object3D[] = [];
 
-  constructor(private parallax = 1, private span = WRAP) {}
+  constructor(private parallax = 1, private span = WRAP, private onWrap?: (o: THREE.Object3D) => void) {}
 
   add<T extends THREE.Object3D>(obj: T): T {
     this.items.push(obj);
@@ -28,7 +28,10 @@ export class Conveyor {
     const d = dx * this.parallax;
     for (const o of this.items) {
       o.position.x -= d;
-      if (o.position.x < -this.span) o.position.x += this.span * 2;
+      if (o.position.x < -this.span) {
+        o.position.x += this.span * 2;
+        this.onWrap?.(o);  // vòng lại: cho đổi dáng chút (cây xa) — không thành hàng y hệt vòng trước
+      }
     }
   }
 }
