@@ -492,6 +492,10 @@ class Engine:
         self.weather = "clear"  # clear | drizzle | rain | fog — overlay vẽ mưa / sương, lơ xe báo khi đổi
         self.weather_region: str | None = None
         self.last_weather_talk = -1e9
+        self.ads: list[dict] = []  # quảng cáo bot của anh: lơ xe đọc câu «say» lần lượt (server đặt theo cài đặt)
+        self.ad_gap = 8 * 60.0
+        self.next_ad = now + 120.0  # mở game: đọc quảng cáo đầu tiên sau 2 phút
+        self.ad_index = 0
         self.chatter: list[dict] = []  # chuyện phiếm chờ AI đáp (khi bật AI)
         self.last_chatter = -1e9
         self.last_block_remind = -1e9
@@ -1566,6 +1570,7 @@ class Engine:
             self._expire_rolls()
         self._vendor_tick(now)
         self._quiz_tick(now)
+        self._ad_tick(now)
         if self.phase == "DRIVING":
             self._hunger_tick(dt)
         self._remind_direction(now)
@@ -1794,6 +1799,22 @@ class Engine:
         if now - self.last_weather_talk >= WEATHER_TALK_GAP:
             self.last_weather_talk = now
             self.talk(f"weather_{kind}", main=True)
+
+    def _ad_tick(self, now: float) -> None:
+        """Lơ xe đọc quảng cáo bot của anh mỗi ad_gap giây, lần lượt từng bot; né lúc đang đố / bị chặn / chiếu video."""
+        if not self.ads or now < self.next_ad or self.quiz or self.block or self.show or self.phase == "SPECIAL":
+            return
+        self.ad_now()
+
+    def ad_now(self) -> None:
+        """Đọc quảng cáo kế tiếp ngay (admin bấm trên /control)."""
+        if not self.ads:
+            raise Refused("Chưa có quảng cáo nào (hoặc đang tắt).")
+        ad = self.ads[self.ad_index % len(self.ads)]
+        self.ad_index += 1
+        self.next_ad = self.last_now + self.ad_gap
+        self.emit("ad", title=ad["title"], desc=ad.get("desc", ""))
+        self.loxe(ad.get("say") or f"{ad['title']}, {ad.get('desc', '')}")
 
     def set_weather(self, kind: str) -> None:
         """Admin đổi thời tiết tay trên /control (giữ tới khi xe sang vùng mới)."""

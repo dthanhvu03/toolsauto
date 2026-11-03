@@ -33,7 +33,11 @@ export interface Control {
   rotate_seconds?: number;
   mix?: "balanced" | "music" | "voice";  // trộn tiếng
   hud_scale?: number;  // cỡ chữ trên live 0,6 – 1,2 (PLAN-133)
+  ads_on?: boolean;  // quảng cáo bot của anh (03/11)
+  ads?: Ad[];
 }
+
+export interface Ad { title: string; desc: string; say?: string }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
 
@@ -258,6 +262,7 @@ export interface GameEvent {
   position?: number;
   next_tier?: string; // quà: «thêm X xu → …»
   diamonds?: number; // quà: xu của lần tặng này (total = cộng dồn trong chuyến)
+  desc?: string;  // ad
   question?: string; options?: string[];  // quiz
   answer?: string; option?: string; winners?: string[]; right?: number;  // quiz_end
 }

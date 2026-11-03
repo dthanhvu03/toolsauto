@@ -340,6 +340,8 @@ export class Hud {
         tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
       }
+      const c = s.control;
+      if (c?.ads_on) for (const ad of c.ads ?? []) tips.push(`📣 <b>${esc(ad.title)}</b> · ${esc(ad.desc)}`);  // bot của anh
       if (s.next_lane) {  // ai chờ trước đi trước — nói rõ xe kế tiếp đi đâu để người chờ yên tâm
         tips.unshift(`⏳ Chuyến sau: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
       }
@@ -522,6 +524,9 @@ export class Hud {
         $("cta-block").classList.remove("alarm");
         void ($("cta-block") as HTMLElement).offsetWidth;
         $("cta-block").classList.add("alarm");
+        break;
+      case "ad":  // lơ xe vừa đọc quảng cáo bot
+        this.toast(`📣 ${esc(e.title ?? "")}`, esc(e.desc ?? ""));
         break;
       case "quiz":  // đố vui
         this.flash("🧠 ĐỐ VUI!");

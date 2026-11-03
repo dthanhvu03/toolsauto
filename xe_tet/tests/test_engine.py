@@ -2242,3 +2242,38 @@ def test_admin_sets_weather_by_hand():
     assert e.snapshot()["weather"] == "fog" and any(x.get("sky") == "fog" for x in e.drain())
     with pytest.raises(Refused):
         e.set_weather("snow")
+
+
+def test_lo_xe_reads_owner_bot_ads_in_turn_and_skips_busy_moments():
+    e, t = _driving_with_riders()
+    e.ads = [{"title": "@a_bot", "desc": "A", "say": "Ghé bot A"}, {"title": "@b_bot", "desc": "B", "say": ""}]
+    e.ad_gap = 60.0
+    e.next_ad = t + 1
+    e.quiz_now()
+    e.drain()
+    e.tick(t + 2)
+    assert not [x for x in e.drain() if x["type"] == "ad"]  # đang đố: chờ
+    e.quiz = None
+    e.tick(t + 3)
+    out = e.drain()
+    assert [x["title"] for x in out if x["type"] == "ad"] == ["@a_bot"]
+    assert any(x["type"] == "loxe" and x["text"] == "Ghé bot A" for x in out)
+    e.tick(t + 30)
+    assert not [x for x in e.drain() if x["type"] == "ad"]
+    e.tick(t + 64)
+    out = e.drain()
+    assert any(x["type"] == "loxe" and x["text"] == "@b_bot, B" for x in out)  # không có câu đọc: đọc tên + câu ngắn
+    e.ads = []
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    with pytest.raises(Refused):
+        e.ad_now()
+
+
+def test_ads_setting_is_cleaned():
+    from xe_tet.server.settings import DEFAULTS, clean
+    out = clean({"ads": [{"title": " @x_bot ", "desc": "a\nb", "say": "y" * 500}, {"title": ""}, "rác",
+                         {"title": "2"}, {"title": "3"}, {"title": "4"}], "ads_talk_min": 0})
+    assert out["ads"][0] == {"title": "@x_bot", "desc": "a b", "say": "y" * 200}
+    assert [a["title"] for a in out["ads"]] == ["@x_bot", "2", "3"] and out["ads_talk_min"] == 2
+    assert [a["title"] for a in DEFAULTS["ads"]] == ["@zt_shopee_bot", "@aipass_shop_bot"]

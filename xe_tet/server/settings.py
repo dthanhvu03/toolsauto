@@ -74,7 +74,18 @@ DEFAULTS: dict = {
     "quiz_every_min": 3,
     "incidents_on": True,  # sự cố dọc đường: xẹp lốp, kẹt xe, trâu qua đường — tự xong, tim làm nhanh hơn, quà xong ngay
     "incident_xu": 5,
+    # quảng cáo bot của anh (03/11): biển ven đường + dòng gợi ý trên màn + lơ xe đọc mỗi ads_talk_min phút
+    "ads_on": True,
+    "ads_talk_min": 8,
+    "ads": [
+        {"title": "@zt_shopee_bot", "desc": "Dán link Shopee · bot gửi link mua + tiền hoàn",
+         "say": "Bà con mua Shopee thì dán link vô bot hoàn tiền dét tê sốp pi trên Telegram, bot gửi lại link mua với số tiền được hoàn."},
+        {"title": "@aipass_shop_bot", "desc": "Shop trên Telegram · thanh toán xong giao ngay",
+         "say": "Ghé shop ây ai pát trên Telegram, chọn món, thanh toán xong là giao hàng liền."},
+    ],
 }
+ADS_MAX = 3
+AD_LIMITS = {"title": 32, "desc": 70, "say": 200}
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
@@ -86,6 +97,18 @@ MIXES = ("balanced", "music", "voice")
 BLOCK_XU = (1, 1000)
 COVER_RANGE = (10, 600)
 log = logging.getLogger("xe_tet")
+
+
+def clean_ads(value) -> list[dict]:
+    """Tối đa ADS_MAX mục {title, desc, say}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ."""
+    ads = []
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        ad = {k: " ".join(str(item.get(k) or "").split())[:n] for k, n in AD_LIMITS.items()}
+        if ad["title"]:
+            ads.append(ad)
+    return ads[:ADS_MAX]
 
 
 def clean(changes: dict, current: dict | None = None) -> dict:
@@ -144,6 +167,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(120, max(1, float(value))))
         elif key == "quiz_every_min":
             out[key] = int(min(30, max(1, float(value))))
+        elif key == "ads":
+            out[key] = clean_ads(value)
+        elif key == "ads_talk_min":
+            out[key] = int(min(60, max(2, float(value))))
         elif key == "incident_xu":
             out[key] = int(min(1000, max(1, float(value))))
         elif key == "roll_wait_s":

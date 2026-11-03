@@ -439,6 +439,7 @@ export class World {
       this.aimCamera(false);
     }
     if (c) this.control.fade = !!c.fade;
+    this.road.setAds(c?.ads_on ? c.ads ?? [] : []);  // biển quảng cáo bot ven đường
     const quality: Quality = c?.quality === "low" || c?.quality === "medium" ? c.quality : "high";
     if (quality !== this.quality) this.applyQuality(quality);
     // Chúc Tết (quà lớn) chen vào giữa bến / đường / trạm: giữ nguyên cảnh đang có, không nhảy cảnh.

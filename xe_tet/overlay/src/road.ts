@@ -31,6 +31,7 @@ export class Conveyor {
       if (o.position.x < -this.span) {
         o.position.x += this.span * 2;
         this.onWrap?.(o);  // vòng lại: cho đổi dáng chút (cây xa) — không thành hàng y hệt vòng trước
+        (o.userData.onWrap as (() => void) | undefined)?.();
       }
     }
   }
@@ -230,6 +231,26 @@ function directionSign(): BlueBoard {
   });
 }
 
+/** Biển quảng cáo bot của anh (03/11): nền đỏ viền vàng, tên bot to + câu ngắn; cao hơn nóc xe, sau dãy cột điện. */
+function adSign(): BlueBoard {
+  return new BlueBoard(9.5, 3, 5.4, (g, [title, desc]) => {
+    const { width: w, height: h } = g.canvas;
+    g.fillStyle = "#c62828";
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#ffd23f";
+    g.lineWidth = 12;
+    g.strokeRect(10, 10, w - 20, h - 20);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#ffe7a8";
+    fit(g, title ?? "", 70, w - 60);
+    g.fillText(title ?? "", w / 2, h * 0.38);
+    g.fillStyle = "#ffffff";
+    fit(g, desc ?? "", 34, w - 60, 700);
+    g.fillText(desc ?? "", w / 2, h * 0.74);
+  });
+}
+
 /** Biển địa giới: «TỈNH NGHỆ AN» / «THÀNH PHỐ ĐÀ NẴNG» + «Kính chào quý khách». */
 function borderSign(): BlueBoard {
   return new BlueBoard(6.2, 2.3, 3.4, (g, [title]) => {
@@ -419,6 +440,9 @@ export class Roadway {
   private bikes = [new Motorbike(MAI, 30), new Motorbike(DAO, 210)];
   private blossom = MAI;
   private bikeGap = 40;
+  private adBoard = adSign();
+  private ads: { title: string; desc: string }[] = [];
+  private adIndex = 0;
 
   constructor() {
     this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.92 });
@@ -453,6 +477,9 @@ export class Roadway {
       this.roadside.add(this.belt.add(at(stakeRow(7, 1.6), x, 0, z)));
     }
     this.roadside.add(this.belt.add(at(speedSign(60), -10, 0, -ROAD_HALF - 0.9)));
+    this.adBoard.group.visible = false;
+    this.adBoard.group.userData.onWrap = () => this.showAd(this.adIndex + 1);  // mỗi vòng một bot
+    this.roadside.add(this.belt.add(at(this.adBoard.group, 12, 0, -ROAD_HALF - 4.6)));  // ngay phía trước xe: chạy là thấy
     for (const bike of this.bikes) this.roadside.add(at(bike.group, -WRAP, 0, ROAD_HALF - 0.8));
     for (const sign of this.borders) {
       sign.group.visible = false;
@@ -548,6 +575,22 @@ export class Roadway {
   }
 
   /** Mưa: mặt đường sẫm + bóng, ổ gà đọng nước. */
+  /** Danh sách quảng cáo (trống: ẩn biển). */
+  setAds(ads: { title: string; desc: string }[]): void {
+    const key = JSON.stringify(ads);
+    if (key === JSON.stringify(this.ads)) return;
+    this.ads = ads.map((a) => ({ ...a }));
+    this.showAd(this.adIndex);
+  }
+
+  private showAd(index: number): void {
+    this.adIndex = index;
+    this.adBoard.group.visible = this.ads.length > 0;
+    if (!this.ads.length) return;
+    const ad = this.ads[index % this.ads.length];
+    this.adBoard.set([ad.title, ad.desc]);
+  }
+
   setWet(wet: boolean): void {
     this.roadMat.roughness = wet ? 0.35 : 0.92;
     this.roadMat.color.setHex(wet ? 0xb4b4bc : 0xffffff);

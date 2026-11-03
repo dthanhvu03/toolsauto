@@ -148,6 +148,10 @@ class Hub:
             engine.quiz_gap = self.settings["quiz_every_min"] * 60.0
             engine.next_quiz = min(engine.next_quiz, engine.last_now + engine.quiz_gap)
         engine.incidents_on = self.settings["incidents_on"]
+        engine.ads = self.settings["ads"] if self.settings["ads_on"] else []
+        if engine.ad_gap != self.settings["ads_talk_min"] * 60.0:
+            engine.ad_gap = self.settings["ads_talk_min"] * 60.0
+            engine.next_ad = min(engine.next_ad, engine.last_now + engine.ad_gap)
         engine.incident_xu = self.settings["incident_xu"]
 
     def maybe_answer(self, now: float) -> None:
@@ -480,6 +484,8 @@ async def _admin(body: dict) -> dict:
         engine.vendor_now()
     elif action == "quiz":  # đố vui ngay
         engine.quiz_now()
+    elif action == "ad":  # lơ xe đọc quảng cáo bot kế tiếp ngay
+        engine.ad_now()
     elif action == "weather":  # đổi thời tiết tay: clear | drizzle | rain | fog
         engine.set_weather(str(body.get("sky") or ""))
     elif action == "focus":  # zoom máy quay vào một khách trên xe (giường, 0 = bỏ)

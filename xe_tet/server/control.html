@@ -166,6 +166,16 @@
     </div>
     <p class="hint">Câu đố A / B / C về đặc sản, biển số, vùng miền các tỉnh — người xem gõ A, B hoặc C, ba người đúng sớm
       nhất được đọc tên. Sự cố tự xong sau 30 giây; tim làm nhanh hơn, tặng quà góp đủ thì xong ngay.</p>
+    <h3>📣 Quảng cáo bot của anh</h3>
+    <div class="row">
+      <button id="ad-now">📣 Lơ xe đọc quảng cáo ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="ads_on"> Bật</label>
+      <span>đọc mỗi</span><input type="number" id="ads-min" min="2" max="60" step="1" aria-label="Số phút giữa hai lần lơ xe đọc quảng cáo"><span>phút</span>
+    </div>
+    <div id="ads-rows"></div>
+    <div class="row"><button id="save-ads" class="primary">Lưu quảng cáo</button></div>
+    <p class="hint">Mỗi bot: <b>tên</b> + <b>câu ngắn</b> hiện trên biển ven đường và dòng gợi ý; <b>câu đọc</b> là lơ xe nói
+      (viết theo cách đọc, ví dụ «dét tê sốp pi» thay cho zt_shopee — máy đọc tiếng Việt đọc sai chữ Anh). Để trống tên là bỏ mục đó.</p>
     <h3>📺 Bảng quảng cáo</h3>
     <p class="hint live-line" id="show-now">Đang không chiếu.</p>
     <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
@@ -879,6 +889,17 @@ $("save-roll").onclick = () => {
 };
 $("vendor-call").onclick = () => admin({ action: "vendor" });
 $("quiz-call").onclick = () => admin({ action: "quiz" });
+$("ad-now").onclick = () => admin({ action: "ad" });
+$("ads-rows").innerHTML = [0, 1, 2].map((i) => `<div class="row">
+  <input type="text" id="ad-title-${i}" maxlength="32" placeholder="Tên bot ${i + 1}, ví dụ @ten_bot" aria-label="Tên bot ${i + 1}">
+  <input type="text" id="ad-desc-${i}" maxlength="70" placeholder="Câu ngắn trên biển" aria-label="Câu ngắn bot ${i + 1}">
+  <input type="text" id="ad-say-${i}" maxlength="200" placeholder="Câu lơ xe đọc" aria-label="Câu lơ xe đọc bot ${i + 1}">
+</div>`).join("");
+$("save-ads").onclick = () => {
+  const ads = [0, 1, 2].map((i) => ({ title: $(`ad-title-${i}`).value, desc: $(`ad-desc-${i}`).value, say: $(`ad-say-${i}`).value }));
+  setControl({ ads, ads_talk_min: +$("ads-min").value });
+  log("Đã lưu quảng cáo bot");
+};
 document.querySelectorAll("[data-sky]").forEach((b) => b.onclick = () => admin({ action: "weather", sky: b.dataset.sky }));
 $("save-quiz").onclick = () => {
   setControl({ quiz_every_min: +$("quiz-min").value });
@@ -1035,6 +1056,13 @@ async function refresh() {
       $("roll-idle").value = control.roll_idle_min ?? 15;
       $("vendor-xu").value = control.vendor_xu ?? 10;
       $("quiz-min").value = control.quiz_every_min ?? 3;
+      $("ads-min").value = control.ads_talk_min ?? 8;
+      [0, 1, 2].forEach((i) => {
+        const ad = (control.ads || [])[i] || {};
+        $(`ad-title-${i}`).value = ad.title || "";
+        $(`ad-desc-${i}`).value = ad.desc || "";
+        $(`ad-say-${i}`).value = ad.say || "";
+      });
       $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;
