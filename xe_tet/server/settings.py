@@ -69,6 +69,11 @@ DEFAULTS: dict = {
     "roll_on": True,  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng lâu → gọi tên, chờ trả lời mới xếp giường
     "roll_idle_min": 15,  # im lặng quá chừng này phút thì điểm danh
     "roll_wait_s": 45,  # giây chờ người được gọi tên thả tim / bình luận
+    # đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn)
+    "quiz_on": True,  # đố vui A / B / C về các tỉnh lúc xe chạy
+    "quiz_every_min": 3,
+    "incidents_on": True,  # sự cố dọc đường: xẹp lốp, kẹt xe, trâu qua đường — tự xong, tim làm nhanh hơn, quà xong ngay
+    "incident_xu": 5,
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -137,6 +142,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(1000, max(1, float(value))))
         elif key == "roll_idle_min":
             out[key] = int(min(120, max(1, float(value))))
+        elif key == "quiz_every_min":
+            out[key] = int(min(30, max(1, float(value))))
+        elif key == "incident_xu":
+            out[key] = int(min(1000, max(1, float(value))))
         elif key == "roll_wait_s":
             out[key] = int(min(180, max(15, float(value))))
         elif key == "tiktok_user":

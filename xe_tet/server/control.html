@@ -145,6 +145,27 @@
       <span>Góp</span><input type="number" id="vendor-xu" min="1" max="1000" step="1" aria-label="Số xu góp gọi cô bán hàng"><span>xu</span>
       <button id="save-vendor">Lưu</button>
     </div>
+    <h3>🧠 Đố vui · 🛞 Sự cố dọc đường</h3>
+    <p class="hint live-line" id="quiz-now">Chưa có câu đố.</p>
+    <div class="row">
+      <button id="quiz-call">🧠 Đố vui ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="quiz_on"> Tự đố</label>
+      <span>mỗi</span><input type="number" id="quiz-min" min="1" max="30" step="1" aria-label="Số phút giữa hai câu đố"><span>phút</span>
+      <button id="save-quiz">Lưu</button>
+    </div>
+    <div class="row">
+      <button data-block="tire">🛞 Xẹp lốp ngay</button>
+      <button data-block="jam">🚗 Kẹt xe ngay</button>
+      <button data-block="cattle">🐃 Trâu qua đường ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="incidents_on"> Tự gặp dọc đường</label>
+    </div>
+    <div class="row">
+      <span>Thời tiết <b id="sky-now">–</b>:</span>
+      <button data-sky="clear">☀️ Quang</button><button data-sky="drizzle">🌦 Mưa phùn</button>
+      <button data-sky="rain">🌧 Mưa rào</button><button data-sky="fog">🌫 Sương mù</button>
+    </div>
+    <p class="hint">Câu đố A / B / C về đặc sản, biển số, vùng miền các tỉnh — người xem gõ A, B hoặc C, ba người đúng sớm
+      nhất được đọc tên. Sự cố tự xong sau 30 giây; tim làm nhanh hơn, tặng quà góp đủ thì xong ngay.</p>
     <h3>📺 Bảng quảng cáo</h3>
     <p class="hint live-line" id="show-now">Đang không chiếu.</p>
     <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
@@ -857,6 +878,12 @@ $("save-roll").onclick = () => {
   log("Đã lưu điểm danh");
 };
 $("vendor-call").onclick = () => admin({ action: "vendor" });
+$("quiz-call").onclick = () => admin({ action: "quiz" });
+document.querySelectorAll("[data-sky]").forEach((b) => b.onclick = () => admin({ action: "weather", sky: b.dataset.sky }));
+$("save-quiz").onclick = () => {
+  setControl({ quiz_every_min: +$("quiz-min").value });
+  log("Đã lưu nhịp đố vui");
+};
 $("save-vendor").onclick = () => {
   setControl({ vendor_xu: +$("vendor-xu").value });
   log("Đã lưu số xu gọi cô bán hàng");
@@ -977,7 +1004,8 @@ async function refresh() {
     $("m-top").textContent = (m.top || []).length ? "Tặng nhiều nhất giờ này: " + m.top.map((t) => `${t.name} ${t.xu} xu`).join(" · ") : "Chưa có quà trong giờ này.";
     const blk = s.block;
     $("block-now").textContent = blk
-      ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : "👮 Công an đang chặn"} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
+      ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : blk.kind === "police" ? "👮 Công an đang chặn" : "🛞 " + blk.reason} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
+        + (blk.left != null ? ` · tự xong sau ${blk.left} giây` : "")
         + (blk.cover_in != null ? ` · tự bù lỗ sau ${blk.cover_in} giây` : "")
       : "Xe đang không bị chặn.";
     $("cover").disabled = !blk;
@@ -987,7 +1015,13 @@ async function refresh() {
     $("vendor-now").textContent = !vd ? (control.vendor_on === false ? "Đang tắt." : "Chưa tới lúc (cô lên lúc xe đang chạy, mỗi chuyến một lần).")
       : vd.stage === "pool" ? `Đang góp gọi cô bán hàng: ${vd.paid}/${vd.goal} xu`
       : vd.stage === "stop" ? `🧺 Xe tấp vào cho cô lên · ${vd.left} giây`
-      : `🧺 Cô đang bán trên xe · còn ${vd.left} giây · bán được ${vd.sold} phần`;
+      : `🧺 Cô đang bán suốt chuyến · bán được ${vd.sold} phần`;
+    const qz = s.quiz;
+    $("quiz-now").textContent = !qz ? (control.quiz_on === false ? "Tự đố đang tắt." : "Chưa có câu đố (đố lúc xe đang chạy).")
+      : qz.done ? `Đáp án ${"ABC"[qz.answer]}: ${qz.right} người đúng` + (qz.winners.length ? ` · ${qz.winners.join(", ")}` : "")
+      : `🧠 ${qz.question} · ${qz.answered} người trả lời · còn ${qz.left} giây`;
+    $("quiz-call").disabled = !!qz && !qz.done;
+    $("sky-now").textContent = { clear: "☀️ quang", drizzle: "🌦 mưa phùn", rain: "🌧 mưa rào", fog: "🌫 sương mù" }[s.weather] || "–";
     $("vendor-call").disabled = !!vd && vd.stage !== "pool";
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
     if (!timesLoaded) {  // không ghi đè khi admin đang gõ
@@ -1000,6 +1034,7 @@ async function refresh() {
       $("cover-seconds").value = control.cover_seconds ?? 60;
       $("roll-idle").value = control.roll_idle_min ?? 15;
       $("vendor-xu").value = control.vendor_xu ?? 10;
+      $("quiz-min").value = control.quiz_every_min ?? 3;
       $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;

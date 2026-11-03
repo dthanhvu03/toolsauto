@@ -13,7 +13,7 @@ import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
 import { avatarImg } from "./hud";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor, WeatherKind } from "./types";
 
 export const W = 1080;
 export const H = 1920;
@@ -21,6 +21,11 @@ const BASE_SPEED = 14; // đơn vị / giây khi speed = 1
 const escHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const HUNGRY = 30;  // % no bụng dưới chừng này: «sắp đói» (khớp server)
 const hungry = (s: Seat) => s.full != null && s.full < HUNGRY;
+const FOG_CLEAR: [number, number] = [42, 220];
+const OVERCAST: Record<WeatherKind, number> = { clear: 0, drizzle: 0.35, rain: 0.55, fog: 0.45 };  // trời xám đi bao nhiêu
+const GREY = new THREE.Color(0x9aa3ad);
+const FOG_THICK: [number, number] = [8, 70];  // sương mù: xa chừng này là mờ hẳn
+const CATTLE_WALK = 1.1;  // đàn trâu băng qua đường (đơn vị / giây)
 const VENDOR_WALK = 3.2;  // cô bán hàng đi trong khoang (đơn vị / giây)
 const INSIDE_X = 500; // khoang trong xe đặt riêng một chỗ, camera riêng
 
@@ -219,6 +224,9 @@ export class World {
   private wcLine: Walker[] = [];
   private boardLine: Walker[] = [];  // bến: hàng người có vé chờ bước lên xe (PLAN-145)
   private roadside: Walker[] = [];
+  private weatherKind: WeatherKind | null = null;
+  private fogWant: [number, number] = FOG_CLEAR;
+  private crossers: THREE.Object3D[] = [];  // trâu đang băng qua đường (sự cố «trâu qua đường»)
   private blockProp: THREE.Group | null = null;  // trạm thu phí / chốt công an trước đầu xe (PLAN-148)
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
   private blockLeaving = false;
@@ -367,14 +375,20 @@ export class World {
     return stars;
   }
 
+  /** Thời tiết server bốc theo vùng: mưa phùn / mưa rào (vệt mưa + đường ướt) / sương mù (sương của cảnh dày lên). */
+  private setWeather(kind: WeatherKind): void {
+    if (kind === this.weatherKind) return;
+    this.weatherKind = kind;
+    this.weather.set(kind);
+    this.road.setWet(kind === "drizzle" || kind === "rain");
+    this.fogWant = kind === "fog" ? FOG_THICK : FOG_CLEAR;
+  }
+
   private setRegion(region: Region): void {
     if (region === this.region) return;
     this.region = region;
     this.land.setRegion(region);
     bendTree(this.land.group);  // cảnh vùng mới dựng: uốn theo đường ngay, không đợi lượt quét
-    const rain = region === "bac";  // mưa phùn miền Bắc
-    this.weather.set(rain ? "drizzle" : "clear");
-    this.road.setWet(rain);
     this.petals.setColor(region === "bac" ? 0xffa6c4 : 0xffd23f); // đào hồng miền Bắc, mai vàng nơi khác
     this.blossomColor = region === "bac" ? 0xffa6c4 : 0xffd23f;
     this.road.setBlossom(region === "bac" ? DAO : MAI);
@@ -431,6 +445,7 @@ export class World {
     const want = state.phase === "SPECIAL" ? this.set : SET_OF[state.phase];
     if (want !== this.set) this.transition(() => this.applySet(want));
     if (state.region !== this.region && (state.phase === "DRIVING" || !prev)) this.setRegion(state.region);
+    this.setWeather(state.weather ?? (state.region === "bac" ? "drizzle" : "clear"));
     const leg = state.legs[state.leg_index];
     if (leg && state.phase === "DRIVING") {  // cột cây số: điểm tới + km còn lại (khớp số km trên bảng tuyến)
       this.road.setTarget(leg.kind === "rest" ? "TRẠM DỪNG" : leg.label, leg.km - state.trip_km);
@@ -682,6 +697,12 @@ export class World {
       const want = this.blockLeaving ? 1.35 : 0;
       this.blockArm.rotation.x += (want - this.blockArm.rotation.x) * Math.min(1, dt * 4);
     }
+    for (const c of this.crossers) {  // trâu thong thả đi ngang qua đầu xe, ra khỏi đường thì vòng lại phía bên kia
+      c.position.z -= CATTLE_WALK * dt;
+      if (c.position.z < -7) c.position.z = 6;
+      c.userData.phase = (c.userData.phase ?? 0) + dt * 5;
+      (c.userData.legs as THREE.Object3D[]).forEach((leg, i) => { leg.rotation.z = Math.sin(c.userData.phase + i * Math.PI / 2) * 0.35; });
+    }
   }
 
   /** Cô bán hàng (anh 03/11): xe tấp vào → cô đội nón lá ôm thúng từ lề bước lên cửa trước; lúc bán thì bảng «🧺 Cô Ba bán…»
@@ -776,6 +797,44 @@ export class World {
       const sign = label("🚧 TRẠM THU PHÍ", "lbl sign");
       sign.position.set(4.6, 0.3, 4.6);  // lề phía camera, dưới thân xe: không bị mép khung cắt
       g.add(sign);
+    } else if (kind === "tire") {  // xẹp lốp: Anh Tư ngồi thay bánh trước, kích xe, bánh dự phòng, tam giác cảnh báo sau xe
+      const fix = makePerson(200, "🔧 Anh Tư");
+      fix.position.set(4.2, 0.1, 2.3);
+      fix.scale.y = 0.75;  // ngồi xổm
+      const spare = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.22, 10, 20), mat(0x212121));
+      spare.position.set(5.6, 0.62, 2.6);
+      spare.rotation.y = 0.4;
+      const jack = at(box(0.35, 0.5, 0.35, 0xd32f2f), 4.9, 0.25, 1.6);
+      const warn = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 3), mat(0xff3d00, 0x551100));
+      warn.position.set(-10.5, 0.4, 1.6);
+      g.add(fix, spare, jack, warn);
+      const sign = label("🛞 XẸP LỐP · ĐANG THAY", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
+    } else if (kind === "jam") {  // kẹt xe: hàng xe con, xe tải đứng trước đầu xe, đèn phanh đỏ
+      const colors = [0xeceff1, 0x1565c0, 0xc62828, 0x37474f, 0xf9a825];
+      // khung dọc TikTok: trước đầu xe chỉ thấy chừng 6 đơn vị — hai xe cùng làn sát đầu xe, một xe tải làn bên kia
+      const pick = Math.floor(Math.random() * colors.length);
+      g.add(this.makeCar(9.8, 0.1, colors[pick]), this.makeCar(14.2, -0.2, colors[(pick + 1) % 5], true),
+        this.makeCar(11.5, -4.2, colors[(pick + 3) % 5], true));
+      const sign = label("🚗 KẸT XE · NHÍCH TỪNG CHÚT", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
+    } else if (kind === "cattle") {  // đàn trâu thong thả băng qua đường ngay trước đầu xe, có chú bé chăn trâu
+      for (let i = 0; i < 4; i++) {
+        const b = this.makeBuffalo();
+        b.position.set(8.8 + (i % 2) * 2.2, 0, 6 - i * 3.2);
+        g.add(b);
+        this.crossers.push(b);
+      }
+      const boy = makePerson(25, "🧑‍🌾 Chăn trâu");
+      boy.position.set(11.4, 0.1, 3.5);
+      g.add(boy);
+      this.crossers.push(boy);
+      boy.userData.legs = [];
+      const sign = label("🐃 TRÂU QUA ĐƯỜNG", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
     } else {
       const cop = makePerson(55, "👮 CSGT");
       cop.position.set(7.0, 0.1, 2.6);
@@ -848,7 +907,49 @@ export class World {
     this.scene.remove(group);
   }
 
+  /** Xe con / xe tải nhỏ đơn giản (thân, cabin kính, 4 bánh, đèn phanh) — dùng cho cảnh kẹt xe. */
+  private makeCar(x: number, z: number, color: number, truck = false): THREE.Group {
+    const car = new THREE.Group();
+    const len = truck ? 5.2 : 3.6;
+    car.add(at(box(len, truck ? 1.9 : 0.8, 1.7, color), 0, truck ? 1.35 : 0.75, 0));
+    car.add(at(box(truck ? 1.3 : 1.9, 0.7, 1.55, truck ? 0xeceff1 : 0x90a4ae, 0x111a22), truck ? -len / 2 + 0.7 : -0.2,
+      truck ? 1.1 : 1.45, 0));
+    for (const [wx, wz] of [[-len / 2 + 0.7, 0.85], [len / 2 - 0.7, 0.85], [-len / 2 + 0.7, -0.85], [len / 2 - 0.7, -0.85]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 12), mat(0x1b1b1b));
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wx, 0.36, wz);
+      car.add(wheel);
+    }
+    for (const lz of [0.6, -0.6]) car.add(at(box(0.1, 0.28, 0.42, 0xff1744, 0xff1744), -len / 2 - 0.03, truck ? 0.6 : 0.85, lz));  // đèn phanh
+    car.position.set(x, 0, z);
+    return car;
+  }
+
+  /** Con trâu: thân xám đen, đầu, cặp sừng cong, 4 chân (đung đưa khi đi). */
+  private makeBuffalo(): THREE.Group {
+    const b = new THREE.Group();
+    const skin = 0x5f5754;  // xám trâu, sáng hơn mặt đường để ban đêm vẫn thấy
+    b.add(at(box(0.9, 0.85, 1.9, skin), 0, 1.15, 0), at(box(0.6, 0.6, 0.7, skin), 0, 1.3, -1.15));
+    for (const side of [-1, 1]) {
+      const horn = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 6, 10, Math.PI), mat(0xd7ccc8));
+      horn.position.set(side * 0.25, 1.7, -1.15);
+      horn.rotation.set(0, Math.PI / 2, side * 0.6);
+      b.add(horn);
+    }
+    const legs: THREE.Object3D[] = [];
+    for (const [lx, lz] of [[-0.3, -0.7], [0.3, -0.7], [-0.3, 0.7], [0.3, 0.7]]) {
+      const leg = new THREE.Group();
+      leg.position.set(lx, 0.75, lz);
+      leg.add(at(box(0.2, 0.75, 0.2, skin), 0, -0.37, 0));
+      b.add(leg);
+      legs.push(leg);
+    }
+    b.userData.legs = legs;
+    return b;
+  }
+
   private dropBlock(): void {
+    this.crossers = [];
     if (!this.blockProp) return;
     dropLabels(this.blockProp);
     this.scene.remove(this.blockProp);
@@ -1069,15 +1170,18 @@ export class World {
     }
     const look = this.look = lookAt(this.skyHour);
     this.night = isNight(this.skyHour);
-    this.sky.set(look.top, look.horizon);
+    const g = OVERCAST[this.weatherKind ?? "clear"];  // mưa / sương: trời xám, nắng yếu — nhìn là biết đổi thời tiết
+    const grey = (hex: number) => (g ? new THREE.Color(hex).lerp(GREY, g * (this.night ? 0.3 : 1)).getHex() : hex);
+    const horizon = grey(look.horizon);
+    this.sky.set(grey(look.top), horizon);
     this.scene.background = null;
-    (this.scene.fog as THREE.Fog).color.setHex(look.horizon);
-    (this.renderer.domElement.parentElement as HTMLElement).style.background = `#${look.horizon.toString(16).padStart(6, "0")}`;
+    (this.scene.fog as THREE.Fog).color.setHex(horizon);
+    (this.renderer.domElement.parentElement as HTMLElement).style.background = `#${horizon.toString(16).padStart(6, "0")}`;
     this.hemi.color.setHex(look.hemiSky);
     this.hemi.groundColor.setHex(look.hemiGround);
     this.hemi.intensity = look.hemi;
     this.sun.color.setHex(look.sunColor);
-    this.sun.intensity = look.sun;
+    this.sun.intensity = look.sun * (1 - 0.7 * g);
     this.scene.environmentIntensity = this.night ? 0.25 : 0.65;
     this.renderer.toneMappingExposure = look.exposure;
     this.stars.visible = this.night;
@@ -1268,6 +1372,11 @@ export class World {
     this.updateTunnel(dt, moving && !!s?.terrain?.tunnel);
     this.bus.update(dt, this.speed, this.night || this.inTunnel);  // trong hầm bật đèn xe
     this.weather.update(dt, moving ? this.speed * 0.1 : 0);
+    const fog = this.scene.fog as THREE.Fog;  // sương dày / tan dần, không bật tắt cái rụp
+    const fogK = this.view === "inside" ? 1 : Math.min(1, dt * 0.6);
+    const want = this.view === "inside" ? FOG_CLEAR : this.fogWant;  // trong khoang xe: không mù
+    fog.near += (want[0] - fog.near) * fogK;
+    fog.far += (want[1] - fog.far) * fogK;
 
     // người đi bộ
     for (const w of [...this.walkers]) {

@@ -111,7 +111,9 @@ export interface State {
   patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
   vendor?: Vendor | null;
   name_hold?: boolean;  // hết giờ đón, xe chờ lơ xe đọc xong tên người lên xe
-  rollcall?: { name: string; left: number }[];  // điểm danh: người tới lượt lên xe đang được gọi tên (anh 03/11)
+  rollcall?: { name: string; left: number }[];
+  quiz?: Quiz | null;  // đố vui A / B / C (anh 03/11)
+  weather?: WeatherKind;  // điểm danh: người tới lượt lên xe đang được gọi tên (anh 03/11)
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
   turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
   block?: Block | null;
@@ -148,9 +150,28 @@ interface Person {
   parcels?: number;  // thùng quà Tết ôm vào cổng (PLAN-134 C)
 }
 
+export type WeatherKind = "clear" | "drizzle" | "rain" | "fog";
+
+/** Câu đố đang hỏi (`done`: đã có đáp án, thẻ còn vài giây). */
+export interface Quiz {
+  question: string;
+  options: string[];
+  left: number;
+  answered: number;
+  done: boolean;
+  answer?: number;
+  winners?: string[];
+  right?: number;
+}
+
+/** Sự cố dọc đường: tự xong sau `total` giây (tim rút ngắn), tặng quà góp đủ thì xong ngay. */
+export const INCIDENT_KINDS = ["tire", "jam", "cattle"] as const;
+
 /** Xe đang bị chặn: góp quà đủ `goal` xu thì đi tiếp. */
 export interface Block {
-  kind: "toll" | "police";
+  kind: "toll" | "police" | (typeof INCIDENT_KINDS)[number];
+  left?: number | null;  // sự cố: giây còn lại
+  total?: number | null;
   reason: string;
   goal: number;
   paid: number;
@@ -191,7 +212,9 @@ export interface GameEvent {
   place?: string;  // trạm dừng chân: tỉnh có trạm
   label?: string; round?: number;  // goal_step
   points?: number;  // race_win
-  kind?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;  // block / block_end
+  // block / block_end: loại chặn nằm ở `block` («kind» là của khung tin — server ghi đè)
+  block?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;
+  sky?: string;  // weather: clear | drizzle | rain | fog
   total?: number;
   board?: { province: string; count: number }[];
   top_liker?: string | null;
@@ -235,4 +258,6 @@ export interface GameEvent {
   position?: number;
   next_tier?: string; // quà: «thêm X xu → …»
   diamonds?: number; // quà: xu của lần tặng này (total = cộng dồn trong chuyến)
+  question?: string; options?: string[];  // quiz
+  answer?: string; option?: string; winners?: string[]; right?: number;  // quiz_end
 }

@@ -148,6 +148,54 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} sắp đói rồi, bà con góp quà gọi {vendor} lên xe bán nem, bì, bánh mì.",
             "Bụng {name} kêu rồi đó, ai góp quà gọi {vendor} lên bán đồ ăn.",
         ),
+        "quiz_ask": (  # đố vui (anh 03/11): gõ A, B, C
+            "Đố vui nè bà con, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người đúng sớm nhất được đọc tên.",
+            "Anh Tư đố cái, {q}. A là {a}, B là {b}, C là {c}. Gõ A, B hay C lẹ lên.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} trả lời đúng sớm nhất, giỏi quá trời, cộng điểm cho tỉnh nhà.",
+            "Đúng rồi, {ans}. Hoan hô {name}, đố câu sau nhanh tay nữa nghe.",
+        ),
+        "quiz_none": (
+            "Hổng ai trúng hết, đáp án là {ans}. Câu sau bà con ráng nghen.",
+            "Đáp án là {ans}, lần này chưa ai đúng, để câu sau.",
+        ),
+        "fact": (
+            "Xe đang chạy ngang, {fact}, ai quê ở đây thả cái tim coi.",
+            "Bà con biết hông, {fact}, về Tết nhớ ghé.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn lất phất rồi bà con, lạnh thì đắp mền vô.",
+            "Trời mưa phùn, đường trơn, bác tài chạy chậm chút cho chắc.",
+        ),
+        "weather_rain": (
+            "Trời đổ mưa rồi, ai ngồi gần cửa sổ kéo rèm lại giùm.",
+            "Mưa rào tới rồi, bác tài bật gạt nước chạy từ từ.",
+        ),
+        "weather_fog": (
+            "Sương mù dày quá, bác tài bật đèn sương mù chạy chậm lại.",
+            "Sương giăng kín đường rồi bà con, ngó ra cửa sổ thấy mờ mờ đẹp ghê.",
+        ),
+        "weather_clear": (
+            "Trời tạnh rồi, nắng lên đẹp quá bà con.",
+            "Hết mưa rồi, đường khô ráo, xe chạy bon bon.",
+        ),
+        "tire": (  # sự cố dọc đường: tự xong, tim làm nhanh hơn
+            "Chết, xe xẹp lốp ở {place}, Anh Tư xuống thay liền, bà con thả tim cho Anh Tư làm lẹ, tặng {goal} xu gọi thợ là xong ngay.",
+            "Nổ lốp rồi bà con, đợi Anh Tư thay cái bánh, thả tim tiếp sức coi.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi bà con, xe nhích từng chút, thả tim cho đường thông lẹ.",
+            "Đường {place} kẹt cứng, ráng chờ chút, bà con thả tim, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe dừng chờ chút, thả tim cho trâu đi lẹ.",
+            "Ê trâu ơi tránh đường cho xe về quê ăn Tết, bà con thả tim cho đàn trâu qua lẹ.",
+        ),
+        "incident_clear": (
+            "Xong rồi bà con, {what} xong, xe chạy tiếp.",
+            "Ổn rồi, cảm ơn bà con thả tim, xe lên đường.",
+        ),
         "vendor_pool": (
             "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là cô Ba lên xe bán nem, bì, bánh mì.",
             "Cảm ơn {name}, còn {left} xu nữa là có nem chua, bánh mì lên tận giường.",
@@ -451,6 +499,54 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} sắp đói rồi, ae góp quà gọi {vendor} lên bán đồ ăn.",
             "Bụng {name} biểu tình rồi, góp quà gọi {vendor} lên xe đi ae.",
         ),
+        "quiz_ask": (
+            "Đố vui nè ae, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người nhanh nhất được xướng tên.",
+            "Câu đố siêu dễ nè, {q}. A là {a}, B là {b}, C là {c}. Gõ đáp án lẹ đi ae.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} đỉnh nóc kịch trần, cộng điểm cho tỉnh nhà.",
+            "Chuẩn luôn, {ans}. {name} uy tín, câu sau nhanh tay nữa nghen.",
+        ),
+        "quiz_none": (
+            "Toang, không ai trúng, đáp án là {ans}. Câu sau gỡ lại ae.",
+            "Đáp án là {ans}, ae khum ai trúng hết, câu sau làm lại.",
+        ),
+        "fact": (
+            "Ae biết không, {fact}, ai quê đây điểm danh cái.",
+            "Chuyện hay nè, {fact}, Tết về nhớ ghé chéc in.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn lất phất, chill dữ thần luôn ae.",
+            "Trời mưa phùn rồi, lạnh run, ae đắp mền vô.",
+        ),
+        "weather_rain": (
+            "Mưa rồi ae ơi, không khí về quê chuẩn phim luôn.",
+            "Trời đổ mưa, tài xế chạy chậm lại cho an toàn nghen.",
+        ),
+        "weather_fog": (
+            "Sương mù dày đặc, cảnh như phim, tài xế bật đèn chạy chậm.",
+            "Sương giăng kín đường, ảo ma thật sự ae.",
+        ),
+        "weather_clear": (
+            "Tạnh rồi ae, nắng đẹp quá trời.",
+            "Hết mưa rồi, đường khô, quẩy tiếp thôi.",
+        ),
+        "tire": (
+            "Toang, xe xẹp lốp ở {place}, Anh Tư thay liền, ae thả tim tiếp sức, tặng {goal} xu gọi thợ là xong ngay.",
+            "Nổ lốp rồi ae, chờ xíu thay bánh, thả tim cho lẹ.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi ae, thả tim cho đường thông lẹ.",
+            "Kẹt cứng luôn, ae thả tim, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe đứng hình, ae thả tim cho trâu đi lẹ.",
+            "Trâu ơi tránh đường cho xe về quê, ae thả tim hối trâu đi.",
+        ),
+        "incident_clear": (
+            "Xong rồi ae, {what} xong, gét gô.",
+            "Ổn áp rồi, cảm ơn ae thả tim, chạy tiếp thôi.",
+        ),
         "vendor_pool": (
             "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là có nem, bì, bánh mì lên xe.",
             "Còn {left} xu là cô Ba lên xe bán đồ ăn, {name} mở bát rồi đó ae.",
@@ -752,6 +848,54 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "hungry_call": (
             "{name} sắp đói rồi, mọi người góp quà gọi {vendor} lên xe bán đồ ăn.",
             "{name} đói bụng rồi, góp quà để {vendor} lên xe bán nem, bì, bánh mì.",
+        ),
+        "quiz_ask": (
+            "Đố vui nè mọi người, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người đúng sớm nhất được đọc tên.",
+            "Câu đố đây, {q}. A là {a}, B là {b}, C là {c}. Mọi người gõ A, B hay C.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} chuẩn không cần chỉnh, cộng điểm cho tỉnh nhà.",
+            "Chính xác, {ans}. Chúc mừng {name}, câu sau nhanh tay nữa.",
+        ),
+        "quiz_none": (
+            "Bó tay chấm com, chưa ai đúng, đáp án là {ans}.",
+            "Đáp án là {ans}, câu này khó quá, để câu sau.",
+        ),
+        "fact": (
+            "Mọi người biết không, {fact}, ai quê ở đây thả tim nào.",
+            "Xe đang đi ngang, {fact}, Tết này nhớ ghé.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn rồi, lạnh như nước cất, mọi người đắp chăn vào.",
+            "Trời mưa phùn lất phất, đường trơn, tài xế chạy chậm thôi.",
+        ),
+        "weather_rain": (
+            "Trời đổ mưa rồi, ai gần cửa sổ kéo rèm giúp.",
+            "Mưa rào tới, tài xế bật gạt nước, chạy từ từ.",
+        ),
+        "weather_fog": (
+            "Sương mù dày quá, tài xế bật đèn sương mù chạy chậm lại.",
+            "Sương giăng kín đường, nhìn ra cửa sổ mờ mờ đẹp lắm.",
+        ),
+        "weather_clear": (
+            "Tạnh mưa rồi, nắng lên đẹp quá.",
+            "Hết mưa rồi, đường khô ráo, xe chạy êm.",
+        ),
+        "tire": (
+            "Xe xẹp lốp ở {place} rồi, Anh Tư thay ngay, mọi người thả tim tiếp sức, tặng {goal} xu gọi thợ là xong liền.",
+            "Nổ lốp rồi, chờ chút thay bánh, mọi người thả tim cho nhanh.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi, mọi người thả tim cho đường thông nhanh.",
+            "Đường kẹt cứng, thả tim nào, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe dừng chờ, thả tim cho trâu đi nhanh.",
+            "Trâu ơi tránh đường cho xe về quê ăn Tết, mọi người thả tim nào.",
+        ),
+        "incident_clear": (
+            "Xong rồi, {what} xong, xe đi tiếp.",
+            "Ổn rồi, cảm ơn mọi người thả tim, lên đường thôi.",
         ),
         "vendor_pool": (
             "Cảm ơn {name}, thêm {left} xu nữa là cô bán hàng lên xe bán nem, bì, bánh mì.",

@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { Block, FleetBus, GameEvent, Route, State, Vendor } from "./types";
+import type { Block, FleetBus, GameEvent, Quiz, Route, State, Vendor } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -18,6 +18,15 @@ function setText(id: string, text: string): void {
   const el = $(id);
   if (el.textContent !== text) el.textContent = text;
 }
+
+const BLOCK_PILL: Record<string, string> = { toll: "Trạm thu phí", police: "Công an", tire: "Xẹp lốp", jam: "Kẹt xe", cattle: "Trâu qua đường" };
+const INCIDENT_ICON: Record<string, string> = { tire: "🛞", jam: "🚗", cattle: "🐃" };
+const WEATHER_NOTE: Record<string, [string, string]> = {
+  drizzle: ["🌦 Mưa phùn", "Đường trơn · xe chạy chậm cho chắc"],
+  rain: ["🌧 Trời đổ mưa", "Kéo rèm lại · bác tài bật gạt nước"],
+  fog: ["🌫 Sương mù", "Bác tài bật đèn sương mù"],
+  clear: ["☀️ Trời tạnh", "Nắng lên rồi · xe chạy bon bon"],
+};
 
 const PILL: Record<State["phase"], string> = {
   BOARDING: "Đón khách", DRIVING: "Đang chạy", REST: "Trạm dừng", DROPOFF: "Thả khách",
@@ -177,7 +186,7 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (s.block.kind === "toll" ? "Trạm thu phí" : "Công an")
+    setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (BLOCK_PILL[s.block.kind] ?? "Dừng xe")
       : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
@@ -208,6 +217,8 @@ export class Hud {
   private statusText(s: State): [string, string] {
     if (s.paused) return ["Xe dừng chờ xíu nha", ""];
     if (s.show) return [`📺 ${s.show.title}`, `còn ${clock(s.show.left)}`];  // dừng xem video bảng quảng cáo
+    if (s.block && s.block.left != null) return [`${INCIDENT_ICON[s.block.kind] ?? "⚠"} ${s.block.reason} · ${s.block.place}`,
+      `❤ thả tim · ${s.block.left}s`];  // sự cố: tự xong
     if (s.block) return [s.block.kind === "toll" ? `🚧 Trạm thu phí ${s.block.place}` : `👮 ${s.block.reason}`,
       `góp ${s.block.paid}/${s.block.goal} xu`];  // PLAN-148
     if (s.vendor?.stage === "stop") return [`🧺 Tấp vào cho ${s.vendor.name} lên xe`, `${s.vendor.left ?? 0}s`];
@@ -354,7 +365,7 @@ export class Hud {
     setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
-    this.renderBlock(s.block ?? null, s.vendor ?? null);
+    this.renderBlock(s.block ?? null, s.vendor ?? null, s.quiz ?? null);
     const f = s.focus;
     if (f && f.name !== this.focusName) {  // anh bấm vào khách trên /control: thẻ giới thiệu người đó
       const where = f.stops_before ? `còn ${f.stops_before} điểm nữa tới ${esc(f.province)}` : `điểm kế là ${esc(f.province)}`;
@@ -371,15 +382,28 @@ export class Hud {
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
-  private renderBlock(b: Block | null, v: Vendor | null = null): void {
+  private renderBlock(b: Block | null, v: Vendor | null = null, q: Quiz | null = null): void {
     // cô Ba bán suốt chuyến: thẻ lớn chỉ lúc cô lên + 20 giây đầu, sau đó nhường chỗ «Gõ tên tỉnh», cách mua nằm ở dòng gợi ý
     if (v?.stage === "stop") this.vendorSince = 0;
     else if (v?.stage === "sell" && !this.vendorSince) this.vendorSince = Date.now();
     else if (!v || v.stage === "pool") this.vendorSince = 0;
-    const selling = !b && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
-    $("cta-block").classList.toggle("hidden", !b && !selling);
-    $("cta-main").classList.toggle("hidden", !!b || selling);
-    $("cta-sub").classList.toggle("hidden", !!b || selling);
+    const quiz = !b && !!q;
+    const selling = !b && !quiz && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
+    const card = !!b || quiz || selling;
+    $("cta-block").classList.toggle("hidden", !card);
+    $("cta-block").classList.toggle("quiz", quiz);
+    $("cta-main").classList.toggle("hidden", card);
+    $("cta-sub").classList.toggle("hidden", card);
+    if (quiz) {  // đố vui: câu hỏi + ba đáp án; hết giờ thì đáp án đúng + người trả lời nhanh nhất
+      const opts = q!.options.map((o, i) => q!.done && i !== q!.answer ? "" : `<b>${"ABC"[i]}</b> ${esc(o)}`).filter(Boolean).join(" · ");
+      const tail = q!.done
+        ? (q!.winners?.length ? ` · 🏆 ${q!.winners.map((n) => esc(n)).join(", ")}` : " · chưa ai đúng")
+        : ` · gõ <b>A</b> <b>B</b> <b>C</b> · ${q!.left}s`;
+      setHTML("cta-block", `<div class="blk-title">🧠 ${q!.done ? "ĐÁP ÁN · " : ""}${esc(q!.question)}?</div>`
+        + `<div class="blk-bar">${q!.done ? "" : `<i style="width:${Math.round(q!.left / 25 * 100)}%"></i>`}`
+        + `<span>${q!.done ? "✅ " : ""}${opts}${tail}</span></div>`);
+      return;
+    }
     if (selling) {  // cô bán hàng trên xe: hai dòng như thẻ bị chặn — cách mua + giờ còn lại
       const treat = v!.treats?.length ? ` · 🎉 ${v!.treats.slice(-2).map((n) => esc(n)).join(", ")} bao cả xe` : "";
       setHTML("cta-block", `<div class="blk-title">🧺 ${esc(v!.name).toUpperCase()} LÊN XE · BÁN SUỐT CHUYẾN</div>`
@@ -387,6 +411,13 @@ export class Hud {
       return;
     }
     if (!b) return;
+    if (b.left != null) {  // sự cố dọc đường: tự xong, tim làm nhanh hơn, quà xong ngay
+      const total = Math.max(1, b.total ?? 30);
+      const done = Math.min(100, Math.round(((total - b.left) / total) * 100));
+      setHTML("cta-block", `<div class="blk-title">${INCIDENT_ICON[b.kind] ?? "⚠"} ${esc(b.reason).toUpperCase()} · ${esc(b.place)}</div>`
+        + `<div class="blk-bar"><i style="width:${done}%"></i><span>❤ Thả tim cho nhanh · 🎁 ${b.goal} xu xong ngay · ${b.left}s</span></div>`);
+      return;
+    }
     // hai dòng (cao bằng «Gõ tên tỉnh» + dòng gợi ý): không đẩy bảng quà xuống đè lơ xe
     const title = b.kind === "toll" ? `🚧 TRẠM THU PHÍ ${esc(b.place).toUpperCase()}`
       : b.speeding ? "👮 QUÁ TỐC ĐỘ · CÔNG AN PHẠT" : `👮 CÔNG AN · ${esc(b.reason)}`;
@@ -486,16 +517,31 @@ export class Hud {
         this.note(`🎯 Cả phòng đạt ${e.xu} xu · ${esc(e.label ?? "")}`, `Cảm ơn ${esc(e.name ?? "")} và mọi người đã tặng quà`);
         break;
       case "block":  // trạm thu phí / công an chặn xe (PLAN-148)
-        this.flash(e.kind === "toll" ? "🚧 TRẠM THU PHÍ" : e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA");
+        this.flash(e.block === "toll" ? "🚧 TRẠM THU PHÍ" : e.block === "police" ? (e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA")
+          : `${INCIDENT_ICON[e.block ?? ""] ?? "⚠"} ${(e.reason ?? "").toUpperCase()}`);
         $("cta-block").classList.remove("alarm");
         void ($("cta-block") as HTMLElement).offsetWidth;
         $("cta-block").classList.add("alarm");
         break;
+      case "quiz":  // đố vui
+        this.flash("🧠 ĐỐ VUI!");
+        break;
+      case "quiz_end":
+        this.note(`✅ Đáp án ${e.answer}: ${esc(e.option ?? "")}`, e.winners?.length
+          ? `🏆 ${e.winners.map((n) => esc(n)).join(", ")} · ${e.right}/${e.total} người đúng` : `Chưa ai đúng · ${e.total} người trả lời`);
+        break;
+      case "weather": {
+        const w = WEATHER_NOTE[e.sky ?? ""];
+        if (w) this.toast(...w);
+        break;
+      }
       case "block_end":
-        if (e.by === "cover") {
-          this.note(`💸 Anh Tư bù lỗ ${(e.goal ?? 0) - (e.paid ?? 0)} xu`, `${e.kind === "toll" ? "Qua trạm" : "Nộp phạt xong"} · xe đi tiếp`);
+        if (e.by === "time" || (e.block && INCIDENT_ICON[e.block])) {
+          this.note(`✅ ${INCIDENT_ICON[e.block ?? ""] ?? ""} Xong rồi · xe chạy tiếp`, e.by === "gifts" ? `Cảm ơn ${esc(e.name ?? "")} góp quà` : "Cảm ơn bà con thả tim");
+        } else if (e.by === "cover") {
+          this.note(`💸 Anh Tư bù lỗ ${(e.goal ?? 0) - (e.paid ?? 0)} xu`, `${e.block === "toll" ? "Qua trạm" : "Nộp phạt xong"} · xe đi tiếp`);
         } else {
-          this.note(`✅ Góp đủ ${e.goal} xu · cảm ơn ${esc(e.name ?? "")}`, `${e.kind === "toll" ? "Barie mở" : "Nộp phạt xong"} · xe đi tiếp`);
+          this.note(`✅ Góp đủ ${e.goal} xu · cảm ơn ${esc(e.name ?? "")}`, `${e.block === "toll" ? "Barie mở" : "Nộp phạt xong"} · xe đi tiếp`);
         }
         break;
       case "pickup_stop": {  // xe dừng hẳn bên lề đón người hẹn (PLAN-145): đọc tên ai lên

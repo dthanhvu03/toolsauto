@@ -201,7 +201,9 @@ def test_every_talk_line_fills_its_fields():
     fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
                   prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình",
                   lunar="26 Chạp", other="Bình", need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì")
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì",
+                  q="Phở bò là của tỉnh nào", a="Nam Định", b="Huế", c="Hà Nội", ans="A, Nam Định",
+                  fact="Nam Định nổi tiếng với phở bò")
     kinds = set(LINES[STYLES[0]])
     assert all(set(LINES[style]) == kinds for style in STYLES)  # kiểu nào cũng đủ mọi tình huống
     for style in TALK_STYLES:

@@ -75,7 +75,7 @@ def test_hub_answers_in_background_and_survives_ai_failure(monkeypatch):
     q = {"uid": "bình", "name": "Bình", "text": "xe có wifi không", "at": 0.0}
     seen = {}
 
-    async def fake_ask(client, key, name, question, ctx):
+    async def fake_ask(client, key, name, question, ctx, chat=False):
         seen["ctx"] = ctx
         return "Xe có wifi đó Bình ơi, cứ gõ tên tỉnh lên xe."
 
@@ -105,7 +105,7 @@ def test_same_question_reuses_answer_without_calling_ai(monkeypatch):
     hub.ai_cache.clear()
     calls = []
 
-    async def fake_ask(client, key, name, question, ctx):
+    async def fake_ask(client, key, name, question, ctx, chat=False):
         calls.append(question)
         return f"Xe có wifi đó {name} ơi, cứ gõ tên tỉnh lên xe." if "wifi" in question else f"Xe số 2 đó {name}."
 

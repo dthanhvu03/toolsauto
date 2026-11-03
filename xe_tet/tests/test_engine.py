@@ -1612,7 +1612,9 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì")
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì",
+                  q="Phở bò là của tỉnh nào", a="Nam Định", b="Huế", c="Hà Nội", ans="A, Nam Định",
+                  fact="Nam Định nổi tiếng với phở bò")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1693,7 +1695,7 @@ def test_toll_stops_bus_until_gifts_cover_fee_only_gifts_count():
     _driving(e)
     e.block_now("toll")
     (ev,) = [x for x in e.drain() if x["type"] == "block"]
-    assert ev["kind"] == "toll" and ev["goal"] == 20 and e.snapshot()["speed"] == 0.0
+    assert ev["block"] == "toll" and ev["goal"] == 20 and e.snapshot()["speed"] == 0.0
     km = e.trip_km()
     e.handle({"type": "like", "name": "Tim", "count": 500}, 2)
     comment(e, "Bình", "góp", 3)
@@ -2067,3 +2069,176 @@ def test_tiktok_avatar_kept_and_shown_with_name():
     assert seats == {"An": url, "Bình": ""}
     tickets = [ev for ev in e.drain() if ev["type"] == "ticket"]
     assert tickets[0]["avatar"] == url and "avatar" not in tickets[1]
+
+
+# ---- đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn) ------------------------------------
+
+def test_quiz_answers_first_try_only_and_names_fastest_three():
+    import random as _random
+    from xe_tet.server.game.engine import QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.rng = _random.Random(3)
+    e.quiz_now()
+    out = e.drain()
+    assert "quiz" in types(out)
+    ask = next(x for x in out if x["type"] == "loxe")["text"]
+    assert "A" in ask and "B" in ask and "C" in ask and "!" not in ask
+    right = "ABC"[e.quiz["answer"]]
+    wrong = "ABC"[(e.quiz["answer"] + 1) % 3]
+    comment(e, "Sai", wrong, t + 1)
+    comment(e, "Sai", right, t + 2)  # đổi đáp án không tính
+    for i, name in enumerate(["An", "Bình", "Chi", "Dũng"]):
+        comment(e, name, f"câu {right.lower()}" if i % 2 else right, t + 3 + i)
+    view = e.snapshot()["quiz"]
+    assert view["answered"] == 5 and "answer" not in view  # chưa hết giờ: không lộ đáp án
+    assert e.viewers["an"].province == "hanoi"  # gõ chữ cái không đổi vé
+    e.tick(t + QUIZ_SECONDS + 1)
+    out = e.drain()
+    end = next(x for x in out if x["type"] == "quiz_end")
+    assert end["winners"] == ["An", "Bình", "Chi"] and end["right"] == 4 and end["total"] == 5
+    assert any("An, Bình và Chi" in x.get("text", "") for x in out if x["type"] == "loxe")
+    assert e.snapshot()["quiz"]["done"]
+    comment(e, "Muộn", right, t + QUIZ_SECONDS + 2)  # hết giờ: chữ cái là bình luận thường
+    assert "muon" not in e.quiz["answers"]
+    e.tick(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.quiz is None
+
+
+def test_quiz_comes_by_itself_only_while_driving():
+    e = Engine(0.0)
+    e.quiz_on = True
+    e.quiz_gap = 60.0
+    e.next_quiz = 0.0
+    e.tick(1.0)
+    assert e.quiz is None  # đang đón khách ở bến: chưa đố
+    comment(e, "An", "Hà Nội", 2)
+    run_until(e, "DRIVING", 3)
+    e.tick(e.last_now + 1)
+    assert e.quiz is not None and not e.quiz["done"]
+
+
+def test_quiz_data_is_well_formed():
+    import random as _random
+    from xe_tet.server.game.trivia import FAMOUS, answer_of, fact, make_quiz
+    assert set(FAMOUS) <= set(BY_KEY)
+    rng = _random.Random(0)
+    for _ in range(300):
+        q = make_quiz(rng)
+        assert len(set(q["options"])) == 3 and 0 <= q["answer"] <= 2
+        if q["kind"] != "region":
+            assert q["options"][q["answer"]] == BY_KEY[q["key"]].name
+            assert normalize(BY_KEY[q["key"]].name) not in normalize(q["question"])  # câu hỏi không lộ đáp án
+    assert make_quiz(rng, prefer="namdinh")["key"] == "namdinh"
+    assert fact("namdinh") == "Nam Định nổi tiếng với phở bò"
+    assert [answer_of(x) for x in ("a", "Câu B", "đáp án c", "chọn A")] == [0, 1, 2, 0]
+    assert [answer_of(x) for x in ("ba", "a b", "Bình Định", "ok", "")] == [None] * 5
+
+
+def test_incident_ends_by_itself_likes_speed_it_up_gifts_end_it_now():
+    from xe_tet.server.game.engine import INCIDENT_LIKE_MAX, INCIDENT_SECONDS
+    e, t = _driving_with_riders()
+    e.incidents_on = True
+    e.fee_auto = False
+    e.block_now("tire")
+    out = e.drain()
+    assert e.block["kind"] == "tire" and "block" in types(out)
+    assert any("lốp" in x.get("text", "") for x in out if x["type"] == "loxe")
+    km = e.trip_km()
+    e.tick(t + 5)
+    assert e.trip_km() == km  # xe đứng thay lốp
+    e.handle({"type": "like", "name": "An", "count": 10_000}, t + 6)  # tim dồn: rút ngắn, nhưng còn ít nhất 40 % thời gian
+    assert e.block["until"] == e.block["since"] + INCIDENT_SECONDS * (1 - INCIDENT_LIKE_MAX)
+    assert e.snapshot()["block"]["left"] is not None
+    e.tick(e.block["until"] + 0.1)
+    out = e.drain()
+    assert e.block is None and any(x["type"] == "block_end" and x["by"] == "time" for x in out)
+    e.block_now("cattle")
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 5, "gift": "Hoa hồng"}, e.last_now + 1)
+    assert e.block is None  # góp đủ xu: xong ngay
+
+
+def test_incidents_planned_even_with_toll_and_police_off():
+    import random as _random
+    from xe_tet.server.game.engine import INCIDENTS
+    e = Engine(0.0)
+    e.incidents_on = True
+    e.block_rng = _random.Random(1)
+    kinds = [k for _ in range(40) for _, k in e._plan_blocks(600.0)]
+    assert kinds and set(kinds) <= set(INCIDENTS)
+    e.incidents_on = False
+    assert not any(e._plan_blocks(600.0) for _ in range(20))
+
+
+def test_weather_rolls_by_region_and_lo_xe_says_it():
+    import random as _random
+    e = Engine(0.0)
+    e.rng = _random.Random(0)
+    seen = set()
+    for i in range(40):
+        e.weather_region = None
+        e._roll_weather("taynguyen", 1000.0 * i)
+        seen.add(e.weather)
+    assert seen <= {"clear", "fog", "rain"} and {"fog", "clear"} <= seen
+    assert "weather" in types(e.drain())
+    assert e.snapshot()["weather"] in seen
+
+
+def test_lo_xe_tells_a_fact_about_the_province_passed():
+    e, t = _driving_with_riders()
+    out = []
+    while e.phase == "DRIVING" and t < 2000:
+        t += 1
+        e.tick(t)
+        out += e.drain()
+    facts = [x["text"] for x in out if x["type"] == "loxe" and "nổi tiếng với" in x["text"]]
+    assert facts  # Hà Nội đi đâu cũng qua vài tỉnh có chuyện kể
+
+
+def test_ai_gets_chatter_only_when_no_question_waiting():
+    from xe_tet.server.game.engine import CHATTER_GAP
+    e, t = _driving_with_riders()
+    e.ai_reply = True
+    comment(e, "An", "về quê vui quá mọi người ơi", t)
+    comment(e, "Bình", "ok", t)  # quá ngắn: bỏ
+    comment(e, "Chi", "xe chạy êm ghê luôn", t + 1)
+    q = e.next_question(t + 2, 40.0)
+    assert q["chat"] and q["name"] == "Chi"  # câu mới nhất
+    assert e.next_question(t + 3, 40.0) is None  # giãn cách chuyện phiếm
+    e.questions.append({"uid": "x", "name": "X", "text": "bao giờ tới?", "at": t + 3})
+    assert e.next_question(t + 4, 40.0)["name"] == "X"  # câu hỏi luôn trước
+    assert e.next_question(t + 2 + CHATTER_GAP, 60.0)["name"] == "An"
+    comment(e, "Chi", "tối nay đông vui quá luôn", t + 5)
+    assert not e.chatter  # mỗi người tối đa một lần / 3 phút
+    e.ai_reply = False
+    comment(e, "Dũng", "chào cả nhà nha mọi người", t + 6)
+    assert not e.chatter
+
+
+def test_block_weather_quiz_events_keep_off_the_reserved_kind_field():
+    """Lỗi cũ: sự cố / trạm / thời tiết gửi trường «kind» → server ghi đè bằng «event», màn hình nháy sai chữ."""
+    e, t = _driving_with_riders()
+    e.incidents_on = e.blocks_on = True
+    e.fee_auto = False
+    out = []
+    for kind in ("toll", "police", "tire", "jam", "cattle"):
+        e.block_now(kind)
+        e.handle({"type": "gift", "name": "An", "diamonds": 100, "gift": "Hoa"}, t)
+        out += e.drain()
+    e.weather_region = None
+    e.weather = "?"
+    e._roll_weather("bac", t)
+    e.quiz_now()
+    out += e.drain()
+    assert [x["block"] for x in out if x["type"] == "block"] == ["toll", "police", "tire", "jam", "cattle"]
+    assert all("kind" not in x for x in out)
+
+
+def test_admin_sets_weather_by_hand():
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    e = Engine(0.0)
+    e.set_weather("fog")
+    assert e.snapshot()["weather"] == "fog" and any(x.get("sky") == "fog" for x in e.drain())
+    with pytest.raises(Refused):
+        e.set_weather("snow")

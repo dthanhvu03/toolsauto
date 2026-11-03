@@ -143,6 +143,12 @@ class Hub:
         engine.roll_on = self.settings["roll_on"]
         engine.roll_idle = self.settings["roll_idle_min"] * 60.0
         engine.roll_wait = float(self.settings["roll_wait_s"])
+        engine.quiz_on = self.settings["quiz_on"]
+        if engine.quiz_gap != self.settings["quiz_every_min"] * 60.0:
+            engine.quiz_gap = self.settings["quiz_every_min"] * 60.0
+            engine.next_quiz = min(engine.next_quiz, engine.last_now + engine.quiz_gap)
+        engine.incidents_on = self.settings["incidents_on"]
+        engine.incident_xu = self.settings["incident_xu"]
 
     def maybe_answer(self, now: float) -> None:
         """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""
@@ -165,7 +171,8 @@ class Hub:
                 self.ai_error = "chưa có GEMINI_API_KEY trong /home/vu/toolsauto/.env"
                 return
             ctx = self.engine.ai_context(q["uid"])
-            ckey = ai_reply.cache_key(q["text"], ctx)
+            chat = bool(q.get("chat"))  # chuyện phiếm: đáp lại riêng từng người, không dùng lại câu trả lời
+            ckey = None if chat else ai_reply.cache_key(q["text"], ctx)
             hit = self.ai_cache.get(ckey) if ckey else None
             if hit and time.monotonic() - hit[1] <= ai_reply.CACHE_TTL:  # câu hỏi giống vừa trả lời: dùng lại, không gọi AI
                 self.ai_cache.move_to_end(ckey)
@@ -173,7 +180,7 @@ class Hub:
                 self.ai_cache_hits += 1
                 return
             self.ai_client = self.ai_client or httpx.AsyncClient()
-            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], ctx)
+            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], ctx, chat=chat)
             if text:
                 self.engine.loxe(text)
                 self.ai_answered += 1
@@ -471,6 +478,10 @@ async def _admin(body: dict) -> dict:
         engine.cover()
     elif action == "vendor":  # gọi cô bán hàng lên xe ngay (không cần góp)
         engine.vendor_now()
+    elif action == "quiz":  # đố vui ngay
+        engine.quiz_now()
+    elif action == "weather":  # đổi thời tiết tay: clear | drizzle | rain | fog
+        engine.set_weather(str(body.get("sky") or ""))
     elif action == "focus":  # zoom máy quay vào một khách trên xe (giường, 0 = bỏ)
         engine.focus_seat(as_int(body.get("seat"), 0))
     elif action == "next_lane":  # chọn hướng cho chuyến kế tiếp ("" = về thứ tự đặt vé)

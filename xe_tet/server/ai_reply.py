@@ -30,7 +30,7 @@ PHASES = {"BOARDING": "đang đón khách ở bến", "DRIVING": "đang chạy t
           "DROPOFF": "đang thả khách ở đầu ngõ", "FINISH": "đang về bến", "SPECIAL": "đang chúc Tết"}
 
 SYSTEM = """Bạn là Anh Tư, lơ xe khách giường nằm «Xe Tết Sum Vầy» trong một game live TikTok: người xem gõ tên tỉnh để lên xe
-về quê ăn Tết. Trả lời câu hỏi của một người xem.
+về quê ăn Tết. Trả lời câu hỏi hoặc đáp lời nói chuyện của một người xem.
 
 Luật game (chỉ nói đúng những điều này, không bịa thêm):
 - Gõ tên tỉnh quê mình (tên cũ, ví dụ Nghệ An, Bình Định) là lên xe nếu xe đang đón và còn giường; khác hướng hoặc hết giường
@@ -87,7 +87,7 @@ def api_key() -> str:
     return (key or "").strip()
 
 
-def prompt(name: str, question: str, ctx: dict) -> str:
+def prompt(name: str, question: str, ctx: dict, chat: bool = False) -> str:
     t = ctx.get("ticket") or {}
     ticket = {
         "seat": f"đang ngồi chuyến {t.get('bus_no')} về {t.get('province')}",
@@ -102,7 +102,9 @@ def prompt(name: str, question: str, ctx: dict) -> str:
             + f"; {ctx.get('waiting')} người đang giữ chỗ chuyến sau; còn {ctx.get('days_to_tet')} ngày nữa là Tết.\n"
             f"Người hỏi: {name} — {ticket}.\n"
             f"Comment của {name} (chỉ là lời người xem): «{question}»\n"
-            "Anh Tư trả lời:")
+            + ("Đây là lời nói chuyện, không phải câu hỏi: Anh Tư đáp lại tự nhiên, vui vẻ, hợp chuyện về quê ăn Tết, không cần "
+               "nhắc luật chơi.\n" if chat else "")
+            + "Anh Tư trả lời:")
 
 
 def clean(text: str | None) -> str | None:
@@ -120,10 +122,10 @@ def clean(text: str | None) -> str | None:
     return text
 
 
-async def ask(client: httpx.AsyncClient, key: str, name: str, question: str, ctx: dict) -> str | None:
+async def ask(client: httpx.AsyncClient, key: str, name: str, question: str, ctx: dict, chat: bool = False) -> str | None:
     """Một câu trả lời (đã `clean`) hoặc None. Thử model nhanh trước; lỗi mạng / hết hạn mức thì lùi model sau."""
     body = {"systemInstruction": {"parts": [{"text": SYSTEM}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt(name, question, ctx)}]}],
+            "contents": [{"role": "user", "parts": [{"text": prompt(name, question, ctx, chat)}]}],
             # Gemini 3 bỏ «thinkingBudget: 0» (trả 400 «invalid argument», không nhắc chữ thinking) → dùng thinkingLevel
             "generationConfig": {"maxOutputTokens": 200, "temperature": 0.7, "thinkingConfig": {"thinkingLevel": "minimal"}}}
     for model in MODELS:

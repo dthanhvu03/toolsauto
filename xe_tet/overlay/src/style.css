@@ -466,3 +466,8 @@ img.av { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; v
 .lbl.win img.av { width: 1em; height: 1em; margin-right: 0.15em; }
 .lbl.berth small.full { display: block; font-size: 0.62em; font-weight: 700; color: #4e7d32; }
 .lbl.berth small.full.hungry { color: #c62828; }
+/* đố vui (anh 03/11): câu hỏi dài hơn tên trạm — chữ nhỏ hơn chút */
+.cta-block.quiz .blk-title { font-size: 38px; }
+.cta-block.quiz .blk-bar { border-color: #6a1b9a; }
+.cta-block.quiz .blk-bar i { background: linear-gradient(90deg, #ce93d8, #8e24aa); opacity: 0.45; }
+.cta-block.quiz .blk-bar span { font-size: 26px; color: #4a148c; }
