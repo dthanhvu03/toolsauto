@@ -35,6 +35,9 @@ const PILL: Record<State["phase"], string> = {
 const MAX_TOASTS = 2;  // anh 03/11 «che hết rồi»: tối đa 2 thẻ, không phủ xuống nóc xe
 const GIFTS_OPEN_MS = 10_000;
 const GIFTS_EVERY_MS = 45_000;
+const GIFTS_REOPEN_MS = 60_000;  // phòng đông quà tới liên tục: bảng quà lớn mở lại tối đa mỗi phút một lần
+const FLASH_MS = 2600;
+const FLASH_MINOR_GAP_MS = 8000;  // chữ lớn phụ (bóp còi, trà đá, mốc tim) cách nhau ít nhất 8 giây
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
 const SEATS_DEFAULT = 24;
@@ -143,7 +146,14 @@ export class Hud {
   private giftsTimer = 0;
   private focusName = "";
 
-  private openGifts(ms: number): void {
+  private giftsOpenedAt = -Infinity;
+
+  /** Bảng quà lớn: không mở khi khung đang là câu đố / trạm / cô bán hàng (anh 04/11 «đỡ rối»), quà tới dồn thì mỗi phút một lần. */
+  private openGifts(ms: number, fromGift = false): void {
+    const now = performance.now();
+    if (!$("cta-block").classList.contains("hidden")) return;
+    if (fromGift && now - this.giftsOpenedAt < GIFTS_REOPEN_MS) return;
+    this.giftsOpenedAt = now;
     $("cta").classList.add("gifts-open");
     window.clearTimeout(this.giftsTimer);
     this.giftsTimer = window.setTimeout(() => $("cta").classList.remove("gifts-open"), ms);
@@ -423,6 +433,7 @@ export class Hud {
     const selling = !b && !quiz && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
     const card = !!b || quiz || selling;
     $("cta-block").classList.toggle("hidden", !card);
+    if (card) $("cta").classList.remove("gifts-open");  // câu đố / trạm hiện ra: thu bảng quà lại, khung không cao vống
     $("cta-block").classList.toggle("quiz", quiz);
     $("cta-main").classList.toggle("hidden", card);
     $("cta-sub").classList.toggle("hidden", card);
@@ -546,16 +557,13 @@ export class Hud {
           "Quê bên nào thì bình luận, thả tim, tặng quà cho bên đó · bên nhiều điểm chạy trước");
         break;
       case "versus_win":  // đối kháng: hướng thắng chạy chuyến này
-        this.flash(`⚔️ ${e.dest ?? ""} thắng!`);
         this.note(`⚔️ ${esc(e.dest ?? "")} thắng ${esc(e.rival ?? "")} · ${e.points} – ${e.rival_points ?? 0}`,
           `Chuyến này chạy ${esc(e.lane ?? "")} · vòng đối kháng mới bắt đầu`);
         break;
       case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
-        this.flash(`⚔️ ${e.province ?? ""} thắng đua tỉnh!`);
         this.note(`⚔️ ${esc(e.province ?? "")} thắng đua tỉnh · ${e.points} điểm`, `Chuyến này đi hướng ${esc(e.province ?? "")} · vòng mới bắt đầu`);
         break;
       case "goal_step":  // mục tiêu buổi live qua mốc: cả phòng được cảnh vui
-        this.flash(`🎯 ${e.xu} xu · ${e.label ?? ""}`);
         this.note(`🎯 Cả phòng đạt ${e.xu} xu · ${esc(e.label ?? "")}`, `Cảm ơn ${esc(e.name ?? "")} và mọi người đã tặng quà`);
         break;
       case "block":  // trạm thu phí / công an chặn xe (PLAN-148)
@@ -609,7 +617,6 @@ export class Hud {
         break;
       case "vendor":
         if (e.stage === "stop") {
-          this.flash("🧺 CÔ BÁN HÀNG LÊN XE");
           this.note(`🧺 ${name} lên xe bán nem, bì, bánh mì`, e.by ? `Nhờ ${esc(e.by)} góp quà · gõ tên món để mua` : "Gõ tên món để mua");
         }
         break;
@@ -647,9 +654,9 @@ export class Hud {
         this.toast(`🏠 ${name} ở ngay ${esc(e.province ?? "")}`, "Đi bộ về nhà nha!", "stay");
         break;
       case "gift":
-        this.openGifts(GIFTS_OPEN_MS);  // vừa có quà: mở bảng quà cho người khác thấy quà làm được gì
+        this.openGifts(GIFTS_OPEN_MS, true);  // vừa có quà: mở bảng quà cho người khác thấy quà làm được gì
         if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
-        if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`);
+        if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`, true);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
           // gọn 2 dòng (anh báo 03/11: thẻ quà 4 dòng đè nhau, tràn xuống bảng góc phải): việc quà làm được + mốc kế tiếp;
           // thùng quà gầm xe đã hiện trên xe, không ghi lại
@@ -678,13 +685,13 @@ export class Hud {
         this.flash(`☕ Trạm dừng chân ${e.place ?? ""}`);
         break;
       case "honk":
-        this.flash("📢 Bíp bíp! Lên xe nào!");
+        this.flash("📢 Bíp bíp! Lên xe nào!", true);
         break;
       case "like_milestone":
-        this.flash(`❤ ${(e.total ?? 0).toLocaleString("vi-VN")} tim! Nhấn ga!`);
+        this.flash(`❤ ${(e.total ?? 0).toLocaleString("vi-VN")} tim! Nhấn ga!`, true);
         break;
       case "treat":
-        this.flash(`🧊 ${name} bao cả xe trà đá!`);
+        this.flash(`🧊 ${name} bao cả xe trà đá!`, true);
         break;
       case "relief_depart": {
         const sponsor = e.sponsor ? ` của ${esc(e.sponsor)}` : "";
@@ -917,7 +924,17 @@ export class Hud {
     }, seconds * 1000);
   }
 
-  private flash(text: string): void {
+  private flashShownAt = -Infinity;
+  private minorAt = -Infinity;
+
+  /** Chữ lớn giữa màn. Lúc chữ hiện, lơ xe + thông báo mờ đi để không chồng chữ (anh 04/11 «đỡ rối»).
+   *  Chữ phụ (minor) không đè chữ chính đang hiện và cách nhau ít nhất FLASH_MINOR_GAP_MS. */
+  private flash(text: string, minor = false): void {
+    const now = performance.now();
+    if (minor && (now - this.flashShownAt < FLASH_MS || now - this.minorAt < FLASH_MINOR_GAP_MS)) return;
+    if (minor) this.minorAt = now;
+    this.flashShownAt = now;
+    $("hud").classList.add("flashing");
     const el = $("flash");
     el.textContent = text;
     el.classList.remove("hidden");
@@ -925,7 +942,10 @@ export class Hud {
     void el.offsetWidth;
     el.style.animation = "";
     window.clearTimeout(this.flashTimer);
-    this.flashTimer = window.setTimeout(() => el.classList.add("hidden"), 2600);
+    this.flashTimer = window.setTimeout(() => {
+      el.classList.add("hidden");
+      $("hud").classList.remove("flashing");
+    }, FLASH_MS);
   }
 }
 

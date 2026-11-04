@@ -298,6 +298,9 @@ html, body {
 }
 
 #hud.inside #toasts, #hud.inside #board { display: none; }
+/* chữ lớn giữa màn đang hiện: lơ xe + thông báo lùi mờ, không chồng chữ (anh 04/11 «đỡ rối») */
+#loxe, #toasts { transition: opacity 0.25s ease; }
+#hud.flashing #loxe, #hud.flashing #toasts { opacity: 0.12; }
 /* Băng rôn lớn (thả khách, chúc Tết, hết chuyến) thế chỗ bảng tuyến + lời kêu gọi + lơ xe để cảnh 3D bên dưới không bị che. */
 #hud.bannering #route, #hud.bannering #cta, #hud.bannering #loxe { visibility: hidden; }
 /* Admin tắt từng phần (bảng điều khiển → Màn hình) */
