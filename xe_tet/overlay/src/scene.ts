@@ -525,18 +525,30 @@ export class World {
 
   /** Bảng tên hành khách trên nóc xe (anh 03/11: «góc nhìn nào cũng phải có tên những người đang ở trong xe»): đi theo xe ở
    * mọi góc máy ngoài xe; trong xe thì tên đã nằm trên từng giường. Người tặng quà ⭐ viền vàng, đông quá thì «+N người». */
+  /** Số người đã có giường nhưng còn đứng hàng ở bến (chưa bước vào cửa) — HUD trừ ra để số «trên xe» khớp cảnh
+   * (anh 04/11 «khách hiển thị 24/24 mà vẫn cho lên xe»: hết trận đối kháng cả 24 người được xếp giường cùng lúc). */
+  onBoarding: ((pending: number) => void) | null = null;
+  private lastSeats: (Seat | null)[] = [];
+
+  private boardChanged(): void {
+    this.onBoarding?.(this.boardLine.length);
+    this.refreshRiderTag(this.lastSeats);
+  }
+
   private refreshRiderTag(seats: (Seat | null)[]): void {
+    this.lastSeats = seats;
+    const queued = new Set(this.boardLine.map((w) => w.name));  // còn đứng hàng ở bến: chưa hiện ở cửa sổ, chưa tính trên xe
     seats.forEach((s, i) => {  // tên ngắn ngay cửa sổ giường (tên dài bị cắt «…» — tên đủ ở bảng dưới thân xe)
       const el = this.windowTags[i]?.element;
       if (!el) return;
-      el.style.display = s ? "" : "none";
+      el.style.display = s && !queued.has(s.name) ? "" : "none";
       el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
       el.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐" : ""}${escHtml(i === this.focusSeat ? s.name : short)}${s.snack ?? ""}${hungry(s) ? "😋" : ""}` : "";
       this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
-    const riders = seats.filter((x): x is Seat => !!x);
+    const riders = seats.filter((x): x is Seat => !!x && !queued.has(x.name));
     const el = this.riderTag.element;
     el.style.display = riders.length ? "" : "none";
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -594,6 +606,7 @@ export class World {
     for (const w of [...this.walkers]) this.removeWalker(w);
     this.wcLine = [];
     this.boardLine = [];
+    this.boardChanged();
     this.roadside = [];
     this.vendorWalker = null;
     this.dropBlock();
@@ -1007,6 +1020,7 @@ export class World {
     w.name = name;
     w.queuedAt = this.t;
     this.boardLine.push(w);
+    this.boardChanged();
   }
 
   private lineSpot(k: number): THREE.Vector3 {
@@ -1041,6 +1055,7 @@ export class World {
     go.hold = false;
     go.path = [this.bus.doorSpot.clone()];  // tới cửa thì lên xe (hết đường đi → gỡ khỏi cảnh)
     this.boardLine.forEach((w, i) => { w.path = [this.lineSpot(i)]; });
+    this.boardChanged();
   }
 
   private bubble(seat: number, text: string): void {

@@ -155,21 +155,19 @@ html, body {
 .cta-main { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
 .cta-main b { color: #fff; background: var(--red); padding: 0 14px; border-radius: 12px; }
 .cta-sub { font-size: 34px; font-weight: 600; color: var(--ink); margin-top: 4px; white-space: nowrap; animation: fadein 0.5s ease; }
-/* bảng quà cố định (PLAN-144): 4 ô / hàng, ô cuối rộng gấp đôi */
-.gift-head { margin-top: 8px; padding-top: 8px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 30px; font-weight: 800;
-  color: var(--red-deep); }
+/* bảng quà (PLAN-144) — anh 04/11 «bảng vàng to quá»: 6 mục một dòng, 3 cột × 2 hàng, cao chừng nửa bảng ô cũ */
+.gift-head { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 24px; font-weight: 800;
+  color: var(--red-deep); white-space: nowrap; }
 .gift-line { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 25px; font-weight: 800;
   color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #cta:not(.gifts-open) .gift-head, #cta:not(.gifts-open) .gift-grid { display: none; }
 #cta.gifts-open .gift-line { display: none; }
-.gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
-.gift-grid div { background: #fff; border: 2px solid #f1c56b; border-radius: 14px; padding: 6px 4px; display: grid;
-  grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; }
-.gift-grid div.wide { grid-column: span 3; }
-.gift-grid b { grid-column: 2; font-size: 28px; color: var(--red); line-height: 1.1; }
-.gift-grid i { grid-row: span 2; font-style: normal; font-size: 40px; line-height: 1; }
-.gift-grid span { grid-column: 2; font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; }
+.gift-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.gift-grid div { background: #fff; border: 1px solid #f1c56b; border-radius: 10px; padding: 3px 10px; display: flex;
+  align-items: center; gap: 6px; min-width: 0; text-align: left; white-space: nowrap; }
+.gift-grid i { font-style: normal; font-size: 24px; line-height: 1; }
+.gift-grid b { font-size: 21px; color: var(--red); line-height: 1.2; }
+.gift-grid span { font-size: 19px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* xe bị chặn: thanh góp quà (PLAN-148) */
 .cta-block .blk-title { font-family: var(--display); font-size: 46px; font-weight: 800; color: var(--red-deep); line-height: 1.15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

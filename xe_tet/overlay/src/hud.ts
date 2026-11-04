@@ -101,6 +101,8 @@ function whereText(e: GameEvent): [string, string] {
 
 export class Hud {
   private bannerTimer = 0;
+  private boardPending = 0;  // người đã có giường còn đứng hàng ở bến (scene báo) — chưa tính «trên xe»
+  private lastState: State | null = null;
   // băng rôn xếp hàng: xe chính và xe tăng cường có thể tới nơi cùng lúc — đọc tên lần lượt, không đè nhau
   private bannerQueue: { pages: string[]; seconds: number; pageSeconds: number }[] = [];
   private bannerBusy = false;
@@ -178,6 +180,20 @@ export class Hud {
     el.style.top = `${((rect.bottom - stage.top) / (stage.width / 1080) + 10) / z}px`;
   }
 
+  /** Scene báo số người còn đứng hàng lên xe: số trên xe tăng theo từng người bước vào cửa. */
+  setBoarding(pending: number): void {
+    if (pending === this.boardPending) return;
+    this.boardPending = pending;
+    this.renderSeats();
+  }
+
+  private renderSeats(): void {
+    const s = this.lastState;
+    if (!s) return;
+    const on = Math.max(0, s.bus.riders - (s.phase === "BOARDING" ? this.boardPending : 0));
+    setText("seats", `🚌 ${on}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
+  }
+
   update(s: State): void {
     const prevPhase = this.state?.phase;
     this.state = s;
@@ -215,7 +231,8 @@ export class Hud {
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
     ($("bar-fill") as HTMLElement).style.width = `${Math.round(this.progress(s) * 100)}%`;
     this.renderMarks(s);
-    setText("seats", `🚌 ${s.bus.riders}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
+    this.lastState = s;
+    this.renderSeats();
     setHTML("next-stops", this.nextStops(s));
     const pass = s.terrain?.pass ?? null;
     if (pass && pass !== this.lastPass) this.flash(`${s.terrain.tunnel ? "🚇" : "⛰"} ${pass}`);  // vừa vào đèo / hầm
