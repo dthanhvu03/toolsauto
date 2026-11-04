@@ -529,8 +529,7 @@ def test_empty_boarding_bus_turns_to_first_passenger():
 
 
 def test_oldest_ticket_goes_first():
-    """BR-4: người chờ quá lâu (LANE_MAX_WAIT) thì tuyến của họ chạy trước, kể cả làn kia 40 người."""
-    from xe_tet.server.game.engine import LANE_MAX_WAIT
+    """BR-4 (anh 03/11 «ai đặt trước lên trước»): người giữ chỗ trước thì tuyến của họ chạy trước, kể cả làn kia 40 người."""
     e = Engine(0.0)
     for i in range(24):
         comment(e, f"B{i}", "Huế", 1)  # Bắc: 1 xe đầy
@@ -538,14 +537,12 @@ def test_oldest_ticket_goes_first():
     for i in range(40):
         comment(e, f"C{i}", "Huế", 2)  # Bắc: 40 người giữ chỗ sau
     t = run_until(e, "FINISH", 1)
-    e.queued_at["út"] = t - LANE_MAX_WAIT - 1  # Út đã chờ quá lâu
     run_until(e, "BOARDING", t)
-    # PLAN-145: bình thường chuyến mới chọn tuyến đông người — nhưng Út chờ quá LANE_MAX_WAIT nên tuyến Nam đi trước
     assert e.bus.lane == "south" and e.bus.seat_of("út") is not None
 
 
-def test_new_trip_takes_the_fullest_route_unless_someone_waited_too_long():
-    """PLAN-145: chỉ một xe — chuyến mới chở tuyến đông người chờ nhất (đi cùng tuyến về đầy đủ); chưa ai chờ quá lâu."""
+def test_new_trip_takes_the_route_with_people_waiting():
+    """Chỉ một xe: chuyến mới chạy tuyến đang có người chờ (người tuyến kia đã ngồi trên xe chuyến trước)."""
     e = Engine(0.0)
     comment(e, "Út", "Cà Mau", 1)  # Nam: 1 người, chờ trước
     for i in range(10):
@@ -1855,32 +1852,6 @@ def test_session_goal_steps_unlock_fun_for_everyone_and_money_panel():
     assert e.snapshot()["goal"]["xu"] == 5 and e.snapshot()["goal"]["round"] == 2
     m = e.money()
     assert m["hour_xu"] == 105 and m["gifters"] == 2 and m["top"][0] == {"name": "B", "xu": 70}
-
-
-def test_province_race_decides_next_trip_and_resets_each_trip(monkeypatch):
-    """Đua tỉnh (anh 03/11): bình luận (1 điểm / 15 giây / người) + tim (20 tim = 1) + quà (1 xu = 5) cộng cho tỉnh quê; tỉnh
-    nhiều điểm nhất có người chờ thì chuyến mới đi hướng đó; mỗi chuyến một vòng."""
-    monkeypatch.setattr("xe_tet.server.game.engine.LANE_MAX_WAIT", 1e9)  # chuyến Hà Nội dài: tắt luật «chờ quá 10 phút»
-    e = Engine(0.0)
-    e.race_on = True  # anh 03/11 tắt mặc định (ai đặt trước lên trước); máy giữ lại
-    fill_lane(e, "Cà Mau", SEATS, 1)  # chuyến 1 hướng nam, đầy
-    comment(e, "Tây1", "Bạc Liêu", 2)  # hướng nam: hết giường → chờ
-    fill_lane(e, "Hà Nội", 3, 3, prefix="B")  # hướng bắc đông người chờ hơn
-    e.drain()
-    tay = e.viewers["tây1"].province
-    for t in (4, 5, 6):  # bình luận dồn: chỉ 1 điểm / 15 giây (lúc gõ tên tỉnh đã được 1)
-        comment(e, "Tây1", "chào cả nhà", t)
-    assert e.race[tay] == 1
-    e.handle({"type": "like", "name": "Tây1", "count": 45}, 7)
-    e.handle({"type": "like", "name": "Tây1", "count": 100}, 8)  # chỉ tim (không quà): vẫn kéo tỉnh mình lên được
-    assert {"province": "Bạc Liêu", "points": 8} in e.snapshot()["race"]  # Cà Mau nhiều điểm hơn nhưng đã ngồi hết trên xe
-    t = 9.0
-    while e.bus.no == 1:  # chạy hết chuyến 1 → chuyến 2: Bạc Liêu thắng dù hướng bắc đông người chờ hơn
-        t += 1
-        e.tick(t)
-    wins = [x for x in e.drain() if x["type"] == "race_win"]
-    assert wins and wins[-1]["province"] == "Bạc Liêu" and e.bus.seat_of("tây1") is not None
-    assert not e.race  # vòng mới
 
 
 def test_billboard_video_stops_bus_then_continues():

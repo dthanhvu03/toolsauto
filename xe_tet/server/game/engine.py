@@ -130,8 +130,8 @@ QUIZ_SECONDS = 40.0  # giây người xem gõ A / B / C (lơ xe đọc câu hỏ
 QUIZ_RESULT_S = 12.0  # thẻ đáp án còn trên màn hình chừng này giây
 QUIZ_LEAD_S = 10.0  # câu đố tự bật chỉ khi còn ≥ giờ trả lời + đáp án + chừng này giây mới tới điểm dừng kế (anh 03/11:
 # «vừa bật câu đố lên thì nhảy» — băng «Về tới …» che mất)
-QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đua tỉnh
-QUIZ_RACE = 3
+QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đối kháng
+QUIZ_POINTS = 3  # trả lời đúng câu đố: điểm đối kháng cho hướng quê mình
 QUIZ_RECENT = 12  # không đố lại tỉnh vừa đố
 FACT_GAP = 75.0
 ARRIVE_SHOW_KM = 10.0  # còn chừng này km tới điểm thả khách thì màn ghi tên tỉnh đó
@@ -227,9 +227,6 @@ RELIEF_AUTO = False
 PICKUP_STOP_BASE = 3.5  # giây tấp vào / mở cửa (người chờ đứng 2 giây rồi mới bước lên)
 PICKUP_STOP_STEP = 1.3  # giây mỗi người bước lên
 PICKUP_JOIN = 0.4  # điểm đón sắp tới còn ≥ 40 % PICKUP_LEAD giây → người hẹn sau đứng chung điểm đó (xe dừng một lần)
-# Chọn tuyến cho chuyến mới (PLAN-145): tuyến chở được nhiều người đang chờ nhất (cả người làn khác mà xe đi ngang quê); ai chờ
-# quá LANE_MAX_WAIT giây thì tuyến của người đó được đi trước — đông mà không ai bị bỏ quên
-LANE_MAX_WAIT = 600.0  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
 PRIORITY_TALK_GAP = 8.0  # lơ xe báo «X tặng quà, lên đầu hàng» tối đa 8 giây / câu
 # Quà = xe chạy nhanh (anh chọn 03/11 «tặng quà để xe trước đi nhanh hơn», mỗi xu cộng giây): mỗi xu thêm TURBO_PER_XU giây
 # chạy gấp TURBO_MULT, cộng dồn tối đa TURBO_MAX giây; chỉ trừ lúc xe đang chạy — xe tới quê / về bến sớm, chuyến sau tới sớm
@@ -264,16 +261,12 @@ BLOCK_FULL_RATE = 1.0
 GOAL_STEPS = ((0.1, "lixi", "🧧 mưa lì xì cả màn hình"), (0.3, "lantern", "🏮 thả đèn lồng"),
               (0.6, "firework", "🎆 pháo hoa lớn"), (1.0, "party", "🎉 cả xe dừng lại chúc Tết"))
 MONEY_WINDOW = 3600.0  # bảng doanh thu /control: quà trong 1 giờ gần nhất
-# Đua tỉnh (anh 03/11 duyệt): bình luận + tim + quà cộng điểm cho tỉnh quê; mỗi chuyến một vòng — tỉnh nhiều điểm nhất mà có
-# người đang chờ thì chuyến mới đi hướng tỉnh đó (sau luật «chờ quá 10 phút đi trước»). Trộn hành động miễn phí: không thành
-# game «chấm điểm chỉ bằng quà» (TikTok hạn chế), người không tặng vẫn kéo được tỉnh mình lên.
-RACE_PER_COMMENT = 1
-RACE_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây (không spam lấy điểm)
-RACE_LIKES_PER_POINT = 20
-RACE_PER_XU = 5
-RACE_TALK_GAP = 30.0
+# Điểm đối kháng từ hành động miễn phí (người không tặng vẫn góp được); quà tính riêng theo versus_xu (PLAN-151)
+VS_PER_COMMENT = 1
+VS_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây (không spam lấy điểm)
+VS_LIKES_PER_POINT = 20
 # Đối kháng (anh 03/11 «game đối kháng như mấy chỗ live khác»): hai hướng đứng đầu hàng chờ đấu nhau — ai quê thuộc hướng
-# nào thì bình luận / tim / quà cộng điểm cho hướng đó (cùng thang điểm đua tỉnh); vào bến, hướng nhiều điểm hơn chạy trước
+# nào thì bình luận / tim / quà cộng điểm cho hướng đó; vào bến, hướng nhiều điểm hơn chạy trước
 VERSUS_TALK_GAP = 30.0
 VERSUS_XU = 20  # điểm đối kháng mỗi xu (PLAN-151: quà quyết trận; 1 xu = 400 tim) — /control chỉnh được
 VERSUS_GOLDEN_S = 60.0  # giờ vàng: chừng này giây cuối trước khi xe về bến, điểm quà x2 (0 = tắt)
@@ -381,8 +374,8 @@ class Viewer:
     vip: bool = False
     fireworks: bool = False
     likes_trip: int = 0
-    race_at: float = -1e9  # lần cuối bình luận được điểm đua tỉnh
-    race_likes: int = 0  # tim lẻ chưa đủ một điểm đua tỉnh
+    vs_at: float = -1e9  # lần cuối bình luận được điểm đối kháng
+    vs_likes: int = 0  # tim lẻ chưa đủ một điểm đối kháng
     trips: int = 0
     followed: bool = False
     switched: bool = False
@@ -518,7 +511,6 @@ class Engine:
         self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
         self.started_at = now
         self.focus: dict | None = None  # {uid, until}: máy quay đang zoom vào khách này
-        self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
         self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
         self.ticket_idle = TICKET_IDLE
         self.roll_on = True  # anh bật / tắt điểm danh trên /control
@@ -535,7 +527,6 @@ class Engine:
         self.last_hunger_talk = -1e9
         self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
         self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
-        self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
         self.versus_on = False  # chế độ đối kháng (/control)
         self.versus: Counter = Counter()  # điểm đối kháng vòng này (theo làn)
         self.versus_leader: str | None = None
@@ -546,9 +537,6 @@ class Engine:
         self.versus_lock: list[str] = []  # cặp hướng chốt cho vòng này (PLAN-151): không đổi giữa chừng
         self.versus_by: dict[str, Counter] = {}  # làn → điểm góp theo uid (người góp nhiều nhất bên thắng lên băng rôn)
         self.versus_told: set[str] = set()  # đã hô «golden» / «final» vòng này
-        self.race_leader: str | None = None
-        self.race_winner: str | None = None
-        self.last_race_talk = -1e9
         self.videos: list[dict] = []  # video bảng quảng cáo (server cập nhật từ thư mục)
         self.show: dict | None = None  # đang dừng xem video
         self.shows_on = False  # server bật theo cài đặt; engine trần (test) không tự chiếu
@@ -904,7 +892,6 @@ class Engine:
         self.boarding_started = now
         self.seated_at = []
         self.bus_counter += 1
-        self.race_winner = None
         self.versus_winner = None
         self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
         if self.versus_winner:  # vòng đối kháng: hướng thắng chạy chuyến này
@@ -923,12 +910,6 @@ class Engine:
         self.versus_lock = []
         self.versus_by = {}
         self.versus_told = set()
-        if self.race_winner:  # vòng đua tỉnh này có tỉnh thắng: báo rồi sang vòng mới
-            win = BY_KEY[self.race_winner].name
-            self.emit("race_win", province=win, points=self.race[self.race_winner])
-            self.talk("race_win", prov=win, main=True)
-        self.race.clear()
-        self.race_leader = None
         self.next_banner = None
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
@@ -968,8 +949,8 @@ class Engine:
         return max(FULL_BUS_SECONDS, min(FULL_HOLD_MAX, NAME_LEAD_S + recent * NAME_READ_S))
 
     def _pick_lane(self, consume: bool = True) -> str:
-        """Tuyến của chuyến mới (PLAN-145): ai chờ quá LANE_MAX_WAIT giây thì tuyến của người chờ lâu nhất đi trước (không ai bị
-        bỏ đói); còn lại chọn tuyến chở được nhiều người đang chờ nhất — tính cả người làn khác mà xe đi ngang quê họ."""
+        """Tuyến của chuyến mới: anh chọn trên /control trước; đối kháng thì hướng thắng; còn lại ai đặt trước đi trước, người
+        tặng quà được ưu tiên (anh 03/11)."""
         self._prune_queues()
         waiting = [lane for lane, q in self.queues.items() if q]
         if not waiting:
@@ -986,24 +967,7 @@ class Engine:
             if consume and self.versus[win] > 0:
                 self.versus_winner = (win, lose, self.versus[win], self.versus[lose])
             return win
-        if not self.race_on:  # anh 03/11: ai đặt trước lên trước, chỉ người tặng quà được ưu tiên
-            return self._fifo_order()[0]
-        oldest = min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
-        if self.last_now - self.queued_at.get(self.queues[oldest][0], self.last_now) > LANE_MAX_WAIT:
-            return oldest
-        people = [self.viewers[u].province for q in self.queues.values() for u in q]
-
-        def load(lane: str) -> int:
-            served = self.network.serves(lane)
-            return sum(1 for prov in people if prov in served)
-        # đua tỉnh: tỉnh nhiều điểm nhất (có người đang chờ) quyết hướng chuyến này
-        contenders = [(pts, key) for key, pts in self.race.items() if pts > 0 and key in people]
-        for _, key in sorted(contenders, reverse=True):
-            lanes = [lane for lane in waiting if key in self.network.serves(lane)]
-            if lanes:
-                self.race_winner = key
-                return max(lanes, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
-        return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
+        return self._fifo_order()[0]
 
     def _versus_pair(self) -> list[str]:
         """Hai hướng đang đối kháng: hai hướng đứng đầu thứ tự chạy (quà trước, đặt sớm trước); dưới hai hướng có người chờ
@@ -1950,7 +1914,7 @@ class Engine:
             v.quiz_score += 1
             if len(q["winners"]) < QUIZ_WINNERS:
                 q["winners"].append(v.name)
-                self._race(v, QUIZ_RACE)
+                self._versus_score(v, QUIZ_POINTS)
 
     def _end_quiz(self, now: float) -> None:
         q = self.quiz
@@ -2028,22 +1992,6 @@ class Engine:
             return
         self.chatter = [*self.chatter, {"uid": v.uid, "name": v.name, "text": text.strip()[:200], "at": now,
                                         "chat": True}][-CHATTER_KEEP:]
-
-    # ---- đua tỉnh -------------------------------------------------------------------------------
-
-    def _race(self, v: Viewer, points: int, xu: int = 0) -> None:
-        """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước); `xu`: điểm từ quà."""
-        self._versus_score(v, points, xu)
-        key = v.province or v.home
-        if not self.race_on or not key or points <= 0:
-            return
-        self.race[key] += points
-        leader = self.race.most_common(1)[0][0]
-        if leader != self.race_leader:
-            self.race_leader = leader
-            if self.last_now - self.last_race_talk >= RACE_TALK_GAP:
-                self.last_race_talk = self.last_now
-                self.talk("race_lead", prov=BY_KEY[leader].name)
 
     # ---- bảng quảng cáo: dừng xe xem video ----------------------------------------------------
 
@@ -2258,9 +2206,9 @@ class Engine:
                 v.stage_comments += 1
                 v.stage += 1
             self._on_comment(v, str(event.get("text") or ""), now)
-            if now - v.race_at >= RACE_COMMENT_GAP:
-                v.race_at = now
-                self._race(v, RACE_PER_COMMENT)
+            if now - v.vs_at >= VS_COMMENT_GAP:
+                v.vs_at = now
+                self._versus_score(v, VS_PER_COMMENT)
         elif kind == "like":
             count = max(1, min(LIKE_MAX, as_int(event.get("count"))))
             v.likes += count
@@ -2683,10 +2631,10 @@ class Engine:
         if b and "until" in b:  # sự cố: tim cả phòng giúp Anh Tư làm nhanh hơn
             floor = b["since"] + INCIDENT_SECONDS * (1 - INCIDENT_LIKE_MAX)
             b["until"] = max(floor, b["until"] - count * INCIDENT_LIKE_S)
-        v.race_likes += count
-        if v.race_likes >= RACE_LIKES_PER_POINT:
-            self._race(v, v.race_likes // RACE_LIKES_PER_POINT)
-            v.race_likes %= RACE_LIKES_PER_POINT
+        v.vs_likes += count
+        if v.vs_likes >= VS_LIKES_PER_POINT:
+            self._versus_score(v, v.vs_likes // VS_LIKES_PER_POINT)
+            v.vs_likes %= VS_LIKES_PER_POINT
         for mark in LIKE_MILESTONES:
             if before < mark <= self.trip_likes:
                 self.emit("like_milestone", total=mark)
@@ -2818,14 +2766,8 @@ class Engine:
         Chuyến hiện tại phải xong trước; mỗi làn có người chờ lâu hơn người đầu hàng làn này thì đi trước một chuyến
         (BR-4 ai chờ trước đi trước).
         """
-        if not self.race_on:  # cùng thứ tự với chuyến thật sẽ chạy (quà trước, đặt sớm trước, anh chọn trên /control trước)
-            order = [u["lane"] for u in self.upcoming()]
-            older = order.index(lane) if lane in order else len(order)
-        else:
-            queue = self.queues[lane]
-            mine = self.queued_at.get(queue[0], self.last_now) if queue else self.last_now
-            older = sum(1 for key, q in self.queues.items()
-                        if key != lane and q and self.queued_at.get(q[0], self.last_now) < mine)
+        order = [u["lane"] for u in self.upcoming()]  # cùng thứ tự với chuyến thật sẽ chạy
+        older = order.index(lane) if lane in order else len(order)
         trips = 1 + position // SEATS + older
         return self.bus.no + trips, self._eta_minutes(trips)
 
@@ -2985,7 +2927,7 @@ class Engine:
         self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
         self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
         self._advance_goal(v, diamonds)
-        self._race(v, diamonds * RACE_PER_XU, diamonds)
+        self._versus_score(v, 0, diamonds)
         paid = self._pay_block(v, diamonds) or self._pay_vendor(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
@@ -3175,7 +3117,6 @@ class Engine:
             "speed": 0.0 if self.halt or self.block or self.show else round(self.speed(), 3),
             "show": {"url": self.show["url"], "title": self.show["title"], "seconds": self.show["seconds"],
                      "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
-            "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
             "versus": self._versus_view(),
             "upcoming": self.upcoming(),
             "focus": self._focus_view(),

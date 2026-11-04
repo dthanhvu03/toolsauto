@@ -124,7 +124,6 @@ export interface State {
   block?: Block | null;
   focus?: { seat: number; name: string; vip: boolean; province: string; stops_before: number | null; in_s: number | null; trips: number; left: number } | null;
   show?: { url: string; title: string; seconds: number; left: number } | null;  // đang dừng xem video bảng quảng cáo
-  race?: { province: string; points: number }[];  // đua tỉnh vòng này
   versus?: Versus | null;  // đối kháng: hai hướng đầu hàng chờ đấu điểm giành chuyến sau (anh 03/11)
   videos?: { name: string; title: string; url: string; seconds: number }[];
   goal?: { xu: number; goal: number; round: number; next_xu: number; next: string };  // mục tiêu buổi live  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
@@ -218,7 +217,7 @@ export interface GameEvent {
   specialty?: string;
   place?: string;  // trạm dừng chân: tỉnh có trạm
   label?: string; round?: number;  // goal_step
-  points?: number;  // race_win
+  points?: number;  // versus_win / versus_assist
   // block / block_end: loại chặn nằm ở `block` («kind» là của khung tin — server ghi đè)
   block?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;
   sky?: string;  // weather: clear | drizzle | rain | fog

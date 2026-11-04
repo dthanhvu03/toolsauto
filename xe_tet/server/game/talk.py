@@ -228,14 +228,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Mục tiêu buổi live tới {xu} xu rồi, cảm ơn {name} với bà con, {label} cho cả phòng.",
             "Qua mốc {xu} xu, {label} nè bà con, cảm ơn {name}.",
         ),
-        "race_lead": (  # đua tỉnh (anh 03/11)
-            "Đua tỉnh nè bà con, {prov} đang dẫn đầu, tỉnh nào bình luận, thả tim, tặng quà nhiều là chuyến sau đi tỉnh đó.",
-            "{prov} vượt lên dẫn đầu đua tỉnh rồi, tỉnh khác đâu, bình luận thả tim kéo tỉnh mình lên.",
-        ),
-        "race_win": (
-            "{prov} thắng đua tỉnh, chuyến này Anh Tư chạy hướng {prov}, bà con chuẩn bị lên xe.",
-            "Chúc mừng {prov} thắng đua tỉnh, xe đi hướng {prov} liền.",
-        ),
         "versus_start": (  # đối kháng (anh 03/11): hai hướng đầu hàng chờ giành chuyến sau
             "Đối kháng chuyến sau nè bà con, hướng {lead} đấu hướng {rival}, quê bên nào thì bình luận, thả tim, tặng quà cho bên đó, bên nào nhiều điểm chạy trước.",
             "Chuyến sau ai đi trước, {lead} hay {rival}, bà con quê bên nào kéo điểm cho bên đó, chưa gõ quê thì gõ tên tỉnh vô.",
@@ -619,14 +611,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Mốc {xu} xu done, {label} cho cả phòng, {name} uy tín.",
             "Cả phòng góp tới {xu} xu, mở khoá {label}, cảm ơn {name}.",
         ),
-        "race_lead": (
-            "{prov} đang top một đua tỉnh, tỉnh khác vào bình luận thả tim kéo lên đi ae.",
-            "Đua tỉnh căng lắm, {prov} dẫn đầu, tỉnh nào nhiều điểm chuyến sau đi tỉnh đó.",
-        ),
-        "race_win": (
-            "{prov} win đua tỉnh, chuyến này chạy hướng {prov} luôn.",
-            "Team {prov} thắng rồi, xe đi {prov} ae ơi.",
-        ),
         "versus_start": (
             "Pê ka chuyến sau nè ae, team {lead} đấu team {rival}, quê bên nào thì com men, thả tim, tặng quà cho bên đó, team nào nhiều điểm chạy trước.",
             "{lead} hay {rival} chạy trước đây ae, chưa gõ quê thì gõ tên tỉnh vô để vào team.",
@@ -1008,14 +992,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "goal_step": (
             "Mục tiêu buổi live đạt {xu} xu, {label} cho mọi người, cảm ơn {name}.",
             "Đã tới mốc {xu} xu, {label}, cảm ơn {name} và mọi người.",
-        ),
-        "race_lead": (
-            "{prov} đang dẫn đầu đua tỉnh, mọi người bình luận, thả tim, tặng quà để tỉnh mình lên đầu.",
-            "Đua tỉnh: {prov} dẫn đầu, tỉnh thắng được đi chuyến sau.",
-        ),
-        "race_win": (
-            "{prov} thắng đua tỉnh, chuyến này đi hướng {prov}.",
-            "Chúc mừng {prov}, xe đi hướng {prov}.",
         ),
         "versus_start": (
             "Đối kháng chuyến sau: hướng {lead} đấu hướng {rival}, mọi người quê bên nào thì bình luận, thả tim, tặng quà cho bên đó, bên nhiều điểm hơn chạy trước.",

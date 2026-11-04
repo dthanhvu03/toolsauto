@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { Block, FleetBus, GameEvent, Quiz, Route, State, Vendor, Versus, VersusSide } from "./types";
+import type { Block, GameEvent, Quiz, Route, State, Vendor, Versus, VersusSide } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -40,7 +40,6 @@ const FLASH_MS = 2600;
 const FLASH_MINOR_GAP_MS = 8000;  // chữ lớn phụ (bóp còi, trà đá, mốc tim) cách nhau ít nhất 8 giây
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
-const SEATS_DEFAULT = 24;
 const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
@@ -72,15 +71,6 @@ interface Ticket {
   tripNo?: number;
   promoted?: boolean; relief?: boolean;  // người đang giữ chỗ được xếp lên xe / lên xe tăng cường
 }
-
-// Trạng thái từng xe trên bảng «Xe khác» (PLAN-134 B: người xem không biết chuyến nào đang đón / chạy / sắp về).
-const FLEET_PHASE: Record<string, (b: { next: string | null }) => string> = {
-  BOARDING: () => "🟢 đang đón",
-  DRIVING: (b) => (b.next ? `→ ${esc(b.next)}` : "🏁 về bến"),
-  REST: (b) => `☕ nghỉ ${esc(b.next ?? "")}`,
-  DROPOFF: (b) => `📍 thả khách ${esc(b.next ?? "")}`,
-  FINISH: () => "🏁 về bến",
-};
 
 /** Trả lời «xe nào / tới đâu rồi» cho đúng người hỏi (PLAN-134 B). */
 function whereText(e: GameEvent): [string, string] {
@@ -360,7 +350,7 @@ export class Hud {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn",
         "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»",
-        "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng"];
+        "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng", "🎁 Tặng quà: từ 18 tuổi"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
         tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
@@ -381,15 +371,15 @@ export class Hud {
         tips.unshift(`🧺 Góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên xe bán nem, bì, bánh mì`);
       }
     }
-    // chân bảng quà: người đang chờ · xe đang chạy x2 nhờ ai · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
+    // chân bảng quà (anh 04/11 «cái nào thừa»): chỉ cảm ơn người góp lúc bị chặn + Chủ nhà xe / Phó nhà xe. Số người chờ đã có
+    // ở bảng tuyến + bảng «Chờ chuyến sau», xe x2 đã có ở bảng tuyến, «từ 18 tuổi» nằm trong dòng gợi ý + màn «Cách chơi»
     const [owner, deputy] = s.patrons ?? [];
-    const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
-    const turbo = !s.turbo ? "" : s.phase === "DRIVING"
-      ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}`
-      : ` · 🚀 <b>${s.turbo.left}s</b> x2 để dành lúc xe chạy · nhờ ${esc(s.turbo.by)}`;  // đứng ở bến: chưa chạy nhanh
+    const crown = owner ? `👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
     const thanks = s.block?.top.length  // đang bị chặn: chân bảng cảm ơn người góp
-      ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")} · ` : "";
-    setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
+      ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")}` : "";
+    const foot = [thanks, crown].filter(Boolean).join(" · ");
+    setHTML("cta-foot", foot);
+    $("cta-foot").classList.toggle("hidden", !foot);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
     this.renderBlock(s.block ?? null, s.vendor ?? null, s.quiz ?? null);
@@ -482,12 +472,9 @@ export class Hud {
   private renderBoard(): void {
     const s = this.state;
     if (!s) return;
-    const riders = s.bus.seats.filter((x): x is NonNullable<typeof x> => !!x);
-    const fleet: FleetBus[] = s.fleet ?? [];
-    // bảng góc phải luân phiên (rà soát 02/11: thêm bảng quà + danh sách MỌI xe kèm số khách, xe trống ghi rõ còn giường)
-    const modes = [  // chỉ một xe (PLAN-145): bỏ bảng «Các xe»
+    // bảng góc phải luân phiên: người chờ (có tên + thứ tự) và tỉnh đông nhất; khách trên xe đã có ở dải tên dưới thân xe
+    const modes = [
       ...(s.queue?.length ? ["queue", "queue"] : []),
-      ...(riders.length ? ["riders"] : []),
       "top",
     ];
     const mode = modes[this.boardTick % modes.length];
@@ -497,22 +484,6 @@ export class Hud {
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
         `<li><span>#${w.pos}</span>${w.arrow} ${esc(w.name)} <small>· ${esc(w.province)}</small></li>`).join(""));
-    } else if (mode === "fleet") {  // mọi xe: số khách, đang ở đâu (PLAN-130); xe trống / đang đón ghi số giường còn
-      setText("board-title", `🚌 Các xe (${fleet.length})`);
-      setHTML("board-list", fleet.slice(0, QUEUE_ROWS).map((b) => {
-        const where = FLEET_PHASE[b.phase]?.(b) ?? (b.next ? `→ ${esc(b.next)}` : "🏁 về bến");
-        // đang đón: số giường đã có người / 24 (trống thì ghi «trống» — gõ tên tỉnh là lên); đang chạy: số khách
-        const load = b.phase === "BOARDING" ? (b.riders ? `${b.riders}/${SEATS_DEFAULT}` : "trống") : `${b.riders} khách`;
-        const on = b.featured ? "📺" : "";
-        return `<li><span>${load}</span>${on}${b.arrow}${b.no} <small>${where}</small></li>`;
-      }).join(""));
-    } else if (mode === "riders") {
-      setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
-      setHTML("board-list", riders.slice(-6).reverse()
-        .map((r) => `<li>${r.vip ? "⭐ " : r.badge ? `${r.badge} ` : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
-    } else if (s.race?.length) {  // đua tỉnh (đang tắt mặc định từ 03/11: ai đặt trước lên trước)
-      setText("board-title", "⚔️ Đua tỉnh · thắng đi trước");
-      setHTML("board-list", s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join(""));
     } else {
       setText("board-title", "🏆 Tỉnh đông nhất");
       setHTML("board-list", s.board.length
@@ -572,9 +543,6 @@ export class Hud {
         break;
       case "versus_assist":  // người không thuộc bên nào tặng quà → tiếp sức bên đang thua
         this.toast(`🎁 ${name} tiếp sức ${esc(e.dest ?? "")}`, `+${e.points ?? 0} điểm đối kháng`, "gift", `assist:${e.name}`);
-        break;
-      case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
-        this.note(`⚔️ ${esc(e.province ?? "")} thắng đua tỉnh · ${e.points} điểm`, `Chuyến này đi hướng ${esc(e.province ?? "")} · vòng mới bắt đầu`);
         break;
       case "goal_step":  // mục tiêu buổi live qua mốc: cả phòng được cảnh vui
         this.note(`🎯 Cả phòng đạt ${e.xu} xu · ${esc(e.label ?? "")}`, `Cảm ơn ${esc(e.name ?? "")} và mọi người đã tặng quà`);
