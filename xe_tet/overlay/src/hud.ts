@@ -209,11 +209,11 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    const mainAd = c?.ads_on ? c.ads?.[0] : undefined;  // bot chính thường trực cạnh đếm ngày (PLAN-153)
+    const mainAd = c?.ads_on ? c.ads?.[0] : undefined;  // quảng cáo chính thường trực cạnh đếm ngày (PLAN-153)
     const titleAd = $("title-ad");
     titleAd.classList.toggle("hidden", !mainAd);
     if (mainAd) {
-      const html = `💸 Tele <b>${esc(mainAd.title.replace(/^tele(gram)?\s*:\s*/i, ""))}</b>`;
+      const html = `<b>${esc(mainAd.title)}</b>`;  // chữ admin đặt, nguyên văn (live: không tên sàn / app — anh 04/11)
       if (titleAd.dataset.html !== html) titleAd.innerHTML = titleAd.dataset.html = html;
     }
     setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (BLOCK_PILL[s.block.kind] ?? "Dừng xe")

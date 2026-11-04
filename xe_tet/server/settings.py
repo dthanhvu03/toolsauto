@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .game.engine import BOARD_SECONDS, FEATURE_MODES, REST_SECONDS, TRIP_MINUTES
 from .game.geo import DEFAULT_DEPARTURE
+from .game.moderation import off_platform
 from .game.network import available
 from .game.talk import TALK_STYLES
 
@@ -80,13 +81,11 @@ DEFAULTS: dict = {
     # quảng cáo bot của anh (03/11): biển ven đường + dòng gợi ý trên màn + lơ xe đọc mỗi ads_talk_min phút
     "ads_on": True,
     "ads_talk_min": 8,
+    # anh 04/11 «live TikTok nói sàn khác thì cấm live» → câu trung tính: không tên sàn / app / bot, chỉ mời ghé trang cá nhân
     "ads": [
-        {"title": "@zt_shopee_bot", "desc": "Dán link Shopee · bot gửi link mua + tiền hoàn",
-         "say": "Bà con mua Shopee thì dán link vô bot hoàn tiền dét tê sốp pi trên Telegram, bot gửi lại link mua với số tiền được hoàn.",
-         "keys": "hoàn tiền, shopee, sốp pi, săn sale, mã giảm, cashback"},
-        {"title": "@aipass_shop_bot", "desc": "Shop trên Telegram · thanh toán xong giao ngay",
-         "say": "Ghé shop ây ai pát trên Telegram, chọn món, thanh toán xong là giao hàng liền.",
-         "keys": "chatgpt, chat gpt, gpt, gemini, tài khoản ai, acc ai, aipass"},
+        {"title": "👤 Ghé trang cá nhân kênh", "desc": "Xem thêm tiện ích của nhà xe",
+         "say": "Bà con muốn biết thêm tiện ích của nhà xe thì ghé trang cá nhân của kênh xem thử.",
+         "keys": "hoàn tiền, shopee, sốp pi, săn sale, mã giảm, cashback, chatgpt, chat gpt, gpt, gemini, tài khoản ai"},
     ],
 }
 ADS_MAX = 3
@@ -105,16 +104,21 @@ log = logging.getLogger("xe_tet")
 
 
 def clean_ads(value) -> list[dict]:
-    """Tối đa ADS_MAX mục {title, desc, say, keys}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ."""
-    ads = []
+    """Tối đa ADS_MAX mục {title, desc, say, keys}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ. Mục có tên sàn / app /
+    link (off_platform) cũng bỏ — live TikTok nói sàn khác thì bị dừng (anh 04/11); bỏ hết vì lý do đó thì dùng câu trung tính."""
+    ads, dropped = [], False
     for item in value if isinstance(value, list) else []:
         if not isinstance(item, dict):
             continue
         ad = {k: " ".join(str(item.get(k) or "").split())[:n] for k, n in AD_LIMITS.items()}
-        if "keys" not in item:  # quảng cáo lưu trước PLAN-153: lấy từ khoá mặc định của đúng bot đó (theo @tên)
-            ad["keys"] = next((d["keys"] for d in DEFAULTS["ads"] if d["title"].lower() in ad["title"].lower()), "")
-        if ad["title"]:
-            ads.append(ad)
+        if not ad["title"]:
+            continue
+        if any(off_platform(ad[k]) for k in ("title", "desc", "say")):
+            dropped = True
+            continue
+        ads.append(ad)
+    if not ads and dropped:
+        return [dict(a) for a in DEFAULTS["ads"]]
     return ads[:ADS_MAX]
 
 

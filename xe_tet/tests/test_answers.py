@@ -64,6 +64,12 @@ def test_ai_answers_are_cleaned_to_the_loxe_voice():
     long = ai_reply.clean("chữ " * 100)
     assert len(long) <= ai_reply.MAX_CHARS + 1 and long.endswith(".")
     assert ai_reply.clean("") is None and ai_reply.clean(None) is None
+    # anh 04/11 «live nói sàn khác thì cấm live»: câu AI có tên sàn / app / lời kéo người đi thì bỏ, không đọc
+    for bad in ("Ghé Shopee mua đi Lan", "Tải Telegram về nhé", "Inbox anh nghen", "Chuyển khoản cho anh", "Vô sàn cam săn sale",
+                "Kết bạn Zalo với anh"):
+        assert ai_reply.clean(bad) is None, bad
+    for ok in ("Xe tới Huế lúc chiều đó Lan ơi", "Gõ tên tỉnh là lên xe", "Ghé trang cá nhân của kênh xem thử", "Ăn phở bò ở trạm"):
+        assert ai_reply.clean(ok) == ok, ok
 
 
 def test_hub_answers_in_background_and_survives_ai_failure(monkeypatch):

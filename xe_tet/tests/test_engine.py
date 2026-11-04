@@ -2346,35 +2346,44 @@ def test_lo_xe_reads_owner_bot_ads_in_turn_and_skips_busy_moments():
 
 
 def test_ads_setting_is_cleaned():
-    from xe_tet.server.settings import DEFAULTS, clean
-    out = clean({"ads": [{"title": " @x_bot ", "desc": "a\nb", "say": "y" * 500}, {"title": ""}, "rác",
+    from xe_tet.server.settings import clean
+    out = clean({"ads": [{"title": " @x_shop ", "desc": "a\nb", "say": "y" * 500}, {"title": ""}, "rác",
                          {"title": "2"}, {"title": "3"}, {"title": "4"}], "ads_talk_min": 0})
-    assert out["ads"][0] == {"title": "@x_bot", "desc": "a b", "say": "y" * 200, "keys": ""}
-    old = clean({"ads": [{"title": "Tele: @zt_shopee_bot", "desc": "", "say": ""}]})["ads"][0]  # lưu trước PLAN-153
-    assert "hoàn tiền" in old["keys"]
-    assert clean({"ads": [{"title": "@zt_shopee_bot", "keys": ""}]})["ads"][0]["keys"] == ""  # anh xoá từ khoá: giữ trống
-    assert [a["title"] for a in out["ads"]] == ["@x_bot", "2", "3"] and out["ads_talk_min"] == 2
-    assert [a["title"] for a in DEFAULTS["ads"]] == ["@zt_shopee_bot", "@aipass_shop_bot"]
+    assert out["ads"][0] == {"title": "@x_shop", "desc": "a b", "say": "y" * 200, "keys": ""}
+    assert [a["title"] for a in out["ads"]] == ["@x_shop", "2", "3"] and out["ads_talk_min"] == 2
+
+
+def test_ads_never_name_other_platforms_on_live():
+    """Anh 04/11 «live TikTok mà nói sàn khác thì cấm live»: mục quảng cáo có Shopee / Telegram / link bị bỏ; bỏ hết thì dùng
+    câu trung tính (mời ghé trang cá nhân kênh); mặc định không có tên sàn / app / bot."""
+    from xe_tet.server.game.moderation import off_platform
+    from xe_tet.server.settings import DEFAULTS, clean
+    old = [{"title": "Tele: @zt_shopee_bot", "desc": "Dán link Shopee", "say": "bot hoàn tiền trên Telegram"},
+           {"title": "@aipass_shop_bot", "desc": "Shop trên Telegram", "say": "ghé shop"}]
+    assert clean({"ads": old})["ads"] == DEFAULTS["ads"]
+    mixed = clean({"ads": [old[0], {"title": "Nhà xe", "desc": "ghé trang cá nhân", "say": "ghé trang cá nhân kênh"}]})["ads"]
+    assert [a["title"] for a in mixed] == ["Nhà xe"]
+    assert not any(off_platform(a[k]) for a in DEFAULTS["ads"] for k in ("title", "desc", "say"))
 
 
 def test_viewer_asking_for_cashback_gets_bot_named_once():
-    """PLAN-153: bình luận có từ khoá («hoàn tiền», «chat gờ pê tê») → lơ xe gọi tên chỉ đúng bot, mỗi người một lần mỗi
-    bot, cả phòng 20 giây một lần; hết lượt cũng không chuyển câu đó cho AI (AI không biết bot, từng đáp sai)."""
-    from xe_tet.server.settings import DEFAULTS
+    """PLAN-153: bình luận có từ khoá («hoàn tiền», «chat gờ pê tê») → lơ xe gọi tên đọc câu của mục đó (04/11: câu trung tính,
+    không tên sàn), mỗi người một lần mỗi mục, cả phòng 20 giây một lần; hết lượt cũng không chuyển câu đó cho AI."""
     e, t = _driving_with_riders()
-    e.ads = [dict(a) for a in DEFAULTS["ads"]]
+    e.ads = [{"title": "A", "desc": "", "say": "Ghé trang cá nhân kênh", "keys": "hoàn tiền, shopee"},
+             {"title": "B", "desc": "", "say": "Hỏi lơ xe", "keys": "chatgpt, chat gpt"}]
     e.drain()
     comment(e, "Lan", "có hoàn tiền shopee không anh", t + 1)
     out = e.drain()
-    assert [(x["title"], x["name"]) for x in out if x["type"] == "ad"] == [("@zt_shopee_bot", "Lan")]
-    assert any(x["type"] == "loxe" and x["text"].startswith("Lan ơi, Bà con mua Shopee") for x in out)
+    assert [(x["title"], x["name"]) for x in out if x["type"] == "ad"] == [("A", "Lan")]
+    assert any(x["type"] == "loxe" and x["text"] == "Lan ơi, Ghé trang cá nhân kênh" for x in out)
     comment(e, "Huy", "Hoàn tiền là sao", t + 5)  # cả phòng vừa được chỉ: chờ 20 giây
     assert not [x for x in e.drain() if x["type"] == "ad"]
     e.ai_reply = True
     comment(e, "Lan", "hoàn tiền là sao vậy anh?", t + 30)  # Lan được chỉ rồi: im, không hỏi AI
     assert not [x for x in e.drain() if x["type"] == "ad"] and not e.questions and not e.chatter
-    comment(e, "Lan", "có bán ChatGPT không", t + 31)  # bot khác thì vẫn chỉ
-    assert [x["title"] for x in e.drain() if x["type"] == "ad"] == ["@aipass_shop_bot"]
+    comment(e, "Lan", "có bán ChatGPT không", t + 31)  # mục khác thì vẫn đọc
+    assert [x["title"] for x in e.drain() if x["type"] == "ad"] == ["B"]
     comment(e, "Tú", "đi shop không", t + 60)  # «shop» không phải «shopee»: không khớp
     assert not [x for x in e.drain() if x["type"] == "ad"]
     e.ads = []

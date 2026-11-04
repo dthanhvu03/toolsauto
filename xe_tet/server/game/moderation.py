@@ -86,8 +86,24 @@ def clean_name(name: str) -> str:
     return name
 
 
+# Tên sàn / app khác + lời kéo người ra khỏi TikTok (anh 04/11 «live TikTok mà nói sàn khác thì cấm live»): không hiện, không
+# đọc trên live. Blog người bán live ở VN liệt kê; TikTok ghi: kéo người mua ngoài TikTok bị giảm hiển thị, cố lách bị khoá.
+OFF_PLATFORM_PLAIN = frozenset({
+    "shopee", "shoppe", "sopee", "sopi", "lazada", "tiki", "sendo", "telegram", "tele", "zalo", "facebook", "fb", "messenger",
+    "instagram", "insta", "youtube", "inbox", "ib", "link", "website", "qr", "bot",
+})
+OFF_PLATFORM_PHRASES = ("sop pi", "san cam", "so dien thoai", "chuyen khoan", "ket ban", "lien he", "trang web", "ma qr")
+
+
+def off_platform(text: str) -> bool:
+    """Có tên sàn / app khác, link, «inbox», «chuyển khoản»… — nói hay hiện trên live dễ bị TikTok dừng live."""
+    plain = _plain(text or "", leet=False)
+    padded = f" {plain} "
+    return any(w in OFF_PLATFORM_PLAIN for w in plain.split()) or any(f" {p} " in padded for p in OFF_PLATFORM_PHRASES)
+
+
 def allow_chat(text: str) -> bool:
-    """Bong bóng chat / câu AI: có từ bậy, miệt thị, link, số điện thoại thì không hiện, không đọc."""
-    if _LINK.search(text) or _PHONE.search(text):
+    """Bong bóng chat / câu AI: có từ bậy, miệt thị, link, số điện thoại, tên sàn / app khác thì không hiện, không đọc."""
+    if _LINK.search(text) or _PHONE.search(text) or off_platform(text):
         return False
     return not is_bad(text)

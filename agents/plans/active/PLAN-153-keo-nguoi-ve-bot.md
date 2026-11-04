@@ -63,3 +63,10 @@
   Admin thấy nguồn ở tin «Người dùng mới» + bảng Phễu (cashback), «Thống kê» (shop). Ruff sạch.
 - Xe Tết: pytest 217, ruff sạch, tsc sạch. Từ khoá: chỉ đúng bot, mỗi người 1 lần/bot, cả phòng 20 giây/lần. Hết lượt thì câu đó không
   chuyển cho AI: trên 8811, AI từng đáp sai «Không hoàn tiền đâu». 8811: chip dưới tên game + lơ xe «Bảo Ngọc ơi, …», 0 lỗi JS.
+
+## Đổi hướng (04/11, sau khi nạp): live không nhắc sàn / app
+- Anh: «live TikTok mà nói sàn khác thì cấm live». Research: TikTok ghi kéo người mua ngoài TikTok bị giảm hiển thị, cố lách
+  hạn chế có thể bị khoá; blog người bán VN liệt kê Shopee, Lazada, Telegram, Zalo, Facebook, link bio, inbox, QR, nói lái.
+- Anh chọn «giữ câu trung tính»: lơ xe + màn hình chỉ mời ghé trang cá nhân kênh, không tên sàn / app / bot. Tên bot để ở bio.
+- `moderation.off_platform` chặn tên sàn / app / lời kéo người đi ở bong bóng chat + câu AI; mục quảng cáo có những chữ đó bị bỏ,
+  bỏ hết thì dùng câu trung tính mặc định. AI có thêm luật không nói tên sàn / app. pytest 219.
