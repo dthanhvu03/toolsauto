@@ -764,6 +764,7 @@ export class Hud {
     const el = $("callout");
     if (!this.tickets.length && !this.notes.length) {
       el.classList.add("hidden");
+      $("hud").classList.remove("calling");
       return;
     }
     this.calloutBusy = true;
@@ -801,16 +802,18 @@ export class Hud {
         big = `🎫 ${esc(t.name)} lên xe tăng cường số ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · xe chạy ngay, hết chờ`;
       } else {
+        // thẻ gọn một dòng (anh 04/11 «to quá»): ai + về đâu; chuyến / giường / km ở dòng phụ
         big = t.promoted  // người đang giữ chỗ được xếp lên xe: phải báo, không thì thẻ cũ vẫn ghi «chuyến sau»
-          ? `🎫 ${esc(t.name)} hết chờ, lên xe chuyến ${t.bus} về ${esc(t.province)}!`
-          : `🎫 ${esc(t.name)} lên xe chuyến ${t.bus} về ${esc(t.province)}!`;
-        small = `${route} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)}`
+          ? `🎫 ${esc(t.name)} hết chờ · về ${esc(t.province)}`
+          : `🎫 ${esc(t.name)} lên xe về ${esc(t.province)}`;
+        small = `Chuyến ${t.bus} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)} · ${km(t.km)} km`
           + ((t.tripNo ?? 1) > 1 ? ` · lần về quê thứ ${t.tripNo}` : "");
       }
     }
     el.innerHTML = `<div class="big">${big}</div><div class="small">${small}</div>`;
     this.placeCallout();
     el.classList.remove("hidden", "show");
+    $("hud").classList.toggle("calling", $("cta-block").classList.contains("hidden"));  // câu đố / trạm: thẻ nằm dưới, khỏi ẩn
     void el.offsetWidth;
     el.classList.add("show");
     window.setTimeout(() => {
@@ -854,7 +857,7 @@ export class Hud {
   private toast(title: string, sub = "", kind = "", key = ""): void {
     const list = $("toasts");
     const face = this.eventAvatar ? avatarImg(this.eventAvatar) : "";
-    const html = sub ? `${face}${title}<small>${sub}</small>` : `${face}${title}`;
+    const html = `<span class="t">${face}${title}</span>${sub ? `<small>${sub}</small>` : ""}`;
     const old = key ? this.keyed.get(key) : undefined;
     if (old && old.el.isConnected && !old.el.classList.contains("out")) {
       old.el.innerHTML = html;
