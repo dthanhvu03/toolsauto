@@ -260,6 +260,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} ghé {n} ngày liền, Anh Tư thưởng suất lên đầu hàng, gõ tên tỉnh là có giường trước.",
             "Chuỗi {n} ngày của {name} nè, thưởng lên đầu hàng chờ, gõ tỉnh liền đi.",
         ),
+        "versus_golden": (  # PLAN-151: một phút cuối, quà nhân đôi điểm
+            "Giờ vàng rồi bà con, một phút cuối quà tính gấp đôi điểm, {rival} còn kịp lật kèo {lead}.",
+            "Vô giờ vàng, tặng quà lúc này điểm nhân hai, bà con {rival} ráng lên.",
+        ),
+        "versus_final": (
+            "{rival} còn thua {need} điểm, {secs} giây nữa xe về bến, ai lật kèo đây.",
+            "Còn {secs} giây, {rival} kém {need} điểm thôi, một món quà là lật liền.",
+        ),
+        "versus_win_mvp": (
+            "Hướng {lead} thắng {rival}, công lớn nhất là {name}, tên {name} lên băng rôn chuyến này.",
+            "{lead} thắng rồi, cảm ơn {name} góp nhiều nhất, Anh Tư dán tên lên băng rôn xe luôn.",
+        ),
         "versus_win": (
             "Hướng {lead} thắng đối kháng, chuyến này Anh Tư chạy hướng {lead}, bà con {rival} ráng chuyến sau.",
             "{lead} thắng {rival} rồi, xe chạy hướng {lead} liền, bà con lên xe.",
@@ -639,6 +651,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} chuỗi {n} ngày, thưởng lên đầu hàng luôn, gõ tỉnh là có giường trước.",
             "Chuỗi {n} ngày của {name} nè, quà là lên đầu hàng chờ, gét gô.",
         ),
+        "versus_golden": (
+            "Giờ vàng ae ơi, một phút cuối quà x2 điểm, team {rival} lật kèo được đó.",
+            "Vào giờ vàng rồi, quà nhân đôi điểm, team {rival} gét gô.",
+        ),
+        "versus_final": (
+            "Team {rival} còn thua {need} điểm, {secs} giây nữa thôi, ai cứu đây.",
+            "Còn {secs} giây, {rival} kém {need} điểm, một món quà là lật kèo.",
+        ),
+        "versus_win_mvp": (
+            "Team {lead} win pê ka, em vi pi là {name}, tên lên băng rôn luôn.",
+            "{lead} thắng {rival}, {name} gánh team đỉnh nóc, tên dán lên băng rôn xe.",
+        ),
         "versus_win": (
             "Team {lead} win pê ka, chuyến này chạy hướng {lead}, team {rival} hẹn chuyến sau.",
             "{lead} thắng {rival} rồi ae, xe chạy hướng {lead} luôn.",
@@ -1016,6 +1040,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "streak_reward": (
             "{name} ghé {n} ngày liền, nhà xe tặng suất lên đầu hàng chờ, gõ tên tỉnh là có giường trước.",
             "Chuỗi {n} ngày của {name}, phần thưởng là lên đầu hàng chờ.",
+        ),
+        "versus_golden": (
+            "Giờ vàng bắt đầu, một phút cuối quà được tính gấp đôi điểm, {rival} vẫn còn cơ hội.",
+            "Một phút cuối rồi, quà nhân đôi điểm, hướng {rival} cố lên.",
+        ),
+        "versus_final": (
+            "{rival} đang kém {need} điểm, còn {secs} giây.",
+            "Còn {secs} giây, {rival} chỉ cách {need} điểm.",
+        ),
+        "versus_win_mvp": (
+            "Hướng {lead} thắng, cảm ơn {name} góp nhiều điểm nhất, tên {name} lên băng rôn chuyến này.",
+            "Chúc mừng {lead}, người góp nhiều nhất là {name}, tên được dán lên băng rôn xe.",
         ),
         "versus_win": (
             "Hướng {lead} thắng đối kháng, chuyến này đi hướng {lead}, hướng {rival} đi chuyến sau.",

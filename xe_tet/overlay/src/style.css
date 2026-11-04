@@ -184,6 +184,10 @@ html, body {
 .vs-bar span b { font-size: 32px; color: #ffe082; }
 .vs-bar em { font-style: normal; font-size: 32px; }
 .vs-bar small { grid-column: 1 / -1; font-size: 18px; font-weight: 700; text-align: center; opacity: 0.95; }
+/* giờ vàng (PLAN-151): viền vàng nhấp nháy, dòng dưới chữ vàng to hơn */
+.vs-bar.golden { border-color: #ffc107; animation: vsgold 0.9s ease-in-out infinite alternate; }
+.vs-bar.golden small { color: #ffe082; font-size: 20px; }
+@keyframes vsgold { from { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.9); } to { box-shadow: 0 0 22px 6px rgba(255, 193, 7, 0.9); } }
 .cta-foot { margin-top: 8px; font-size: 26px; font-weight: 700; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cta-foot b { color: var(--red); }
 

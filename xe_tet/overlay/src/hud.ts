@@ -418,9 +418,15 @@ export class Hud {
     const total = a.points + b.points;
     const pct = total ? Math.round((a.points / total) * 100) : 50;
     const side = (x: VersusSide) => `${x.lead && total ? "👑 " : ""}${x.arrow} ${esc(x.dest)} <b>${x.points}</b>`;
+    // dòng dưới (PLAN-151): giờ vàng → đếm ngược; có người góp → tên người góp nhiều nhất mỗi bên; chưa ai → cách chơi
+    const tops = vs.sides.map((x) => x.top ? `${x.arrow} ${esc(x.top)}` : "").filter(Boolean);
+    const foot = vs.golden
+      ? `⏱ GIỜ VÀNG ${clock(vs.left ?? 0)} · quà x2 điểm · 1 xu = ${(vs.xu ?? 20) * 2} điểm`
+      : tops.length ? `🔥 Góp nhiều nhất: ${tops.join(" · ")} · 1 xu = ${vs.xu ?? 20} điểm`
+        : `Quê bên nào thì góp cho bên đó · 1 xu = ${vs.xu ?? 20} điểm · bên nhiều điểm chạy trước`;
+    bar.classList.toggle("golden", !!vs.golden);
     setHTML("vs-bar", `<i style="width:${Math.min(92, Math.max(8, pct))}%"></i>`
-      + `<span class="a">${side(a)}</span><em>⚔️</em><span class="b">${side(b)}</span>`
-      + `<small>Quê bên nào thì bình luận · thả tim · tặng quà cho bên đó — bên nhiều điểm chạy trước</small>`);
+      + `<span class="a">${side(a)}</span><em>⚔️</em><span class="b">${side(b)}</span><small>${foot}</small>`);
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
@@ -558,7 +564,14 @@ export class Hud {
         break;
       case "versus_win":  // đối kháng: hướng thắng chạy chuyến này
         this.note(`⚔️ ${esc(e.dest ?? "")} thắng ${esc(e.rival ?? "")} · ${e.points} – ${e.rival_points ?? 0}`,
-          `Chuyến này chạy ${esc(e.lane ?? "")} · vòng đối kháng mới bắt đầu`);
+          e.mvp ? `👑 Góp nhiều nhất: ${esc(e.mvp)} ${e.mvp_points ?? 0} điểm · tên lên băng rôn xe`
+            : `Chuyến này chạy ${esc(e.lane ?? "")} · vòng đối kháng mới bắt đầu`);
+        break;
+      case "versus_golden":  // PLAN-151: một phút cuối, quà x2 điểm
+        this.flash("⏱ GIỜ VÀNG · QUÀ X2");
+        break;
+      case "versus_assist":  // người không thuộc bên nào tặng quà → tiếp sức bên đang thua
+        this.toast(`🎁 ${name} tiếp sức ${esc(e.dest ?? "")}`, `+${e.points ?? 0} điểm đối kháng`, "gift", `assist:${e.name}`);
         break;
       case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
         this.note(`⚔️ ${esc(e.province ?? "")} thắng đua tỉnh · ${e.points} điểm`, `Chuyến này đi hướng ${esc(e.province ?? "")} · vòng mới bắt đầu`);

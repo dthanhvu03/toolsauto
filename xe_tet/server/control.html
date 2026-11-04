@@ -152,6 +152,13 @@
     <div class="row">
       <label class="toggle"><input type="checkbox" data-show="versus_on" data-default="off"> Bật đối kháng</label>
     </div>
+    <div class="row">
+      <span>1 xu =</span><input type="number" id="versus-xu" min="1" max="200" step="1" aria-label="Điểm đối kháng mỗi xu"><span>điểm</span>
+      <span>· giờ vàng</span><input type="number" id="versus-golden" min="0" max="180" step="5" aria-label="Số giây giờ vàng cuối vòng"><span>giây cuối (quà x2, 0 = tắt)</span>
+      <button id="save-versus">Lưu</button>
+    </div>
+    <p class="hint">Quà của người không thuộc bên nào (chưa gõ tỉnh, quê hướng khác) tính cho bên đang thua. Người góp nhiều nhất
+      bên thắng được dán tên lên băng rôn chuyến đó.</p>
     <h3>🧠 Đố vui · 🛞 Sự cố dọc đường</h3>
     <p class="hint live-line" id="quiz-now">Chưa có câu đố.</p>
     <div class="row">
@@ -908,6 +915,7 @@ $("save-ads").onclick = () => {
   log("Đã lưu quảng cáo bot");
 };
 document.querySelectorAll("[data-sky]").forEach((b) => b.onclick = () => admin({ action: "weather", sky: b.dataset.sky }));
+$("save-versus").onclick = () => setControl({ versus_xu: +$("versus-xu").value, versus_golden_s: +$("versus-golden").value });
 $("save-quiz").onclick = () => {
   setControl({ quiz_every_min: +$("quiz-min").value });
   log("Đã lưu nhịp đố vui");
@@ -1053,6 +1061,7 @@ async function refresh() {
     $("versus-now").textContent = control.versus_on !== true ? "Đối kháng đang tắt."
       : !vs ? "Chờ có ít nhất hai hướng có người chờ."
       : vs.sides.map((x) => `${x.arrow} ${x.dest}: ${x.points} điểm · ${x.waiting} chờ${x.lead ? " 👑" : ""}`).join("  ⚔️  ")
+        + (vs.golden ? ` · ⏱ GIỜ VÀNG còn ${vs.left}s` : "")
         + (vs.chosen ? " · anh đã chọn tay hướng chạy kế tiếp" : "");
     $("sky-now").textContent = { clear: "☀️ quang", drizzle: "🌦 mưa phùn", rain: "🌧 mưa rào", fog: "🌫 sương mù" }[s.weather] || "–";
     $("vendor-call").disabled = !!vd && vd.stage !== "pool";
@@ -1068,6 +1077,8 @@ async function refresh() {
       $("roll-idle").value = control.roll_idle_min ?? 15;
       $("vendor-xu").value = control.vendor_xu ?? 10;
       $("quiz-min").value = control.quiz_every_min ?? 3;
+      $("versus-xu").value = control.versus_xu ?? 20;
+      $("versus-golden").value = control.versus_golden_s ?? 60;
       $("ads-min").value = control.ads_talk_min ?? 8;
       [0, 1, 2].forEach((i) => {
         const ad = (control.ads || [])[i] || {};

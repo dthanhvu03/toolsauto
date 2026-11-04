@@ -71,6 +71,8 @@ DEFAULTS: dict = {
     "roll_wait_s": 45,  # giây chờ người được gọi tên thả tim / bình luận
     # đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn)
     "versus_on": False,  # đối kháng (anh 03/11): hai hướng đầu hàng chờ đấu điểm theo quê, hướng thắng chạy chuyến sau
+    "versus_xu": 20,  # điểm đối kháng mỗi xu (PLAN-151: quà quyết trận)
+    "versus_golden_s": 60,  # giờ vàng: chừng này giây cuối trước khi xe về bến, quà x2 điểm (0 = tắt)
     "quiz_on": True,  # đố vui A / B / C về các tỉnh lúc xe chạy
     "quiz_every_min": 3,
     "incidents_on": True,  # sự cố dọc đường: xẹp lốp, kẹt xe, trâu qua đường — tự xong, tim làm nhanh hơn, quà xong ngay
@@ -166,6 +168,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(1000, max(1, float(value))))
         elif key == "roll_idle_min":
             out[key] = int(min(120, max(1, float(value))))
+        elif key == "versus_xu":
+            out[key] = int(min(200, max(1, float(value))))
+        elif key == "versus_golden_s":
+            out[key] = int(min(180, max(0, float(value))))
         elif key == "quiz_every_min":
             out[key] = int(min(30, max(1, float(value))))
         elif key == "ads":

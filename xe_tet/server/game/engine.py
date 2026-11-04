@@ -275,6 +275,9 @@ RACE_TALK_GAP = 30.0
 # Đối kháng (anh 03/11 «game đối kháng như mấy chỗ live khác»): hai hướng đứng đầu hàng chờ đấu nhau — ai quê thuộc hướng
 # nào thì bình luận / tim / quà cộng điểm cho hướng đó (cùng thang điểm đua tỉnh); vào bến, hướng nhiều điểm hơn chạy trước
 VERSUS_TALK_GAP = 30.0
+VERSUS_XU = 20  # điểm đối kháng mỗi xu (PLAN-151: quà quyết trận; 1 xu = 400 tim) — /control chỉnh được
+VERSUS_GOLDEN_S = 60.0  # giờ vàng: chừng này giây cuối trước khi xe về bến, điểm quà x2 (0 = tắt)
+VERSUS_FINAL_S = 20.0  # lơ xe hô «còn thua N điểm» lúc còn chừng này giây
 # Bảng quảng cáo bên đường (anh 03/11): video anh tải lên; xe đang chạy dừng lại xem hết rồi chạy tiếp
 SHOW_LEG_WINDOW = (0.15, 0.8)
 FOCUS_SECONDS = 12.0  # /control bấm vào một khách: máy quay zoom vào cửa sổ giường người đó chừng này giây (anh 03/11)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
@@ -538,6 +541,11 @@ class Engine:
         self.versus_leader: str | None = None
         self.versus_winner: tuple[str, str, int, int] | None = None  # (làn thắng, làn thua, điểm thắng, điểm thua)
         self.last_versus_talk = -1e9
+        self.versus_xu = VERSUS_XU
+        self.versus_golden_s = VERSUS_GOLDEN_S
+        self.versus_lock: list[str] = []  # cặp hướng chốt cho vòng này (PLAN-151): không đổi giữa chừng
+        self.versus_by: dict[str, Counter] = {}  # làn → điểm góp theo uid (người góp nhiều nhất bên thắng lên băng rôn)
+        self.versus_told: set[str] = set()  # đã hô «golden» / «final» vòng này
         self.race_leader: str | None = None
         self.race_winner: str | None = None
         self.last_race_talk = -1e9
@@ -901,11 +909,20 @@ class Engine:
         self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
         if self.versus_winner:  # vòng đối kháng: hướng thắng chạy chuyến này
             win, lose, wp, lp = self.versus_winner
+            mvp = self._versus_top(win)
+            if mvp and self.bus.banner is None:  # người góp nhiều nhất bên thắng: tên lên băng rôn chuyến này
+                self.bus.banner = mvp[0]
             self.emit("versus_win", lane=self.network.lane_by_key[win].label, dest=self._dest(win), points=wp,
-                      rival=self._dest(lose), rival_points=lp)
-            self.talk("versus_win", lead=self._dest(win), rival=self._dest(lose), main=True)
+                      rival=self._dest(lose), rival_points=lp, mvp=mvp[0] if mvp else None, mvp_points=mvp[1] if mvp else 0)
+            if mvp:
+                self.talk("versus_win_mvp", lead=self._dest(win), rival=self._dest(lose), name=mvp[0], main=True)
+            else:
+                self.talk("versus_win", lead=self._dest(win), rival=self._dest(lose), main=True)
         self.versus.clear()
         self.versus_leader = None
+        self.versus_lock = []
+        self.versus_by = {}
+        self.versus_told = set()
         if self.race_winner:  # vòng đua tỉnh này có tỉnh thắng: báo rồi sang vòng mới
             win = BY_KEY[self.race_winner].name
             self.emit("race_win", province=win, points=self.race[self.race_winner])
@@ -990,23 +1007,77 @@ class Engine:
 
     def _versus_pair(self) -> list[str]:
         """Hai hướng đang đối kháng: hai hướng đứng đầu thứ tự chạy (quà trước, đặt sớm trước); dưới hai hướng có người chờ
-        thì không đấu."""
+        thì không đấu. Đã chốt cặp (điểm đầu tiên / xe xuất bến — PLAN-151) thì giữ cặp đó tới hết vòng; một bên hết người chờ
+        giữa chừng thì vòng huỷ, chuyến sau theo thứ tự đặt vé."""
         if not self.versus_on:
             return []
+        if self.versus_lock:
+            return self.versus_lock if all(self.queues.get(lane) for lane in self.versus_lock) else []
         order = self._fifo_order()
         return order[:2] if len(order) >= 2 else []
+
+    def _versus_left(self) -> float | None:
+        """Giây tới lúc xe về bến (hết vòng đối kháng); đang đón khách thì None. Xe đứng (chặn / video) thì số này đứng theo."""
+        phase = self._phase_now()
+        if phase == "BOARDING" or (phase != "FINISH" and not self.trip):
+            return None
+        if phase == "FINISH":
+            return max(0.0, (self.resume[1] if self.phase == "SPECIAL" else self.phase_until - self.last_now))
+        return self._arrivals()[1] + FINISH_SECONDS
+
+    def _versus_golden(self) -> bool:
+        left = self._versus_left()
+        return self.versus_golden_s > 0 and left is not None and left <= self.versus_golden_s
+
+    def _versus_top(self, lane: str) -> tuple[str, int] | None:
+        """(tên, điểm) người góp nhiều nhất cho hướng này vòng này."""
+        by = self.versus_by.get(lane)
+        if not by:
+            return None
+        uid, pts = by.most_common(1)[0]
+        v = self.viewers.get(uid)
+        return (v.name, pts) if v and pts > 0 else None
+
+    def _versus_tick(self) -> None:
+        """Giờ vàng: lơ xe hô lúc mở, và một lần chừng VERSUS_FINAL_S giây cuối báo bên thua còn kém bao nhiêu."""
+        pair = self._versus_pair()
+        if not pair or not self.versus_lock:
+            return
+        left = self._versus_left()
+        if left is None or self.versus_golden_s <= 0 or left > self.versus_golden_s:
+            return
+        lead = self._versus_lead(pair)
+        other = pair[1] if lead == pair[0] else pair[0]
+        if "golden" not in self.versus_told:
+            self.versus_told.add("golden")
+            self.emit("versus_golden", seconds=round(left))
+            self.talk("versus_golden", lead=self._dest(lead), rival=self._dest(other))
+        elif "final" not in self.versus_told and left <= VERSUS_FINAL_S and self.versus[lead] > self.versus[other]:
+            self.versus_told.add("final")
+            self.talk("versus_final", rival=self._dest(other), need=self.versus[lead] - self.versus[other], secs=round(left))
 
     def _versus_lead(self, pair: list[str]) -> str:
         return max(pair, key=lambda lane: (self.versus[lane], -pair.index(lane)))
 
-    def _versus_score(self, v: Viewer, points: int) -> None:
-        """Điểm đối kháng cho hướng có quê người xem (vé đang có, không thì quê đã về lần trước)."""
+    def _versus_score(self, v: Viewer, points: int, xu: int = 0) -> None:
+        """Điểm đối kháng cho hướng có quê người xem (vé đang có, không thì quê đã về lần trước). Quà (PLAN-151): mỗi xu
+        versus_xu điểm, giờ vàng x2; người tặng không thuộc bên nào (chưa có quê / quê hướng khác) → tiếp sức bên đang thua."""
         key = v.province or v.home
         pair = self._versus_pair()
-        lane = self.network.lane_of(key) if key and pair else None
+        if not pair:
+            return
+        lane = self.network.lane_of(key) if key else None
+        if xu > 0:
+            points = xu * self.versus_xu * (2 if self._versus_golden() else 1)
+            if lane not in pair:
+                lane = min(pair, key=lambda ln: (self.versus[ln], -pair.index(ln)))  # bên thua (hoà: bên đứng sau)
+                self.emit("versus_assist", name=v.name, hue=v.hue, dest=self._dest(lane), points=points, avatar=v.avatar)
         if lane not in pair or points <= 0:
             return
+        if not self.versus_lock:  # điểm đầu tiên của vòng: chốt cặp
+            self.versus_lock = list(pair)
         self.versus[lane] += points
+        self.versus_by.setdefault(lane, Counter())[v.uid] += points
         lead = self._versus_lead(pair)
         other = pair[1] if lead == pair[0] else pair[0]
         if lead != self.versus_leader and self.versus[lead] > self.versus[other]:
@@ -1023,9 +1094,14 @@ class Engine:
         sides = []
         for lane in pair:
             ln = self.network.lane_by_key[lane]
+            top = self._versus_top(lane)
             sides.append({"lane": lane, "label": ln.label, "arrow": ln.arrow, "dest": self._dest(lane),
-                          "points": self.versus[lane], "waiting": len(self.queues[lane]), "lead": lane == lead})
-        return {"sides": sides, "chosen": self.next_lane in self.queues and bool(self.queues.get(self.next_lane))}
+                          "points": self.versus[lane], "waiting": len(self.queues[lane]), "lead": lane == lead,
+                          "top": top[0] if top else None})
+        left = self._versus_left()
+        golden = self._versus_golden()
+        return {"sides": sides, "chosen": self.next_lane in self.queues and bool(self.queues.get(self.next_lane)),
+                "golden": golden, "left": round(left) if golden and left is not None else None, "xu": self.versus_xu}
 
     def _fifo_order(self) -> list[str]:
         """Thứ tự các hướng chạy tiếp theo: hướng của người tặng quà đang chờ trước, rồi người đặt vé sớm nhất (anh 03/11)."""
@@ -1318,7 +1394,8 @@ class Engine:
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
         self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)), main=True)
         pair = self._versus_pair()
-        if pair:  # vòng đối kháng mới: hai hướng đầu hàng chờ đấu nhau giành chuyến sau
+        if pair:  # vòng đối kháng mới: hai hướng đầu hàng chờ đấu nhau giành chuyến sau — chốt cặp tới hết vòng
+            self.versus_lock = list(pair)
             self.emit("versus_start", sides=[self._dest(lane) for lane in pair])
             self.talk("versus_start", lead=self._dest(pair[0]), rival=self._dest(pair[1]))
         self._roll_weather(BY_KEY[self._where()[0]].region, now, force=True)
@@ -1681,6 +1758,7 @@ class Engine:
             self._expire_rolls()
         self._vendor_tick(now)
         self._quiz_tick(now, dt)
+        self._versus_tick()
         self._ad_tick(now)
         if self.phase == "DRIVING":
             self._hunger_tick(dt)
@@ -1953,9 +2031,9 @@ class Engine:
 
     # ---- đua tỉnh -------------------------------------------------------------------------------
 
-    def _race(self, v: Viewer, points: int) -> None:
-        """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước)."""
-        self._versus_score(v, points)
+    def _race(self, v: Viewer, points: int, xu: int = 0) -> None:
+        """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước); `xu`: điểm từ quà."""
+        self._versus_score(v, points, xu)
         key = v.province or v.home
         if not self.race_on or not key or points <= 0:
             return
@@ -2907,7 +2985,7 @@ class Engine:
         self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
         self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
         self._advance_goal(v, diamonds)
-        self._race(v, diamonds * RACE_PER_XU)
+        self._race(v, diamonds * RACE_PER_XU, diamonds)
         paid = self._pay_block(v, diamonds) or self._pay_vendor(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added

@@ -145,6 +145,8 @@ class Hub:
         engine.roll_wait = float(self.settings["roll_wait_s"])
         engine.quiz_on = self.settings["quiz_on"]
         engine.versus_on = self.settings["versus_on"]
+        engine.versus_xu = self.settings["versus_xu"]
+        engine.versus_golden_s = float(self.settings["versus_golden_s"])
         if engine.quiz_gap != self.settings["quiz_every_min"] * 60.0:
             engine.quiz_gap = self.settings["quiz_every_min"] * 60.0
             engine.next_quiz = min(engine.next_quiz, engine.last_now + engine.quiz_gap)

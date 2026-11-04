@@ -238,6 +238,8 @@ export interface GameEvent {
   dest?: string;  // versus_win: tỉnh đặt tên hướng thắng
   rival?: string;  // versus_win: hướng thua
   rival_points?: number;
+  mvp?: string | null;  // người góp nhiều nhất bên thắng
+  mvp_points?: number;
   sides?: string[];  // versus_start: hai hướng đấu nhau
   arrow?: string;
   km?: number;  // km thật từ bến đi
@@ -278,5 +280,6 @@ export interface GameEvent {
   answer?: string; option?: string; winners?: string[]; right?: number;  // quiz_end
 }
 
-export interface VersusSide { lane: string; label: string; arrow: string; dest: string; points: number; waiting: number; lead: boolean }
-export interface Versus { sides: VersusSide[]; chosen: boolean }
+export interface VersusSide { lane: string; label: string; arrow: string; dest: string; points: number; waiting: number; lead: boolean;
+  top?: string | null }  // người góp nhiều nhất bên này
+export interface Versus { sides: VersusSide[]; chosen: boolean; golden?: boolean; left?: number | null; xu?: number }  // giờ vàng (PLAN-151)

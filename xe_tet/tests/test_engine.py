@@ -2395,6 +2395,45 @@ def test_versus_two_lanes_fight_for_next_trip(real_routes):
     assert all(p == 0 for p in e.versus.values())  # vòng mới
 
 
+def test_versus_gifts_decide_golden_minute_mvp_and_locked_pair(real_routes):
+    """PLAN-151 (anh 04/11 «live mà không có tiền chán quá»): quà quyết trận (1 xu = 20 điểm, hơn 400 tim); cặp đấu chốt, hướng
+    thứ ba được quà lên đầu hàng cũng không chen vào; người không thuộc bên nào tặng → tiếp sức bên thua; một phút cuối quà x2,
+    lơ xe hô; người góp nhiều nhất bên thắng lên băng rôn."""
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e.versus_on = True
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    comment(e, "Cà", "Cà Mau", t + 1)
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
+    e.handle({"type": "like", "name": "Cà", "count": 2000}, t + 3)  # 100 điểm tim
+    e.handle({"type": "gift", "name": "Đà", "gift": "Kẹo", "diamonds": 10}, t + 3)  # 200 điểm quà
+    assert e.versus[danang] == 200 + 1 and e.versus_lock == [camau, danang]
+    comment(e, "Kiên", "Kiên Giang", t + 4)
+    e.drain()
+    e.handle({"type": "gift", "name": "Kiên", "gift": "Hoa hồng", "diamonds": 1}, t + 5)  # hướng thứ ba: lên đầu hàng
+    e.handle({"type": "gift", "name": "Lạ", "gift": "Hoa hồng", "diamonds": 1}, t + 5)  # chưa có quê
+    assist = [x for x in e.drain() if x["type"] == "versus_assist"]
+    assert [x["dest"] for x in assist] == ["Cà Mau", "Cà Mau"] and e.versus[camau] == 100 + 40
+    assert [x["lane"] for x in e.snapshot()["versus"]["sides"]] == [camau, danang]  # cặp không đổi
+    while not e._versus_golden():
+        t += 0.5
+        e.tick(t)
+        assert e.phase != "BOARDING"
+    t += 0.5
+    e.tick(t)  # lơ xe hô ở nhịp kế tiếp
+    out = e.drain()
+    assert "versus_golden" in types(out) and e.snapshot()["versus"]["golden"]
+    e.handle({"type": "gift", "name": "Cà", "gift": "Hoa hồng", "diamonds": 1}, t)
+    assert e.versus[camau] == 140 + 40  # giờ vàng x2
+    run_until(e, "BOARDING", t)
+    win = next(x for x in e.drain() if x["type"] == "versus_win")
+    assert e.bus.lane == danang and win["mvp"] == "Đà" and win["mvp_points"] == 201 and e.bus.banner == "Đà"
+    assert e.versus_lock == [] and not e.versus_by
+
+
 def test_versus_off_or_single_lane_keeps_booking_order(real_routes):
     from xe_tet.server.game.network import Network
     net = Network(real_routes, "hcm_miendong")
