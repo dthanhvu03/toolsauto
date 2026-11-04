@@ -503,7 +503,7 @@ export class Hud {
     } else if (mode === "riders") {
       setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()
-        .map((r) => `<li>${r.vip ? "⭐ " : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
+        .map((r) => `<li>${r.vip ? "⭐ " : r.badge ? `${r.badge} ` : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
     } else if (s.race?.length) {  // đua tỉnh (đang tắt mặc định từ 03/11: ai đặt trước lên trước)
       setText("board-title", "⚔️ Đua tỉnh · thắng đi trước");
       setHTML("board-list", s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join(""));
@@ -526,7 +526,7 @@ export class Hud {
         if (e.changed) {
           this.toast(`🔁 ${name} đổi vé → ${esc(e.province ?? "")}`);
         } else {
-          this.tickets.push({ name: e.name ?? "", province: e.province ?? "", seat: e.seat ?? null,
+          this.tickets.push({ name: `${e.badge ? `${e.badge} ` : ""}${e.name ?? ""}`, province: e.province ?? "", seat: e.seat ?? null,
             next: !!e.next, eta: e.eta_min, lane: e.lane ?? "", arrow: e.arrow ?? "",
             km: e.km ?? 0, departure: e.departure ?? "", bus: e.bus_no ?? 0,
             pickup: e.pickup, pickupIn: e.pickup_in, passed: e.passed, tripNo: e.trip_no,
@@ -642,7 +642,14 @@ export class Hud {
         this.toast(`👑 ${name} lên làm Chủ nhà xe`, `${e.xu ?? 0} xu trong buổi`, "gift");
         break;
       case "welcome":  // khách buổi trước quay lại (PLAN-134 D)
-        this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
+        this.toast(`🎉 ${name} quay lại`, [(e.streak ?? 0) >= 2 ? `🔥 ${e.streak} ngày liên tiếp` : "",
+          e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`].filter(Boolean).join(" · "));
+        break;
+      case "level_up":  // cấp khách (anh 04/11 «chơi quài không chán»)
+        this.toast(`${esc(e.badge ?? "")} ${name} lên cấp`, esc(e.title ?? ""), "gift", `level:${e.name}`);
+        break;
+      case "streak":  // mốc chuỗi ngày: thưởng lên đầu hàng
+        this.toast(`🔥 ${name} ghé ${e.n ?? 0} ngày liền`, "Thưởng lên đầu hàng chờ · gõ tên tỉnh", "gift", `streak:${e.name}`);
         break;
       case "via":  // xe chạy qua tỉnh không ai xuống: gọi bà con tỉnh đó (PLAN-134)
         this.toast(`🛣 Xe đang qua ${esc(e.province ?? "")}`, `Bà con ${esc(e.province ?? "")} thả tim chào xe ❤`);

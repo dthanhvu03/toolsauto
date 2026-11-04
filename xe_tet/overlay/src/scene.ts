@@ -518,7 +518,7 @@ export class World {
       b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
-      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}`
+      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : s.badge ? `${s.badge} ` : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}`
         + (s.full != null ? `<small class="${hungry(s) ? "full hungry" : "full"}">${hungry(s) ? "😋 sắp đói" : "🍚"} ${s.full}%</small>` : "") : `trống`;
     });
   }

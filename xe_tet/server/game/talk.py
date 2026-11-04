@@ -244,6 +244,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Hướng {lead} đang dẫn điểm hướng {rival} rồi, bà con {rival} đâu, thả tim kéo lên coi.",
             "{lead} vượt lên rồi bà con, {rival} mà không kéo là chờ chuyến sau đó.",
         ),
+        "level_up": (  # điểm hành trình qua mốc cấp (rank.py)
+            "Chúc mừng {name} lên cấp {title}, Anh Tư nhớ mặt rồi đó.",
+            "{name} giờ là {title} của nhà xe rồi, ghé bến hoài là vậy đó.",
+        ),
+        "level_near": (
+            "{name} còn đúng một chuyến hay một ngày ghé nữa là lên {title}, ráng lên.",
+            "Ê {name}, sắp lên {title} rồi, mai ghé bến tiếp là đủ.",
+        ),
+        "welcome_streak": (  # ghé live nhiều ngày liền
+            "{name} ghé bến {n} ngày liền rồi, chăm dữ vậy, Anh Tư thương.",
+            "Lại là {name}, ngày thứ {n} liên tiếp, giữ chuỗi nghen.",
+        ),
+        "streak_reward": (  # mốc chuỗi ngày: thưởng lên đầu hàng
+            "{name} ghé {n} ngày liền, Anh Tư thưởng suất lên đầu hàng, gõ tên tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name} nè, thưởng lên đầu hàng chờ, gõ tỉnh liền đi.",
+        ),
         "versus_win": (
             "Hướng {lead} thắng đối kháng, chuyến này Anh Tư chạy hướng {lead}, bà con {rival} ráng chuyến sau.",
             "{lead} thắng {rival} rồi, xe chạy hướng {lead} liền, bà con lên xe.",
@@ -607,6 +623,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Team {lead} đang dẫn team {rival}, team {rival} đâu rồi, thả tim gánh team đi ae.",
             "{lead} vượt lên rồi, {rival} không kéo là chờ chuyến sau đó ae.",
         ),
+        "level_up": (
+            "{name} lên cấp {title} rồi mọi người ơi, đỉnh nóc kịch trần.",
+            "Chúc mừng {name} up lên {title}, khách ruột uy tín.",
+        ),
+        "level_near": (
+            "{name} còn một chuyến nữa là lên {title}, gét gô.",
+            "{name} sắp up {title} rồi, mai ghé tiếp là xong.",
+        ),
+        "welcome_streak": (
+            "{name} giữ chuỗi {n} ngày liền, quá cháy.",
+            "Ngày thứ {n} liên tiếp của {name}, chuỗi đẹp đừng để đứt.",
+        ),
+        "streak_reward": (
+            "{name} chuỗi {n} ngày, thưởng lên đầu hàng luôn, gõ tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name} nè, quà là lên đầu hàng chờ, gét gô.",
+        ),
         "versus_win": (
             "Team {lead} win pê ka, chuyến này chạy hướng {lead}, team {rival} hẹn chuyến sau.",
             "{lead} thắng {rival} rồi ae, xe chạy hướng {lead} luôn.",
@@ -968,6 +1000,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "versus_lead": (
             "Hướng {lead} đang dẫn điểm hướng {rival}, mọi người {rival} cố lên.",
             "{lead} đang dẫn trước {rival}, còn kịp lật kèo.",
+        ),
+        "level_up": (
+            "Chúc mừng {name} lên cấp {title}, cảm ơn đã đồng hành cùng nhà xe.",
+            "{name} vừa lên {title}, chuẩn không cần chỉnh.",
+        ),
+        "level_near": (
+            "{name} chỉ còn một chuyến hoặc một ngày ghé nữa là lên {title}.",
+            "{name} sắp lên {title} rồi, hẹn gặp lại ở bến.",
+        ),
+        "welcome_streak": (
+            "{name} ghé bến {n} ngày liên tiếp, cảm ơn đã luôn có mặt.",
+            "Ngày thứ {n} liền của {name}, giữ chuỗi nhé.",
+        ),
+        "streak_reward": (
+            "{name} ghé {n} ngày liền, nhà xe tặng suất lên đầu hàng chờ, gõ tên tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name}, phần thưởng là lên đầu hàng chờ.",
         ),
         "versus_win": (
             "Hướng {lead} thắng đối kháng, chuyến này đi hướng {lead}, hướng {rival} đi chuyến sau.",

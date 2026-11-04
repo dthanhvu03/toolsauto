@@ -24,6 +24,7 @@ from .answers import faq, is_question
 from .network import PASS_SPAN_KM, TUNNEL_SPAN_KM, Network, Trip
 from .parser import FOOD_EMOJI, normalize, parse
 from .provinces import BY_KEY, specialty_of
+from . import rank
 from .talk import hours_phrase, line, spoken_list
 from .trivia import LETTERS, answer_of, fact, make_quiz
 
@@ -193,6 +194,7 @@ ASK_GAP = 12.0  # giây giữa hai câu lơ xe trả lời câu hỏi có sẵn 
 ASK_PER_VIEWER = 30.0  # mỗi người hỏi tối đa 30 giây một lần (hỏi dồn không chiếm hết lời lơ xe)
 QUESTIONS_KEEP = 10  # hàng câu hỏi chờ AI: giữ 10 câu mới nhất
 SAME_HOME_GAP = 30.0  # giây giữa hai lần lơ xe ghép đôi người cùng quê
+LEVEL_TALK_GAP = 20.0  # giây giữa hai câu lơ xe chúc lên cấp / nhắc sắp lên cấp (thả cả xe cùng lúc nhiều người lên cấp)
 WELCOME_GAP = 20.0  # giây giữa hai lần lơ xe chào khách quay lại (đầu buổi nhiều người cũ vào cùng lúc)
 INVITE_LIKES = 15  # tim trong chuyến của một người chưa có vé → lơ xe gọi tên mời lên xe (người xem lặng lẽ, chưa comment)
 INVITE_GAP = 45.0  # giây giữa hai lần mời; mỗi người được mời một lần mỗi buổi
@@ -396,6 +398,7 @@ class Viewer:
     first_day: str = ""
     last_day: str = ""
     days: int = 0
+    streak: int = 0  # số ngày ghé live liên tiếp (rank.py)
     returning: bool = False  # đã gặp ở buổi live trước → lơ xe chào lại (một lần mỗi buổi)
     gift_trip: int = 0  # xu cộng dồn trong chuyến này → tính bậc quà
     last_seen: float = 0.0  # lần cuối có bất kỳ tương tác nào (TikTok không báo ai rời phòng)
@@ -572,6 +575,7 @@ class Engine:
         self.recall: Callable[[str], dict | None] | None = None  # hồ sơ khách buổi trước (Hub gắn store.load)
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
+        self.last_level_talk = -1e9
         self.last_same_home = -1e9
         self.last_invite = -1e9
         self.fuel = 1.0  # bình xăng 0 → 1 (PLAN-137)
@@ -656,6 +660,7 @@ class Engine:
             if row:  # khách đã gặp ở buổi trước (PLAN-134 D)
                 v.home, v.trips, v.likes, v.gifts, v.comments = row["home"], row["trips"], row["likes"], row["gifts"], row["comments"]
                 v.first_day, v.last_day, v.days = row["first_day"], row["last_day"], row["days"]
+                v.streak = row.get("streak") or (1 if v.days else 0)
                 v.returning = v.last_day < self._today().isoformat()
         elif name:
             v.name = name
@@ -743,7 +748,8 @@ class Engine:
     def take_dirty(self) -> list[dict]:
         """Hồ sơ người xem đã đổi từ lần lấy trước (Hub ghi SQLite theo lô)."""
         rows = [{"uid": v.uid, "name": v.name, "home": v.home, "trips": v.trips, "likes": v.likes, "gifts": v.gifts,
-                 "comments": v.comments, "first_day": v.first_day, "last_day": v.last_day, "days": v.days}
+                 "comments": v.comments, "first_day": v.first_day, "last_day": v.last_day, "days": v.days,
+                 "streak": v.streak}
                 for uid in self.dirty if (v := self.viewers.get(uid))]
         self.dirty = set()
         return rows
@@ -751,20 +757,45 @@ class Engine:
     def _seen_today(self, v: Viewer, now: float) -> None:
         """Có tương tác thật (không tính vào phòng): ghi ngày ghé; khách buổi trước thì lơ xe chào lại (PLAN-134 D)."""
         today = self._today().isoformat()
-        if v.last_day != today:
+        new_day = v.last_day != today
+        if new_day:
+            before = rank.points(v.trips, v.days)
+            yesterday = (self._today() - timedelta(days=1)).isoformat()
+            v.streak = v.streak + 1 if v.last_day == yesterday else 1
             v.first_day = v.first_day or today
             v.last_day = today
             v.days += 1
+            self._level_check(v, before, now)
+            if v.streak in rank.STREAK_REWARD_DAYS:  # mốc chuỗi ngày: một suất lên đầu hàng chờ (như tặng quà lúc chưa có vé)
+                v.prio_credit = True
+                self.emit("streak", name=v.name, hue=v.hue, n=v.streak, reward=True)
+                self.talk("streak_reward", name=v.name, n=v.streak)
         self.dirty.add(v.uid)
         if v.returning and now - self.last_welcome >= WELCOME_GAP:
             v.returning = False
             self.last_welcome = now
             home = BY_KEY[v.home].name if v.home in BY_KEY else None
-            self.emit("welcome", name=v.name, hue=v.hue, trips=v.trips, home=home, days=v.days)
-            if v.trips and home:
+            self.emit("welcome", name=v.name, hue=v.hue, trips=v.trips, home=home, days=v.days, streak=v.streak)
+            if v.streak >= 2 and not (new_day and v.streak in rank.STREAK_REWARD_DAYS):
+                self.talk("welcome_streak", name=v.name, n=v.streak)
+            elif v.trips and home:
                 self.talk("welcome_trips", name=v.name, prov=home, n=v.trips)
             else:
                 self.talk("welcome_back", name=v.name)
+
+    def _level_check(self, v: Viewer, before: int, now: float) -> None:
+        """Điểm hành trình vừa tăng: qua mốc cấp → báo lên cấp; còn 1 điểm nữa → lơ xe nhắc (giãn LEVEL_TALK_GAP)."""
+        pts = rank.points(v.trips, v.days)
+        if rank.level(pts) > rank.level(before):
+            self.emit("level_up", name=v.name, hue=v.hue, title=rank.title(pts), badge=rank.badge(pts))
+            if now - self.last_level_talk >= LEVEL_TALK_GAP:
+                self.last_level_talk = now
+                self.talk("level_up", name=v.name, title=rank.LEVELS[rank.level(pts)][2])
+            return
+        nxt = rank.to_next(pts)
+        if nxt and nxt[1] == 1 and now - self.last_level_talk >= LEVEL_TALK_GAP:
+            self.last_level_talk = now
+            self.talk("level_near", name=v.name, title=nxt[0].split(" ", 1)[1])
 
     def _set_phase(self, phase: str, now: float, seconds: float) -> None:
         self.phase = phase
@@ -1364,10 +1395,12 @@ class Engine:
             v.home = province
             v.home_now = True
             v.province = None
+            before = rank.points(v.trips, v.days)
             v.trips += 1
+            self._level_check(v, before, self.last_now)
             self.dirty.add(uid)
             fireworks = fireworks or v.fireworks
-            people.append({"name": v.name, "hue": v.hue, "vip": v.vip, "wish": pick(WISHES, f"{uid}:{bus_no}"),
+            people.append({"name": v.name, "hue": v.hue, "vip": v.vip, "badge": rank.badge(rank.points(v.trips, v.days)), "wish": pick(WISHES, f"{uid}:{bus_no}"),
                            "parcels": v.parcels})
             v.fireworks = False
             v.vip = False
@@ -2523,7 +2556,7 @@ class Engine:
         lane = self.network.lane_by_key[self.bus.lane if seat is not None else self.network.lane_of(v.province)]
         km = self.network.km(v.province)
         info = {"name": v.name, "hue": v.hue, "province": BY_KEY[v.province].name, "seat": seat, "changed": changed,
-                "trip_no": v.trips + 1,
+                "trip_no": v.trips + 1, "badge": rank.badge(rank.points(v.trips, v.days)),
                 "lane": lane.label, "arrow": lane.arrow, "km": km, "departure": self.network.departure.short}
         if seat is not None:
             self.emit("ticket", **info, bus_no=self.bus.no, next=False, **extra)
@@ -3001,7 +3034,7 @@ class Engine:
         out = []
         for uid in uids:
             v = self.viewers.get(uid) if uid else None
-            out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "snack": SNACKS[v.snack][1] if v.snack else "",
+            out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "badge": rank.badge(rank.points(v.trips, v.days)), "snack": SNACKS[v.snack][1] if v.snack else "",
                         "full": math.floor(v.full),  # làm tròn xuống: 29,9% là «sắp đói» (dưới 30)
                         "avatar": v.avatar,
                         "province": BY_KEY[v.province].name if v.province else ""} if v else None)

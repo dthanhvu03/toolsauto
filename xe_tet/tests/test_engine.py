@@ -1408,6 +1408,39 @@ def test_returning_viewer_is_remembered_and_greeted(tmp_path):
     assert db.load("an")["likes"] == 9 and db.load("an")["days"] == 2
 
 
+def test_streak_days_reward_queue_priority_and_level_up(tmp_path):
+    """Anh 04/11 «chơi quài không chán»: ghé nhiều ngày liền → chuỗi ngày (mốc 3 ngày thưởng lên đầu hàng); điểm hành trình
+    (chuyến + ngày) qua mốc → báo lên cấp, huy hiệu cạnh tên. DB cũ chưa có cột streak vẫn mở được (chỉ thêm cột)."""
+    import sqlite3
+    from xe_tet.server.game import rank
+    from xe_tet.server.store import ViewerStore
+    old = sqlite3.connect(tmp_path / "x.db")
+    old.execute("CREATE TABLE viewers (uid TEXT PRIMARY KEY, name TEXT NOT NULL, home TEXT, trips INTEGER NOT NULL DEFAULT 0,"
+                " likes INTEGER NOT NULL DEFAULT 0, gifts INTEGER NOT NULL DEFAULT 0, comments INTEGER NOT NULL DEFAULT 0,"
+                " first_day TEXT NOT NULL, last_day TEXT NOT NULL, days INTEGER NOT NULL DEFAULT 1)")
+    old.execute("INSERT INTO viewers VALUES ('an', 'An', 'hanoi', 0, 0, 0, 0, '2026-12-19', '2026-12-19', 1)")
+    old.commit()
+    old.close()
+    db = ViewerStore(tmp_path / "x.db")
+    assert db.load("an")["streak"] == 1
+    for day, streak in ((20, 2), (21, 3)):
+        e = Engine(0.0, today=date(2026, 12, day))
+        e.recall = db.load
+        e.handle({"type": "like", "name": "An", "count": 1}, 1)
+        events = e.drain()
+        assert e.viewers["an"].streak == streak
+        reward = [ev for ev in events if ev["type"] == "streak"]
+        assert bool(reward) == (streak == 3) and e.viewers["an"].prio_credit == (streak == 3)
+        db.save_many(e.take_dirty())
+    assert [ev for ev in events if ev["type"] == "level_up"]  # 3 ngày ghé = 3 điểm → Khách quen
+    assert rank.badge(3) == "🎫" and rank.badge(0) == ""
+    e = Engine(0.0, today=date(2026, 12, 23))  # bỏ một ngày: chuỗi về 1
+    e.recall = db.load
+    e.handle({"type": "like", "name": "An", "count": 1}, 1)
+    assert e.viewers["an"].streak == 1
+    assert rank.to_next(9) == ("⭐ Hành khách vàng", 1) and rank.to_next(50) is None
+
+
 def test_same_hometown_riders_are_paired():
     e = Engine(0.0)
     comment(e, "An", "Nghệ An", 1)

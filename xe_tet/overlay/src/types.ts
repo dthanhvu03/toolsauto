@@ -56,6 +56,7 @@ export interface Seat {
   avatar?: string;  // ảnh đại diện TikTok
   full?: number;  // % no bụng (dưới 30: sắp đói)
   snack?: string;  // món mua của cô bán hàng (emoji) — hiện cạnh tên
+  badge?: string;  // biểu tượng cấp khách (🎫 ⭐ 🚌 👑), khách mới để trống
 }
 
 export interface Vendor {  // cô bán hàng lên xe (anh 03/11): góp quà → tấp vào lề cho cô lên → bán trong lúc xe chạy
@@ -153,6 +154,7 @@ interface Person {
   vip: boolean;
   wish: string;
   parcels?: number;  // thùng quà Tết ôm vào cổng (PLAN-134 C)
+  badge?: string;
 }
 
 export type WeatherKind = "clear" | "drizzle" | "rain" | "fog";
@@ -225,6 +227,10 @@ export interface GameEvent {
   top_liker?: string | null;
   delivered?: number;
   title?: string;
+  badge?: string;  // cấp khách (ticket / level_up)
+  streak?: number;  // số ngày ghé liên tiếp (welcome)
+  n?: number;  // mốc chuỗi ngày (streak)
+  reward?: boolean;
   seconds?: number;
   page_size?: number;
   page_seconds?: number;
