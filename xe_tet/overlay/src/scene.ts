@@ -13,7 +13,7 @@ import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
 import { avatarImg } from "./hud";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor, WeatherKind } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor, VersusSide, WeatherKind } from "./types";
 
 export const W = 1080;
 export const H = 1920;
@@ -43,6 +43,11 @@ const BOARD_H = 9.5;
 const RIDER_TAG_MAX = 8;  // anh 03/11 «che hết rồi»: 21 tên chiếm 5 dòng đè thân xe — tên đủ đã có trên cửa sổ / bảng phải
 const FOCUS_CAM = [2.2, 1.6, 8.5];  // máy quay đứng chéo trước cửa sổ khách đang focus (lệch về đầu xe, cao hơn chút)  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
+// đối kháng ở bến (PLAN-152): xe thứ hai đậu làn sau (phía bến, thấy nóc + thân trên, không che bảng / tên); lật kèo thì hai xe đổi làn, vượt nhau theo chiều dọc xe
+const BAY2 = new THREE.Vector3(Number(URL_PARAMS.get("bay2x") ?? 0), 0, Number(URL_PARAMS.get("bay2z") ?? -5.5));
+const ORIGIN = new THREE.Vector3();
+const SWAP_S = 1.8;  // giây đổi làn
+const SWAP_PASS = 7;  // hai xe tránh nhau: lệch theo chiều dọc xe giữa lúc đổi làn
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
 // ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
 // giờ xuất bến + giờ xe chạy — chuyến 26 tiếng thì trời qua một ngày một đêm), ở bến theo đồng hồ thật.
@@ -208,6 +213,10 @@ export class World {
   private petals = new Petals();
   private stars: THREE.Points;
   private bus = new Bus();
+  private rival = new Bus();  // đối kháng ở bến (PLAN-152): xe hướng đang thua đậu làn bên
+  private duelLead = "";
+  private duelSwap = 1;  // 0 → 1: hai xe đang đổi làn (lật kèo)
+  private duelTags = [label("", "lbl duel"), label("", "lbl duel")];  // biển phe trên nóc: [xe chính, xe làn bên]
   private road = new Roadway();
   private land = new Landscape();
   private tunnel = new Tunnel();
@@ -347,7 +356,13 @@ export class World {
       this.bus.group.add(tag);
       this.windowTags.push(tag);
     });
-    this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.fx.group,
+    this.rival.group.visible = false;
+    [this.bus, this.rival].forEach((b, i) => {
+      this.duelTags[i].position.set(2.5, 5.0, 0);
+      this.duelTags[i].visible = false;
+      b.group.add(this.duelTags[i]);
+    });
+    this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.rival.group, this.fx.group,
       this.dust.group, this.lixi.group, this.skyLanterns.group, this.blossoms.group);
 
     for (const stage of Object.values(this.stages)) this.scene.add(stage.group);
@@ -486,6 +501,26 @@ export class World {
     this.bus.setRoute(`${state.departure.short} → ${last && state.phase !== "BOARDING" ? last.label : state.bus.to}`);
     this.ben.setStation(state.departure.name);
     this.ben.setLanes(state.lanes);
+    // đối kháng ở bến: xe hướng đang thua đậu làn bên; xe chính luôn là hướng dẫn điểm → lật kèo thì hai xe đổi làn
+    const other = want === "ben" ? state.versus?.sides.find((x) => x.label !== state.bus.lane) : undefined;
+    this.rival.group.visible = !!other;
+    this.duelTags.forEach((t) => { t.visible = !!other; });
+    if (other) {
+      const mine = state.versus!.sides.find((x) => x !== other)!;
+      const done = !!state.versus!.done;
+      const tag = (x: VersusSide, win: boolean) => done
+        ? (win ? `🏁 ${x.arrow} ${escHtml(x.dest)} · XUẤT BẾN` : `⏳ ${x.arrow} ${escHtml(x.dest)} · CHUYẾN SAU`)
+        : `${x.lead && x.points ? "👑 " : ""}${x.arrow} ${escHtml(x.dest)} · <b>${x.points}</b>`;
+      this.duelTags[0].element.innerHTML = tag(mine, true);
+      this.duelTags[1].element.innerHTML = tag(other, false);
+      this.rival.setRoute(`${state.departure.short} → ${other.dest}`);
+      if (this.duelLead && this.duelLead !== state.bus.lane) this.duelSwap = 0;
+      this.duelLead = state.bus.lane;
+    } else if (this.duelLead) {
+      this.duelLead = "";
+      this.duelSwap = 1;
+      this.bus.group.position.set(0, 0, 0);
+    }
   }
 
   /** Bảng tên hành khách trên nóc xe (anh 03/11: «góc nhìn nào cũng phải có tên những người đang ở trong xe»): đi theo xe ở
@@ -1379,7 +1414,18 @@ export class World {
     }
     this.updateRoadShape(dt, moving);
     this.updateTunnel(dt, moving && !!s?.terrain?.tunnel);
-    this.bus.update(dt, this.speed, this.night || this.inTunnel);  // trong hầm bật đèn xe
+    let swapSpeed = 0;
+    if (this.rival.group.visible) {  // hai xe đổi làn: xe vừa dẫn điểm từ làn bên lên làn đầu, xe kia lùi về
+      const before = this.duelSwap;
+      this.duelSwap = Math.min(1, this.duelSwap + dt / SWAP_S);
+      const k = THREE.MathUtils.smoothstep(this.duelSwap, 0, 1);
+      const pass = Math.sin(Math.PI * k) * SWAP_PASS;
+      this.bus.group.position.lerpVectors(BAY2, ORIGIN, k).x += pass;
+      this.rival.group.position.lerpVectors(ORIGIN, BAY2, k).x -= pass;
+      swapSpeed = before < 1 ? SWAP_PASS * 2 : 0;
+      this.rival.update(dt, swapSpeed, this.night);
+    }
+    this.bus.update(dt, this.speed + swapSpeed, this.night || this.inTunnel);  // trong hầm bật đèn xe
     this.weather.update(dt, moving ? this.speed * 0.1 : 0);
     const fog = this.scene.fog as THREE.Fog;  // sương dày / tan dần, không bật tắt cái rụp
     const fogK = this.view === "inside" ? 1 : Math.min(1, dt * 0.6);

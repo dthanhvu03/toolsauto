@@ -281,4 +281,5 @@ export interface GameEvent {
 
 export interface VersusSide { lane: string; label: string; arrow: string; dest: string; points: number; waiting: number; lead: boolean;
   top?: string | null }  // người góp nhiều nhất bên này
-export interface Versus { sides: VersusSide[]; chosen: boolean; golden?: boolean; left?: number | null; xu?: number }  // giờ vàng (PLAN-151)
+export interface Versus { sides: VersusSide[]; chosen: boolean; golden?: boolean; left?: number | null; xu?: number;  // giờ vàng (PLAN-151)
+  done?: boolean }  // hết trận ở bến, xe thắng chưa xuất bến (PLAN-152): sides[0] là xe thắng

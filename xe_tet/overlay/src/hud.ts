@@ -352,7 +352,10 @@ export class Hud {
         "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»",
         "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng", "🎁 Tặng quà: từ 18 tuổi"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
-        tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
+        const vs = s.versus;  // đối kháng ở bến (PLAN-152): chưa biết xe nào chạy — nói hai xe đang đấu
+        tips.unshift(vs && !vs.done
+          ? `⚔️ Xe ${esc(vs.sides[0].dest)} đấu xe ${esc(vs.sides[1].dest)} · gõ tên tỉnh để vào phe`
+          : `🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
       }
       const c = s.control;
@@ -410,10 +413,12 @@ export class Hud {
     const side = (x: VersusSide) => `${x.lead && total ? "👑 " : ""}${x.arrow} ${esc(x.dest)} <b>${x.points}</b>`;
     // dòng dưới (PLAN-151): giờ vàng → đếm ngược; có người góp → tên người góp nhiều nhất mỗi bên; chưa ai → cách chơi
     const tops = vs.sides.map((x) => x.top ? `${x.arrow} ${esc(x.top)}` : "").filter(Boolean);
-    const foot = vs.golden
-      ? `⏱ GIỜ VÀNG ${clock(vs.left ?? 0)} · quà x2 điểm · 1 xu = ${(vs.xu ?? 20) * 2} điểm`
-      : tops.length ? `🔥 Góp nhiều nhất: ${tops.join(" · ")} · 1 xu = ${vs.xu ?? 20} điểm`
-        : `Quê bên nào thì góp cho bên đó · 1 xu = ${vs.xu ?? 20} điểm · bên nhiều điểm chạy trước`;
+    const foot = vs.done
+      ? `🏁 Xe ${esc(a.dest)} xuất bến trước · xe ${esc(b.dest)} giữ khách, chạy chuyến sau`
+      : vs.golden
+        ? `⏱ GIỜ VÀNG ${clock(vs.left ?? 0)} · quà x2 điểm · 1 xu = ${(vs.xu ?? 20) * 2} điểm`
+        : tops.length ? `🔥 Góp nhiều nhất: ${tops.join(" · ")} · 1 xu = ${vs.xu ?? 20} điểm`
+          : `Quê bên nào góp cho xe bên đó · 1 xu = ${vs.xu ?? 20} điểm · xe nhiều điểm xuất bến trước`;
     bar.classList.toggle("golden", !!vs.golden);
     setHTML("vs-bar", `<i style="width:${Math.min(92, Math.max(8, pct))}%"></i>`
       + `<span class="a">${side(a)}</span><em>⚔️</em><span class="b">${side(b)}</span><small>${foot}</small>`);
@@ -531,12 +536,12 @@ export class Hud {
         break;
       case "versus_start":  // đối kháng: vòng mới
         if (e.sides?.length === 2) this.note(`⚔️ Đối kháng: ${esc(e.sides[0])} đấu ${esc(e.sides[1])}`,
-          "Quê bên nào thì bình luận, thả tim, tặng quà cho bên đó · bên nhiều điểm chạy trước");
+          "Hai xe đậu sẵn · quê bên nào thì bình luận, thả tim, tặng quà cho xe bên đó · xe nhiều điểm xuất bến trước");
         break;
       case "versus_win":  // đối kháng: hướng thắng chạy chuyến này
         this.note(`⚔️ ${esc(e.dest ?? "")} thắng ${esc(e.rival ?? "")} · ${e.points} – ${e.rival_points ?? 0}`,
           e.mvp ? `👑 Góp nhiều nhất: ${esc(e.mvp)} ${e.mvp_points ?? 0} điểm · tên lên băng rôn xe`
-            : `Chuyến này chạy ${esc(e.lane ?? "")} · vòng đối kháng mới bắt đầu`);
+            : `Xe ${esc(e.dest ?? "")} xuất bến trước · xe ${esc(e.rival ?? "")} chạy chuyến sau`);
         break;
       case "versus_golden":  // PLAN-151: một phút cuối, quà x2 điểm
         this.flash("⏱ GIỜ VÀNG · QUÀ X2");

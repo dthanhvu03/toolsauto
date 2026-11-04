@@ -387,6 +387,10 @@ html, body {
   text-overflow: ellipsis;
 }
 .lbl.vip { background: linear-gradient(90deg, #b8860b, #f4c04e); color: #3a2118; }
+/* đối kháng ở bến (PLAN-152): biển phe trên nóc mỗi xe */
+.lbl.duel { font-size: 26px; font-weight: 800; background: var(--red); color: #fff; border: 2px solid var(--gold);
+  padding: 2px 12px; max-width: none; }
+.lbl.duel b { color: var(--gold-soft); }
 .lbl.sign.small { font-size: 24px !important; padding: 3px 10px !important; border-width: 2px !important; }
 .lbl.sign {
   font-size: 36px;

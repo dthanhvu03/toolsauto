@@ -2335,41 +2335,50 @@ def test_ads_setting_is_cleaned():
     assert [a["title"] for a in DEFAULTS["ads"]] == ["@zt_shopee_bot", "@aipass_shop_bot"]
 
 
-def test_versus_two_lanes_fight_for_next_trip(real_routes):
-    """Anh 03/11 «game đối kháng»: hai hướng đầu hàng chờ đấu điểm theo quê (bình luận / tim / quà như đua tỉnh); vào bến,
-    hướng nhiều điểm hơn chạy trước dù đặt vé sau; người quê hướng khác không cộng điểm; tắt thì về thứ tự đặt vé."""
+def test_versus_two_buses_at_station_winner_departs_loser_next(real_routes):
+    """PLAN-152 (anh 04/11 «2 xe khách chuẩn bị xuất bến, xe nào win thì xe đó chạy trước»): trận đấu ở bến lúc đón khách;
+    chưa ai lên giường tới hết trận; xe dẫn điểm đứng làn đầu; người quê hướng khác không cộng; hết giờ đón xe thắng nhận
+    khách + xuất bến, xe thua giữ khách chạy chuyến ngay sau (lượt đó không đấu)."""
     from xe_tet.server.game.network import Network
     e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
     e.versus_on = True
     for i in range(SEATS):
         comment(e, f"Bắc{i}", "Hà Nội", 1)
     t = run_until(e, "DRIVING", 2)
-    north = e.bus.lane
     comment(e, "Cà", "Cà Mau", t + 1)  # đặt trước
     comment(e, "Đà", "Đà Nẵng", t + 2)
     camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
-    assert {camau, danang}.isdisjoint({north}) and camau != danang
-    view = e.snapshot()["versus"]
-    assert [x["lane"] for x in view["sides"]] == [camau, danang]  # hai hướng đầu hàng, theo thứ tự đặt vé
-    # Cà đặt vé lúc chưa có đối thủ (không điểm); Đà gõ quê lúc đã có hai hướng: bình luận được 1 điểm như đua tỉnh
-    e.handle({"type": "like", "name": "Đà", "count": 200}, t + 3)
-    e.handle({"type": "like", "name": "Bắc0", "count": 400}, t + 3)  # quê hướng khác: không cộng
-    pts = {x["lane"]: x["points"] for x in e.snapshot()["versus"]["sides"]}
-    assert pts[danang] > 0 and pts[camau] == 0
-    assert e.upcoming()[0]["lane"] == danang  # bảng chuyến sau: hướng dẫn điểm chạy trước
-    assert any(x["type"] == "loxe" and "Đà Nẵng" in x["text"] for x in e.drain())
-    run_until(e, "BOARDING", t + 4)
+    assert camau != danang and e.snapshot()["versus"] is None  # xe đang chạy: không đấu
+    t = run_until(e, "BOARDING", t + 3)
     out = e.drain()
-    assert e.bus.lane == danang
-    win = next(x for x in out if x["type"] == "versus_win")
+    assert "versus_start" in types(out) and e.versus_lock == [camau, danang]
+    view = e.snapshot()["versus"]
+    assert [x["lane"] for x in view["sides"]] == [camau, danang] and not view["done"]
+    assert e.bus.lane == camau and e.bus.riders() == []  # hoà: xe đặt trước đứng đầu; chưa ai lên giường
+    e.handle({"type": "like", "name": "Đà", "count": 200}, t + 1)
+    e.handle({"type": "like", "name": "Bắc0", "count": 400}, t + 1)  # quê hướng khác: không cộng
+    assert e.versus[danang] > 0 and e.versus[camau] == 0
+    assert e.bus.lane == danang  # lật kèo: xe Đà Nẵng lên làn đầu
+    comment(e, "Huế", "Huế", t + 2)  # người mới gõ quê giữa trận: vào hàng chờ, chưa lên giường
+    assert e.bus.riders() == []
+    t = run_until(e, "DRIVING", t + 2)
+    win = next(x for x in e.drain() if x["type"] == "versus_win")
     assert win["dest"] == "Đà Nẵng" and win["rival"] == "Cà Mau" and win["points"] > win["rival_points"] == 0
-    assert all(p == 0 for p in e.versus.values())  # vòng mới
+    names = {e.viewers[u].name for u in e.bus.riders()}
+    assert "Đà" in names and "Cà" not in names and e.versus_next == camau
+    comment(e, "Kiên", "Kiên Giang", t + 1)  # hướng khác chờ: lượt sau vẫn là xe thua, không đấu
+    while e.phase != "BOARDING":  # Cà còn xem (thả tim) — im lặng cả chuyến thì bị điểm danh trước khi xếp giường
+        t += 0.5
+        e.tick(t)
+        e.handle({"type": "like", "name": "Cà", "count": 1}, t)
+    assert e.bus.lane == camau and "Cà" in {e.viewers[u].name for u in e.bus.riders()}
+    assert "versus_start" not in types(e.drain()) and e.snapshot()["versus"] is None and e.versus_next is None
 
 
-def test_versus_gifts_decide_golden_minute_mvp_and_locked_pair(real_routes):
-    """PLAN-151 (anh 04/11 «live mà không có tiền chán quá»): quà quyết trận (1 xu = 20 điểm, hơn 400 tim); cặp đấu chốt, hướng
-    thứ ba được quà lên đầu hàng cũng không chen vào; người không thuộc bên nào tặng → tiếp sức bên thua; một phút cuối quà x2,
-    lơ xe hô; người góp nhiều nhất bên thắng lên băng rôn."""
+def test_versus_gifts_decide_golden_minute_mvp_and_cancel(real_routes):
+    """PLAN-151 + 152: quà quyết trận (1 xu = 20 điểm, hơn 400 tim); hướng thứ ba được quà lên đầu hàng cũng không chen vào;
+    người không thuộc bên nào tặng → tiếp sức bên thua; giờ vàng = phút cuối giờ đón, quà x2, lơ xe hô; người góp nhiều
+    nhất bên thắng lên băng rôn. Tắt đối kháng giữa trận: huỷ, đón khách như thường."""
     from xe_tet.server.game.network import Network
     e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
     e.versus_on = True
@@ -2378,31 +2387,45 @@ def test_versus_gifts_decide_golden_minute_mvp_and_locked_pair(real_routes):
     t = run_until(e, "DRIVING", 2)
     comment(e, "Cà", "Cà Mau", t + 1)
     comment(e, "Đà", "Đà Nẵng", t + 2)
+    comment(e, "Kiên", "Kiên Giang", t + 2)
     camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
-    e.handle({"type": "like", "name": "Cà", "count": 2000}, t + 3)  # 100 điểm tim
-    e.handle({"type": "gift", "name": "Đà", "gift": "Kẹo", "diamonds": 10}, t + 3)  # 200 điểm quà
-    assert e.versus[danang] == 200 + 1 and e.versus_lock == [camau, danang]
-    comment(e, "Kiên", "Kiên Giang", t + 4)
+    t = run_until(e, "BOARDING", t + 3)
+    e.handle({"type": "like", "name": "Cà", "count": 2000}, t)  # 100 điểm tim
+    e.handle({"type": "gift", "name": "Đà", "gift": "Kẹo", "diamonds": 10}, t)  # 200 điểm quà
+    assert e.versus[danang] == 200 and e.versus_lock == [camau, danang]
     e.drain()
-    e.handle({"type": "gift", "name": "Kiên", "gift": "Hoa hồng", "diamonds": 1}, t + 5)  # hướng thứ ba: lên đầu hàng
-    e.handle({"type": "gift", "name": "Lạ", "gift": "Hoa hồng", "diamonds": 1}, t + 5)  # chưa có quê
+    e.handle({"type": "gift", "name": "Kiên", "gift": "Hoa hồng", "diamonds": 1}, t + 1)  # hướng thứ ba: lên đầu hàng
+    e.handle({"type": "gift", "name": "Lạ", "gift": "Hoa hồng", "diamonds": 1}, t + 1)  # chưa có quê
     assist = [x for x in e.drain() if x["type"] == "versus_assist"]
     assert [x["dest"] for x in assist] == ["Cà Mau", "Cà Mau"] and e.versus[camau] == 100 + 40
     assert [x["lane"] for x in e.snapshot()["versus"]["sides"]] == [camau, danang]  # cặp không đổi
     while not e._versus_golden():
         t += 0.5
         e.tick(t)
-        assert e.phase != "BOARDING"
+        assert e.phase == "BOARDING" and not e.bus.riders()
     t += 0.5
     e.tick(t)  # lơ xe hô ở nhịp kế tiếp
     out = e.drain()
     assert "versus_golden" in types(out) and e.snapshot()["versus"]["golden"]
     e.handle({"type": "gift", "name": "Cà", "gift": "Hoa hồng", "diamonds": 1}, t)
     assert e.versus[camau] == 140 + 40  # giờ vàng x2
-    run_until(e, "BOARDING", t)
+    t = run_until(e, "DRIVING", t)
     win = next(x for x in e.drain() if x["type"] == "versus_win")
-    assert e.bus.lane == danang and win["mvp"] == "Đà" and win["mvp_points"] == 201 and e.bus.banner == "Đà"
-    assert e.versus_lock == [] and not e.versus_by
+    assert e.bus.lane == danang and win["mvp"] == "Đà" and win["mvp_points"] == 200 and e.bus.banner == "Đà"
+    assert e.versus_lock == [] and e.snapshot()["versus"] is None
+    # tắt giữa trận
+    e2 = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e2.versus_on = True
+    for i in range(SEATS):
+        comment(e2, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e2, "DRIVING", 2)
+    comment(e2, "Cà", "Cà Mau", t + 1)
+    comment(e2, "Đà", "Đà Nẵng", t + 2)
+    t = run_until(e2, "BOARDING", t + 3)
+    assert e2.versus_lock and not e2.bus.riders()
+    e2.versus_on = False
+    e2.tick(t + 0.5)
+    assert "versus_cancel" in types(e2.drain()) and e2.versus_lock == [] and e2.bus.riders()
 
 
 def test_versus_off_or_single_lane_keeps_booking_order(real_routes):
