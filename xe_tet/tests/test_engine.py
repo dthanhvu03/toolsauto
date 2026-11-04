@@ -482,6 +482,21 @@ def test_big_gifts_do_not_queue_endless_specials():
     assert len(e.specials) <= SPECIALS_QUEUE_MAX
 
 
+
+def test_full_special_queue_still_wishes_every_1000_xu_giver():
+    """Anh 04/11 «tặng xong mà không được là mất uy tín»: hàng cảnh chúc Tết đầy (An tặng 3000 xu) thì Bình, Chi tặng 1000 xu
+    vẫn được ghép tên vào cảnh cuối; tặng thêm không ghép trùng; hàng vẫn tối đa SPECIALS_QUEUE_MAX cảnh."""
+    from xe_tet.server.game.engine import SPECIALS_QUEUE_MAX
+    e = Engine(0.0)
+    e.paused = True  # cảnh chưa chạy được: hàng đứng yên
+    e.handle({"type": "gift", "name": "An", "diamonds": 3000, "gift": "Vũ trụ"}, 2)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1000, "gift": "Sư tử"}, 3)
+    e.handle({"type": "gift", "name": "Chi", "diamonds": 1000, "gift": "Sư tử"}, 4)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1000, "gift": "Sư tử"}, 5)
+    assert len(e.specials) == SPECIALS_QUEUE_MAX
+    assert e.specials[-1] == "An & Bình & Chi"
+
+
 def test_next_lane_choice_dropped_when_its_queue_empties():
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)

@@ -865,8 +865,12 @@ class Engine:
             v.province = None
 
     def _queue_special(self, name: str) -> None:
+        """Cảnh «cả xe chúc Tết» chờ chiếu. Hàng đầy: người chưa có cảnh nào được ghép tên vào cảnh cuối — đã tặng 1000 xu thì
+        phải được chúc (anh 04/11 «tặng xong mà không được là mất uy tín»); người đã có cảnh thì thôi thêm lần nữa."""
         if len(self.specials) < SPECIALS_QUEUE_MAX:
             self.specials.append(name)
+        elif not any(name in entry.split(" & ") for entry in self.specials):
+            self.specials[-1] = f"{self.specials[-1]} & {name}"
 
     def _prune_queues(self) -> None:
         """Vé ma (người chờ đã rời phòng quá lâu) không được tính vào chọn làn / cao điểm / số chờ."""

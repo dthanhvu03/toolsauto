@@ -676,6 +676,9 @@ export class Hud {
           const perk = (e.perk ?? "").split(" · ").slice(0, 2).join(" · ");
           const hint = e.next_tier ? ` · 🎯 ${esc(e.next_tier)}` : "";
           this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(perk)}${hint}`, "gift", `gift:${e.name}`);
+        } else {
+          // 1000 xu: cảnh chúc Tết có thể phải chờ (đang chúc người khác / tạm dừng) — báo nhận quà ngay, không để im
+          this.toast(`🧧 ${name} · ${e.total ?? e.diamonds} xu`, "Cả xe sắp dừng lại chúc Tết bạn", "gift", `gift:${e.name}`);
         }
         break;
       case "follow":
@@ -890,7 +893,11 @@ export class Hud {
     el.className = `toast ${kind}`;
     el.innerHTML = html;
     list.prepend(el);
-    while (list.children.length > MAX_TOASTS) list.lastElementChild?.remove();
+    // quá số thẻ: bỏ thẻ cũ nhất KHÔNG phải quà trước — thẻ cảm ơn quà không bị theo dõi / chia sẻ đẩy mất (anh 04/11)
+    while (list.children.length > MAX_TOASTS) {
+      const cards = [...list.children].reverse();
+      (cards.find((c) => c !== el && !c.classList.contains("gift")) ?? cards[0]).remove();
+    }
     const timer = this.expire(el, key);
     if (key) this.keyed.set(key, { el, timer });
   }

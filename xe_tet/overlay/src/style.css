@@ -321,7 +321,7 @@ html, body {
   animation: heartfly 1.3s cubic-bezier(.3, .6, .4, 1) forwards;
 }
 
-#hud.inside #toasts, #hud.inside #board { display: none; }
+#hud.inside #board, #hud.inside #toasts .toast:not(.gift) { display: none; }  /* trong xe vẫn thấy thẻ cảm ơn quà */
 /* chữ lớn giữa màn đang hiện: lơ xe + thông báo lùi mờ, không chồng chữ (anh 04/11 «đỡ rối») */
 #loxe, #toasts { transition: opacity 0.25s ease; }
 #hud.flashing #loxe, #hud.flashing #toasts { opacity: 0.12; }
@@ -330,7 +330,8 @@ html, body {
 /* Admin tắt từng phần (bảng điều khiển → Màn hình) */
 #hud.hide-route #route, #hud.hide-route #cta, #hud.hide-loxe #loxe, #hud.hide-toasts #toasts,
 #hud.hide-board #board, #hud.hide-board #rest-card { display: none !important; }
-#hud.showing #cta, #hud.showing #loxe, #hud.showing #toasts, #hud.showing #callout { display: none !important; }
+#hud.showing #cta, #hud.showing #loxe, #hud.showing #toasts .toast:not(.gift), #hud.showing #callout { display: none !important; }
+/* xem video bảng quảng cáo: chỉ còn thẻ cảm ơn quà (anh 04/11 «tặng xong mà không được là mất uy tín») */
 
 /* ---- thẻ bên (góc phải, ngoài khung comment TikTok) ---- */
 .side { right: 20px; width: 340px; padding: 14px 18px; }
