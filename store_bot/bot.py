@@ -9,6 +9,7 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import re
 import secrets
 import threading
 import time
@@ -126,6 +127,7 @@ class StoreBot:
         sender = message.get("from") or {}
         if chat.get("type") != "private" or not sender.get("id"):
             return
+        is_new = self.repo.get_user(sender["id"]) is None
         user = self.repo.touch_user(sender["id"], sender.get("username"), sender.get("first_name"))
         chat_id = chat["id"]
         text = (message.get("text") or "").strip()
@@ -136,6 +138,9 @@ class StoreBot:
             if command in {"/start", "/menu"}:
                 self._clear_await(user.user_id)
                 payload = arg.strip()
+                source = "kenh" if payload.startswith("buy_") else payload.lower()
+                if is_new and re.fullmatch(r"[a-z0-9_]{1,32}", source):
+                    self.repo.record_source(user.user_id, source)
                 if payload.startswith("buy_") and payload[4:].isdigit():
                     # Bấm "Mua ngay" trên kênh: vào thẳng món đó. Khách mới thì gửi kèm bàn phím menu một lần.
                     if not self.repo.get_state(f"menu_sent:{user.user_id}"):
@@ -589,7 +594,7 @@ class StoreBot:
                 return f"Không đồng bộ được FatCat: {exc}"
             self._show(chat_id, message_id, msg.admin_sync_result(count, balance), keyboard([button("⬅️ Quay lại", "adm")]))
         elif data == "as":
-            self._show(chat_id, message_id, msg.admin_stats(self.repo.stats(), self._upstream_balance()),
+            self._show(chat_id, message_id, msg.admin_stats(self.repo.stats(), self._upstream_balance(), self.repo.source_counts()),
                        keyboard([button("💸 Giao dịch gần đây", "al")], [button("⬅️ Quay lại", "adm")]))
         elif data == "al":
             self._show(chat_id, message_id, msg.admin_ledger(self.repo.recent_ledger()),

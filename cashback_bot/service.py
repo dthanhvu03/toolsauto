@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -88,6 +89,16 @@ def _command_name(text: str) -> str | None:
     if not token.startswith("/"):
         return None
     return token.split("@", 1)[0].lower()
+
+
+def start_source(text: str) -> str | None:
+    """Mã nguồn trong link `t.me/<bot>?start=<mã>` (PLAN-153): live, video, bio… — chữ thường, số, gạch dưới."""
+    parts = (text or "").split()
+    if len(parts) != 2 or _command_name(parts[0]) != "/start":
+        return None
+    code = parts[1].lower()
+    return code if re.fullmatch(r"[a-z0-9_]{1,32}", code) else None
+
 
 _NOT_FOUND_CODES = {"not_found"}
 # Đơn cũ hơn mức này lần đầu bot thấy thì không báo "có đơn mới" (tránh nhắn dồn đơn cũ).
@@ -510,8 +521,12 @@ class CashbackService:
         message_id: int | None = None,
     ) -> BotReply:
         is_new = self.repo.upsert_user(telegram_user_id, username if isinstance(username, str) else None)
+        source = start_source(text) if is_new else None
+        if source:
+            self.repo.set_state(f"src:{telegram_user_id}", source)
         if is_new and self.admin_notifier:
-            self.admin_notifier.notify_new_user(telegram_user_id, username if isinstance(username, str) else None)
+            self.admin_notifier.notify_new_user(
+                telegram_user_id, username if isinstance(username, str) else None, source=source)
         if update_id is not None:
             previous = self.repo.get_by_update_id(update_id)
             if previous is not None:

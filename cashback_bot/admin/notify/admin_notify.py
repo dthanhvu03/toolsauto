@@ -279,14 +279,15 @@ class AdminNotifier:
     def _active(self) -> bool:
         return self.enabled and self.chat_id is not None
 
-    def notify_new_user(self, telegram_user_id: int, username: str | None) -> None:
+    def notify_new_user(self, telegram_user_id: int, username: str | None, source: str | None = None) -> None:
         if not self._active():
             return
         total = self.repo.count_users()
         body = (
             f"🆕 <b>Người dùng mới</b> · {_who(telegram_user_id, username)}\n\n"
             f"👥 Tổng: <b>{total}</b> người dùng\n"
-            f"🕓 {_vn_now_text()}\n"
+            + (f"📍 Nguồn: <b>{source}</b>\n" if source else "")
+            + f"🕓 {_vn_now_text()}\n"
             + _details(_user_line(telegram_user_id))
         )
         self.repo.enqueue_admin_event(

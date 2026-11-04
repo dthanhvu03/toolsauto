@@ -641,6 +641,9 @@ def _funnel_lines(stats) -> list[str]:
         ("Người dùng", stats.users_total, f"mới {stats.users_new} · gửi link {stats.users_active}"),
         ("Link", stats.links_created, f"gửi {stats.links_total} · lỗi {errors}"),
     ]
+    sources = getattr(stats, "sources", ())
+    if sources:
+        rows.insert(1, ("Nguồn", sum(n for _c, n in sources), " · ".join(f"{c} {n}" for c, n in sources)))
     shopee = stats.shopee
     if shopee is not None and (shopee.total_clicks or shopee.orders_total):
         cr = shopee.conversion_rate_percent
