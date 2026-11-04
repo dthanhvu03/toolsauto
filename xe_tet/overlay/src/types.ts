@@ -37,7 +37,7 @@ export interface Control {
   ads?: Ad[];
 }
 
-export interface Ad { title: string; desc: string; say?: string }
+export interface Ad { title: string; desc: string; say?: string; keys?: string }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
 

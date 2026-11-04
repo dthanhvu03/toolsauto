@@ -169,6 +169,7 @@ BOOST_HALF_LIFE = 6.0
 CHAT_COOLDOWN = 5.0
 VIA_TALK_GAP = 40.0  # giây: chuyến nén ~4 phút qua cả chục tỉnh — gọi tỉnh nào cũng gọi thì lơ xe nói liên tục
 WHERE_COOLDOWN = 15.0
+AD_ASK_GAP = 20.0  # khán giả hỏi «hoàn tiền», «chat gờ pê tê»…: lơ xe chỉ bot tối đa một lần mỗi 20 giây (PLAN-153)
 # Bắt xe dọc đường (PLAN-136): xe tuyến cố định đón khách ở điểm dừng đón trả dọc đường (Thông tư 36/2024), người đi hẹn
 # trước rồi ra điểm đón chờ. Chuyến chạy đường bị nén (nghìn km vài phút) nên điểm đón đặt theo GIÂY THẬT phía trước xe.
 PICKUP_LEAD = 20.0  # giây: điểm đón cách xe chừng này — người xem kịp thấy «ra điểm đón chờ» rồi thấy xe tới
@@ -502,6 +503,8 @@ class Engine:
         self.ad_gap = 8 * 60.0
         self.next_ad = now + 120.0  # mở game: đọc quảng cáo đầu tiên sau 2 phút
         self.ad_index = 0
+        self.ad_asked: set[tuple[str, int]] = set()  # (uid, bot) đã được lơ xe chỉ bot trong buổi — mỗi người một lần
+        self.last_ad_ask = -1e9
         self.chatter: list[dict] = []  # chuyện phiếm chờ AI đáp (khi bật AI)
         self.last_chatter = -1e9
         self.last_block_remind = -1e9
@@ -1998,11 +2001,32 @@ class Engine:
         """Đọc quảng cáo kế tiếp ngay (admin bấm trên /control)."""
         if not self.ads:
             raise Refused("Chưa có quảng cáo nào (hoặc đang tắt).")
-        ad = self.ads[self.ad_index % len(self.ads)]
+        k, n = self.ad_index, len(self.ads)
+        # bot đầu danh sách là bot chính (anh 04/11: ưu tiên hoàn tiền): cứ ba lần đọc thì hai lần bot chính
+        ad = self.ads[0 if n == 1 or k % 3 != 2 else 1 + (k // 3) % (n - 1)]
         self.ad_index += 1
         self.next_ad = self.last_now + self.ad_gap
         self.emit("ad", title=ad["title"], desc=ad.get("desc", ""))
         self.loxe(ad.get("say") or f"{ad['title']}, {ad.get('desc', '')}")
+
+    def _ad_ask(self, v: Viewer, text: str, now: float) -> bool:
+        """Bình luận có từ khoá của một bot (mục «keys» trong quảng cáo): lơ xe gọi tên người hỏi, chỉ bot đó.
+        Mỗi người một lần mỗi bot trong buổi, cả phòng AD_ASK_GAP giây một lần. True khi có từ khoá (kể cả hết lượt): câu đó
+        không chuyển cho AI — AI không biết bot của anh, từng đáp sai «không hoàn tiền đâu» (8811, 04/11)."""
+        said = f" {normalize(text)} "
+        for i, ad in enumerate(self.ads):
+            keys = (normalize(k) for k in str(ad.get("keys") or "").split(","))
+            if any(k and f" {k} " in said for k in keys):
+                break
+        else:
+            return False
+        if (v.uid, i) in self.ad_asked or now - self.last_ad_ask < AD_ASK_GAP:
+            return True
+        self.ad_asked.add((v.uid, i))
+        self.last_ad_ask = now
+        self.emit("ad", title=ad["title"], desc=ad.get("desc", ""), name=v.name)
+        self.loxe(f"{v.name} ơi, {ad.get('say') or ad.get('desc') or ad['title']}")
+        return True
 
     def set_weather(self, kind: str) -> None:
         """Admin đổi thời tiết tay trên /control (giữ tới khi xe sang vùng mới)."""
@@ -2307,7 +2331,9 @@ class Engine:
             else:
                 self.emit("rest_action", name=v.name, hue=v.hue, action="shop")
         else:
-            if faq(text) or is_question(text):
+            if self._ad_ask(v, text, now):
+                pass
+            elif faq(text) or is_question(text):
                 self._question(v, text, now)
             elif self.ai_reply:
                 self._chatter(v, text, now)

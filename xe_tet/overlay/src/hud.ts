@@ -201,6 +201,13 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
+    const mainAd = c?.ads_on ? c.ads?.[0] : undefined;  // bot chính thường trực cạnh đếm ngày (PLAN-153)
+    const titleAd = $("title-ad");
+    titleAd.classList.toggle("hidden", !mainAd);
+    if (mainAd) {
+      const html = `💸 Tele <b>${esc(mainAd.title.replace(/^tele(gram)?\s*:\s*/i, ""))}</b>`;
+      if (titleAd.dataset.html !== html) titleAd.innerHTML = titleAd.dataset.html = html;
+    }
     setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (BLOCK_PILL[s.block.kind] ?? "Dừng xe")
       : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
@@ -560,7 +567,7 @@ export class Hud {
         $("cta-block").classList.add("alarm");
         break;
       case "ad":  // lơ xe vừa đọc quảng cáo bot
-        this.toast(`📣 ${esc(e.title ?? "")}`, esc(e.desc ?? ""));
+        this.toast(`📣 ${e.name ? `${esc(e.name)} · ` : ""}${esc(e.title ?? "")}`, esc(e.desc ?? ""));  // có name: khán giả hỏi
         break;
       case "quiz":  // đố vui
         this.flash("🧠 ĐỐ VUI!");

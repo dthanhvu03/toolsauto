@@ -84,6 +84,10 @@ html, body {
 }
 #title .brand { font-family: var(--display); font-size: 60px; white-space: nowrap; font-weight: 800; letter-spacing: 2px; line-height: 1; padding-top: 6px; }
 #title .sub { margin-top: 2px; font-size: 32px; font-weight: 600; color: #fff; white-space: nowrap; }
+/* bot chính thường trực dưới tên game (PLAN-153): chip kính tối nhỏ, tên bot vàng */
+#title-ad { display: inline-block; vertical-align: 3px; margin-left: 14px; padding: 2px 12px; border-radius: 999px; background: var(--n-bg);
+  border: 1px solid var(--n-line); font-size: 22px; font-weight: 600; color: var(--n-sub); white-space: nowrap; }
+#title-ad b { color: var(--n-hi); }
 
 /* ---- thẻ chung ---- */
 .card {

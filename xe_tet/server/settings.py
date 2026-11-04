@@ -82,13 +82,15 @@ DEFAULTS: dict = {
     "ads_talk_min": 8,
     "ads": [
         {"title": "@zt_shopee_bot", "desc": "Dán link Shopee · bot gửi link mua + tiền hoàn",
-         "say": "Bà con mua Shopee thì dán link vô bot hoàn tiền dét tê sốp pi trên Telegram, bot gửi lại link mua với số tiền được hoàn."},
+         "say": "Bà con mua Shopee thì dán link vô bot hoàn tiền dét tê sốp pi trên Telegram, bot gửi lại link mua với số tiền được hoàn.",
+         "keys": "hoàn tiền, shopee, sốp pi, săn sale, mã giảm, cashback"},
         {"title": "@aipass_shop_bot", "desc": "Shop trên Telegram · thanh toán xong giao ngay",
-         "say": "Ghé shop ây ai pát trên Telegram, chọn món, thanh toán xong là giao hàng liền."},
+         "say": "Ghé shop ây ai pát trên Telegram, chọn món, thanh toán xong là giao hàng liền.",
+         "keys": "chatgpt, chat gpt, gpt, gemini, tài khoản ai, acc ai, aipass"},
     ],
 }
 ADS_MAX = 3
-AD_LIMITS = {"title": 32, "desc": 70, "say": 200}
+AD_LIMITS = {"title": 32, "desc": 70, "say": 200, "keys": 120}  # keys: từ khoá bình luận, cách nhau dấu phẩy
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
@@ -103,12 +105,14 @@ log = logging.getLogger("xe_tet")
 
 
 def clean_ads(value) -> list[dict]:
-    """Tối đa ADS_MAX mục {title, desc, say}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ."""
+    """Tối đa ADS_MAX mục {title, desc, say, keys}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ."""
     ads = []
     for item in value if isinstance(value, list) else []:
         if not isinstance(item, dict):
             continue
         ad = {k: " ".join(str(item.get(k) or "").split())[:n] for k, n in AD_LIMITS.items()}
+        if "keys" not in item:  # quảng cáo lưu trước PLAN-153: lấy từ khoá mặc định của đúng bot đó (theo @tên)
+            ad["keys"] = next((d["keys"] for d in DEFAULTS["ads"] if d["title"].lower() in ad["title"].lower()), "")
         if ad["title"]:
             ads.append(ad)
     return ads[:ADS_MAX]

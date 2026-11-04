@@ -189,7 +189,9 @@
     <div id="ads-rows"></div>
     <div class="row"><button id="save-ads" class="primary">Lưu quảng cáo</button></div>
     <p class="hint">Mỗi bot: <b>tên</b> + <b>câu ngắn</b> hiện trên biển ven đường và dòng gợi ý; <b>câu đọc</b> là lơ xe nói
-      (viết theo cách đọc, ví dụ «dét tê sốp pi» thay cho zt_shopee — máy đọc tiếng Việt đọc sai chữ Anh). Để trống tên là bỏ mục đó.</p>
+      (viết theo cách đọc, ví dụ «dét tê sốp pi» thay cho zt_shopee — máy đọc tiếng Việt đọc sai chữ Anh). Để trống tên là bỏ mục đó.
+      <b>Bot 1 là bot chính</b>: cứ ba lần đọc thì hai lần bot 1. <b>Từ khoá</b>: khán giả bình luận có từ đó (ví dụ «hoàn tiền»)
+      thì lơ xe gọi tên người đó chỉ bot, mỗi người một lần mỗi buổi. Bot 1 cũng hiện thường trực dưới tên game.</p>
     <h3>📺 Bảng quảng cáo</h3>
     <p class="hint live-line" id="show-now">Đang không chiếu.</p>
     <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
@@ -908,9 +910,11 @@ $("ads-rows").innerHTML = [0, 1, 2].map((i) => `<div class="row">
   <input type="text" id="ad-title-${i}" maxlength="32" placeholder="Tên bot ${i + 1}, ví dụ @ten_bot" aria-label="Tên bot ${i + 1}">
   <input type="text" id="ad-desc-${i}" maxlength="70" placeholder="Câu ngắn trên biển" aria-label="Câu ngắn bot ${i + 1}">
   <input type="text" id="ad-say-${i}" maxlength="200" placeholder="Câu lơ xe đọc" aria-label="Câu lơ xe đọc bot ${i + 1}">
+  <input type="text" id="ad-keys-${i}" maxlength="120" placeholder="Từ khoá khán giả gõ, cách nhau dấu phẩy" aria-label="Từ khoá bot ${i + 1}">
 </div>`).join("");
 $("save-ads").onclick = () => {
-  const ads = [0, 1, 2].map((i) => ({ title: $(`ad-title-${i}`).value, desc: $(`ad-desc-${i}`).value, say: $(`ad-say-${i}`).value }));
+  const ads = [0, 1, 2].map((i) => ({ title: $(`ad-title-${i}`).value, desc: $(`ad-desc-${i}`).value, say: $(`ad-say-${i}`).value,
+    keys: $(`ad-keys-${i}`).value }));
   setControl({ ads, ads_talk_min: +$("ads-min").value });
   log("Đã lưu quảng cáo bot");
 };
@@ -1085,6 +1089,7 @@ async function refresh() {
         $(`ad-title-${i}`).value = ad.title || "";
         $(`ad-desc-${i}`).value = ad.desc || "";
         $(`ad-say-${i}`).value = ad.say || "";
+        $(`ad-keys-${i}`).value = ad.keys || "";
       });
       $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
