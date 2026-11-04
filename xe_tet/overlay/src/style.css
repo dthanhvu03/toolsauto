@@ -155,19 +155,9 @@ html, body {
 .cta-main { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
 .cta-main b { color: #fff; background: var(--red); padding: 0 14px; border-radius: 12px; }
 .cta-sub { font-size: 34px; font-weight: 600; color: var(--ink); margin-top: 4px; white-space: nowrap; animation: fadein 0.5s ease; }
-/* bảng quà (PLAN-144) — anh 04/11 «bảng vàng to quá»: 6 mục một dòng, 3 cột × 2 hàng, cao chừng nửa bảng ô cũ */
-.gift-head { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 24px; font-weight: 800;
-  color: var(--red-deep); white-space: nowrap; }
+/* dòng quà một dòng trong khung kêu gọi; danh sách đầy đủ ở bảng góc phải (#board.gifts) */
 .gift-line { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 25px; font-weight: 800;
   color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#cta:not(.gifts-open) .gift-head, #cta:not(.gifts-open) .gift-grid { display: none; }
-#cta.gifts-open .gift-line { display: none; }
-.gift-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
-.gift-grid div { background: #fff; border: 1px solid #f1c56b; border-radius: 10px; padding: 3px 10px; display: flex;
-  align-items: center; gap: 6px; min-width: 0; text-align: left; white-space: nowrap; }
-.gift-grid i { font-style: normal; font-size: 24px; line-height: 1; }
-.gift-grid b { font-size: 21px; color: var(--red); line-height: 1.2; }
-.gift-grid span { font-size: 19px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* xe bị chặn: thanh góp quà (PLAN-148) */
 .cta-block .blk-title { font-family: var(--display); font-size: 46px; font-weight: 800; color: var(--red-deep); line-height: 1.15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -349,7 +339,10 @@ html, body {
 #board li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
 #board li span { float: right; color: var(--red); margin-left: 8px; }
 #board li small { color: #6b4a33; font-weight: 500; }
-#board.gifts ol { font-size: 26px; }  /* bảng quà: tên quà + hiệu ứng trọn một dòng */
+#board.gifts ol { font-size: 25px; }  /* danh sách quà: quà làm gì + giá trọn một dòng */
+#board.gifts { width: 430px; }  /* rộng hơn bảng thường: đủ chữ, không cắt «…» */
+#board.gifts li { line-height: 1.45; }
+#board.gifts li span { font-weight: 800; }
 #stay { margin-top: 8px; font-size: 26px; color: #4c6a8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #rest-card { top: 1290px; }
 #rest-orders div { font-size: 32px; font-weight: 700; }

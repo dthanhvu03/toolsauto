@@ -33,9 +33,16 @@ const PILL: Record<State["phase"], string> = {
   FINISH: "Về bến", SPECIAL: "Chúc Tết",
 };
 const MAX_TOASTS = 2;  // anh 03/11 «che hết rồi»: tối đa 2 thẻ, không phủ xuống nóc xe
-const GIFTS_OPEN_MS = 10_000;
-const GIFTS_EVERY_MS = 45_000;
-const GIFTS_REOPEN_MS = 60_000;  // phòng đông quà tới liên tục: bảng quà lớn mở lại tối đa mỗi phút một lần
+const GIFT_BOARD_MS = 12_000;  // vừa có quà: bảng góc phải giữ danh sách quà chừng này
+// danh sách quà dọc ở bảng góc phải (anh 04/11 «phải show dạng list thì user mới thấy») — trái: quà làm gì, phải: giá
+const GIFT_ROWS: [string, string][] = [
+  ["⚡ Lên đầu hàng", "1 xu"],
+  ["🚀 Xe x2 · 3 giây", "mỗi xu"],
+  ["🎆 Pháo hoa về quê", "10 xu"],
+  ["🏮 Băng rôn tên bạn", "100 xu"],
+  ["🧧 Cả xe chúc Tết", "1000 xu"],
+  ["👑 Chủ nhà xe", "top quà"],
+];
 const FLASH_MS = 2600;
 const FLASH_MINOR_GAP_MS = 8000;  // chữ lớn phụ (bóp còi, trà đá, mốc tim) cách nhau ít nhất 8 giây
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
@@ -129,27 +136,12 @@ export class Hud {
   constructor() {
     window.setInterval(() => { this.ctaTick++; this.renderCta(); }, CTA_ROTATE_MS);
     window.setInterval(() => { this.boardTick++; this.renderBoard(); }, BOARD_ROTATE_MS);
-    // bảng quà đầy đủ chỉ mở lúc cần (anh 03/11 «che hết rồi»): mỗi GIFTS_EVERY_MS mở GIFTS_OPEN_MS cho người mới thấy
-    window.setInterval(() => this.openGifts(GIFTS_OPEN_MS), GIFTS_EVERY_MS);
     // lơ xe + thông báo bám ngay dưới khung kêu gọi: khung gọn lại thì nhích lên, chừa cảnh xe
     new ResizeObserver(() => this.placeUnderCta()).observe($("cta"));
   }
 
-  private giftsTimer = 0;
+  private giftBoardUntil = 0;
   private focusName = "";
-
-  private giftsOpenedAt = -Infinity;
-
-  /** Bảng quà lớn: không mở khi khung đang là câu đố / trạm / cô bán hàng (anh 04/11 «đỡ rối»), quà tới dồn thì mỗi phút một lần. */
-  private openGifts(ms: number, fromGift = false): void {
-    const now = performance.now();
-    if (!$("cta-block").classList.contains("hidden")) return;
-    if (fromGift && now - this.giftsOpenedAt < GIFTS_REOPEN_MS) return;
-    this.giftsOpenedAt = now;
-    $("cta").classList.add("gifts-open");
-    window.clearTimeout(this.giftsTimer);
-    this.giftsTimer = window.setTimeout(() => $("cta").classList.remove("gifts-open"), ms);
-  }
 
   /** Đặt lơ xe / cột thông báo ngay dưới đáy khung kêu gọi (đơn vị thiết kế 1080×1920, chia cho cỡ chữ --z). */
   private placeUnderCta(): void {
@@ -458,7 +450,6 @@ export class Hud {
     const selling = !b && !quiz && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
     const card = !!b || quiz || selling;
     $("cta-block").classList.toggle("hidden", !card);
-    if (card) $("cta").classList.remove("gifts-open");  // câu đố / trạm hiện ra: thu bảng quà lại, khung không cao vống
     $("cta-block").classList.toggle("quiz", quiz);
     $("cta-main").classList.toggle("hidden", card);
     $("cta-sub").classList.toggle("hidden", card);
@@ -501,14 +492,18 @@ export class Hud {
   private renderBoard(): void {
     const s = this.state;
     if (!s) return;
-    // bảng góc phải luân phiên: người chờ (có tên + thứ tự) và tỉnh đông nhất; khách trên xe đã có ở dải tên dưới thân xe
+    // bảng góc phải luân phiên: người chờ (có tên + thứ tự), quà, tỉnh đông nhất; khách trên xe đã có ở dải tên dưới thân xe
     const modes = [
       ...(s.queue?.length ? ["queue", "queue"] : []),
+      "gifts",
       "top",
     ];
-    const mode = modes[this.boardTick % modes.length];
-    $("board").classList.remove("gifts");
-    if (mode === "queue") {
+    const mode = Date.now() < this.giftBoardUntil ? "gifts" : modes[this.boardTick % modes.length];
+    $("board").classList.toggle("gifts", mode === "gifts");
+    if (mode === "gifts") {
+      setText("board-title", "🎁 Tặng quà");
+      setHTML("board-list", GIFT_ROWS.map(([what, price]) => `<li><span>${price}</span>${what}</li>`).join(""));
+    } else if (mode === "queue") {
       setText("board-title", "⏳ Chờ chuyến sau");
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
@@ -671,7 +666,8 @@ export class Hud {
         this.toast(`🏠 ${name} ở ngay ${esc(e.province ?? "")}`, "Đi bộ về nhà nha!", "stay");
         break;
       case "gift":
-        this.openGifts(GIFTS_OPEN_MS, true);  // vừa có quà: mở bảng quà cho người khác thấy quà làm được gì
+        this.giftBoardUntil = Date.now() + GIFT_BOARD_MS;  // vừa có quà: bảng góc phải hiện danh sách quà cho người khác thấy
+        this.renderBoard();
         if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
         if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`, true);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
