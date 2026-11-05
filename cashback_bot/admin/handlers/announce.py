@@ -18,6 +18,8 @@ from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import (
     DEALS_ANNOUNCE,
     DEALS_ANNOUNCE_KEYBOARD,
+    MEMBER_ANNOUNCE,
+    MEMBER_ANNOUNCE_KEYBOARD,
     WALLET_ANNOUNCE,
     WALLET_ANNOUNCE_KEYBOARD,
     WATCH_ANNOUNCE,
@@ -36,6 +38,13 @@ ANNOUNCEMENTS: dict[str, tuple[str, str, Keyboard]] = {
     "deals-v1": ("Deal hời 20:08 · báo giảm giá · TikTok Shop", DEALS_ANNOUNCE, DEALS_ANNOUNCE_KEYBOARD),
     "wallet-v1": ("Ví hoàn tiền xem trước · điều khoản V3", WALLET_ANNOUNCE, WALLET_ANNOUNCE_KEYBOARD),
     "watch-v1": ("Theo dõi giá · deal gửi liền · ShopeeFood sắp có", WATCH_ANNOUNCE, WATCH_ANNOUNCE_KEYBOARD),
+    "member-v1": ("Hạng Vàng tới 31/12 · mời bạn · rút tiền đã mở", MEMBER_ANNOUNCE, MEMBER_ANNOUNCE_KEYBOARD),
+}
+
+# Tin chỉ đúng với một nhóm khách: mã → điều kiện SQL thêm trên telegram_user_id. «member-v1» nói «bạn đang ở hạng
+# Vàng» nên chỉ gửi khách cũ được xếp Vàng lúc bật hạng (khách mới sau đó là Đồng).
+AUDIENCE_SQL: dict[str, str] = {
+    "member-v1": "telegram_user_id IN (SELECT user_id FROM member_ranks WHERE rank_code = 'GOLD' AND reason = 'khach_cu')",
 }
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
@@ -46,9 +55,13 @@ def history_line(before: dict, after: dict) -> str:
     return f"Tin giới thiệu «{title}»: gửi {after.get('queued', 0)} khách mới (tổng {after.get('total', 0)})"
 
 
-def recipients(conn: sqlite3.Connection, now: datetime) -> list[int]:
+def recipients(conn: sqlite3.Connection, now: datetime, key: str | None = None) -> list[int]:
+    extra = AUDIENCE_SQL.get(key or "")
+    if extra and not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'member_ranks'").fetchone():
+        return []
     users = [int(r[0]) for r in conn.execute(
-        "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created' ORDER BY telegram_user_id")]
+        "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created'"
+        + (f" AND {extra}" if extra else "") + " ORDER BY telegram_user_id")]
     cfg = NotifyConfig(True)
     return [u for u in users if customer_block_reason(conn, {"category": CATEGORY, "chat_id": u}, cfg, now) is None]
 
@@ -86,7 +99,7 @@ class AnnounceAdmin:
         stamp = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         queued = 0
         with self.repo.connect() as conn:
-            for user in recipients(conn, now):
+            for user in recipients(conn, now, key):
                 queued += enqueue_event(
                     conn, event_key=f"announce:{key}:{user}", event_type="ANNOUNCE", chat_id=user, message_html=text,
                     audience="customer", category=CATEGORY, reply_markup_json=markup, source_ref=f"announce:{key}",
@@ -100,8 +113,8 @@ class AnnounceAdmin:
                  "Gửi một lần cho khách đã từng tạo link. Bấm để xem trước rồi mới gửi.", ""]
         rows = []
         with self.repo.connect() as conn:
-            people = len(recipients(conn, now))
             for key, (title, _text, _kb) in ANNOUNCEMENTS.items():
+                people = len(recipients(conn, now, key))
                 done = sent_count(conn, key)
                 lines.append(f"• {title}: đã gửi {done} · còn {max(people - done, 0)} khách chưa nhận")
                 rows.append(((f"👁 {title}", f"c:an:v:{key}"),))
@@ -110,7 +123,7 @@ class AnnounceAdmin:
     def _preview(self, key: str, now: datetime, notice: str = "") -> BotReply:
         title, text, _keyboard = ANNOUNCEMENTS[key]
         with self.repo.connect() as conn:
-            people = recipients(conn, now)
+            people = recipients(conn, now, key)
             done = {int(r[0]) for r in conn.execute(
                 "SELECT chat_id FROM admin_notifications WHERE event_key LIKE ?", (f"announce:{key}:%",))}
         waiting = [u for u in people if u not in done]

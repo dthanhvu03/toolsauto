@@ -1393,6 +1393,23 @@ WATCH_ANNOUNCE = (
     "Phiền thì gõ /thongbao tắt nha 🫶"
 )
 WATCH_ANNOUNCE_KEYBOARD: Keyboard = ((("🔥 Deal hôm nay", "u:dh"),), (("📋 Món đang theo dõi", "u:pw:l"),))
+# Tin giới thiệu hạng + mời bạn + rút tiền (PLAN-154/155, 2026-11-05). Gửi khách đã từng tạo link: đều là khách cũ,
+# đang ở Vàng tới hết 31/12/2026. Không đưa tỷ lệ chia của khách; thưởng mời bạn ghi đúng như điều khoản V5.
+MEMBER_ANNOUNCE = (
+    "🎉 <b>Cảm ơn bạn đã đồng hành cùng bot!</b>\n\n"
+    "🥇 <b>Bạn đang ở hạng Vàng</b>: hạng cao nhất, mỗi đơn hoàn nhiều nhất. Là khách quen nên bạn được giữ Vàng "
+    "tới hết <b>31/12/2026</b>. Từ tháng 1, hạng xét theo đơn của 2 tháng gần nhất; cứ mua qua bot đều là giữ "
+    "được nha. Xem ở /hang.\n\n"
+    "🤝 <b>Mời bạn nhận thưởng</b>: bạn bè vào bot bằng link mời của bạn, mỗi đơn họ mua trong 6 tháng bạn được "
+    "thưởng thêm <b>10% hoa hồng</b> của đơn đó. Bạn bè vẫn nhận đủ tiền hoàn, không bị trừ gì. Lấy link ở /moiban.\n\n"
+    "👛 <b>Rút tiền đã mở</b>: tiền hoàn đã vào ví là rút được về ngân hàng. Mở /dieukien bấm đồng ý điều khoản "
+    "mới trước khi rút nha.\n\n"
+    "Phiền thì gõ /thongbao tắt nha 🫶"
+)
+MEMBER_ANNOUNCE_KEYBOARD: Keyboard = (
+    (("🏅 Hạng của tôi", "u:p:rank"), ("🤝 Mời bạn", "u:p:invite")),
+    (("👛 Ví của tôi", "u:p:wallet"), ("📋 Điều khoản", "u:p:rules")),
+)
 DEALS_PICK_HINT = "👉 Bấm link hoặc nút bên dưới để mở Shopee mua ngay:"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"
