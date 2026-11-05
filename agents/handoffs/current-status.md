@@ -1,3 +1,9 @@
+## Phiên 2026-11-05 (cb-speed) — Rà soát timeout / trùng / tốc độ gửi tin, vá 2 chỗ chậm
+
+- **Số đo (từ 29/10):** thẻ link Telegram ~1s sau khi tạo; AddLiveTag 0 timeout / 94 link; 0 tin trùng (60 phút), 0 tin cách ly, 0 gửi hỏng / 1.223 tin hàng đợi; hàng đợi TB ~46s, deal TB ~4 phút (loạt tin). Zalo inbox ghi received_at = replied_at nên chưa đo được tốc độ trả lời Zalo.
+- **Done:** (1) «🔥 Deal hôm nay» không rút gọn link trong lúc khách chờ (trước tới 8 × 2,2s, chặn cả vòng): `deals.merge` giữ `url`, `prefill_links` rút gọn sẵn ở luồng quét (tối đa 40), feed dùng `deal_link(shorten=False)`. (2) Còn tin hàng đợi thì getUpdates chờ 1s (Telegram) / 2s (Zalo) thay vì 30s: `Dispatcher.has_due`, `AdminNotifier.has_pending`. Test 1206 qua (`b9` sẵn).
+- **Next Action (chủ bot):** `systemctl restart cashback-bot cashback-zalo`.
+
 ## Phiên 2026-11-05 (cb-payout-k2-fix) — Kỳ Shopee #2 MATCHED + sửa nút «Đã nhận đúng»
 
 - **System State:** kỳ #2 (2026-11, `…261102`) **MATCHED**, NH nhận 16.392đ (chủ bot xác nhận 05/11). 2 đơn kỳ #2 SETTLED → vào ví ở lượt đồng bộ kế. Chủ bot đã công bố V5 (04:08Z).

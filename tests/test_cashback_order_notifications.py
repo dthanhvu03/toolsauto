@@ -588,3 +588,25 @@ def test_tin_admin_ghi_ro_khi_khong_co_tin_cho_khach(tmp_path):
     _order(bot, _link(bot), status="PAID")  # mua trước mốc kích hoạt: tin khách bị bỏ qua ngay
     _shopee_notice(bot, EditTelegram())
     assert "📨 Báo khách: ⏭ không gửi (đơn trước mốc kích hoạt)" in _admin_html(bot)
+
+
+def test_dispatcher_has_due_chi_khi_con_tin_flush_se_lay(tmp_path):
+    """Rà soát 2026-11-05: vòng lặp chờ getUpdates ngắn lại khi còn tin; tin chưa tới hạn / hết lượt thử thì không."""
+    from cashback_bot.db import TrackingRepository, enqueue_event
+    from cashback_bot.notify_dispatch import MAX_ATTEMPTS, Dispatcher
+
+    repo = TrackingRepository(str(tmp_path / "c.sqlite"))
+    repo.migrate()
+    zalo = Dispatcher(repo, None, False, None, True, channel="zalo")
+    tele = Dispatcher(repo, None, False, None, True)
+    assert not zalo.has_due() and not tele.has_due()
+    with repo.connect() as conn:
+        enqueue_event(conn, event_key="k1", event_type="WALLET_ENTRY", chat_id=-5, message_html="x",
+                      audience="customer", category="wallet")
+    assert zalo.has_due() and not tele.has_due(), "tin khách Zalo chỉ bot Zalo gửi"
+    with repo.connect() as conn:
+        conn.execute("UPDATE admin_notifications SET status = 'retry', next_retry_at = '2999-01-01T00:00:00Z'")
+    assert not zalo.has_due(), "chưa tới giờ thử lại"
+    with repo.connect() as conn:
+        conn.execute("UPDATE admin_notifications SET next_retry_at = NULL, attempt_count = ?", (MAX_ATTEMPTS,))
+    assert not zalo.has_due(), "hết lượt thử"

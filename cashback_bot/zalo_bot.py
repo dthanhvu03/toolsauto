@@ -32,7 +32,7 @@ from cashback_bot.service import CashbackService
 from cashback_bot.shopee_url import parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
-from cashback_bot.zalo_api import ZaloApi
+from cashback_bot.zalo_api import POLL_TIMEOUT_SEC, ZaloApi
 from cashback_bot.zalo_render import (
     ERROR_REPLY,
     INTERRUPTED_REPLY,
@@ -50,6 +50,8 @@ logger = logging.getLogger("cashback_bot")
 
 LOCK_PATH = "/tmp/cashback_zalo.lock"
 CHANNEL = "zalo"
+# Còn tin khách Zalo chờ gửi thì chờ tin mới 2 giây (5 tin / vòng) thay vì POLL_TIMEOUT_SEC.
+BUSY_POLL_SEC = 2
 MENU_TTL = timedelta(minutes=30)
 # Danh sách số của tin bot tự gửi (deal hời, nhắc sale…): khách thường đọc muộn, giữ một ngày (chủ bot 2026-10-28).
 PUSH_MENU_TTL = timedelta(hours=24)
@@ -498,7 +500,8 @@ def _loop(channel: ZaloChannel, dispatcher: Dispatcher, api: ZaloApi, telegram: 
           watch_chat: int | None = None) -> None:
     while True:
         try:
-            updates = api.get_updates()
+            # Còn tin khách Zalo chờ gửi thì chờ tin mới 2 giây thay vì 30 (rà soát 2026-11-05).
+            updates = api.get_updates(BUSY_POLL_SEC if dispatcher.has_due() else POLL_TIMEOUT_SEC)
             channel.store.beat()
             for update in updates:
                 try:

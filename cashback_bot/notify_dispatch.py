@@ -119,10 +119,20 @@ class Dispatcher:
         self.admin_active = admin_enabled and admin_chat_id is not None and channel == "telegram"
         self.cfg = NotifyConfig(customer_enabled, test_ids)
 
+    def _audiences(self) -> tuple[str, ...]:
+        return ("admin", "customer") if self.admin_active else ("customer",)
+
+    def has_due(self, now: datetime | None = None) -> bool:
+        """Còn tin flush() sẽ lấy (cùng kênh, đối tượng, số lần thử). Vòng lặp dùng để chờ tin mới ngắn lại khi còn
+        tin cần gửi (rà soát 2026-11-05: loạt tin deal / tin giới thiệu xếp hàng vài phút)."""
+        moment = now or datetime.now(timezone.utc)
+        return bool(self.repo.list_pending_admin_events(
+            limit=1, max_attempts=MAX_ATTEMPTS, now=_stamp(moment), audiences=self._audiences(), channel=self.channel))
+
     def flush(self, limit: int = 10, now: datetime | None = None) -> DispatchResult:
         moment = now or datetime.now(timezone.utc)
         result = DispatchResult()
-        audiences = ("admin", "customer") if self.admin_active else ("customer",)
+        audiences = self._audiences()
         rows = self.repo.list_pending_admin_events(
             limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment), audiences=audiences, channel=self.channel
         )

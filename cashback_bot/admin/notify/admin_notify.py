@@ -761,13 +761,20 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def _dispatcher(self) -> Dispatcher:
+        return Dispatcher(
+            self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
+            self.customer_notification_test_ids,
+        )
+
+    def has_pending(self) -> bool:
+        """Còn tin hàng đợi flush_pending sẽ gửi (bot Telegram dùng để chờ getUpdates ngắn lại)."""
+        return self._dispatcher().has_due()
+
     def flush_pending(self, limit: int = 10) -> None:
         """Gửi hàng đợi chung qua Dispatcher (PLAN-079): tin admin khi bật thông báo admin, tin khách theo cờ và
         tuỳ chọn của khách."""
-        Dispatcher(
-            self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
-            self.customer_notification_test_ids,
-        ).flush(limit)
+        self._dispatcher().flush(limit)
         self.refresh_order_receipts()
 
     def refresh_order_receipts(self, limit: int = 5, now: datetime | None = None) -> int:

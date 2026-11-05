@@ -62,3 +62,31 @@ def test_khach_mo_deal_hom_nay_tu_trang_chu_lenh_va_bam_mon(tmp_path):
                                  "message": {"message_id": 6, "chat": {"id": USER, "type": "private"}}}}
     _chat, card = bot.handle_update(update)
     assert "Hoàn dự kiến" in card.text and card.edit_message_id is None, "thẻ link là tin mới, giữ danh sách"
+
+
+# --- Rà soát 2026-11-05: bấm «Deal hôm nay» không rút gọn link trong lúc khách chờ ------------------------
+
+
+def test_bam_deal_hom_nay_khong_goi_rut_gon_va_dung_link_da_luu(monkeypatch):
+    calls = []
+    monkeypatch.setattr(deals, "shorten_shopee_url", lambda *a, **k: calls.append(a) or "https://s.shopee.vn/X")
+    pool = _pool()
+    pool["dep"][0]["url"] = "https://s.shopee.vn/SAVED"
+    _text, keyboard = deals.feed_message(pool, [], None)
+    urls = _ids(keyboard)
+    assert calls == [] and urls[0] == "https://s.shopee.vn/SAVED"
+    assert all("an_redir" in u or "s.shopee.vn" in u for u in urls), "món chưa có link rút gọn dùng an_redir"
+
+
+def test_quet_giu_link_cu_va_rut_gon_san_mon_moi(monkeypatch):
+    calls = []
+    monkeypatch.setattr(deals, "shorten_shopee_url",
+                        lambda url, **k: calls.append(url) or (None if url.endswith("/22") else f"https://s.shopee.vn/{url[-2:]}"))
+    now = datetime(2026, 11, 5, 4, tzinfo=timezone.utc)
+    current = {"21": dict(ROW, item_id=21, name="Nam 1", cat="nam", first="x", seen="old", url="https://s.shopee.vn/KEEP")}
+    found = {"nam": [dict(ROW, item_id=i, name=f"Nam {i}") for i in (21, 22, 23)]}
+    merged, new = deals.merge(current, found, now)
+    assert new == 2 and merged["21"]["url"] == "https://s.shopee.vn/KEEP", "gộp lượt quét không làm mất link đã lưu"
+    assert deals.prefill_links(merged, deals._stamp(now)) == 1
+    assert "url" not in merged["22"], "rút gọn lỗi: không lưu, lượt sau thử lại"
+    assert merged["23"]["url"] == "https://s.shopee.vn/23" and len(calls) == 2
