@@ -65,11 +65,11 @@ class TelegramApi:
         self._base = f"https://api.telegram.org/bot{token}"
         self._timeout = timeout
 
-    def get_updates(self, offset: int) -> list[dict]:
+    def get_updates(self, offset: int, timeout_sec: int = 30) -> list[dict]:
         response = requests.get(
             f"{self._base}/getUpdates",
             # channel_post: tin AddLiveTag trong kênh báo mã (PLAN-104, voucher.py).
-            params={"offset": offset, "timeout": 30,
+            params={"offset": offset, "timeout": timeout_sec,
                     "allowed_updates": '["message","callback_query","channel_post","edited_channel_post"]'},
             timeout=self._timeout,
         )

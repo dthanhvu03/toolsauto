@@ -138,6 +138,7 @@ class Stats:
     quarantined_updates: int = 0
     insight: Insight | None = None
     shopee: ShopeeStats | None = None
+    sources: tuple[tuple[str, int], ...] = ()  # người mới theo mã ?start= (PLAN-153)
     recent_links: list[RecentLink] = field(default_factory=list)
 
 
@@ -257,6 +258,17 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
         since=since,
         users_total=_count(conn, "SELECT COUNT(*) FROM telegram_users"),
         users_new=_count(conn, f"SELECT COUNT(*) FROM telegram_users WHERE {in_period}", (lo,)),
+        sources=tuple(
+            (str(code), int(n)) for code, n in conn.execute(
+                """
+                SELECT s.value, COUNT(*) AS n FROM bot_state s
+                JOIN telegram_users u ON u.telegram_user_id = CAST(substr(s.key, 5) AS INTEGER)
+                WHERE s.key LIKE 'src:%' AND u.created_at >= ?
+                GROUP BY s.value ORDER BY n DESC, s.value LIMIT 6
+                """,
+                (lo,),
+            ).fetchall()
+        ),
         users_active=_count(
             conn, f"SELECT COUNT(DISTINCT telegram_user_id) FROM link_requests WHERE {in_period}", (lo,)
         ),

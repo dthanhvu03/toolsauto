@@ -27,6 +27,8 @@ EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 OPS_COST_KEY = "ops_cost_monthly_vnd"
 PERIODS = {"7d": "7 ngày", "30d": "30 ngày", "month": "Tháng này", "all": "Từ đầu"}
 CLAWBACK = ":clawback:"
+# Dòng thưởng mời bạn «<đơn>:ref» (PLAN-155): tiền chi cho khách, không phải một đơn.
+REF = ":ref"
 TICKET_FINAL = ("RESOLVED", "REJECTED", "CLOSED")
 ZALO_LIMIT = 50
 # Ngưỡng cảnh báo vận hành và nhóm khách (PLAN-089 mục 2.3, 2.4).
@@ -169,13 +171,14 @@ def money(conn: sqlite3.Connection, since: datetime, days: int, user_id: int | N
     row = conn.execute(
         f"""
         SELECT
-          COUNT(DISTINCT CASE WHEN e.status != 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0
+          COUNT(DISTINCT CASE WHEN e.status != 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0 AND instr(e.conversion_id, '{REF}') = 0
                               THEN e.conversion_id END) AS orders,
-          COUNT(DISTINCT CASE WHEN e.status != 'cancelled' THEN e.telegram_user_id END) AS customers,
+          COUNT(DISTINCT CASE WHEN e.status != 'cancelled' AND instr(e.conversion_id, '{REF}') = 0
+                              THEN e.telegram_user_id END) AS customers,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' THEN e.commission_vnd END), 0) AS net,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' THEN e.cashback_vnd END), 0) AS cashback,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' THEN e.fee_vnd + e.tax_vnd END), 0) AS reserve,
-          COUNT(DISTINCT CASE WHEN e.status = 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0
+          COUNT(DISTINCT CASE WHEN e.status = 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0 AND instr(e.conversion_id, '{REF}') = 0
                               THEN e.conversion_id END) AS cancelled_orders,
           COALESCE(SUM(CASE WHEN e.status = 'cancelled' THEN e.commission_vnd END), 0) AS cancelled_net,
           COALESCE(SUM(CASE WHEN e.status != 'cancelled' AND c.settlement_status = 'SETTLED'
@@ -186,7 +189,9 @@ def money(conn: sqlite3.Connection, since: datetime, days: int, user_id: int | N
                             THEN e.fee_vnd + e.tax_vnd END), 0) AS settled_reserve
         FROM cashback_entries e
         LEFT JOIN shopee_conversions c
-          ON c.conversion_id = CASE WHEN instr(e.conversion_id, '{CLAWBACK}') > 0
+          ON c.conversion_id = CASE WHEN instr(e.conversion_id, '{REF}') > 0
+                                    THEN substr(e.conversion_id, 1, instr(e.conversion_id, '{REF}') - 1)
+                                    WHEN instr(e.conversion_id, '{CLAWBACK}') > 0
                                     THEN substr(e.conversion_id, 1, instr(e.conversion_id, '{CLAWBACK}') - 1)
                                     ELSE e.conversion_id END
         WHERE COALESCE(e.purchase_time, e.created_at) >= ? {where_user}
@@ -526,11 +531,11 @@ def customers(conn: sqlite3.Connection, now: datetime) -> list[Customer]:
         int(r["uid"]): r for r in conn.execute(
             f"""
             SELECT e.telegram_user_id AS uid,
-                   COUNT(DISTINCT CASE WHEN e.status != 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0
+                   COUNT(DISTINCT CASE WHEN e.status != 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0 AND instr(e.conversion_id, '{REF}') = 0
                                        THEN e.conversion_id END) AS orders,
                    COUNT(DISTINCT CASE WHEN e.status IN ('holding', 'available')
-                                        AND instr(e.conversion_id, '{CLAWBACK}') = 0 THEN e.conversion_id END) AS completed,
-                   COUNT(DISTINCT CASE WHEN e.status = 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0
+                                        AND instr(e.conversion_id, '{CLAWBACK}') = 0 AND instr(e.conversion_id, '{REF}') = 0 THEN e.conversion_id END) AS completed,
+                   COUNT(DISTINCT CASE WHEN e.status = 'cancelled' AND instr(e.conversion_id, '{CLAWBACK}') = 0 AND instr(e.conversion_id, '{REF}') = 0
                                        THEN e.conversion_id END) AS cancelled,
                    COALESCE(SUM(CASE WHEN e.status != 'cancelled' THEN e.commission_vnd END), 0) AS net,
                    COALESCE(SUM(CASE WHEN e.status != 'cancelled' THEN e.cashback_vnd END), 0) AS cashback,
@@ -886,7 +891,7 @@ def margin_rate(share: float, reserve_rate: float, formula: str) -> float:
 def breakeven(conn: sqlite3.Connection, now: datetime) -> Breakeven:
     row = conn.execute(
         f"""
-        SELECT COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 THEN conversion_id END),
+        SELECT COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 AND instr(conversion_id, '{REF}') = 0 THEN conversion_id END),
                COALESCE(SUM(commission_vnd), 0), COALESCE(SUM(cashback_vnd), 0), COALESCE(SUM(fee_vnd + tax_vnd), 0),
                COALESCE(SUM(policy_label LIKE 'v1.2%'), 0), COUNT(*)
         FROM cashback_entries WHERE status != 'cancelled'
@@ -1116,7 +1121,7 @@ def top_since(conn: sqlite3.Connection, since: datetime, limit: int = 3) -> list
     rows = conn.execute(
         f"""
         SELECT telegram_user_id,
-               COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 THEN conversion_id END),
+               COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 AND instr(conversion_id, '{REF}') = 0 THEN conversion_id END),
                SUM(commission_vnd)
         FROM cashback_entries WHERE status != 'cancelled' AND COALESCE(purchase_time, created_at) >= ?
         GROUP BY telegram_user_id HAVING SUM(commission_vnd) > 0 ORDER BY 3 DESC LIMIT ?

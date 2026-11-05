@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { Block, FleetBus, GameEvent, Route, State } from "./types";
+import type { Block, GameEvent, Quiz, Route, State, Vendor, Versus, VersusSide } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -19,16 +19,34 @@ function setText(id: string, text: string): void {
   if (el.textContent !== text) el.textContent = text;
 }
 
+const BLOCK_PILL: Record<string, string> = { toll: "Trạm thu phí", police: "Công an", tire: "Xẹp lốp", jam: "Kẹt xe", cattle: "Trâu qua đường" };
+const INCIDENT_ICON: Record<string, string> = { tire: "🛞", jam: "🚗", cattle: "🐃" };
+const WEATHER_NOTE: Record<string, [string, string]> = {
+  drizzle: ["🌦 Mưa phùn", "Đường trơn · xe chạy chậm cho chắc"],
+  rain: ["🌧 Trời đổ mưa", "Kéo rèm lại · bác tài bật gạt nước"],
+  fog: ["🌫 Sương mù", "Bác tài bật đèn sương mù"],
+  clear: ["☀️ Trời tạnh", "Nắng lên rồi · xe chạy bon bon"],
+};
+
 const PILL: Record<State["phase"], string> = {
   BOARDING: "Đón khách", DRIVING: "Đang chạy", REST: "Trạm dừng", DROPOFF: "Thả khách",
   FINISH: "Về bến", SPECIAL: "Chúc Tết",
 };
-const MAX_TOASTS = 3;
-const GIFTS_OPEN_MS = 10_000;
-const GIFTS_EVERY_MS = 45_000;
+const MAX_TOASTS = 2;  // anh 03/11 «che hết rồi»: tối đa 2 thẻ, không phủ xuống nóc xe
+const GIFT_BOARD_MS = 12_000;  // vừa có quà: bảng góc phải giữ danh sách quà chừng này
+// danh sách quà dọc ở bảng góc phải (anh 04/11 «phải show dạng list thì user mới thấy») — trái: quà làm gì, phải: giá
+const GIFT_ROWS: [string, string][] = [
+  ["⚡ Lên đầu hàng", "1 xu"],
+  ["🚀 Xe x2 · 3 giây", "mỗi xu"],
+  ["🎆 Pháo hoa về quê", "10 xu"],
+  ["🏮 Băng rôn tên bạn", "100 xu"],
+  ["🧧 Cả xe chúc Tết", "1000 xu"],
+  ["👑 Chủ nhà xe", "top quà"],
+];
+const FLASH_MS = 2600;
+const FLASH_MINOR_GAP_MS = 8000;  // chữ lớn phụ (bóp còi, trà đá, mốc tim) cách nhau ít nhất 8 giây
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
-const SEATS_DEFAULT = 24;
 const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
@@ -61,15 +79,6 @@ interface Ticket {
   promoted?: boolean; relief?: boolean;  // người đang giữ chỗ được xếp lên xe / lên xe tăng cường
 }
 
-// Trạng thái từng xe trên bảng «Xe khác» (PLAN-134 B: người xem không biết chuyến nào đang đón / chạy / sắp về).
-const FLEET_PHASE: Record<string, (b: { next: string | null }) => string> = {
-  BOARDING: () => "🟢 đang đón",
-  DRIVING: (b) => (b.next ? `→ ${esc(b.next)}` : "🏁 về bến"),
-  REST: (b) => `☕ nghỉ ${esc(b.next ?? "")}`,
-  DROPOFF: (b) => `📍 thả khách ${esc(b.next ?? "")}`,
-  FINISH: () => "🏁 về bến",
-};
-
 /** Trả lời «xe nào / tới đâu rồi» cho đúng người hỏi (PLAN-134 B). */
 function whereText(e: GameEvent): [string, string] {
   const name = esc(e.name ?? "");
@@ -99,6 +108,8 @@ function whereText(e: GameEvent): [string, string] {
 
 export class Hud {
   private bannerTimer = 0;
+  private boardPending = 0;  // người đã có giường còn đứng hàng ở bến (scene báo) — chưa tính «trên xe»
+  private lastState: State | null = null;
   // băng rôn xếp hàng: xe chính và xe tăng cường có thể tới nơi cùng lúc — đọc tên lần lượt, không đè nhau
   private bannerQueue: { pages: string[]; seconds: number; pageSeconds: number }[] = [];
   private bannerBusy = false;
@@ -125,20 +136,12 @@ export class Hud {
   constructor() {
     window.setInterval(() => { this.ctaTick++; this.renderCta(); }, CTA_ROTATE_MS);
     window.setInterval(() => { this.boardTick++; this.renderBoard(); }, BOARD_ROTATE_MS);
-    // bảng quà đầy đủ chỉ mở lúc cần (anh 03/11 «che hết rồi»): mỗi GIFTS_EVERY_MS mở GIFTS_OPEN_MS cho người mới thấy
-    window.setInterval(() => this.openGifts(GIFTS_OPEN_MS), GIFTS_EVERY_MS);
     // lơ xe + thông báo bám ngay dưới khung kêu gọi: khung gọn lại thì nhích lên, chừa cảnh xe
     new ResizeObserver(() => this.placeUnderCta()).observe($("cta"));
   }
 
-  private giftsTimer = 0;
+  private giftBoardUntil = 0;
   private focusName = "";
-
-  private openGifts(ms: number): void {
-    $("cta").classList.add("gifts-open");
-    window.clearTimeout(this.giftsTimer);
-    this.giftsTimer = window.setTimeout(() => $("cta").classList.remove("gifts-open"), ms);
-  }
 
   /** Đặt lơ xe / cột thông báo ngay dưới đáy khung kêu gọi (đơn vị thiết kế 1080×1920, chia cho cỡ chữ --z). */
   private placeUnderCta(): void {
@@ -152,6 +155,35 @@ export class Hud {
     const toasts = $("toasts") as HTMLElement;
     toasts.style.top = `${bottom / z}px`;
     toasts.style.maxHeight = `${Math.max(120, 1270 - bottom) / z}px`;  // không chạm bảng góc phải (1290 px)
+  }
+
+  /** Thẻ vé giữa màn: thường đè tạm lên khung «Gõ tên tỉnh»; khung đang là câu đố / trạm / sự cố / cô Ba thì hạ xuống ngay
+   *  dưới thanh góp quà — chỉ che tạm bảng quà, không che câu hỏi (anh 03/11 «bị che mất câu đố»). */
+  private placeCallout(): void {
+    const el = $("callout") as HTMLElement;
+    const block = $("cta-block");
+    const stage = $("hud").getBoundingClientRect();
+    const rect = block.getBoundingClientRect();
+    if (block.classList.contains("hidden") || !stage.width || !rect.height) {
+      el.style.top = "";
+      return;
+    }
+    const z = parseFloat(getComputedStyle($("hud")).getPropertyValue("--z")) || HUD_SCALE;
+    el.style.top = `${((rect.bottom - stage.top) / (stage.width / 1080) + 10) / z}px`;
+  }
+
+  /** Scene báo số người còn đứng hàng lên xe: số trên xe tăng theo từng người bước vào cửa. */
+  setBoarding(pending: number): void {
+    if (pending === this.boardPending) return;
+    this.boardPending = pending;
+    this.renderSeats();
+  }
+
+  private renderSeats(): void {
+    const s = this.lastState;
+    if (!s) return;
+    const on = Math.max(0, s.bus.riders - (s.phase === "BOARDING" ? this.boardPending : 0));
+    setText("seats", `🚌 ${on}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
   }
 
   update(s: State): void {
@@ -177,14 +209,22 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (s.block.kind === "toll" ? "Trạm thu phí" : "Công an")
+    const mainAd = c?.ads_on ? c.ads?.[0] : undefined;  // quảng cáo chính thường trực cạnh đếm ngày (PLAN-153)
+    const titleAd = $("title-ad");
+    titleAd.classList.toggle("hidden", !mainAd);
+    if (mainAd) {
+      const html = `<b>${esc(mainAd.title)}</b>`;  // chữ admin đặt, nguyên văn (live: không tên sàn / app — anh 04/11)
+      if (titleAd.dataset.html !== html) titleAd.innerHTML = titleAd.dataset.html = html;
+    }
+    setText("phase-pill", s.paused ? "Tạm dừng" : s.show ? "Xem video" : s.block ? (BLOCK_PILL[s.block.kind] ?? "Dừng xe")
       : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
     ($("bar-fill") as HTMLElement).style.width = `${Math.round(this.progress(s) * 100)}%`;
     this.renderMarks(s);
-    setText("seats", `🚌 ${s.bus.riders}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
+    this.lastState = s;
+    this.renderSeats();
     setHTML("next-stops", this.nextStops(s));
     const pass = s.terrain?.pass ?? null;
     if (pass && pass !== this.lastPass) this.flash(`${s.terrain.tunnel ? "🚇" : "⛰"} ${pass}`);  // vừa vào đèo / hầm
@@ -208,11 +248,19 @@ export class Hud {
   private statusText(s: State): [string, string] {
     if (s.paused) return ["Xe dừng chờ xíu nha", ""];
     if (s.show) return [`📺 ${s.show.title}`, `còn ${clock(s.show.left)}`];  // dừng xem video bảng quảng cáo
+    if (s.block && s.block.left != null) return [`${INCIDENT_ICON[s.block.kind] ?? "⚠"} ${s.block.reason} · ${s.block.place}`,
+      `❤ thả tim · ${s.block.left}s`];  // sự cố: tự xong
     if (s.block) return [s.block.kind === "toll" ? `🚧 Trạm thu phí ${s.block.place}` : `👮 ${s.block.reason}`,
       `góp ${s.block.paid}/${s.block.goal} xu`];  // PLAN-148
+    if (s.vendor?.stage === "stop") return [`🧺 Tấp vào cho ${s.vendor.name} lên xe`, `${s.vendor.left ?? 0}s`];
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
+    if (s.name_hold) return ["📢 Đang đọc tên khách lên xe", "xe chạy liền"];
+    if (s.rollcall?.length && s.phase === "BOARDING") {  // điểm danh: người im lặng lâu tới lượt lên xe
+      const who = s.rollcall.slice(0, 2).map((r) => r.name).join(", ") + (s.rollcall.length > 2 ? ` +${s.rollcall.length - 2}` : "");
+      return [`📣 Gọi ${who}`, `❤ giữ giường ${s.rollcall[0].left}s`];
+    }
     switch (s.phase) {
       case "BOARDING":  // bến đi đã ghi trên bảng LED và biển bến
         return [s.bus.riders >= seatsOf(s) ? "Đủ khách!" : `Đi ${s.bus.to}`, `chạy sau ${clock(left)}`];
@@ -318,28 +366,42 @@ export class Hud {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn",
         "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»",
-        "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng"];
+        "⏳ Ai đặt vé trước lên xe trước · tặng quà được lên đầu hàng", "🎁 Tặng quà: từ 18 tuổi"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
-        tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
+        const vs = s.versus;  // đối kháng ở bến (PLAN-152): chưa biết xe nào chạy — nói hai xe đang đấu
+        tips.unshift(vs && !vs.done
+          ? `⚔️ Xe ${esc(vs.sides[0].dest)} đấu xe ${esc(vs.sides[1].dest)} · gõ tên tỉnh để vào phe`
+          : `🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
       }
+      const c = s.control;
+      if (c?.ads_on) for (const ad of c.ads ?? []) tips.push(`📣 <b>${esc(ad.title)}</b> · ${esc(ad.desc)}`);  // bot của anh
       if (s.next_lane) {  // ai chờ trước đi trước — nói rõ xe kế tiếp đi đâu để người chờ yên tâm
         tips.unshift(`⏳ Chuyến sau: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
+      const hungry = s.bus.seats.filter((x) => x && x.full != null && x.full < 30).length;
+      if (s.vendor?.stage === "sell") {  // cô Ba đang bán: cách mua luôn đứng đầu, kèm số người sắp đói
+        tips.unshift(`🧺 ${esc(s.vendor.name)} đang bán · gõ NEM · BÌ · BÁNH MÌ${hungry ? ` · 😋 ${hungry} người sắp đói` : ""} · 🎁 quà = bao cả xe`);
+      } else if (hungry && s.vendor?.stage === "pool") {
+        tips.unshift(`😋 ${hungry} người sắp đói · góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên bán đồ ăn`);
+      }
+      if (s.vendor?.stage === "pool" && !hungry) {  // góp quà gọi cô bán hàng: gợi ý luôn đứng đầu lúc xe đang chạy
+        tips.unshift(`🧺 Góp quà ${s.vendor.paid ?? 0}/${s.vendor.goal ?? 10} xu gọi ${esc(s.vendor.name)} lên xe bán nem, bì, bánh mì`);
+      }
     }
-    // chân bảng quà: người đang chờ · xe đang chạy x2 nhờ ai · Chủ nhà xe / Phó nhà xe · từ 18 tuổi
+    // chân bảng quà (anh 04/11 «cái nào thừa»): chỉ cảm ơn người góp lúc bị chặn + Chủ nhà xe / Phó nhà xe. Số người chờ đã có
+    // ở bảng tuyến + bảng «Chờ chuyến sau», xe x2 đã có ở bảng tuyến, «từ 18 tuổi» nằm trong dòng gợi ý + màn «Cách chơi»
     const [owner, deputy] = s.patrons ?? [];
-    const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
-    const turbo = !s.turbo ? "" : s.phase === "DRIVING"
-      ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}`
-      : ` · 🚀 <b>${s.turbo.left}s</b> x2 để dành lúc xe chạy · nhờ ${esc(s.turbo.by)}`;  // đứng ở bến: chưa chạy nhanh
+    const crown = owner ? `👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
     const thanks = s.block?.top.length  // đang bị chặn: chân bảng cảm ơn người góp
-      ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")} · ` : "";
-    setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
+      ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")}` : "";
+    const foot = [thanks, crown].filter(Boolean).join(" · ");
+    setHTML("cta-foot", foot);
+    $("cta-foot").classList.toggle("hidden", !foot);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
-    this.renderBlock(s.block ?? null);
+    this.renderBlock(s.block ?? null, s.vendor ?? null, s.quiz ?? null);
     const f = s.focus;
     if (f && f.name !== this.focusName) {  // anh bấm vào khách trên /control: thẻ giới thiệu người đó
       const where = f.stops_before ? `còn ${f.stops_before} điểm nữa tới ${esc(f.province)}` : `điểm kế là ${esc(f.province)}`;
@@ -353,14 +415,69 @@ export class Hud {
       const pct = Math.min(100, Math.round((g.xu / Math.max(1, g.goal)) * 100));
       setHTML("goal-bar", `<i style="width:${pct}%"></i><span>🎯 Mục tiêu buổi live ${g.xu}/${g.goal} xu · tới ${g.next_xu} xu: ${esc(g.next)}</span>`);
     }
+    this.renderVersus(s.versus ?? null);
+  }
+
+  /** Thanh đối kháng: hai màu, phần mỗi bên theo tỉ lệ điểm (0 – 0 thì chia đôi); bên dẫn có vương miện. */
+  private renderVersus(vs: Versus | null): void {
+    const bar = $("vs-bar");
+    bar.classList.toggle("hidden", !vs);
+    if (!vs) return;
+    const [a, b] = vs.sides;
+    const total = a.points + b.points;
+    const pct = total ? Math.round((a.points / total) * 100) : 50;
+    const side = (x: VersusSide) => `${x.lead && total ? "👑 " : ""}${x.arrow} ${esc(x.dest)} <b>${x.points}</b>`;
+    // dòng dưới (PLAN-151): giờ vàng → đếm ngược; có người góp → tên người góp nhiều nhất mỗi bên; chưa ai → cách chơi
+    const tops = vs.sides.map((x) => x.top ? `${x.arrow} ${esc(x.top)}` : "").filter(Boolean);
+    const foot = vs.done
+      ? `🏁 Xe ${esc(a.dest)} xuất bến trước · xe ${esc(b.dest)} giữ khách, chạy chuyến sau`
+      : vs.golden
+        ? `⏱ GIỜ VÀNG ${clock(vs.left ?? 0)} · quà x2 điểm · 1 xu = ${(vs.xu ?? 20) * 2} điểm`
+        : tops.length ? `🔥 Góp nhiều nhất: ${tops.join(" · ")} · 1 xu = ${vs.xu ?? 20} điểm`
+          : `Quê bên nào góp cho xe bên đó · 1 xu = ${vs.xu ?? 20} điểm · xe nhiều điểm xuất bến trước`;
+    bar.classList.toggle("golden", !!vs.golden);
+    setHTML("vs-bar", `<i style="width:${Math.min(92, Math.max(8, pct))}%"></i>`
+      + `<span class="a">${side(a)}</span><em>⚔️</em><span class="b">${side(b)}</span><small>${foot}</small>`);
   }
 
   /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
-  private renderBlock(b: Block | null): void {
-    $("cta-block").classList.toggle("hidden", !b);
-    $("cta-main").classList.toggle("hidden", !!b);
-    $("cta-sub").classList.toggle("hidden", !!b);
+  private renderBlock(b: Block | null, v: Vendor | null = null, q: Quiz | null = null): void {
+    // cô Ba bán suốt chuyến: thẻ lớn chỉ lúc cô lên + 20 giây đầu, sau đó nhường chỗ «Gõ tên tỉnh», cách mua nằm ở dòng gợi ý
+    if (v?.stage === "stop") this.vendorSince = 0;
+    else if (v?.stage === "sell" && !this.vendorSince) this.vendorSince = Date.now();
+    else if (!v || v.stage === "pool") this.vendorSince = 0;
+    const quiz = !b && !!q;
+    const selling = !b && !quiz && (v?.stage === "stop" || (v?.stage === "sell" && Date.now() - this.vendorSince < 20000));
+    const card = !!b || quiz || selling;
+    $("cta-block").classList.toggle("hidden", !card);
+    $("cta-block").classList.toggle("quiz", quiz);
+    $("cta-main").classList.toggle("hidden", card);
+    $("cta-sub").classList.toggle("hidden", card);
+    if (this.calloutBusy) this.placeCallout();  // câu đố / trạm hiện ra giữa lúc thẻ vé đang đứng
+    if (quiz) {  // đố vui: câu hỏi + ba đáp án; hết giờ thì đáp án đúng + người trả lời nhanh nhất
+      const opts = q!.options.map((o, i) => q!.done && i !== q!.answer ? "" : `<b>${"ABC"[i]}</b> ${esc(o)}`).filter(Boolean).join(" · ");
+      const tail = q!.done
+        ? (q!.winners?.length ? ` · 🏆 ${q!.winners.map((n) => esc(n)).join(", ")}` : " · chưa ai đúng")
+        : ` · gõ <b>A</b> <b>B</b> <b>C</b> · ${q!.left}s`;
+      setHTML("cta-block", `<div class="blk-title">🧠 ${q!.done ? "ĐÁP ÁN · " : ""}${esc(q!.question)}?</div>`
+        + `<div class="blk-bar">${q!.done ? "" : `<i style="width:${Math.round(q!.left / 25 * 100)}%"></i>`}`
+        + `<span>${q!.done ? "✅ " : ""}${opts}${tail}</span></div>`);
+      return;
+    }
+    if (selling) {  // cô bán hàng trên xe: hai dòng như thẻ bị chặn — cách mua + giờ còn lại
+      const treat = v!.treats?.length ? ` · 🎉 ${v!.treats.slice(-2).map((n) => esc(n)).join(", ")} bao cả xe` : "";
+      setHTML("cta-block", `<div class="blk-title">🧺 ${esc(v!.name).toUpperCase()} LÊN XE · BÁN SUỐT CHUYẾN</div>`
+        + `<div class="blk-bar"><span>Gõ <b>NEM</b> · <b>BÌ</b> · <b>BÁNH MÌ</b> để mua · 🎁 tặng quà bao cả xe${treat}</span></div>`);
+      return;
+    }
     if (!b) return;
+    if (b.left != null) {  // sự cố dọc đường: tự xong, tim làm nhanh hơn, quà xong ngay
+      const total = Math.max(1, b.total ?? 30);
+      const done = Math.min(100, Math.round(((total - b.left) / total) * 100));
+      setHTML("cta-block", `<div class="blk-title">${INCIDENT_ICON[b.kind] ?? "⚠"} ${esc(b.reason).toUpperCase()} · ${esc(b.place)}</div>`
+        + `<div class="blk-bar"><i style="width:${done}%"></i><span>❤ Thả tim cho nhanh · 🎁 ${b.goal} xu xong ngay · ${b.left}s</span></div>`);
+      return;
+    }
     // hai dòng (cao bằng «Gõ tên tỉnh» + dòng gợi ý): không đẩy bảng quà xuống đè lơ xe
     const title = b.kind === "toll" ? `🚧 TRẠM THU PHÍ ${esc(b.place).toUpperCase()}`
       : b.speeding ? "👮 QUÁ TỐC ĐỘ · CÔNG AN PHẠT" : `👮 CÔNG AN · ${esc(b.reason)}`;
@@ -375,37 +492,22 @@ export class Hud {
   private renderBoard(): void {
     const s = this.state;
     if (!s) return;
-    const riders = s.bus.seats.filter((x): x is NonNullable<typeof x> => !!x);
-    const fleet: FleetBus[] = s.fleet ?? [];
-    // bảng góc phải luân phiên (rà soát 02/11: thêm bảng quà + danh sách MỌI xe kèm số khách, xe trống ghi rõ còn giường)
-    const modes = [  // chỉ một xe (PLAN-145): bỏ bảng «Các xe»
+    // bảng góc phải luân phiên: người chờ (có tên + thứ tự), quà, tỉnh đông nhất; khách trên xe đã có ở dải tên dưới thân xe
+    const modes = [
       ...(s.queue?.length ? ["queue", "queue"] : []),
-      ...(riders.length ? ["riders"] : []),
+      "gifts",
       "top",
     ];
-    const mode = modes[this.boardTick % modes.length];
-    $("board").classList.remove("gifts");
-    if (mode === "queue") {
+    const mode = Date.now() < this.giftBoardUntil ? "gifts" : modes[this.boardTick % modes.length];
+    $("board").classList.toggle("gifts", mode === "gifts");
+    if (mode === "gifts") {
+      setText("board-title", "🎁 Tặng quà");
+      setHTML("board-list", GIFT_ROWS.map(([what, price]) => `<li><span>${price}</span>${what}</li>`).join(""));
+    } else if (mode === "queue") {
       setText("board-title", "⏳ Chờ chuyến sau");
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
         `<li><span>#${w.pos}</span>${w.arrow} ${esc(w.name)} <small>· ${esc(w.province)}</small></li>`).join(""));
-    } else if (mode === "fleet") {  // mọi xe: số khách, đang ở đâu (PLAN-130); xe trống / đang đón ghi số giường còn
-      setText("board-title", `🚌 Các xe (${fleet.length})`);
-      setHTML("board-list", fleet.slice(0, QUEUE_ROWS).map((b) => {
-        const where = FLEET_PHASE[b.phase]?.(b) ?? (b.next ? `→ ${esc(b.next)}` : "🏁 về bến");
-        // đang đón: số giường đã có người / 24 (trống thì ghi «trống» — gõ tên tỉnh là lên); đang chạy: số khách
-        const load = b.phase === "BOARDING" ? (b.riders ? `${b.riders}/${SEATS_DEFAULT}` : "trống") : `${b.riders} khách`;
-        const on = b.featured ? "📺" : "";
-        return `<li><span>${load}</span>${on}${b.arrow}${b.no} <small>${where}</small></li>`;
-      }).join(""));
-    } else if (mode === "riders") {
-      setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
-      setHTML("board-list", riders.slice(-6).reverse()
-        .map((r) => `<li>${r.vip ? "⭐ " : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
-    } else if (s.race?.length) {  // đua tỉnh (đang tắt mặc định từ 03/11: ai đặt trước lên trước)
-      setText("board-title", "⚔️ Đua tỉnh · thắng đi trước");
-      setHTML("board-list", s.race.slice(0, 5).map((b, i) => `<li>${["🥇", "🥈", "🥉"][i] ?? "·"} ${esc(b.province)} <span>${b.points}</span></li>`).join(""));
     } else {
       setText("board-title", "🏆 Tỉnh đông nhất");
       setHTML("board-list", s.board.length
@@ -416,6 +518,7 @@ export class Hud {
 
   onEvent(e: GameEvent): void {
     const name = esc(e.name ?? "");
+    this.eventAvatar = e.avatar ?? "";  // thông báo của sự kiện này có ảnh đại diện người đó (anh 03/11)
     switch (e.type) {
       case "loxe":
         this.loxe(e.text ?? "");
@@ -424,7 +527,7 @@ export class Hud {
         if (e.changed) {
           this.toast(`🔁 ${name} đổi vé → ${esc(e.province ?? "")}`);
         } else {
-          this.tickets.push({ name: e.name ?? "", province: e.province ?? "", seat: e.seat ?? null,
+          this.tickets.push({ name: `${e.badge ? `${e.badge} ` : ""}${e.name ?? ""}`, province: e.province ?? "", seat: e.seat ?? null,
             next: !!e.next, eta: e.eta_min, lane: e.lane ?? "", arrow: e.arrow ?? "",
             km: e.km ?? 0, departure: e.departure ?? "", bus: e.bus_no ?? 0,
             pickup: e.pickup, pickupIn: e.pickup_in, passed: e.passed, tripNo: e.trip_no,
@@ -450,25 +553,53 @@ export class Hud {
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
         break;
-      case "race_win":  // đua tỉnh: tỉnh thắng, chuyến này đi hướng đó
-        this.flash(`⚔️ ${e.province ?? ""} thắng đua tỉnh!`);
-        this.note(`⚔️ ${esc(e.province ?? "")} thắng đua tỉnh · ${e.points} điểm`, `Chuyến này đi hướng ${esc(e.province ?? "")} · vòng mới bắt đầu`);
+      case "versus_start":  // đối kháng: vòng mới
+        if (e.sides?.length === 2) this.note(`⚔️ Đối kháng: ${esc(e.sides[0])} đấu ${esc(e.sides[1])}`,
+          "Hai xe đậu sẵn · quê bên nào thì bình luận, thả tim, tặng quà cho xe bên đó · xe nhiều điểm xuất bến trước");
+        break;
+      case "versus_win":  // đối kháng: hướng thắng chạy chuyến này
+        this.note(`⚔️ ${esc(e.dest ?? "")} thắng ${esc(e.rival ?? "")} · ${e.points} – ${e.rival_points ?? 0}`,
+          e.mvp ? `👑 Góp nhiều nhất: ${esc(e.mvp)} ${e.mvp_points ?? 0} điểm · tên lên băng rôn xe`
+            : `Xe ${esc(e.dest ?? "")} xuất bến trước · xe ${esc(e.rival ?? "")} chạy chuyến sau`);
+        break;
+      case "versus_golden":  // PLAN-151: một phút cuối, quà x2 điểm
+        this.flash("⏱ GIỜ VÀNG · QUÀ X2");
+        break;
+      case "versus_assist":  // người không thuộc bên nào tặng quà → tiếp sức bên đang thua
+        this.toast(`🎁 ${name} tiếp sức ${esc(e.dest ?? "")}`, `+${e.points ?? 0} điểm đối kháng`, "gift", `assist:${e.name}`);
         break;
       case "goal_step":  // mục tiêu buổi live qua mốc: cả phòng được cảnh vui
-        this.flash(`🎯 ${e.xu} xu · ${e.label ?? ""}`);
         this.note(`🎯 Cả phòng đạt ${e.xu} xu · ${esc(e.label ?? "")}`, `Cảm ơn ${esc(e.name ?? "")} và mọi người đã tặng quà`);
         break;
       case "block":  // trạm thu phí / công an chặn xe (PLAN-148)
-        this.flash(e.kind === "toll" ? "🚧 TRẠM THU PHÍ" : e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA");
+        this.flash(e.block === "toll" ? "🚧 TRẠM THU PHÍ" : e.block === "police" ? (e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA")
+          : `${INCIDENT_ICON[e.block ?? ""] ?? "⚠"} ${(e.reason ?? "").toUpperCase()}`);
         $("cta-block").classList.remove("alarm");
         void ($("cta-block") as HTMLElement).offsetWidth;
         $("cta-block").classList.add("alarm");
         break;
+      case "ad":  // lơ xe vừa đọc quảng cáo bot
+        this.toast(`📣 ${e.name ? `${esc(e.name)} · ` : ""}${esc(e.title ?? "")}`, esc(e.desc ?? ""));  // có name: khán giả hỏi
+        break;
+      case "quiz":  // đố vui
+        this.flash("🧠 ĐỐ VUI!");
+        break;
+      case "quiz_end":
+        this.note(`✅ Đáp án ${e.answer}: ${esc(e.option ?? "")}`, e.winners?.length
+          ? `🏆 ${e.winners.map((n) => esc(n)).join(", ")} · ${e.right}/${e.total} người đúng` : `Chưa ai đúng · ${e.total} người trả lời`);
+        break;
+      case "weather": {
+        const w = WEATHER_NOTE[e.sky ?? ""];
+        if (w) this.toast(...w);
+        break;
+      }
       case "block_end":
-        if (e.by === "cover") {
-          this.note(`💸 Anh Tư bù lỗ ${(e.goal ?? 0) - (e.paid ?? 0)} xu`, `${e.kind === "toll" ? "Qua trạm" : "Nộp phạt xong"} · xe đi tiếp`);
+        if (e.by === "time" || (e.block && INCIDENT_ICON[e.block])) {
+          this.note(`✅ ${INCIDENT_ICON[e.block ?? ""] ?? ""} Xong rồi · xe chạy tiếp`, e.by === "gifts" ? `Cảm ơn ${esc(e.name ?? "")} góp quà` : "Cảm ơn bà con thả tim");
+        } else if (e.by === "cover") {
+          this.note(`💸 Anh Tư bù lỗ ${(e.goal ?? 0) - (e.paid ?? 0)} xu`, `${e.block === "toll" ? "Qua trạm" : "Nộp phạt xong"} · xe đi tiếp`);
         } else {
-          this.note(`✅ Góp đủ ${e.goal} xu · cảm ơn ${esc(e.name ?? "")}`, `${e.kind === "toll" ? "Barie mở" : "Nộp phạt xong"} · xe đi tiếp`);
+          this.note(`✅ Góp đủ ${e.goal} xu · cảm ơn ${esc(e.name ?? "")}`, `${e.block === "toll" ? "Barie mở" : "Nộp phạt xong"} · xe đi tiếp`);
         }
         break;
       case "pickup_stop": {  // xe dừng hẳn bên lề đón người hẹn (PLAN-145): đọc tên ai lên
@@ -477,6 +608,32 @@ export class Hud {
         this.note(`🚏 Xe dừng ở ${esc(e.place ?? "")} đón ${who}${more}`, "Đứng chờ sẵn bên đường · lên xe từng người");
         break;
       }
+      case "rollcall":
+        this.toast(`📣 Gọi ${(e.names ?? [e.name ?? ""]).slice(0, 3).map((n) => esc(n)).join(", ")}${(e.names?.length ?? 1) > 3 ? ` +${(e.names?.length ?? 1) - 3}` : ""}`, `Còn xem thì thả tim / bình luận trong ${e.seconds ?? 45}s để giữ giường`);
+        break;
+      case "rollcall_ok":
+        this.toast(`🙋 ${name} có mặt`, "Lên giường");
+        break;
+      case "rollcall_skip":
+        this.toast(`⏭ ${name} lùi chuyến sau`, "Vé vẫn giữ");
+        break;
+      case "rollcall_drop":
+        this.toast(`👋 ${name} nhường vé`, "Quay lại gõ tỉnh để đặt lại");
+        break;
+      case "vendor":
+        if (e.stage === "stop") {
+          this.note(`🧺 ${name} lên xe bán nem, bì, bánh mì`, e.by ? `Nhờ ${esc(e.by)} góp quà · gõ tên món để mua` : "Gõ tên món để mua");
+        }
+        break;
+      case "snack":
+        this.toast(`${e.emoji ?? "🥖"} ${name} mua ${esc((e.item ?? "").toLowerCase())}`, "");
+        break;
+      case "vendor_treat":
+        this.toast(`🎉 ${name} bao cả xe ${esc((e.item ?? "").toLowerCase())} ${e.emoji ?? ""}`, `${e.riders ?? 0} người trên xe`, "gift");
+        break;
+      case "vendor_end":
+        this.toast(`👋 ${name} xuống xe`, `Bán được ${e.sold ?? 0} phần`);
+        break;
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
         this.toast(`🚏 Xe đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
         break;
@@ -490,7 +647,14 @@ export class Hud {
         this.toast(`👑 ${name} lên làm Chủ nhà xe`, `${e.xu ?? 0} xu trong buổi`, "gift");
         break;
       case "welcome":  // khách buổi trước quay lại (PLAN-134 D)
-        this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
+        this.toast(`🎉 ${name} quay lại`, [(e.streak ?? 0) >= 2 ? `🔥 ${e.streak} ngày liên tiếp` : "",
+          e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`].filter(Boolean).join(" · "));
+        break;
+      case "level_up":  // cấp khách (anh 04/11 «chơi quài không chán»)
+        this.toast(`${esc(e.badge ?? "")} ${name} lên cấp`, esc(e.title ?? ""), "gift", `level:${e.name}`);
+        break;
+      case "streak":  // mốc chuỗi ngày: thưởng lên đầu hàng
+        this.toast(`🔥 ${name} ghé ${e.n ?? 0} ngày liền`, "Thưởng lên đầu hàng chờ · gõ tên tỉnh", "gift", `streak:${e.name}`);
         break;
       case "via":  // xe chạy qua tỉnh không ai xuống: gọi bà con tỉnh đó (PLAN-134)
         this.toast(`🛣 Xe đang qua ${esc(e.province ?? "")}`, `Bà con ${esc(e.province ?? "")} thả tim chào xe ❤`);
@@ -502,15 +666,19 @@ export class Hud {
         this.toast(`🏠 ${name} ở ngay ${esc(e.province ?? "")}`, "Đi bộ về nhà nha!", "stay");
         break;
       case "gift":
-        this.openGifts(GIFTS_OPEN_MS);  // vừa có quà: mở bảng quà cho người khác thấy quà làm được gì
+        this.giftBoardUntil = Date.now() + GIFT_BOARD_MS;  // vừa có quà: bảng góc phải hiện danh sách quà cho người khác thấy
+        this.renderBoard();
         if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
-        if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`);
+        if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`, true);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
           // gọn 2 dòng (anh báo 03/11: thẻ quà 4 dòng đè nhau, tràn xuống bảng góc phải): việc quà làm được + mốc kế tiếp;
           // thùng quà gầm xe đã hiện trên xe, không ghi lại
           const perk = (e.perk ?? "").split(" · ").slice(0, 2).join(" · ");
           const hint = e.next_tier ? ` · 🎯 ${esc(e.next_tier)}` : "";
           this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(perk)}${hint}`, "gift", `gift:${e.name}`);
+        } else {
+          // 1000 xu: cảnh chúc Tết có thể phải chờ (đang chúc người khác / tạm dừng) — báo nhận quà ngay, không để im
+          this.toast(`🧧 ${name} · ${e.total ?? e.diamonds} xu`, "Cả xe sắp dừng lại chúc Tết bạn", "gift", `gift:${e.name}`);
         }
         break;
       case "follow":
@@ -533,13 +701,13 @@ export class Hud {
         this.flash(`☕ Trạm dừng chân ${e.place ?? ""}`);
         break;
       case "honk":
-        this.flash("📢 Bíp bíp! Lên xe nào!");
+        this.flash("📢 Bíp bíp! Lên xe nào!", true);
         break;
       case "like_milestone":
-        this.flash(`❤ ${(e.total ?? 0).toLocaleString("vi-VN")} tim! Nhấn ga!`);
+        this.flash(`❤ ${(e.total ?? 0).toLocaleString("vi-VN")} tim! Nhấn ga!`, true);
         break;
       case "treat":
-        this.flash(`🧊 ${name} bao cả xe trà đá!`);
+        this.flash(`🧊 ${name} bao cả xe trà đá!`, true);
         break;
       case "relief_depart": {
         const sponsor = e.sponsor ? ` của ${esc(e.sponsor)}` : "";
@@ -619,6 +787,7 @@ export class Hud {
     const el = $("callout");
     if (!this.tickets.length && !this.notes.length) {
       el.classList.add("hidden");
+      $("hud").classList.remove("calling");
       return;
     }
     this.calloutBusy = true;
@@ -656,15 +825,18 @@ export class Hud {
         big = `🎫 ${esc(t.name)} lên xe tăng cường số ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · xe chạy ngay, hết chờ`;
       } else {
+        // thẻ gọn một dòng (anh 04/11 «to quá»): ai + về đâu; chuyến / giường / km ở dòng phụ
         big = t.promoted  // người đang giữ chỗ được xếp lên xe: phải báo, không thì thẻ cũ vẫn ghi «chuyến sau»
-          ? `🎫 ${esc(t.name)} hết chờ, lên xe chuyến ${t.bus} về ${esc(t.province)}!`
-          : `🎫 ${esc(t.name)} lên xe chuyến ${t.bus} về ${esc(t.province)}!`;
-        small = `${route} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)}`
+          ? `🎫 ${esc(t.name)} hết chờ · về ${esc(t.province)}`
+          : `🎫 ${esc(t.name)} lên xe về ${esc(t.province)}`;
+        small = `Chuyến ${t.bus} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)} · ${km(t.km)} km`
           + ((t.tripNo ?? 1) > 1 ? ` · lần về quê thứ ${t.tripNo}` : "");
       }
     }
     el.innerHTML = `<div class="big">${big}</div><div class="small">${small}</div>`;
+    this.placeCallout();
     el.classList.remove("hidden", "show");
+    $("hud").classList.toggle("calling", $("cta-block").classList.contains("hidden"));  // câu đố / trạm: thẻ nằm dưới, khỏi ẩn
     void el.offsetWidth;
     el.classList.add("show");
     window.setTimeout(() => {
@@ -702,9 +874,13 @@ export class Hud {
     box.classList.add("pop");
   }
 
+  private eventAvatar = "";
+  private vendorSince = 0;
+
   private toast(title: string, sub = "", kind = "", key = ""): void {
     const list = $("toasts");
-    const html = sub ? `${title}<small>${sub}</small>` : title;
+    const face = this.eventAvatar ? avatarImg(this.eventAvatar) : "";
+    const html = `<span class="t">${face}${title}</span>${sub ? `<small>${sub}</small>` : ""}`;
     const old = key ? this.keyed.get(key) : undefined;
     if (old && old.el.isConnected && !old.el.classList.contains("out")) {
       old.el.innerHTML = html;
@@ -717,7 +893,11 @@ export class Hud {
     el.className = `toast ${kind}`;
     el.innerHTML = html;
     list.prepend(el);
-    while (list.children.length > MAX_TOASTS) list.lastElementChild?.remove();
+    // quá số thẻ: bỏ thẻ cũ nhất KHÔNG phải quà trước — thẻ cảm ơn quà không bị theo dõi / chia sẻ đẩy mất (anh 04/11)
+    while (list.children.length > MAX_TOASTS) {
+      const cards = [...list.children].reverse();
+      (cards.find((c) => c !== el && !c.classList.contains("gift")) ?? cards[0]).remove();
+    }
     const timer = this.expire(el, key);
     if (key) this.keyed.set(key, { el, timer });
   }
@@ -767,7 +947,17 @@ export class Hud {
     }, seconds * 1000);
   }
 
-  private flash(text: string): void {
+  private flashShownAt = -Infinity;
+  private minorAt = -Infinity;
+
+  /** Chữ lớn giữa màn. Lúc chữ hiện, lơ xe + thông báo mờ đi để không chồng chữ (anh 04/11 «đỡ rối»).
+   *  Chữ phụ (minor) không đè chữ chính đang hiện và cách nhau ít nhất FLASH_MINOR_GAP_MS. */
+  private flash(text: string, minor = false): void {
+    const now = performance.now();
+    if (minor && (now - this.flashShownAt < FLASH_MS || now - this.minorAt < FLASH_MINOR_GAP_MS)) return;
+    if (minor) this.minorAt = now;
+    this.flashShownAt = now;
+    $("hud").classList.add("flashing");
     const el = $("flash");
     el.textContent = text;
     el.classList.remove("hidden");
@@ -775,6 +965,15 @@ export class Hud {
     void el.offsetWidth;
     el.style.animation = "";
     window.clearTimeout(this.flashTimer);
-    this.flashTimer = window.setTimeout(() => el.classList.add("hidden"), 2600);
+    this.flashTimer = window.setTimeout(() => {
+      el.classList.add("hidden");
+      $("hud").classList.remove("flashing");
+    }, FLASH_MS);
   }
+}
+
+/** Ảnh đại diện TikTok tròn nhỏ trước tên; ảnh hỏng / hết hạn thì tự ẩn. */
+export function avatarImg(url: string | undefined, cls = "av"): string {
+  if (!url || !/^https:\/\/[^"'<>\s\\]+$/.test(url)) return "";
+  return `<img class="${cls}" src="${url.replace(/&/g, "&amp;")}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`;
 }

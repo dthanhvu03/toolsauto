@@ -14,7 +14,7 @@
     <div id="hud">
       <header id="title">
         <div class="brand">XE TẾT SUM VẦY</div>
-        <div class="sub"><span id="countdown">Còn – ngày nữa là Tết</span></div>
+        <div class="sub"><span id="countdown">Còn – ngày nữa là Tết</span><span id="title-ad" class="hidden"></span></div>
       </header>
 
       <section id="route" class="card">
@@ -35,19 +35,12 @@
         <div id="cta-main" class="cta-main"></div>
         <div id="cta-sub" class="cta-sub"></div>
         <!-- bảng quà cố định (PLAN-144/146): chỉ một xe 24 giường — quà giúp chính người tặng, không gọi xe nào khác -->
-        <!-- gọn một dòng (anh 03/11 «che hết rồi»); bảng ô đầy đủ chỉ mở lúc có quà / mỗi 45 giây một lần -->
+        <!-- gọn một dòng (anh 03/11 «che hết rồi»); danh sách quà đầy đủ ở bảng góc phải (anh 04/11) -->
         <div class="gift-line">🎁 Quà: mỗi xu 🚀 xe x2 thêm 3 giây · 1 xu ⚡ lên đầu hàng · 10 🎆 · 100 🏮 băng rôn · 1000 🧧 chúc Tết · 👑 Chủ nhà xe</div>
-        <div class="gift-head">🎁 TẶNG QUÀ = XE CHẠY NHANH · LÊN XE TRƯỚC</div>
-        <div class="gift-grid">
-          <div><b>Mỗi xu</b><i>🚀</i><span>xe x2 thêm 3 giây</span></div>
-          <div><b>1 xu</b><i>⚡</i><span>lên đầu hàng chờ</span></div>
-          <div><b>10 xu</b><i>🎆</i><span>pháo hoa về quê</span></div>
-          <div><b>100 xu</b><i>🏮</i><span>băng rôn tên bạn</span></div>
-          <div><b>1000 xu</b><i>🧧</i><span>cả xe chúc Tết</span></div>
-          <div class="wide"><b>Tặng nhiều nhất</b><i>👑</i><span>Chủ nhà xe · nhì: Phó nhà xe</span></div>
-        </div>
         <!-- mục tiêu buổi live (anh 03/11): thanh chung cả phòng, mỗi mốc mở cảnh vui cho mọi người -->
         <div id="goal-bar" class="goal-bar"><i></i><span></span></div>
+        <!-- đối kháng (anh 03/11): hai hướng đầu hàng chờ đấu điểm theo quê, hướng thắng chạy chuyến sau -->
+        <div id="vs-bar" class="vs-bar hidden"></div>
         <div id="cta-foot" class="cta-foot"></div>
       </section>
 
@@ -73,11 +66,10 @@
       <div id="guide" class="hidden">
         <h2>🧧 CÁCH CHƠI</h2>
         <ol>
-          <li>💬 Gõ <b>tên tỉnh quê</b> (Nghệ An, 37, Sài Gòn…) → có giường về quê</li>
+          <li>💬 Gõ <b>tên tỉnh quê</b> (Nghệ An, 37…) → có giường về quê</li>
           <li>❤ <b>Thả tim</b> → xe chạy nhanh hơn</li>
-          <li>🎫 Gõ <b>xe nào</b> → xem vé, còn bao lâu tới quê</li>
-          <li>🏠 Ở lại? Gõ <b>không về</b></li>
-          <li>🎁 <b>Tặng quà</b> → mỗi xu xe chạy x2 thêm 3 giây (chuyến sau tới sớm), đang chờ thì lên đầu hàng, có giường thì giường vàng (từ 18 tuổi)</li>
+          <li>🎫 Gõ <b>xe nào</b> → xem vé · 🏠 gõ <b>không về</b> nếu ở lại</li>
+          <li>🎁 <b>Tặng quà</b> → xe x2 tốc độ · lên đầu hàng · từ 18 tuổi</li>
         </ol>
       </div>
       <div id="flash" class="hidden"></div>

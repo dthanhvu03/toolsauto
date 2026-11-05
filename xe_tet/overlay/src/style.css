@@ -16,6 +16,15 @@
   /* chữ thường: Be Vietnam Pro; tiêu đề / lời kêu gọi / băng rôn: Baloo 2 (tròn, đậm, đọc rõ khi co về màn điện thoại) */
   --font: "Be Vietnam Pro", system-ui, sans-serif;
   --display: "Baloo 2", "Be Vietnam Pro", system-ui, sans-serif;
+  /* thẻ thông báo (anh 04/11 «to quá» → làm lại kiểu HUD game): kính tối trong mờ, viền vàng mảnh, nhấn màu theo loại;
+     mỗi thẻ tối đa 2 dòng — chữ chính 30, phụ 24 (sau --z 0,8 ≈ 8,5 / 7 px trên điện thoại, như chữ phụ của TikTok) */
+  --n-bg: linear-gradient(180deg, rgba(52, 20, 12, 0.86), rgba(26, 9, 5, 0.86));
+  --n-line: rgba(244, 192, 78, 0.6);
+  --n-text: #fff7e6;
+  --n-sub: #f0d6ad;
+  --n-hi: #ffd54f;
+  --n-radius: 16px;
+  --n-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -75,6 +84,10 @@ html, body {
 }
 #title .brand { font-family: var(--display); font-size: 60px; white-space: nowrap; font-weight: 800; letter-spacing: 2px; line-height: 1; padding-top: 6px; }
 #title .sub { margin-top: 2px; font-size: 32px; font-weight: 600; color: #fff; white-space: nowrap; }
+/* bot chính thường trực dưới tên game (PLAN-153): chip kính tối nhỏ, tên bot vàng */
+#title-ad { display: inline-block; vertical-align: 3px; margin-left: 14px; padding: 2px 12px; border-radius: 999px; background: var(--n-bg);
+  border: 1px solid var(--n-line); font-size: 22px; font-weight: 600; color: var(--n-sub); white-space: nowrap; }
+#title-ad b { color: var(--n-hi); }
 
 /* ---- thẻ chung ---- */
 .card {
@@ -142,21 +155,9 @@ html, body {
 .cta-main { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
 .cta-main b { color: #fff; background: var(--red); padding: 0 14px; border-radius: 12px; }
 .cta-sub { font-size: 34px; font-weight: 600; color: var(--ink); margin-top: 4px; white-space: nowrap; animation: fadein 0.5s ease; }
-/* bảng quà cố định (PLAN-144): 4 ô / hàng, ô cuối rộng gấp đôi */
-.gift-head { margin-top: 8px; padding-top: 8px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 30px; font-weight: 800;
-  color: var(--red-deep); }
+/* dòng quà một dòng trong khung kêu gọi; danh sách đầy đủ ở bảng góc phải (#board.gifts) */
 .gift-line { margin-top: 6px; padding-top: 6px; border-top: 2px dashed rgba(198, 40, 40, 0.35); font-size: 25px; font-weight: 800;
   color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#cta:not(.gifts-open) .gift-head, #cta:not(.gifts-open) .gift-grid { display: none; }
-#cta.gifts-open .gift-line { display: none; }
-.gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
-.gift-grid div { background: #fff; border: 2px solid #f1c56b; border-radius: 14px; padding: 6px 4px; display: grid;
-  grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; }
-.gift-grid div.wide { grid-column: span 3; }
-.gift-grid b { grid-column: 2; font-size: 28px; color: var(--red); line-height: 1.1; }
-.gift-grid i { grid-row: span 2; font-style: normal; font-size: 40px; line-height: 1; }
-.gift-grid span { grid-column: 2; font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; }
 /* xe bị chặn: thanh góp quà (PLAN-148) */
 .cta-block .blk-title { font-family: var(--display); font-size: 46px; font-weight: 800; color: var(--red-deep); line-height: 1.15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -172,26 +173,48 @@ html, body {
 .goal-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ffe082, #ffb300); transition: width 0.6s ease; }
 .goal-bar span { position: relative; display: block; padding: 0 14px; font-size: 25px; font-weight: 800; line-height: 34px; color: var(--red-deep);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* đối kháng (anh 03/11): bên trái đỏ, bên phải xanh, phần mỗi bên theo điểm */
+.vs-bar { position: relative; margin-top: 8px; height: 66px; background: #1e88e5; border: 3px solid var(--red-deep); border-radius: 18px;
+  overflow: hidden; display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: 40px 20px; align-items: center; }
+.vs-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #c62828, #e53935); transition: width 0.6s ease; }
+.vs-bar span, .vs-bar em, .vs-bar small { position: relative; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.45); }
+.vs-bar span { font-size: 28px; font-weight: 800; padding: 0 14px; }
+.vs-bar span.a { text-align: left; }
+.vs-bar span.b { text-align: right; }
+.vs-bar span b { font-size: 32px; color: #ffe082; }
+.vs-bar em { font-style: normal; font-size: 32px; }
+.vs-bar small { grid-column: 1 / -1; font-size: 18px; font-weight: 700; text-align: center; opacity: 0.95; }
+/* giờ vàng (PLAN-151): viền vàng nhấp nháy, dòng dưới chữ vàng to hơn */
+.vs-bar.golden { border-color: #ffc107; animation: vsgold 0.9s ease-in-out infinite alternate; }
+.vs-bar.golden small { color: #ffe082; font-size: 20px; }
+@keyframes vsgold { from { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.9); } to { box-shadow: 0 0 22px 6px rgba(255, 193, 7, 0.9); } }
 .cta-foot { margin-top: 8px; font-size: 26px; font-weight: 700; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cta-foot b { color: var(--red); }
 
 /* màn hướng dẫn lớn 10 giây khi xe vào bến đón khách */
 #guide {
   position: absolute;
-  left: 60px;
-  right: 60px;
+  left: 0;
+  right: 0;
   top: 760px;
-  padding: 26px 34px;
-  background: linear-gradient(180deg, rgba(255, 246, 216, 0.97), rgba(255, 231, 168, 0.97));
-  border: 5px solid var(--red);
-  border-radius: 30px;
-  box-shadow: var(--shadow);
-  animation: pop 0.4s ease;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 820px;
+  padding: 14px 22px 16px;
+  background: var(--n-bg);
+  border: 2px solid var(--n-line);
+  border-radius: var(--n-radius);
+  box-shadow: var(--n-shadow);
+  backdrop-filter: blur(6px);
+  color: var(--n-text);
+  animation: notif-in 0.3s ease;
 }
-#guide h2 { margin: 0 0 10px; text-align: center; font-family: var(--display); font-size: 58px; font-weight: 800; color: var(--red-deep); }
-#guide ol { margin: 0; padding: 0; list-style: none; }
-#guide li { font-size: 34px; font-weight: 600; color: var(--ink); line-height: 1.5; }
-#guide li b { color: var(--red); }
+#guide h2 { margin: 0 0 8px; font-family: var(--display); font-size: 34px; font-weight: 800; color: var(--n-hi); letter-spacing: 1px;
+  line-height: 1.1; }
+#guide ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+#guide li { font-size: 27px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+#guide li b { color: var(--n-hi); }
 
 /* ---- lơ xe ---- */
 #loxe {
@@ -200,32 +223,33 @@ html, body {
   left: 32px;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  max-width: 660px;
+  gap: 10px;
+  max-width: 640px;
 }
 #loxe .face {
   flex: none;
-  width: 92px; height: 92px;
+  width: 72px; height: 72px;
   border-radius: 50%;
   background: var(--gold);
   border: 4px solid #fff;
   display: grid;
   place-items: center;
-  font-size: 54px;
-  box-shadow: var(--shadow);
+  font-size: 42px;
+  box-shadow: var(--n-shadow);
 }
 #loxe .bubble {
-  background: #fff;
-  border-radius: 6px 26px 26px 26px;
-  padding: 10px 20px;
-  font-size: 34px;
+  max-width: 540px;
+  background: rgba(255, 255, 255, 0.93);
+  border-radius: 4px var(--n-radius) var(--n-radius) var(--n-radius);
+  padding: 8px 16px 10px;
+  font-size: 29px;
   font-weight: 600;
-  line-height: 1.3;
-  box-shadow: var(--shadow);
+  line-height: 1.28;
+  box-shadow: var(--n-shadow);
 }
-#loxe .bubble b { display: block; font-size: 28px; color: var(--red); }
-/* câu lơ xe dài (giọng đọc đủ câu): bong bóng tối đa 4 dòng, không phủ kín cảnh */
-#loxe-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+#loxe .bubble b { display: block; font-size: 22px; color: var(--red); letter-spacing: 0.5px; text-transform: uppercase; }
+/* câu lơ xe dài (giọng đọc đủ câu): bong bóng tối đa 3 dòng, không phủ kín cảnh */
+#loxe-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 #loxe.pop .bubble { animation: pop 0.35s ease; }
 
 /* ---- thông báo nhỏ (quà, follow, chia sẻ, ở lại) ---- */
@@ -233,49 +257,61 @@ html, body {
   position: absolute;
   top: 680px;
   right: 24px;
-  width: 440px;
+  width: 430px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-end;
 }
+/* thông báo nhỏ: thanh nhấn màu bên trái theo loại (vàng: thường · đỏ: quà · xanh: ở lại), 1 dòng tiêu đề + 1 dòng phụ */
 .toast {
-  background: rgba(255, 255, 255, 0.96);
-  border-left: 10px solid var(--gold);
-  border-radius: 18px;
-  padding: 10px 18px;
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.25;
-  box-shadow: var(--shadow);
-  animation: slide 0.35s ease;
+  --accent: var(--gold);
   max-width: 100%;
+  padding: 7px 14px 8px 18px;
+  background: var(--n-bg);
+  border: 1.5px solid var(--n-line);
+  border-radius: var(--n-radius);
+  box-shadow: inset 6px 0 0 var(--accent), var(--n-shadow);
+  backdrop-filter: blur(6px);
+  color: var(--n-text);
+  animation: slide 0.3s ease;
 }
-.toast small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 28px;
-  font-weight: 500; color: #6b4a33; }
-.toast, #callout, #banner h2, #banner li { overflow-wrap: anywhere; }  /* tên TikTok dài liền một chữ không tràn khung */
-.toast.gift { border-color: var(--red); background: #fff3e6; }
-.toast.stay { border-color: #6d8fb5; }
+.toast .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 29px;
+  font-weight: 800; line-height: 1.22; }
+.toast small { display: block; font-size: 23px; font-weight: 500; line-height: 1.3; color: var(--n-sub); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.toast.gift { --accent: #ff5a3c; }
+.toast.gift .t { color: var(--n-hi); }
+.toast.stay { --accent: #6fa8dc; }
 .toast.out { opacity: 0; transform: translateX(40px); transition: all 0.4s ease; }
+#callout, #banner h2, #banner li { overflow-wrap: anywhere; }  /* tên TikTok dài liền một chữ không tràn khung */
 
 /* ---- thẻ lớn giữa màn: ai vừa lên xe ---- */
+/* thẻ vé giữa màn (ai vừa lên xe / giữ chỗ): một dải kính tối vừa chữ, 2 dòng, không che hết khung kêu gọi */
 #callout {
   position: absolute;
   top: 960px;
   left: 0;
   right: 0;
   margin: 0 auto;
-  width: 940px;
-  padding: 18px 28px;
+  width: fit-content;
+  max-width: 900px;
+  padding: 8px 22px 10px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.97);
-  border: 5px solid var(--gold);
-  border-radius: 28px;
-  box-shadow: var(--shadow);
+  background: var(--n-bg);
+  border: 2px solid var(--n-line);
+  border-radius: var(--n-radius);
+  box-shadow: var(--n-shadow);
+  backdrop-filter: blur(6px);
+  color: var(--n-text);
 }
-#callout .big { font-family: var(--display); font-size: 50px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
-#callout .small { font-size: 32px; font-weight: 600; color: #6b4a33; margin-top: 4px; }
-#callout.show { animation: pop 0.35s ease; }
+#callout .big { font-family: var(--display); font-size: 33px; font-weight: 800; color: var(--n-hi); line-height: 1.15;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#callout .small { font-size: 23px; font-weight: 600; color: var(--n-sub); margin-top: 2px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+#callout.show { animation: notif-in 0.3s ease; }
+/* thẻ vé đang hiện: dòng «Gõ tên tỉnh» + dòng gợi ý nhường chỗ (giữ khoảng trống), không lòi chữ hai bên thẻ */
+#hud.calling #cta-main, #hud.calling #cta-sub { visibility: hidden; }
 
 /* ---- tim bay lên thanh tốc độ: tim của người xem làm xe chạy ---- */
 #hearts { position: absolute; inset: 0; overflow: hidden; }
@@ -285,13 +321,17 @@ html, body {
   animation: heartfly 1.3s cubic-bezier(.3, .6, .4, 1) forwards;
 }
 
-#hud.inside #toasts, #hud.inside #board { display: none; }
+#hud.inside #board, #hud.inside #toasts .toast:not(.gift) { display: none; }  /* trong xe vẫn thấy thẻ cảm ơn quà */
+/* chữ lớn giữa màn đang hiện: lơ xe + thông báo lùi mờ, không chồng chữ (anh 04/11 «đỡ rối») */
+#loxe, #toasts { transition: opacity 0.25s ease; }
+#hud.flashing #loxe, #hud.flashing #toasts { opacity: 0.12; }
 /* Băng rôn lớn (thả khách, chúc Tết, hết chuyến) thế chỗ bảng tuyến + lời kêu gọi + lơ xe để cảnh 3D bên dưới không bị che. */
 #hud.bannering #route, #hud.bannering #cta, #hud.bannering #loxe { visibility: hidden; }
 /* Admin tắt từng phần (bảng điều khiển → Màn hình) */
 #hud.hide-route #route, #hud.hide-route #cta, #hud.hide-loxe #loxe, #hud.hide-toasts #toasts,
 #hud.hide-board #board, #hud.hide-board #rest-card { display: none !important; }
-#hud.showing #cta, #hud.showing #loxe, #hud.showing #toasts, #hud.showing #callout { display: none !important; }
+#hud.showing #cta, #hud.showing #loxe, #hud.showing #toasts .toast:not(.gift), #hud.showing #callout { display: none !important; }
+/* xem video bảng quảng cáo: chỉ còn thẻ cảm ơn quà (anh 04/11 «tặng xong mà không được là mất uy tín») */
 
 /* ---- thẻ bên (góc phải, ngoài khung comment TikTok) ---- */
 .side { right: 20px; width: 340px; padding: 14px 18px; }
@@ -300,7 +340,10 @@ html, body {
 #board li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
 #board li span { float: right; color: var(--red); margin-left: 8px; }
 #board li small { color: #6b4a33; font-weight: 500; }
-#board.gifts ol { font-size: 26px; }  /* bảng quà: tên quà + hiệu ứng trọn một dòng */
+#board.gifts ol { font-size: 25px; }  /* danh sách quà: quà làm gì + giá trọn một dòng */
+#board.gifts { width: 430px; }  /* rộng hơn bảng thường: đủ chữ, không cắt «…» */
+#board.gifts li { line-height: 1.45; }
+#board.gifts li span { font-weight: 800; }
 #stay { margin-top: 8px; font-size: 26px; color: #4c6a8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #rest-card { top: 1290px; }
 #rest-orders div { font-size: 32px; font-weight: 700; }
@@ -312,7 +355,7 @@ html, body {
   left: 40px;
   right: 40px;
   top: 290px;
-  padding: 22px 30px;
+  padding: 16px 26px;
   text-align: center;
   background: linear-gradient(180deg, rgba(198, 40, 40, 0.97), rgba(142, 27, 22, 0.97));
   color: #fff;
@@ -321,24 +364,35 @@ html, body {
   box-shadow: var(--shadow);
   animation: pop 0.4s ease;
 }
-#banner h2 { margin: 0; font-family: var(--display); font-size: 60px; font-weight: 800; color: var(--gold-soft); line-height: 1.15; }
-#banner p { margin: 10px 0 0; font-size: 34px; }
-#banner ul { list-style: none; margin: 14px 0 0; padding: 0; text-align: left; }
-#banner li { font-size: 34px; line-height: 1.3; padding: 8px 0; border-top: 1px solid rgba(255, 231, 168, 0.3); }
-#banner li b { color: var(--gold-soft); font-size: 38px; }
+#banner h2 { margin: 0; font-family: var(--display); font-size: 48px; font-weight: 800; color: var(--gold-soft); line-height: 1.15; }
+#banner p { margin: 8px 0 0; font-size: 28px; }
+#banner ul { list-style: none; margin: 10px 0 0; padding: 0; text-align: left; }
+#banner li { font-size: 29px; line-height: 1.3; padding: 6px 0; border-top: 1px solid rgba(255, 231, 168, 0.3); }
+#banner li b { color: var(--gold-soft); font-size: 32px; }
 #banner li.vip b::after { content: " ⭐"; }
 
+/* chữ lớn giữa màn: dải băng ngang mờ hai đầu (kiểu thông báo vòng đấu trong game), chữ vàng */
 #flash {
   position: absolute;
   left: 0; right: 0;
   top: 860px;
+  padding: 10px 40px 12px;
   text-align: center;
   font-family: var(--display);
-  font-size: 72px;
+  font-size: 54px;
   font-weight: 800;
-  color: #fff;
-  text-shadow: 0 4px 0 var(--red-deep), 0 0 30px rgba(255, 180, 60, 0.9);
-  animation: pop 0.4s ease;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  color: var(--n-hi);
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  background: linear-gradient(90deg, transparent, rgba(142, 27, 22, 0.88) 18%, rgba(142, 27, 22, 0.88) 82%, transparent);
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold) 80%, transparent) 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: ribbon 0.35s ease;
 }
 
 #offline {
@@ -368,6 +422,11 @@ html, body {
   text-overflow: ellipsis;
 }
 .lbl.vip { background: linear-gradient(90deg, #b8860b, #f4c04e); color: #3a2118; }
+/* đối kháng ở bến (PLAN-152): biển phe trên nóc mỗi xe */
+.lbl.duel { font-size: 26px; font-weight: 800; background: var(--red); color: #fff; border: 2px solid var(--gold);
+  padding: 2px 12px; max-width: none; }
+.lbl.duel b { color: var(--gold-soft); }
+.lbl.sign.small { font-size: 24px !important; padding: 3px 10px !important; border-width: 2px !important; }
 .lbl.sign {
   font-size: 36px;
   font-weight: 800;
@@ -393,7 +452,7 @@ html, body {
 .lbl.win.focus, .lbl.berth.focus { font-size: 30px; max-width: 360px; padding: 4px 12px; z-index: 5; background: #fff;
   border: 3px solid var(--red); box-shadow: 0 0 0 6px rgba(255, 210, 63, 0.7), 0 0 28px rgba(255, 210, 63, 0.9);
   animation: pop 0.35s ease; }
-.lbl.berth { font-size: 26px; max-width: 150px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
+.lbl.berth { font-size: 26px; max-width: 190px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
 .lbl.berth.empty { background: rgba(255, 255, 255, 0.35); color: rgba(255, 255, 255, 0.9); font-weight: 400; }
 .lbl.berth.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }
 .lbl.floor { font-size: 34px; font-weight: 800; background: var(--red); color: var(--gold-soft); max-width: none; }
@@ -410,7 +469,7 @@ html, body {
 }
 .lbl.emoji { background: none; font-size: 52px; padding: 0; overflow: visible; }
 .lbl.banner {
-  font-size: 34px;
+  font-size: 26px;  /* anh 03/11: băng rôn nhỏ lại, không đè dải tên + thân xe */
   font-weight: 800;
   background: var(--gold);
   color: var(--red-deep);
@@ -422,6 +481,14 @@ html, body {
   0% { transform: scale(0.7); opacity: 0; }
   70% { transform: scale(1.05); opacity: 1; }
   100% { transform: scale(1); }
+}
+@keyframes notif-in {
+  from { transform: translateY(-10px) scale(0.97); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ribbon {
+  from { transform: scaleX(0.6); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 @keyframes slide {
   from { transform: translateX(60px); opacity: 0; }
@@ -451,11 +518,24 @@ html, body {
 #loxe { top: calc((150px + 800px * var(--z)) / var(--z)); left: calc(32px / var(--z)); }
 #toasts { top: calc((150px + 800px * var(--z)) / var(--z)); right: calc(24px / var(--z));
   /* không chạm bảng góc phải (top 1290 px): dồn nhiều thì thẻ cũ nhất (dưới cùng) bị cắt */
-  max-height: calc((1270px - 150px - 800px * var(--z)) / var(--z)); overflow: hidden; }
+  max-height: calc((1040px - 150px - 800px * var(--z)) / var(--z)); overflow: hidden; }  /* ≤ 2 thẻ, dừng trên nóc xe */
 #banner { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(40px / var(--z)); right: calc(40px / var(--z)); }
-#callout { top: calc(960px / var(--z)); }
-#guide { zoom: var(--z); top: calc(760px / var(--z)); left: calc(60px / var(--z)); right: calc(60px / var(--z)); }
+/* thẻ thông báo giữa (vé, giữ chỗ…): đè tạm lên khung «Gõ tên tỉnh» vài giây, không đè thân xe (anh 03/11 «che hết rồi») */
+#callout { top: calc((150px + 330px * var(--z)) / var(--z)); }
+#guide { zoom: var(--z); top: calc(760px / var(--z)); }
 #flash { top: calc(860px / var(--z)); }
 .side { right: calc(20px / var(--z)); }
 #board, #rest-card { top: calc(1290px / var(--z)); }
 #offline { bottom: calc(200px / var(--z)); }
+
+/* ảnh đại diện TikTok cạnh tên (anh 03/11) */
+img.av { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; vertical-align: -0.2em; margin-right: 0.25em;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9); background: #eee; }
+.lbl.win img.av { width: 1em; height: 1em; margin-right: 0.15em; }
+.lbl.berth small.full { display: block; font-size: 0.62em; font-weight: 700; color: #4e7d32; }
+.lbl.berth small.full.hungry { color: #c62828; }
+/* đố vui (anh 03/11): câu hỏi dài hơn tên trạm — chữ nhỏ hơn chút */
+.cta-block.quiz .blk-title { font-size: 38px; }
+.cta-block.quiz .blk-bar { border-color: #6a1b9a; }
+.cta-block.quiz .blk-bar i { background: linear-gradient(90deg, #ce93d8, #8e24aa); opacity: 0.45; }
+.cta-block.quiz .blk-bar span { font-size: 26px; color: #4a148c; }

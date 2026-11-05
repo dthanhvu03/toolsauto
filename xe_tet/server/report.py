@@ -164,6 +164,11 @@ def _comments_html(live: LiveStore, sid: int, q: str) -> str:
             f"<div class='wrap'><table>{head}{grouped(lambda r: r['kind'] == 'question' and r['detail'] == 'ai', 25)}</table></div>")
 
 
+def _cell(text: str) -> str:
+    """Bình luận bắt đầu bằng = + - @ thì Excel coi là công thức: thêm dấu ' để luôn hiện là chữ."""
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
 def comments_csv(live: LiveStore, session_id: int) -> str:
     """Toàn bộ bình luận một buổi — CSV có BOM để Excel đọc đúng tiếng Việt."""
     out = io.StringIO()
@@ -172,7 +177,7 @@ def comments_csv(live: LiveStore, session_id: int) -> str:
     w.writerow(["giờ", "phút thứ", "cảnh", "tên", "bình luận", "game hiểu là", "chi tiết"])
     for r in live.comments(session_id):
         w.writerow([datetime.fromtimestamp(r["ts"], VN).strftime("%H:%M:%S"), r["minute"], PHASE_LABEL.get(r["phase"], r["phase"]),
-                    r["name"], r["text"], KIND_LABEL.get(r["kind"], r["kind"]), r["detail"]])
+                    _cell(r["name"]), _cell(r["text"]), KIND_LABEL.get(r["kind"], r["kind"]), r["detail"]])
     return out.getvalue()
 
 

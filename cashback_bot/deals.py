@@ -34,6 +34,8 @@ from datetime import datetime, time, timedelta, timezone
 import requests
 
 from cashback_bot import engagement, sale_calendar
+from cashback_bot.affiliate import build_an_redir
+from cashback_bot.config import load_settings
 from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_INFER_HINT, DEALS_PICK_HINT, PROMO_TAG
 from cashback_bot.money import format_vnd
@@ -42,6 +44,7 @@ from cashback_bot.price_watch import PriceHistoryClient, PriceWatchError
 from cashback_bot.pricing import cashback_for
 from cashback_bot.product_data import ProductDataError, quote_from_payload
 from cashback_bot.sale_calendar import ICT
+from cashback_bot.shopee_shortener import shorten_shopee_url
 from cashback_bot.shopee_url import ShopeeTarget
 
 logger = logging.getLogger("cashback_bot")
@@ -317,6 +320,9 @@ def merge(current: dict[str, dict], found: dict[str, list[dict]], now: datetime)
             new += old is None
             merged[key] = {**deal, "cat": old["cat"] if old else cat, "first": old["first"] if old else stamp,
                            "seen": stamp}
+            if old and old.get("url"):
+                # Link rút gọn của món (cùng shop_id/item_id) không đổi: giữ, khỏi rút gọn lại (rà soát 2026-11-05).
+                merged[key]["url"] = old["url"]
     return merged, new
 
 
@@ -394,7 +400,8 @@ def keywords_for(now: datetime) -> slice:
 def build(repo: TrackingRepository, service, market: MarketSearchClient, history: PriceHistoryClient,
           now: datetime, pause: Callable[[float], None] = clock.sleep) -> dict[str, list[dict]]:
     """Deal của mọi danh mục trong một lượt quét. Số hoàn tính như thẻ link, theo chính sách lúc quét."""
-    resolution = service._resolve_policy(now)
+    # Tin deal gửi chung nhiều khách: tính theo mức Đồng (thấp nhất) để không báo cao hơn link khách sẽ nhận (PLAN-154).
+    resolution = service._resolve_for(None, now)
     result: dict[str, list[dict]] = {}
     for key in CATEGORIES:
         products: dict[int, dict] = {}
@@ -440,34 +447,58 @@ def _k(vnd: int) -> str:
     return (f"{thousands:.0f}" if thousands == int(thousands) else f"{thousands:.1f}".replace(".", ",")) + "k"
 
 
-def deal_link(deal: dict, affiliate_id: str | None = None) -> str:
-    """Tạo link affiliate trực tiếp cho deal: ưu tiên shortlink s.shopee.vn/XXXXX, fallback an_redir."""
+# Rút gọn sẵn tối đa bấy nhiêu món mỗi lượt quét (luồng nền, ~2,2 giây / món).
+PREFILL_MAX = 40
+
+
+def _clean_url(deal: dict) -> str:
+    return f"https://shopee.vn/product/{deal.get('shop_id')}/{deal.get('item_id')}"
+
+
+def _shorten(deal: dict) -> str | None:
+    try:
+        return shorten_shopee_url(_clean_url(deal), sub_id="AUTOSALE", timeout=6.0) or None
+    except Exception:
+        return None
+
+
+def deal_link(deal: dict, affiliate_id: str | None = None, shorten: bool = True) -> str:
+    """Link affiliate của deal: link rút gọn đã lưu → (shorten) rút gọn s.shopee.vn → an_redir đầy đủ.
+
+    shorten=False (khách bấm 🔥 Deal hôm nay): không gọi mạng, không bắt khách chờ; món chưa có link rút gọn dùng
+    an_redir. Link rút gọn được làm sẵn ở luồng quét (prefill_links) — rà soát 2026-11-05: trước đây mỗi lần bấm
+    rút gọn tới 8 món × 2,2 giây ngay trong vòng trả lời khách.
+    """
     cached = deal.get("url")
     if cached:
         return cached
-    shop_id, item_id = deal.get("shop_id"), deal.get("item_id")
-    clean = f"https://shopee.vn/product/{shop_id}/{item_id}"
-    try:
-        from cashback_bot.shopee_shortener import shorten_shopee_url
-        short = shorten_shopee_url(clean, sub_id="AUTOSALE", timeout=6.0)
+    if shorten:
+        short = _shorten(deal)
         if short:
             deal["url"] = short
             return short
-    except Exception:
-        pass
     if not affiliate_id:
         try:
-            from cashback_bot.config import load_settings
             affiliate_id = load_settings().affiliate_id
         except Exception:
             affiliate_id = "17315920094"
     try:
-        from cashback_bot.affiliate import build_an_redir
-        redir = build_an_redir(clean, str(affiliate_id), sub_id="AUTOSALE")
-        deal["url"] = redir
-        return redir
+        return build_an_redir(_clean_url(deal), str(affiliate_id), sub_id="AUTOSALE")
     except Exception:
-        return clean
+        return _clean_url(deal)
+
+
+def prefill_links(deals_by_id: dict[str, dict], seen: str, limit: int = PREFILL_MAX) -> int:
+    """Rút gọn sẵn link các món vừa thấy trong lượt quét mà chưa có link (rẻ nhất trước). Chỉ lưu khi rút gọn được."""
+    todo = sorted((d for d in deals_by_id.values() if d.get("seen") == seen and not d.get("url")),
+                  key=lambda d: d["price"] / d["usual"])[:limit]
+    done = 0
+    for deal in todo:
+        short = _shorten(deal)
+        if short:
+            deal["url"] = short
+            done += 1
+    return done
 
 
 def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int], *, limit: int = PER_MESSAGE,
@@ -603,7 +634,7 @@ def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None
     for number, (key, deal) in enumerate(picked, 1):
         icon = CATEGORIES[key][0].split()[0]
         drop = round((deal["usual"] - deal["price"]) * 100 / deal["usual"])
-        link = deal_link(deal)
+        link = deal_link(deal, shorten=False)
         lines.append(f"{number}. {icon} {html.escape(_short(deal['name']))}: <b>{_k(deal['price'])}</b> "
                      f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
         buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 24)} ↗",
@@ -647,6 +678,7 @@ def scan(repo: TrackingRepository, service, market: MarketSearchClient, history:
         _save(repo, SCAN_KEY, result)
         return result
     merged, new = merge(pool(repo), found, now)
+    prefill_links(merged, _stamp(now))
     _save(repo, POOL_KEY, merged)
     sent = send_round(repo, now)
     result = {"hour": hour, "status": "done", "at": _stamp(now), "found": sum(len(v) for v in found.values()),

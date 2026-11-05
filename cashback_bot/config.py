@@ -83,6 +83,12 @@ class Settings:
     # PLAN-085: TikTok Shop qua RioHub, chưa nối vào luồng khách.
     riohub_api_key: str | None = None
     riohub_creator_username: str | None = None
+    # PLAN-154: hạng Đồng/Bạc/Vàng cho link mới. Mặc định TẮT; chủ bot bật sau khi công bố điều khoản V4.
+    membership_enabled: bool = False
+    # PLAN-155: mời bạn (10% hoa hồng, 6 tháng). Mặc định TẮT; chủ bot bật sau khi công bố điều khoản V5.
+    referral_enabled: bool = False
+    # Tên bot Telegram cho link mời t.me/<tên>?start=ref_<mã>.
+    bot_username: str = "zt_shopee_bot"
 
 
 def _flag(raw: str | None) -> bool:
@@ -193,6 +199,9 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         zalo_bot_token=(env.get("ZALO_BOT_TOKEN") or "").strip() or None,
         riohub_api_key=(env.get("RIOHUB_API_KEY") or "").strip() or None,
         riohub_creator_username=(env.get("RIOHUB_CREATOR_USERNAME") or "").strip().lstrip("@") or None,
+        membership_enabled=_flag(env.get("CASHBACK_MEMBERSHIP_ENABLED")),
+        referral_enabled=_flag(env.get("CASHBACK_REFERRAL_ENABLED")),
+        bot_username=(env.get("CASHBACK_BOT_USERNAME") or "").strip().lstrip("@") or "zt_shopee_bot",
     )
 
 

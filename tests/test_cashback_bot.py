@@ -95,8 +95,9 @@ class _CollectAdmin:
         self.failed = []
         self.flush_calls = 0
 
-    def notify_new_user(self, telegram_user_id, username):
+    def notify_new_user(self, telegram_user_id, username, source=None):
         self.new_users.append((telegram_user_id, username))
+        self.sources = getattr(self, "sources", []) + [source]
 
     def notify_link_sent(self, update_id):
         self.link_sent.append(update_id)
@@ -307,6 +308,21 @@ def test_new_user_notify_mot_lan(tmp_path):
     bot.handle_text(111, "buyer", "/start", update_id=901, now=NOW)
     bot.handle_text(111, "buyer", "/start", update_id=902, now=NOW)
     assert admin.new_users == [(111, "buyer")]
+
+
+def test_start_source_chi_ghi_lan_dau_khach_moi(tmp_path):
+    """PLAN-153: link t.me/zt_shopee_bot?start=live ghi nguồn khách mới, không ghi đè, mã lạ bỏ qua."""
+    admin = _CollectAdmin()
+    store = repo(tmp_path)
+    bot = CashbackService(settings(tmp_path), store, FakeClient(payload()), admin_notifier=admin)
+    bot.handle_text(111, "a", "/start live", update_id=911, now=NOW)
+    bot.handle_text(111, "a", "/start video", update_id=912, now=NOW)
+    bot.handle_text(222, "b", "/start", update_id=913, now=NOW)
+    bot.handle_text(333, "c", "/start x'; drop", update_id=914, now=NOW)
+    bot.handle_text(222, "b", "/start live", update_id=915, now=NOW)  # khách cũ bấm link live: không tính
+    assert store.get_state("src:111") == "live"
+    assert store.get_state("src:222") is None and store.get_state("src:333") is None
+    assert admin.sources == ["live", None, None]
 
 
 def test_link_khong_phai_shopee(tmp_path):

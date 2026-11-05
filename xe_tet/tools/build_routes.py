@@ -45,6 +45,21 @@ TUNNEL_WIND = 50  # quanh đèo ±2 km: hầm / đường tránh đo 0–34 °/k
 PASS_SPAN = 10  # ±10 điểm mẫu 200 m = ±2 km quanh đỉnh đèo
 MERGE_SHARE = 0.4  # làn lẻ chỉ gộp vào làn chung đường ≥ 40 % quãng của nó; không thì giữ làn riêng
 MAX_LANES = 6  # bến quá nhiều làn thì người chờ phân tán — vượt thì gộp làn nhỏ nhất
+# Chuyển làn tay (anh 03/11 «kiểm tra nghiệp vụ đi qua các tỉnh»): gom theo trục còn sót tỉnh lệch đường. Mỗi mục: bến →
+# {tỉnh: một tỉnh của làn đích}. Số trong ngoặc = km xe phải chạy thêm (km bến → tỉnh → điểm cuối làn − km thẳng tới điểm
+# cuối, đo bằng engine) ở làn cũ → làn mới. Chỉ chuyển khi đỡ vòng rõ ràng (≥ 45 km) và làn mới đi ngang (≤ 100 km).
+LANE_MOVES: dict[str, dict[str, str]] = {
+    "hcm_miendong": {"hue": "hanoi"},  # xe Tây Nguyên +178 → xe QL1 +31
+    "hn_giapbat": {"binhdinh": "binhthuan",  # +107 → +53
+                   "haiduong": "quangninh"},  # xe Lạng Sơn +88 → xe Quảng Ninh +5
+    # Đà Lạt: miền Tây đi xe TP.HCM phải vòng 150–600 km (điểm cuối là TP.HCM) → gom về xe miền Tây (Kiên Giang)
+    "dalat": {k: "kiengiang" for k in ("tiengiang", "bentre", "travinh", "vinhlong", "cantho", "haugiang", "soctrang",
+                                       "baclieu", "camau")},
+    "danang": {"quangngai": "binhdinh"},  # xe Tây Nguyên +128 → xe QL1 +73
+    "cantho": {"hue": "hanoi",  # xe Tây Nguyên +178 → xe QL1 +42
+               "angiang": "kiengiang",  # xe Hà Nội +122 → +30
+               "dongthap": "kiengiang"},  # +144 → +98
+}
 
 
 def decode(polyline: str) -> list[tuple[float, float]]:
@@ -243,6 +258,10 @@ def lanes_for(dep, routes: dict) -> list[dict]:
         merge(small)
     while len(lanes) > MAX_LANES:
         merge(min(lanes, key=lambda ln: len(ln["provinces"])))
+    for p, mate in LANE_MOVES.get(dep.key, {}).items():
+        for ln in lanes:
+            ln["provinces"].discard(p)
+        next(ln for ln in lanes if mate in ln["provinces"])["provinces"].add(p)
     out = []
     for i, ln in enumerate(sorted(lanes, key=lambda ln: -len(ln["provinces"]))):
         members = sorted(ln["provinces"], key=lambda k: routes[k]["km"])

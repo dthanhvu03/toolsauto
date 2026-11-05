@@ -78,6 +78,7 @@ SHOPEE_PROMPT_KEYBOARD: Keyboard = (
 
 RANK_KEYBOARD: Keyboard = (
     (("🥉 Đồng", "c:tier:BRONZE"), ("🥈 Bạc", "c:tier:SILVER"), ("🥇 Vàng", "c:tier:GOLD")),
+    (("🎯 Điều kiện lên hạng", "c:mb:home"),),
     BACK_HOME,
 )
 

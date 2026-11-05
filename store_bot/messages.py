@@ -350,7 +350,8 @@ def admin_home(stats: dict[str, int], upstream_balance: int | None = None) -> st
     )
 
 
-def admin_stats(stats: dict[str, int], upstream_balance: int | None = None) -> str:
+def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
+                sources: list[tuple[str, int]] | None = None) -> str:
     blocks = []
     for key, title in (("today", "Hôm nay"), ("7d", "7 ngày"), ("all", "Từ đầu")):
         refunded = stats[f"refunded_{key}"]
@@ -370,7 +371,8 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None) -> s
         + "\n\n"
         f"👥 Khách: {stats['users']} (đã mua: {stats['buyers']})\n"
         f"💼 Số dư khách đang giữ: {vnd(stats['balances'])}"
-        f"{wallet}{waiting}"
+        + (f"\n📍 Khách mới 7 ngày theo nguồn: {' · '.join(f'{c} {n}' for c, n in sources)}" if sources else "")
+        + f"{wallet}{waiting}"
     )
 
 

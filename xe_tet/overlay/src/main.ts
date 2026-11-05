@@ -56,6 +56,7 @@ async function start(): Promise<void> {
   // biên dịch sẵn shader trước khi nhận state (state đổi ẩn / hiện bối cảnh) và trước vòng vẽ; lỗi thì vẫn chạy như cũ
   await world.warmUp().catch((err) => console.error(err));
   const hud = new Hud();
+  world.onBoarding = (n) => hud.setBoarding(n);
   const sound = new Sound();
   sound.onLock = (locked) => document.getElementById("sound-lock")!.classList.toggle("hidden", !locked);
   // Trong xe: tên đã nằm trên giường → ẩn thông báo + bảng tỉnh để không che tầng trên.

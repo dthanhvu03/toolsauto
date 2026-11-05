@@ -43,6 +43,9 @@ from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError, classi
 
 logger = logging.getLogger("cashback_bot")
 LOCK_PATH = "/tmp/cashback_bot.lock"
+# Chờ tin mới (getUpdates long-poll): 30 giây khi rảnh, 1 giây khi hàng đợi còn tin cần gửi.
+IDLE_POLL_SEC = 30
+BUSY_POLL_SEC = 1
 LOG_FORMAT = "%(asctime)s [Cashback] %(levelname)s %(message)s"
 
 # Xử lý lỗi từng update (hardening P0-4). Nhóm thử lại: số lần tối đa trước khi cách ly.
@@ -635,7 +638,9 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             ops_watch.beat(repo)
             flush_outbound(service, telegram, repo, admin_notifier, limit=3)
             offset = repo.get_offset()
-            updates = telegram.get_updates(offset)
+            # Còn tin chờ gửi thì chờ tin mới 1 giây thay vì 30, để vòng sau gửi tiếp ngay (rà soát 2026-11-05).
+            busy = admin_notifier.has_pending() or bool(repo.list_due_outbound(datetime.now(timezone.utc), 1))
+            updates = telegram.get_updates(offset, BUSY_POLL_SEC if busy else IDLE_POLL_SEC)
             _net_recovered(repo, admin_notifier)
             process_updates(service, telegram, repo, updates, admin_notifier)
             drain_sync_results(coordinator, service, admin_notifier)

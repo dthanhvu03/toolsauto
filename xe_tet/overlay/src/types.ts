@@ -33,7 +33,11 @@ export interface Control {
   rotate_seconds?: number;
   mix?: "balanced" | "music" | "voice";  // trộn tiếng
   hud_scale?: number;  // cỡ chữ trên live 0,6 – 1,2 (PLAN-133)
+  ads_on?: boolean;  // quảng cáo bot của anh (03/11)
+  ads?: Ad[];
 }
+
+export interface Ad { title: string; desc: string; say?: string; keys?: string }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
 
@@ -49,6 +53,17 @@ export interface Seat {
   hue: number;
   vip: boolean;
   province: string;
+  avatar?: string;  // ảnh đại diện TikTok
+  full?: number;  // % no bụng (dưới 30: sắp đói)
+  snack?: string;  // món mua của cô bán hàng (emoji) — hiện cạnh tên
+  badge?: string;  // biểu tượng cấp khách (🎫 ⭐ 🚌 👑), khách mới để trống
+}
+
+export interface Vendor {  // cô bán hàng lên xe (anh 03/11): góp quà → tấp vào lề cho cô lên → bán trong lúc xe chạy
+  stage: "pool" | "stop" | "sell";
+  name: string;
+  paid?: number; goal?: number;  // pool
+  left?: number | null; by?: string; sold?: number; treats?: string[];
 }
 
 export interface State {
@@ -99,12 +114,17 @@ export interface State {
   fleet?: FleetBus[];  // mọi xe đang chạy
   trip_minutes?: number;
   patrons?: { name: string; xu: number }[];  // Chủ nhà xe, Phó nhà xe (PLAN-144)
+  vendor?: Vendor | null;
+  name_hold?: boolean;  // hết giờ đón, xe chờ lơ xe đọc xong tên người lên xe
+  rollcall?: { name: string; left: number }[];
+  quiz?: Quiz | null;  // đố vui A / B / C (anh 03/11)
+  weather?: WeatherKind;  // điểm danh: người tới lượt lên xe đang được gọi tên (anh 03/11)
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
   turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
   block?: Block | null;
   focus?: { seat: number; name: string; vip: boolean; province: string; stops_before: number | null; in_s: number | null; trips: number; left: number } | null;
   show?: { url: string; title: string; seconds: number; left: number } | null;  // đang dừng xem video bảng quảng cáo
-  race?: { province: string; points: number }[];  // đua tỉnh vòng này
+  versus?: Versus | null;  // đối kháng: hai hướng đầu hàng chờ đấu điểm giành chuyến sau (anh 03/11)
   videos?: { name: string; title: string; url: string; seconds: number }[];
   goal?: { xu: number; goal: number; round: number; next_xu: number; next: string };  // mục tiêu buổi live  // trạm thu phí / công an chặn xe, chờ góp quà (PLAN-148)
 }
@@ -133,11 +153,31 @@ interface Person {
   vip: boolean;
   wish: string;
   parcels?: number;  // thùng quà Tết ôm vào cổng (PLAN-134 C)
+  badge?: string;
 }
+
+export type WeatherKind = "clear" | "drizzle" | "rain" | "fog";
+
+/** Câu đố đang hỏi (`done`: đã có đáp án, thẻ còn vài giây). */
+export interface Quiz {
+  question: string;
+  options: string[];
+  left: number;
+  answered: number;
+  done: boolean;
+  answer?: number;
+  winners?: string[];
+  right?: number;
+}
+
+/** Sự cố dọc đường: tự xong sau `total` giây (tim rút ngắn), tặng quà góp đủ thì xong ngay. */
+export const INCIDENT_KINDS = ["tire", "jam", "cattle"] as const;
 
 /** Xe đang bị chặn: góp quà đủ `goal` xu thì đi tiếp. */
 export interface Block {
-  kind: "toll" | "police";
+  kind: "toll" | "police" | (typeof INCIDENT_KINDS)[number];
+  left?: number | null;  // sự cố: giây còn lại
+  total?: number | null;
   reason: string;
   goal: number;
   paid: number;
@@ -166,23 +206,40 @@ export interface GameEvent {
   perk?: string;
   action?: string; // rest_action: food | wc | shop
   emoji?: string;
+  item?: string;  // snack / vendor_treat
+  avatar?: string;  // ảnh đại diện TikTok của người trong sự kiện
+  stage?: string;  // vendor: stop | sell
+  riders?: number;  // vendor_treat: số người trên xe được bao
+  sold?: number;  // vendor_end
   people?: Person[];
   fireworks?: boolean;
   region?: Region;
   specialty?: string;
   place?: string;  // trạm dừng chân: tỉnh có trạm
   label?: string; round?: number;  // goal_step
-  points?: number;  // race_win
-  kind?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;  // block / block_end
+  points?: number;  // versus_win / versus_assist
+  // block / block_end: loại chặn nằm ở `block` («kind» là của khung tin — server ghi đè)
+  block?: string; reason?: string; goal?: number; paid?: number; by?: string; speeding?: boolean;
+  sky?: string;  // weather: clear | drizzle | rain | fog
   total?: number;
   board?: { province: string; count: number }[];
   top_liker?: string | null;
   delivered?: number;
   title?: string;
+  badge?: string;  // cấp khách (ticket / level_up)
+  streak?: number;  // số ngày ghé liên tiếp (welcome)
+  n?: number;  // mốc chuỗi ngày (streak)
+  reward?: boolean;
   seconds?: number;
   page_size?: number;
   page_seconds?: number;
   lane?: string;  // vé / xuất bến: «Hướng Hà Nội»
+  dest?: string;  // versus_win: tỉnh đặt tên hướng thắng
+  rival?: string;  // versus_win: hướng thua
+  rival_points?: number;
+  mvp?: string | null;  // người góp nhiều nhất bên thắng
+  mvp_points?: number;
+  sides?: string[];  // versus_start: hai hướng đấu nhau
   arrow?: string;
   km?: number;  // km thật từ bến đi
   hours?: number;  // giờ xe khách thật (thả khách)
@@ -217,4 +274,12 @@ export interface GameEvent {
   position?: number;
   next_tier?: string; // quà: «thêm X xu → …»
   diamonds?: number; // quà: xu của lần tặng này (total = cộng dồn trong chuyến)
+  desc?: string;  // ad
+  question?: string; options?: string[];  // quiz
+  answer?: string; option?: string; winners?: string[]; right?: number;  // quiz_end
 }
+
+export interface VersusSide { lane: string; label: string; arrow: string; dest: string; points: number; waiting: number; lead: boolean;
+  top?: string | null }  // người góp nhiều nhất bên này
+export interface Versus { sides: VersusSide[]; chosen: boolean; golden?: boolean; left?: number | null; xu?: number;  // giờ vàng (PLAN-151)
+  done?: boolean }  // hết trận ở bến, xe thắng chưa xuất bến (PLAN-152): sides[0] là xe thắng

@@ -47,6 +47,7 @@ from cashback_bot.admin.handlers.reserve import SCHEMA_PATH as RESERVE_SCHEMA_PA
 from cashback_bot.admin.handlers.shopee import ShopeeAdmin
 from cashback_bot.admin.handlers.simulation import SIM_AMOUNTS, SimulationAdmin, parse_sim_amount, simulate_share
 from cashback_bot.admin.handlers.insights import InsightsAdmin
+from cashback_bot.admin.handlers.membership import MembershipAdmin
 from cashback_bot.admin.handlers.retention import RetentionAdmin
 from cashback_bot.admin.handlers.support import SupportAdmin
 from cashback_bot.admin.handlers.validation import LISTS as VALIDATION_LISTS
@@ -151,6 +152,7 @@ class AdminPanel:
     _insights_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang gõ một mốc thời hạn lưu dữ liệu (C2): user_id → (mã mốc, hạn chờ).
     _retention_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
+    _membership_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Dựng lại mỗi lần tạo panel (kể cả dataclasses.replace) để handler trỏ đúng panel mới.
     _router: AdminRouter = field(init=False, compare=False, repr=False)
 
@@ -345,6 +347,10 @@ class AdminPanel:
 
     def _retention(self) -> RetentionAdmin:
         return RetentionAdmin(TrackingRepository(self.db_path), audit=self._log_setting, waiting=self._retention_waiting)
+
+    def _membership(self) -> MembershipAdmin:
+        return MembershipAdmin(TrackingRepository(self.db_path), audit=self._log_setting,
+                               waiting=self._membership_waiting, enabled=self.membership_on)
 
     def _support(self) -> SupportAdmin:
         return SupportAdmin(TrackingRepository(self.db_path), self._support_waiting)

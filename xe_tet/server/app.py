@@ -11,6 +11,7 @@ import logging
 import os
 import random
 import time
+import uuid
 from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
@@ -137,6 +138,24 @@ class Hub:
         engine.toll_xu = self.settings["toll_xu"]
         engine.fine_xu = self.settings["fine_xu"]
         engine.cover_seconds = float(self.settings["cover_seconds"]) if self.settings["cover_on"] else 0.0
+        engine.vendor_on = self.settings["vendor_on"]
+        engine.vendor_xu = self.settings["vendor_xu"]
+        engine.roll_on = self.settings["roll_on"]
+        engine.roll_idle = self.settings["roll_idle_min"] * 60.0
+        engine.roll_wait = float(self.settings["roll_wait_s"])
+        engine.quiz_on = self.settings["quiz_on"]
+        engine.versus_on = self.settings["versus_on"]
+        engine.versus_xu = self.settings["versus_xu"]
+        engine.versus_golden_s = float(self.settings["versus_golden_s"])
+        if engine.quiz_gap != self.settings["quiz_every_min"] * 60.0:
+            engine.quiz_gap = self.settings["quiz_every_min"] * 60.0
+            engine.next_quiz = min(engine.next_quiz, engine.last_now + engine.quiz_gap)
+        engine.incidents_on = self.settings["incidents_on"]
+        engine.ads = self.settings["ads"] if self.settings["ads_on"] else []
+        if engine.ad_gap != self.settings["ads_talk_min"] * 60.0:
+            engine.ad_gap = self.settings["ads_talk_min"] * 60.0
+            engine.next_ad = min(engine.next_ad, engine.last_now + engine.ad_gap)
+        engine.incident_xu = self.settings["incident_xu"]
 
     def maybe_answer(self, now: float) -> None:
         """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""
@@ -159,7 +178,8 @@ class Hub:
                 self.ai_error = "chưa có GEMINI_API_KEY trong /home/vu/toolsauto/.env"
                 return
             ctx = self.engine.ai_context(q["uid"])
-            ckey = ai_reply.cache_key(q["text"], ctx)
+            chat = bool(q.get("chat"))  # chuyện phiếm: đáp lại riêng từng người, không dùng lại câu trả lời
+            ckey = None if chat else ai_reply.cache_key(q["text"], ctx)
             hit = self.ai_cache.get(ckey) if ckey else None
             if hit and time.monotonic() - hit[1] <= ai_reply.CACHE_TTL:  # câu hỏi giống vừa trả lời: dùng lại, không gọi AI
                 self.ai_cache.move_to_end(ckey)
@@ -167,7 +187,7 @@ class Hub:
                 self.ai_cache_hits += 1
                 return
             self.ai_client = self.ai_client or httpx.AsyncClient()
-            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], ctx)
+            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], ctx, chat=chat)
             if text:
                 self.engine.loxe(text)
                 self.ai_answered += 1
@@ -276,6 +296,7 @@ class Hub:
                 self.handle(simulator.next_event(self.engine.phase))
                 next_sim = now + random.expovariate(self.sim_rate)
             self.engine.videos = video.videos()  # bảng quảng cáo: danh sách video (quét lại khi thư mục đổi)
+            self.engine.names_pending = self.voice.names_pending(now)
             self.engine.tick(now)
             if self.engine.network.departure.key != self.settings["departure"]:  # người xem gọi xe ra bến khác (PLAN-136)
                 self.update_settings({"departure": self.engine.network.departure.key})
@@ -462,6 +483,14 @@ async def _admin(body: dict) -> dict:
         engine.block_now(str(body.get("kind") or ""))
     elif action == "cover":  # «Anh Tư bù lỗ»: xe đang bị chặn đi tiếp luôn
         engine.cover()
+    elif action == "vendor":  # gọi cô bán hàng lên xe ngay (không cần góp)
+        engine.vendor_now()
+    elif action == "quiz":  # đố vui ngay
+        engine.quiz_now()
+    elif action == "ad":  # lơ xe đọc quảng cáo bot kế tiếp ngay
+        engine.ad_now()
+    elif action == "weather":  # đổi thời tiết tay: clear | drizzle | rain | fog
+        engine.set_weather(str(body.get("sky") or ""))
     elif action == "focus":  # zoom máy quay vào một khách trên xe (giường, 0 = bỏ)
         engine.focus_seat(as_int(body.get("seat"), 0))
     elif action == "next_lane":  # chọn hướng cho chuyến kế tiếp ("" = về thứ tự đặt vé)
@@ -512,6 +541,33 @@ async def passengers() -> dict:
     return hub.engine.manifest()
 
 
+async def receive_upload(request: Request, target: Path, max_bytes: int, what: str) -> JSONResponse | None:
+    """Ghi thân request ra file tạm riêng (hai tab tải cùng tên không ghi chồng), đủ mới đổi tên; lỗi / rớt mạng giữa chừng
+    thì xoá file tạm — không để lại file dở hàng trăm MB. None = xong."""
+    part = target.with_name(f"{target.name}.{uuid.uuid4().hex[:8]}.part")
+    size = 0
+    try:
+        with part.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError(f"{what} quá lớn (tối đa {max_bytes // 1024 // 1024} MB)")
+                fh.write(chunk)
+        if not size:
+            raise ValueError("File rỗng")
+        if target.exists():
+            raise ValueError("Trùng tên với file vừa tải xong, anh tải lại giúp em")
+        part.rename(target)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    except Exception as exc:  # trình duyệt ngắt giữa chừng / hết ổ đĩa
+        log.warning("tải %s lỗi: %s", target.name, exc)
+        return JSONResponse({"ok": False, "error": "Tải lên bị ngắt giữa chừng"}, status_code=400)
+    finally:
+        part.unlink(missing_ok=True)
+    return None
+
+
 @app.post("/api/music")
 async def upload_music(request: Request, name: str = "") -> dict:
     """Tải một bài nhạc lên (thân request là nội dung file, `?name=` là tên file) — bảng điều khiển gửi từng file."""
@@ -519,21 +575,8 @@ async def upload_music(request: Request, name: str = "") -> dict:
         target = music.upload_target(name)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    part = target.with_name(target.name + ".part")  # ghi xong mới đổi tên: danh sách không thấy file dở dang
-    size = 0
-    try:
-        with part.open("wb") as fh:
-            async for chunk in request.stream():
-                size += len(chunk)
-                if size > music.MAX_BYTES:
-                    raise ValueError(f"File quá lớn (tối đa {music.MAX_BYTES // 1024 // 1024} MB)")
-                fh.write(chunk)
-        if not size:
-            raise ValueError("File rỗng")
-        part.rename(target)
-    except ValueError as exc:
-        part.unlink(missing_ok=True)
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    if (err := await receive_upload(request, target, music.MAX_BYTES, "File")) is not None:
+        return err
     await hub.broadcast(hub.state_message())
     return {"ok": True, "name": target.name}
 
@@ -555,21 +598,8 @@ async def upload_video(request: Request, name: str = "") -> dict:
         target = video.upload_target(name)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    part = target.with_name(target.name + ".part")
-    size = 0
-    try:
-        with part.open("wb") as fh:
-            async for chunk in request.stream():
-                size += len(chunk)
-                if size > video.MAX_BYTES:
-                    raise ValueError(f"Video quá lớn (tối đa {video.MAX_BYTES // 1024 // 1024} MB)")
-                fh.write(chunk)
-        if not size:
-            raise ValueError("File rỗng")
-        part.rename(target)
-    except ValueError as exc:
-        part.unlink(missing_ok=True)
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    if (err := await receive_upload(request, target, video.MAX_BYTES, "Video")) is not None:
+        return err
     await hub.broadcast(hub.state_message())
     return {"ok": True, "name": target.name}
 

@@ -11,12 +11,22 @@ import { BLOSSOM_TEX, Fireworks, Floaters, LANTERN_TEX, LIXI_TEX, Puffs } from "
 import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
 import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
+import { avatarImg } from "./hud";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State, Vendor, VersusSide, WeatherKind } from "./types";
 
 export const W = 1080;
 export const H = 1920;
 const BASE_SPEED = 14; // đơn vị / giây khi speed = 1
+const escHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const HUNGRY = 30;  // % no bụng dưới chừng này: «sắp đói» (khớp server)
+const hungry = (s: Seat) => s.full != null && s.full < HUNGRY;
+const FOG_CLEAR: [number, number] = [42, 220];
+const OVERCAST: Record<WeatherKind, number> = { clear: 0, drizzle: 0.35, rain: 0.55, fog: 0.45 };  // trời xám đi bao nhiêu
+const GREY = new THREE.Color(0x9aa3ad);
+const FOG_THICK: [number, number] = [8, 70];  // sương mù: xa chừng này là mờ hẳn
+const CATTLE_WALK = 1.1;  // đàn trâu băng qua đường (đơn vị / giây)
+const VENDOR_WALK = 3.2;  // cô bán hàng đi trong khoang (đơn vị / giây)
 const INSIDE_X = 500; // khoang trong xe đặt riêng một chỗ, camera riêng
 
 // Góc máy ngoài xe admin chọn: [vị trí camera x, y, z, điểm nhìn x, y, z]
@@ -30,9 +40,14 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
 // đang chiếu video bảng quảng cáo: máy quay ngước lên khung bảng (sau xe), xe vẫn trong khung dưới
 const SHOW_CAM: [number, number, number, number, number, number] = [3.5, 8.5, 25, 0.5, 6.2, -8.5];
 const BOARD_H = 9.5;
-const RIDER_TAG_MAX = 24;
+const RIDER_TAG_MAX = 8;  // anh 03/11 «che hết rồi»: 21 tên chiếm 5 dòng đè thân xe — tên đủ đã có trên cửa sổ / bảng phải
 const FOCUS_CAM = [2.2, 1.6, 8.5];  // máy quay đứng chéo trước cửa sổ khách đang focus (lệch về đầu xe, cao hơn chút)  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
+// đối kháng ở bến (PLAN-152): xe thứ hai đậu làn sau (phía bến, thấy nóc + thân trên, không che bảng / tên); lật kèo thì hai xe đổi làn, vượt nhau theo chiều dọc xe
+const BAY2 = new THREE.Vector3(Number(URL_PARAMS.get("bay2x") ?? 0), 0, Number(URL_PARAMS.get("bay2z") ?? -5.5));
+const ORIGIN = new THREE.Vector3();
+const SWAP_S = 1.8;  // giây đổi làn
+const SWAP_PASS = 7;  // hai xe tránh nhau: lệch theo chiều dọc xe giữa lúc đổi làn
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
 // ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
 // giờ xuất bến + giờ xe chạy — chuyến 26 tiếng thì trời qua một ngày một đêm), ở bến theo đồng hồ thật.
@@ -73,6 +88,8 @@ function radiusFor(wind: number): number {
 const MAX_BUBBLES = 6;
 const BOARD_STEP_S = 1.0;  // bến, khi tắt giọng lơ xe: mỗi giây một người bước lên xe
 const BOARD_FALLBACK_S = 32;  // đứng quá lâu mà chưa nghe đọc tên (giọng lỗi / bị cắt) thì vẫn lên — khớp FULL_HOLD_MAX của server (35 giây)
+const BOARD_HURRY_S = 0.35;  // xe đã đủ khách / sắp chạy: người còn đứng hàng (đã có giường) lên liền một mạch
+const HURRY_LEFT_S = 12;  // còn chừng này giây là xe chạy thì cũng lên liền
 const LINE_COLS = 8;  // hàng chờ ở cửa xe gập dòng sau 8 người
 const PICKUP_STEP_S = 1.3;  // dừng đón bên đường: khớp PICKUP_STOP_STEP của server
 const BUBBLE_MS = 5000;
@@ -196,6 +213,10 @@ export class World {
   private petals = new Petals();
   private stars: THREE.Points;
   private bus = new Bus();
+  private rival = new Bus();  // đối kháng ở bến (PLAN-152): xe hướng đang thua đậu làn bên
+  private duelLead = "";
+  private duelSwap = 1;  // 0 → 1: hai xe đang đổi làn (lật kèo)
+  private duelTags = [label("", "lbl duel"), label("", "lbl duel")];  // biển phe trên nóc: [xe chính, xe làn bên]
   private road = new Roadway();
   private land = new Landscape();
   private tunnel = new Tunnel();
@@ -214,11 +235,18 @@ export class World {
   private wcLine: Walker[] = [];
   private boardLine: Walker[] = [];  // bến: hàng người có vé chờ bước lên xe (PLAN-145)
   private roadside: Walker[] = [];
+  private weatherKind: WeatherKind | null = null;
+  private fogWant: [number, number] = FOG_CLEAR;
+  private crossers: THREE.Object3D[] = [];  // trâu đang băng qua đường (sự cố «trâu qua đường»)
   private blockProp: THREE.Group | null = null;  // trạm thu phí / chốt công an trước đầu xe (PLAN-148)
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
   private blockLeaving = false;
   private showCam = false;
   private focusSeat = -1;
+  private vendorWalker: Walker | null = null;
+  private vendorIn: THREE.Group | null = null;
+  private vendorGo = { dir: 1, target: null as number | null, pause: 0, phase: 0 };
+  private vendorTag: CSS2DObject | null = null;
   private riderTag = label("", "lbl riders");  // bảng tên hành khách dưới thân xe (đủ tên dài)
   private windowTags: CSS2DObject[] = [];  // tên từng người ngay ô cửa sổ giường của mình (anh 03/11)
   private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
@@ -328,7 +356,13 @@ export class World {
       this.bus.group.add(tag);
       this.windowTags.push(tag);
     });
-    this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.fx.group,
+    this.rival.group.visible = false;
+    [this.bus, this.rival].forEach((b, i) => {
+      this.duelTags[i].position.set(2.5, 5.0, 0);
+      this.duelTags[i].visible = false;
+      b.group.add(this.duelTags[i]);
+    });
+    this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.rival.group, this.fx.group,
       this.dust.group, this.lixi.group, this.skyLanterns.group, this.blossoms.group);
 
     for (const stage of Object.values(this.stages)) this.scene.add(stage.group);
@@ -358,14 +392,20 @@ export class World {
     return stars;
   }
 
+  /** Thời tiết server bốc theo vùng: mưa phùn / mưa rào (vệt mưa + đường ướt) / sương mù (sương của cảnh dày lên). */
+  private setWeather(kind: WeatherKind): void {
+    if (kind === this.weatherKind) return;
+    this.weatherKind = kind;
+    this.weather.set(kind);
+    this.road.setWet(kind === "drizzle" || kind === "rain");
+    this.fogWant = kind === "fog" ? FOG_THICK : FOG_CLEAR;
+  }
+
   private setRegion(region: Region): void {
     if (region === this.region) return;
     this.region = region;
     this.land.setRegion(region);
     bendTree(this.land.group);  // cảnh vùng mới dựng: uốn theo đường ngay, không đợi lượt quét
-    const rain = region === "bac";  // mưa phùn miền Bắc
-    this.weather.set(rain ? "drizzle" : "clear");
-    this.road.setWet(rain);
     this.petals.setColor(region === "bac" ? 0xffa6c4 : 0xffd23f); // đào hồng miền Bắc, mai vàng nơi khác
     this.blossomColor = region === "bac" ? 0xffa6c4 : 0xffd23f;
     this.road.setBlossom(region === "bac" ? DAO : MAI);
@@ -416,12 +456,14 @@ export class World {
       this.aimCamera(false);
     }
     if (c) this.control.fade = !!c.fade;
+    this.road.setAds(c?.ads_on ? c.ads ?? [] : []);  // biển quảng cáo bot ven đường
     const quality: Quality = c?.quality === "low" || c?.quality === "medium" ? c.quality : "high";
     if (quality !== this.quality) this.applyQuality(quality);
     // Chúc Tết (quà lớn) chen vào giữa bến / đường / trạm: giữ nguyên cảnh đang có, không nhảy cảnh.
     const want = state.phase === "SPECIAL" ? this.set : SET_OF[state.phase];
     if (want !== this.set) this.transition(() => this.applySet(want));
     if (state.region !== this.region && (state.phase === "DRIVING" || !prev)) this.setRegion(state.region);
+    this.setWeather(state.weather ?? (state.region === "bac" ? "drizzle" : "clear"));
     const leg = state.legs[state.leg_index];
     if (leg && state.phase === "DRIVING") {  // cột cây số: điểm tới + km còn lại (khớp số km trên bảng tuyến)
       this.road.setTarget(leg.kind === "rest" ? "TRẠM DỪNG" : leg.label, leg.km - state.trip_km);
@@ -439,11 +481,17 @@ export class World {
       this.focusSeat = fseat;
       this.seatsKey = "";  // vẽ lại tên (người focus hiện đủ tên)
     }
-    const key = JSON.stringify(state.bus.seats);
+    // % no bụng đổi vài giây một lần: chỉ sửa số % trên giường, không dựng lại nhãn (ảnh đại diện khỏi tải lại / nháy)
+    const key = JSON.stringify(state.bus.seats.map((x) => x && { ...x, full: hungry(x) }));
     if (key !== this.seatsKey) {
       this.seatsKey = key;
       this.refreshBerths(state.bus.seats);
       this.refreshRiderTag(state.bus.seats);
+    } else {
+      state.bus.seats.forEach((x, i) => {
+        const el = x && this.berths[i]?.tag.element.querySelector("small.full");
+        if (el && x.full != null) el.textContent = `${hungry(x) ? "😋 sắp đói" : "🍚"} ${x.full}%`;
+      });
     }
     this.bus.setBanner(state.bus.banner);
     if (state.care) this.bus.setDirt(state.care.dirt);
@@ -453,28 +501,60 @@ export class World {
     this.bus.setRoute(`${state.departure.short} → ${last && state.phase !== "BOARDING" ? last.label : state.bus.to}`);
     this.ben.setStation(state.departure.name);
     this.ben.setLanes(state.lanes);
+    // đối kháng ở bến: xe hướng đang thua đậu làn bên; xe chính luôn là hướng dẫn điểm → lật kèo thì hai xe đổi làn
+    const other = want === "ben" ? state.versus?.sides.find((x) => x.label !== state.bus.lane) : undefined;
+    this.rival.group.visible = !!other;
+    this.duelTags.forEach((t) => { t.visible = !!other; });
+    if (other) {
+      const mine = state.versus!.sides.find((x) => x !== other)!;
+      const done = !!state.versus!.done;
+      const tag = (x: VersusSide, win: boolean) => done
+        ? (win ? `🏁 ${x.arrow} ${escHtml(x.dest)} · XUẤT BẾN` : `⏳ ${x.arrow} ${escHtml(x.dest)} · CHUYẾN SAU`)
+        : `${x.lead && x.points ? "👑 " : ""}${x.arrow} ${escHtml(x.dest)} · <b>${x.points}</b>`;
+      this.duelTags[0].element.innerHTML = tag(mine, true);
+      this.duelTags[1].element.innerHTML = tag(other, false);
+      this.rival.setRoute(`${state.departure.short} → ${other.dest}`);
+      if (this.duelLead && this.duelLead !== state.bus.lane) this.duelSwap = 0;
+      this.duelLead = state.bus.lane;
+    } else if (this.duelLead) {
+      this.duelLead = "";
+      this.duelSwap = 1;
+      this.bus.group.position.set(0, 0, 0);
+    }
   }
 
   /** Bảng tên hành khách trên nóc xe (anh 03/11: «góc nhìn nào cũng phải có tên những người đang ở trong xe»): đi theo xe ở
    * mọi góc máy ngoài xe; trong xe thì tên đã nằm trên từng giường. Người tặng quà ⭐ viền vàng, đông quá thì «+N người». */
+  /** Số người đã có giường nhưng còn đứng hàng ở bến (chưa bước vào cửa) — HUD trừ ra để số «trên xe» khớp cảnh
+   * (anh 04/11 «khách hiển thị 24/24 mà vẫn cho lên xe»: hết trận đối kháng cả 24 người được xếp giường cùng lúc). */
+  onBoarding: ((pending: number) => void) | null = null;
+  private lastSeats: (Seat | null)[] = [];
+
+  private boardChanged(): void {
+    this.onBoarding?.(this.boardLine.length);
+    this.refreshRiderTag(this.lastSeats);
+  }
+
   private refreshRiderTag(seats: (Seat | null)[]): void {
+    this.lastSeats = seats;
+    const queued = new Set(this.boardLine.map((w) => w.name));  // còn đứng hàng ở bến: chưa hiện ở cửa sổ, chưa tính trên xe
     seats.forEach((s, i) => {  // tên ngắn ngay cửa sổ giường (tên dài bị cắt «…» — tên đủ ở bảng dưới thân xe)
       const el = this.windowTags[i]?.element;
       if (!el) return;
-      el.style.display = s ? "" : "none";
+      el.style.display = s && !queued.has(s.name) ? "" : "none";
       el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
-      el.textContent = s ? `${s.vip ? "⭐" : ""}${i === this.focusSeat ? s.name : short}` : "";
+      el.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐" : ""}${escHtml(i === this.focusSeat ? s.name : short)}${s.snack ?? ""}${hungry(s) ? "😋" : ""}` : "";
       this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
-    const riders = seats.filter((x): x is Seat => !!x);
+    const riders = seats.filter((x): x is Seat => !!x && !queued.has(x.name));
     const el = this.riderTag.element;
     el.style.display = riders.length ? "" : "none";
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
     const shown = riders.slice(0, RIDER_TAG_MAX);
     el.innerHTML = `<b>🚌 Trên xe ${riders.length}/${seats.length}</b> `
-      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${r.vip ? "⭐" : ""}${esc(r.name)}</span>`).join(" · ")
+      + shown.map((r) => `<span class="${r.vip ? "vip" : ""}">${avatarImg(r.avatar)}${r.vip ? "⭐" : ""}${esc(r.name)}${r.snack ?? ""}${hungry(r) ? "😋" : ""}</span>`).join(" · ")
       + (riders.length > shown.length ? ` · <i>+${riders.length - shown.length} người</i>` : "");
   }
 
@@ -485,7 +565,8 @@ export class World {
       b.blanket.material = mat(s ? (s.vip ? 0xffc93c : hueColor(s.hue, 0.55)) : 0xb0a596);  // tặng quà: giường vàng (PLAN-144)
       b.head.visible = !!s;
       b.tag.element.className = s ? (s.vip ? "lbl berth vip" : "lbl berth") : "lbl berth empty";
-      b.tag.element.textContent = s ? `${s.vip ? "⭐ " : ""}${s.name}` : `trống`;
+      b.tag.element.innerHTML = s ? `${avatarImg(s.avatar)}${s.vip ? "⭐ " : s.badge ? `${s.badge} ` : ""}${escHtml(s.name)}${s.snack ? ` ${s.snack}` : ""}`
+        + (s.full != null ? `<small class="${hungry(s) ? "full hungry" : "full"}">${hungry(s) ? "😋 sắp đói" : "🍚"} ${s.full}%</small>` : "") : `trống`;
     });
   }
 
@@ -525,7 +606,9 @@ export class World {
     for (const w of [...this.walkers]) this.removeWalker(w);
     this.wcLine = [];
     this.boardLine = [];
+    this.boardChanged();
     this.roadside = [];
+    this.vendorWalker = null;
     this.dropBlock();
     this.dropBillboard();
     this.bus.group.position.set(0, 0, 0);
@@ -556,6 +639,9 @@ export class World {
         break;
       case "chat":
         if (e.seat != null) this.bubble(e.seat, e.text ?? "");
+        break;
+      case "snack":  // khách gõ mua: cô Ba đi tới ngang giường người đó
+        if (e.seat != null && this.berths[e.seat]) this.vendorGo.target = this.berths[e.seat].bubbleAt.z + 0.8;
         break;
       case "rest":
         this.rest.setSpecialty(e.specialty ?? "");
@@ -644,7 +730,7 @@ export class World {
       this.roadside.push(this.addWalker(p, [new THREE.Vector3(doorX, 0.1, 2.4), new THREE.Vector3(doorX, 0.1, 1.5)], 3.2,
         undefined, 2 + i * PICKUP_STEP_S));
     });
-    const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign");
+    const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign small");
     sign.position.set(doorX + 3.4, 1.1, curb + 0.6);  // bên phải nhóm người, thấp — không đè tên
     this.scene.add(sign);
     window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
@@ -662,6 +748,91 @@ export class World {
       const want = this.blockLeaving ? 1.35 : 0;
       this.blockArm.rotation.x += (want - this.blockArm.rotation.x) * Math.min(1, dt * 4);
     }
+    for (const c of this.crossers) {  // trâu thong thả đi ngang qua đầu xe, ra khỏi đường thì vòng lại phía bên kia
+      c.position.z -= CATTLE_WALK * dt;
+      if (c.position.z < -7) c.position.z = 6;
+      c.userData.phase = (c.userData.phase ?? 0) + dt * 5;
+      (c.userData.legs as THREE.Object3D[]).forEach((leg, i) => { leg.rotation.z = Math.sin(c.userData.phase + i * Math.PI / 2) * 0.35; });
+    }
+  }
+
+  /** Cô bán hàng (anh 03/11): xe tấp vào → cô đội nón lá ôm thúng từ lề bước lên cửa trước; lúc bán thì bảng «🧺 Cô Ba bán…»
+   * chạy dọc thân xe (cô đang đi giữa hai dãy giường). Dựng theo state: màn mở giữa chừng vẫn thấy. */
+  private updateVendor(v: Vendor | null, dt: number): void {
+    this.updateVendorInside(v?.stage === "sell" ? v : null, dt);
+    const stop = v?.stage === "stop" && this.set === "road";
+    if (stop && !this.vendorWalker) {
+      const p = makePerson(25, `🧺 ${v!.name}`);  // màu 25: nón lá, không ba lô
+      const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.26, 12), mat(0x9c6b30));
+      basket.position.set(0.42, 0.95, 0.15);
+      const food = at(box(0.5, 0.12, 0.5, 0xf2c14e), 0.42, 1.12, 0.15);  // bánh mì, nem xếp trên thúng
+      p.add(basket, food);
+      const doorX = this.bus.doorSpot.x - 1.6;
+      p.position.set(doorX - 2.6, 0.1, 4.3);
+      this.vendorWalker = this.addWalker(p, [new THREE.Vector3(doorX, 0.1, 2.4), new THREE.Vector3(doorX, 0.1, 1.5)], 2.6,
+        () => { this.vendorWalker = null; }, 1.2);
+    }
+    if (!stop && this.vendorWalker) {
+      if (this.walkers.includes(this.vendorWalker)) this.removeWalker(this.vendorWalker);
+      this.vendorWalker = null;
+    }
+    const selling = v?.stage === "sell" && this.set === "road";
+    if (selling && !this.vendorTag) {
+      this.vendorTag = label(`🧺 ${v!.name}`, "lbl sign small");  // nhỏ: cách mua đã có trên dòng gợi ý
+      this.bus.group.add(this.vendorTag);
+    }
+    if (!selling && this.vendorTag) {
+      this.vendorTag.removeFromParent();
+      this.vendorTag = null;
+    }
+    if (this.vendorTag) {  // đi tới đi lui suốt dọc thân xe (anh 03/11), từ cửa sổ đầu tới cửa sổ cuối
+      const xs = this.bus.windowSpots.map((w) => w.x);
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      this.vendorTag.position.set(lo + (hi - lo) * (0.5 + 0.5 * Math.sin(this.t * 0.25)), 3.1, 1.2);
+    }
+  }
+
+  /** Trong khoang xe (góc «trong xe», anh 03/11): cô Ba ôm thúng đi qua đi lại ở lối giữa hai tầng giường; ai gõ mua thì cô
+   * đi tới ngang giường người đó, đứng một chút rồi đi tiếp. */
+  private updateVendorInside(v: Vendor | null, dt: number): void {
+    if (v && !this.vendorIn) {
+      const p = makePerson(25, `🧺 ${v.name}`, false, 2.2);  // tên ngắn: món đã ghi trên thẻ bán hàng
+      p.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.26, 12), mat(0x9c6b30)), 0.42, 0.95, 0.15),
+        at(box(0.5, 0.12, 0.5, 0xf2c14e), 0.42, 1.12, 0.15));
+      p.position.set(0, 0, -11);
+      this.inside.add(p);
+      this.vendorIn = p;
+      this.vendorGo = { dir: 1, target: null, pause: 0, phase: 0 };
+    }
+    if (!v && this.vendorIn) {
+      dropLabels(this.vendorIn);
+      this.inside.remove(this.vendorIn);
+      this.vendorIn = null;
+      return;
+    }
+    const p = this.vendorIn;
+    if (!p) return;
+    const go = this.vendorGo;
+    if (go.pause > 0) {  // đứng ngang giường người vừa mua: đưa món
+      go.pause -= dt;
+      animatePerson(p, "wave", (go.phase += dt * 6));
+      return;
+    }
+    const goal = go.target ?? (go.dir > 0 ? 11 : -11);
+    const step = VENDOR_WALK * dt * Math.sign(goal - p.position.z);
+    if (Math.abs(goal - p.position.z) <= Math.abs(step)) {
+      p.position.z = goal;
+      if (go.target != null) {
+        go.target = null;
+        go.pause = 1.6;
+      } else {
+        go.dir = -go.dir;  // tới đầu / cuối xe: quay lại
+      }
+    } else {
+      p.position.z += step;
+      p.rotation.y = step > 0 ? 0 : Math.PI;  // mặt nhìn theo hướng đi
+    }
+    animatePerson(p, "walk", (go.phase += dt * 7));
   }
 
   private buildBlock(kind: string): void {
@@ -676,6 +847,44 @@ export class World {
       this.blockArm = arm;
       const sign = label("🚧 TRẠM THU PHÍ", "lbl sign");
       sign.position.set(4.6, 0.3, 4.6);  // lề phía camera, dưới thân xe: không bị mép khung cắt
+      g.add(sign);
+    } else if (kind === "tire") {  // xẹp lốp: Anh Tư ngồi thay bánh trước, kích xe, bánh dự phòng, tam giác cảnh báo sau xe
+      const fix = makePerson(200, "🔧 Anh Tư");
+      fix.position.set(4.2, 0.1, 2.3);
+      fix.scale.y = 0.75;  // ngồi xổm
+      const spare = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.22, 10, 20), mat(0x212121));
+      spare.position.set(5.6, 0.62, 2.6);
+      spare.rotation.y = 0.4;
+      const jack = at(box(0.35, 0.5, 0.35, 0xd32f2f), 4.9, 0.25, 1.6);
+      const warn = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 3), mat(0xff3d00, 0x551100));
+      warn.position.set(-10.5, 0.4, 1.6);
+      g.add(fix, spare, jack, warn);
+      const sign = label("🛞 XẸP LỐP · ĐANG THAY", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
+    } else if (kind === "jam") {  // kẹt xe: hàng xe con, xe tải đứng trước đầu xe, đèn phanh đỏ
+      const colors = [0xeceff1, 0x1565c0, 0xc62828, 0x37474f, 0xf9a825];
+      // khung dọc TikTok: trước đầu xe chỉ thấy chừng 6 đơn vị — hai xe cùng làn sát đầu xe, một xe tải làn bên kia
+      const pick = Math.floor(Math.random() * colors.length);
+      g.add(this.makeCar(9.8, 0.1, colors[pick]), this.makeCar(14.2, -0.2, colors[(pick + 1) % 5], true),
+        this.makeCar(11.5, -4.2, colors[(pick + 3) % 5], true));
+      const sign = label("🚗 KẸT XE · NHÍCH TỪNG CHÚT", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
+    } else if (kind === "cattle") {  // đàn trâu thong thả băng qua đường ngay trước đầu xe, có chú bé chăn trâu
+      for (let i = 0; i < 4; i++) {
+        const b = this.makeBuffalo();
+        b.position.set(8.8 + (i % 2) * 2.2, 0, 6 - i * 3.2);
+        g.add(b);
+        this.crossers.push(b);
+      }
+      const boy = makePerson(25, "🧑‍🌾 Chăn trâu");
+      boy.position.set(11.4, 0.1, 3.5);
+      g.add(boy);
+      this.crossers.push(boy);
+      boy.userData.legs = [];
+      const sign = label("🐃 TRÂU QUA ĐƯỜNG", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
       g.add(sign);
     } else {
       const cop = makePerson(55, "👮 CSGT");
@@ -749,7 +958,49 @@ export class World {
     this.scene.remove(group);
   }
 
+  /** Xe con / xe tải nhỏ đơn giản (thân, cabin kính, 4 bánh, đèn phanh) — dùng cho cảnh kẹt xe. */
+  private makeCar(x: number, z: number, color: number, truck = false): THREE.Group {
+    const car = new THREE.Group();
+    const len = truck ? 5.2 : 3.6;
+    car.add(at(box(len, truck ? 1.9 : 0.8, 1.7, color), 0, truck ? 1.35 : 0.75, 0));
+    car.add(at(box(truck ? 1.3 : 1.9, 0.7, 1.55, truck ? 0xeceff1 : 0x90a4ae, 0x111a22), truck ? -len / 2 + 0.7 : -0.2,
+      truck ? 1.1 : 1.45, 0));
+    for (const [wx, wz] of [[-len / 2 + 0.7, 0.85], [len / 2 - 0.7, 0.85], [-len / 2 + 0.7, -0.85], [len / 2 - 0.7, -0.85]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 12), mat(0x1b1b1b));
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wx, 0.36, wz);
+      car.add(wheel);
+    }
+    for (const lz of [0.6, -0.6]) car.add(at(box(0.1, 0.28, 0.42, 0xff1744, 0xff1744), -len / 2 - 0.03, truck ? 0.6 : 0.85, lz));  // đèn phanh
+    car.position.set(x, 0, z);
+    return car;
+  }
+
+  /** Con trâu: thân xám đen, đầu, cặp sừng cong, 4 chân (đung đưa khi đi). */
+  private makeBuffalo(): THREE.Group {
+    const b = new THREE.Group();
+    const skin = 0x5f5754;  // xám trâu, sáng hơn mặt đường để ban đêm vẫn thấy
+    b.add(at(box(0.9, 0.85, 1.9, skin), 0, 1.15, 0), at(box(0.6, 0.6, 0.7, skin), 0, 1.3, -1.15));
+    for (const side of [-1, 1]) {
+      const horn = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 6, 10, Math.PI), mat(0xd7ccc8));
+      horn.position.set(side * 0.25, 1.7, -1.15);
+      horn.rotation.set(0, Math.PI / 2, side * 0.6);
+      b.add(horn);
+    }
+    const legs: THREE.Object3D[] = [];
+    for (const [lx, lz] of [[-0.3, -0.7], [0.3, -0.7], [-0.3, 0.7], [0.3, 0.7]]) {
+      const leg = new THREE.Group();
+      leg.position.set(lx, 0.75, lz);
+      leg.add(at(box(0.2, 0.75, 0.2, skin), 0, -0.37, 0));
+      b.add(leg);
+      legs.push(leg);
+    }
+    b.userData.legs = legs;
+    return b;
+  }
+
   private dropBlock(): void {
+    this.crossers = [];
     if (!this.blockProp) return;
     dropLabels(this.blockProp);
     this.scene.remove(this.blockProp);
@@ -769,6 +1020,7 @@ export class World {
     w.name = name;
     w.queuedAt = this.t;
     this.boardLine.push(w);
+    this.boardChanged();
   }
 
   private lineSpot(k: number): THREE.Vector3 {
@@ -790,6 +1042,12 @@ export class World {
     const voiceOff = this.state?.control?.voice_on === false;
     let go = this.boardLine.find((w) => w.callAt !== undefined && this.t >= w.callAt);
     const head = this.boardLine[0];
+    // anh 03/11 «24/24 mà vẫn xếp hàng lên»: người trong hàng đã có giường, chỉ chờ lơ xe đọc tên — xe đầy / sắp chạy thì
+    // khỏi chờ đọc, lên liền cho cảnh khớp số 24/24
+    const s = this.state;
+    const hurry = !!s && s.phase === "BOARDING"
+      && (s.bus.seats.every((x) => x) || (s.phase_left ?? Infinity) < HURRY_LEFT_S);
+    if (!go && hurry && this.boardTimer >= BOARD_HURRY_S) go = head;
     if (!go && this.boardTimer >= BOARD_STEP_S && (voiceOff || this.t - (head.queuedAt ?? 0) > BOARD_FALLBACK_S)) go = head;
     if (!go) return;
     this.boardTimer = 0;
@@ -797,6 +1055,7 @@ export class World {
     go.hold = false;
     go.path = [this.bus.doorSpot.clone()];  // tới cửa thì lên xe (hết đường đi → gỡ khỏi cảnh)
     this.boardLine.forEach((w, i) => { w.path = [this.lineSpot(i)]; });
+    this.boardChanged();
   }
 
   private bubble(seat: number, text: string): void {
@@ -970,15 +1229,18 @@ export class World {
     }
     const look = this.look = lookAt(this.skyHour);
     this.night = isNight(this.skyHour);
-    this.sky.set(look.top, look.horizon);
+    const g = OVERCAST[this.weatherKind ?? "clear"];  // mưa / sương: trời xám, nắng yếu — nhìn là biết đổi thời tiết
+    const grey = (hex: number) => (g ? new THREE.Color(hex).lerp(GREY, g * (this.night ? 0.3 : 1)).getHex() : hex);
+    const horizon = grey(look.horizon);
+    this.sky.set(grey(look.top), horizon);
     this.scene.background = null;
-    (this.scene.fog as THREE.Fog).color.setHex(look.horizon);
-    (this.renderer.domElement.parentElement as HTMLElement).style.background = `#${look.horizon.toString(16).padStart(6, "0")}`;
+    (this.scene.fog as THREE.Fog).color.setHex(horizon);
+    (this.renderer.domElement.parentElement as HTMLElement).style.background = `#${horizon.toString(16).padStart(6, "0")}`;
     this.hemi.color.setHex(look.hemiSky);
     this.hemi.groundColor.setHex(look.hemiGround);
     this.hemi.intensity = look.hemi;
     this.sun.color.setHex(look.sunColor);
-    this.sun.intensity = look.sun;
+    this.sun.intensity = look.sun * (1 - 0.7 * g);
     this.scene.environmentIntensity = this.night ? 0.25 : 0.65;
     this.renderer.toneMappingExposure = look.exposure;
     this.stars.visible = this.night;
@@ -1144,8 +1406,10 @@ export class World {
     this.t += dt;
     this.updateSky();
     const s = this.state;
-    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block;  // dừng đón / bị chặn: đứng yên
+    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block
+      && s?.vendor?.stage !== "stop";  // dừng đón / bị chặn / tấp vào cho cô bán hàng lên: đứng yên
     this.updateBlock(s?.block?.kind ?? null, dt);
+    this.updateVendor(s?.vendor ?? null, dt);
     this.updateBillboard(s?.show ?? null);
     if (moving && this.roadside.length) {
       this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));
@@ -1165,8 +1429,24 @@ export class World {
     }
     this.updateRoadShape(dt, moving);
     this.updateTunnel(dt, moving && !!s?.terrain?.tunnel);
-    this.bus.update(dt, this.speed, this.night || this.inTunnel);  // trong hầm bật đèn xe
+    let swapSpeed = 0;
+    if (this.rival.group.visible) {  // hai xe đổi làn: xe vừa dẫn điểm từ làn bên lên làn đầu, xe kia lùi về
+      const before = this.duelSwap;
+      this.duelSwap = Math.min(1, this.duelSwap + dt / SWAP_S);
+      const k = THREE.MathUtils.smoothstep(this.duelSwap, 0, 1);
+      const pass = Math.sin(Math.PI * k) * SWAP_PASS;
+      this.bus.group.position.lerpVectors(BAY2, ORIGIN, k).x += pass;
+      this.rival.group.position.lerpVectors(ORIGIN, BAY2, k).x -= pass;
+      swapSpeed = before < 1 ? SWAP_PASS * 2 : 0;
+      this.rival.update(dt, swapSpeed, this.night);
+    }
+    this.bus.update(dt, this.speed + swapSpeed, this.night || this.inTunnel);  // trong hầm bật đèn xe
     this.weather.update(dt, moving ? this.speed * 0.1 : 0);
+    const fog = this.scene.fog as THREE.Fog;  // sương dày / tan dần, không bật tắt cái rụp
+    const fogK = this.view === "inside" ? 1 : Math.min(1, dt * 0.6);
+    const want = this.view === "inside" ? FOG_CLEAR : this.fogWant;  // trong khoang xe: không mù
+    fog.near += (want[0] - fog.near) * fogK;
+    fog.far += (want[1] - fog.far) * fogK;
 
     // người đi bộ
     for (const w of [...this.walkers]) {

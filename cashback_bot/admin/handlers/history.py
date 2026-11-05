@@ -15,6 +15,7 @@ from cashback_bot.admin.handlers.deals import history_line as deals_history
 from cashback_bot.admin.handlers.engagement import history_line as engagement_history
 from cashback_bot.admin.handlers.insights import goal_history
 from cashback_bot.admin.handlers.reserve import ACCOUNT_KINDS, cancelled_ids, vn_time
+from cashback_bot.admin.handlers.membership import history_line as membership_history
 from cashback_bot.admin.handlers.retention import history_line as retention_history
 from cashback_bot.admin.handlers.tiktok import history_line as tiktok_history
 from cashback_bot.money import format_vnd
@@ -149,7 +150,7 @@ def setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
-        "goal", "retention", "tiktok_mode", "sale_reminder", "deals", "announce",
+        "goal", "retention", "tiktok_mode", "sale_reminder", "deals", "announce", "membership_thresholds",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -187,6 +188,8 @@ def setting_line(row: sqlite3.Row) -> str | None:
         return goal_history(before, after)
     if action == "retention":
         return retention_history(before, after)
+    if action == "membership_thresholds":
+        return membership_history(before, after)
     if action == "tiktok_mode":
         return tiktok_history(before, after)
     if action == "sale_reminder":

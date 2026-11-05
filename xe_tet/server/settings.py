@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .game.engine import BOARD_SECONDS, FEATURE_MODES, REST_SECONDS, TRIP_MINUTES
 from .game.geo import DEFAULT_DEPARTURE
+from .game.moderation import off_platform
 from .game.network import available
 from .game.talk import TALK_STYLES
 
@@ -64,7 +65,31 @@ DEFAULTS: dict = {
     "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
     "cover_on": True,  # tự bù lỗ: góp chưa đủ sau cover_seconds giây thì Anh Tư bù phần thiếu, xe đi (anh 03/11: 60 giây)
     "cover_seconds": 60,
+    "vendor_on": True,  # cô bán hàng lên xe (anh 03/11): góp đủ vendor_xu xu thì cô lên bán nem, bì, bánh mì
+    "vendor_xu": 10,
+    "roll_on": True,  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng lâu → gọi tên, chờ trả lời mới xếp giường
+    "roll_idle_min": 15,  # im lặng quá chừng này phút thì điểm danh
+    "roll_wait_s": 45,  # giây chờ người được gọi tên thả tim / bình luận
+    # đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn)
+    "versus_on": False,  # đối kháng (anh 03/11): hai hướng đầu hàng chờ đấu điểm theo quê, hướng thắng chạy chuyến sau
+    "versus_xu": 20,  # điểm đối kháng mỗi xu (PLAN-151: quà quyết trận)
+    "versus_golden_s": 60,  # giờ vàng: chừng này giây cuối trước khi xe về bến, quà x2 điểm (0 = tắt)
+    "quiz_on": True,  # đố vui A / B / C về các tỉnh lúc xe chạy
+    "quiz_every_min": 3,
+    "incidents_on": True,  # sự cố dọc đường: xẹp lốp, kẹt xe, trâu qua đường — tự xong, tim làm nhanh hơn, quà xong ngay
+    "incident_xu": 5,
+    # quảng cáo bot của anh (03/11): biển ven đường + dòng gợi ý trên màn + lơ xe đọc mỗi ads_talk_min phút
+    "ads_on": True,
+    "ads_talk_min": 8,
+    # anh 04/11 «live TikTok nói sàn khác thì cấm live» → câu trung tính: không tên sàn / app / bot, chỉ mời ghé trang cá nhân
+    "ads": [
+        {"title": "👤 Ghé trang cá nhân kênh", "desc": "Xem thêm tiện ích của nhà xe",
+         "say": "Bà con muốn biết thêm tiện ích của nhà xe thì ghé trang cá nhân của kênh xem thử.",
+         "keys": "hoàn tiền, shopee, sốp pi, săn sale, mã giảm, cashback, chatgpt, chat gpt, gpt, gemini, tài khoản ai"},
+    ],
 }
+ADS_MAX = 3
+AD_LIMITS = {"title": 32, "desc": 70, "say": 200, "keys": 120}  # keys: từ khoá bình luận, cách nhau dấu phẩy
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
@@ -76,6 +101,25 @@ MIXES = ("balanced", "music", "voice")
 BLOCK_XU = (1, 1000)
 COVER_RANGE = (10, 600)
 log = logging.getLogger("xe_tet")
+
+
+def clean_ads(value) -> list[dict]:
+    """Tối đa ADS_MAX mục {title, desc, say, keys}: chữ một dòng, cắt độ dài; mục không có tên thì bỏ. Mục có tên sàn / app /
+    link (off_platform) cũng bỏ — live TikTok nói sàn khác thì bị dừng (anh 04/11); bỏ hết vì lý do đó thì dùng câu trung tính."""
+    ads, dropped = [], False
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        ad = {k: " ".join(str(item.get(k) or "").split())[:n] for k, n in AD_LIMITS.items()}
+        if not ad["title"]:
+            continue
+        if any(off_platform(ad[k]) for k in ("title", "desc", "say")):
+            dropped = True
+            continue
+        ads.append(ad)
+    if not ads and dropped:
+        return [dict(a) for a in DEFAULTS["ads"]]
+    return ads[:ADS_MAX]
 
 
 def clean(changes: dict, current: dict | None = None) -> dict:
@@ -128,6 +172,24 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(BLOCK_XU[1], max(BLOCK_XU[0], float(value))))
         elif key == "cover_seconds":  # bản trước: 0 = chờ tới khi đủ (giờ là công tắc cover_on) → về mặc định 60
             out[key] = int(min(COVER_RANGE[1], max(COVER_RANGE[0], float(value)))) if float(value) > 0 else DEFAULTS[key]
+        elif key == "vendor_xu":
+            out[key] = int(min(1000, max(1, float(value))))
+        elif key == "roll_idle_min":
+            out[key] = int(min(120, max(1, float(value))))
+        elif key == "versus_xu":
+            out[key] = int(min(200, max(1, float(value))))
+        elif key == "versus_golden_s":
+            out[key] = int(min(180, max(0, float(value))))
+        elif key == "quiz_every_min":
+            out[key] = int(min(30, max(1, float(value))))
+        elif key == "ads":
+            out[key] = clean_ads(value)
+        elif key == "ads_talk_min":
+            out[key] = int(min(60, max(2, float(value))))
+        elif key == "incident_xu":
+            out[key] = int(min(1000, max(1, float(value))))
+        elif key == "roll_wait_s":
+            out[key] = int(min(180, max(15, float(value))))
         elif key == "tiktok_user":
             text = str(value or "")
             out[key] = text if re.fullmatch(r"[A-Za-z0-9._]{0,24}", text) else out[key]

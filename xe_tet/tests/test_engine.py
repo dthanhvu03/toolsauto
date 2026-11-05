@@ -382,8 +382,10 @@ def test_follow_once_and_share_cooldown():
 
 
 def test_idle_queued_ticket_expires_active_one_rides():
-    from xe_tet.server.game.engine import TICKET_IDLE
+    """Chỉ khi anh bật giới hạn im lặng (ticket_idle > 0)."""
+    TICKET_IDLE = 30 * 60.0
     e = Engine(0.0)
+    e.ticket_idle = TICKET_IDLE
     for i in range(24):
         comment(e, f"K{i}", "Huế", 1)
     comment(e, "Ma", "Huế", 2)  # xếp hàng rồi rời phòng
@@ -398,6 +400,122 @@ def test_idle_queued_ticket_expires_active_one_rides():
     run_until(e, "BOARDING", t)
     assert e.bus.riders() == ["thật"] and "ma" not in e.queued_at
 
+
+
+def _roll_setup():
+    """Xe 1 đầy 24 người Huế; «Im» (im lặng) và «Hai» (thả tim đều) giữ chỗ chuyến sau; chạy tới lúc xe 2 đón khách."""
+    e = Engine(0.0)
+    e.roll_idle = 60.0
+    for i in range(24):
+        comment(e, f"K{i}", "Huế", 1)
+    comment(e, "Im", "Huế", 2)
+    comment(e, "Hai", "Huế", 3)
+    t = run_until(e, "DRIVING", 3)
+    while e.phase != "BOARDING":
+        t += 5
+        e.handle({"type": "like", "name": "Hai", "count": 1}, t)
+        e.tick(t)
+    return e, t
+
+
+def test_silent_watcher_is_called_by_name_and_keeps_bed_when_answering():
+    """Anh 03/11: im lặng vẫn có thể đang xem → không gạch vé; tới lượt lên xe thì lơ xe gọi tên, giữ giường chờ trả lời."""
+    e, t = _roll_setup()
+    assert e.bus.riders() == ["hai"] and "im" in e.rollcalls
+    out = e.drain()
+    assert any(ev["type"] == "rollcall" and ev["name"] == "Im" for ev in out)
+    assert e.snapshot()["rollcall"][0]["name"] == "Im"
+    e.handle({"type": "like", "name": "Im", "count": 1}, t + 10)
+    assert "im" in e.bus.riders() and not e.rollcalls and "rollcall_ok" in types(e.drain())
+
+
+def test_rollcall_holds_bed_and_departure_then_moves_to_next_trip_then_drops():
+    e, t = _roll_setup()
+    comment(e, "Moi", "Huế", t + 1)  # người mới: giường trống thứ 3, không lấy giường đang giữ cho Im
+    held_until = e.rollcalls["im"]
+    e.phase_until = t + 2  # hết giờ đón trong lúc đang gọi tên: xe chờ hết giờ điểm danh
+    e.tick(t + 3)
+    assert e.phase == "BOARDING" and e.phase_until == held_until
+    e.tick(held_until + 0.1)  # không ai trả lời: lùi xuống chuyến sau, vé vẫn giữ
+    assert "im" not in e.bus.riders() and "im" in e.queued_at and e.viewers["im"].roll_skip == e.bus.no
+    assert "rollcall_skip" in types(e.drain())
+    t = run_until(e, "DRIVING", held_until + 0.1)
+    while e.phase != "BOARDING":
+        t += 5
+        e.tick(t)
+    assert "im" in e.rollcalls  # chuyến sau gọi lại
+    e.tick(e.rollcalls["im"] + 0.1)
+    assert "im" not in e.queued_at and e.viewers["im"].province is None  # lỡ 2 lần: nhả vé
+    assert "rollcall_drop" in types(e.drain())
+
+
+def test_rollcall_off_seats_silent_people_directly():
+    e = Engine(0.0)
+    e.roll_on = False
+    e.roll_idle = 60.0
+    for i in range(24):
+        comment(e, f"K{i}", "Huế", 1)
+    comment(e, "Im", "Huế", 2)
+    t = run_until(e, "DRIVING", 3)
+    while e.phase != "BOARDING":
+        t += 5
+        e.tick(t)
+    assert e.bus.riders() == ["im"]
+
+
+def test_ticket_holder_rejoining_counts_as_watching():
+    e = Engine(0.0)
+    e.ticket_idle = 600.0
+    comment(e, "An", "Huế", 1)
+    e.handle({"type": "join", "name": "An"}, 500)
+    e.handle({"type": "join", "name": "Lạ"}, 500)
+    assert e.viewers["an"].last_seen == 500 and e.viewers["lạ"].last_seen == 0
+
+
+def test_big_gifts_do_not_queue_endless_specials():
+    """Rà soát 03/11: 30 quà 29.999 xu từng xếp 84 cảnh chúc Tết (~28 phút xe đứng)."""
+    from xe_tet.server.game.engine import SPECIALS_QUEUE_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Huế", 1)
+    for i in range(30):
+        e.handle({"type": "gift", "name": "An", "diamonds": 29999, "gift": "Vũ trụ"}, 2 + i)
+    assert len(e.specials) <= SPECIALS_QUEUE_MAX
+
+
+
+def test_full_special_queue_still_wishes_every_1000_xu_giver():
+    """Anh 04/11 «tặng xong mà không được là mất uy tín»: hàng cảnh chúc Tết đầy (An tặng 3000 xu) thì Bình, Chi tặng 1000 xu
+    vẫn được ghép tên vào cảnh cuối; tặng thêm không ghép trùng; hàng vẫn tối đa SPECIALS_QUEUE_MAX cảnh."""
+    from xe_tet.server.game.engine import SPECIALS_QUEUE_MAX
+    e = Engine(0.0)
+    e.paused = True  # cảnh chưa chạy được: hàng đứng yên
+    e.handle({"type": "gift", "name": "An", "diamonds": 3000, "gift": "Vũ trụ"}, 2)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1000, "gift": "Sư tử"}, 3)
+    e.handle({"type": "gift", "name": "Chi", "diamonds": 1000, "gift": "Sư tử"}, 4)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1000, "gift": "Sư tử"}, 5)
+    assert len(e.specials) == SPECIALS_QUEUE_MAX
+    assert e.specials[-1] == "An & Bình & Chi"
+
+
+def test_next_lane_choice_dropped_when_its_queue_empties():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    lane = next(k for k, q in e.queues.items() if "út" in q)
+    e.set_next_lane(lane)
+    e._release(e.viewers["út"])
+    e._prune_queues()
+    assert e.next_lane is None
+
+
+def test_pause_holds_roadside_pickup():
+    e = Engine(0.0)
+    e.phase = "DRIVING"
+    e.halt = {"place": "Huế", "people": ["A"], "until": 10.0}
+    e.last_now = 5.0
+    e.paused = True
+    e.tick(60.0)
+    assert e.halt["until"] == 65.0
 
 
 # ---- tuyến thật: làn theo hướng, km thật (BRD-tuyen-xe.md) ------------------
@@ -426,8 +544,7 @@ def test_empty_boarding_bus_turns_to_first_passenger():
 
 
 def test_oldest_ticket_goes_first():
-    """BR-4: người chờ quá lâu (LANE_MAX_WAIT) thì tuyến của họ chạy trước, kể cả làn kia 40 người."""
-    from xe_tet.server.game.engine import LANE_MAX_WAIT
+    """BR-4 (anh 03/11 «ai đặt trước lên trước»): người giữ chỗ trước thì tuyến của họ chạy trước, kể cả làn kia 40 người."""
     e = Engine(0.0)
     for i in range(24):
         comment(e, f"B{i}", "Huế", 1)  # Bắc: 1 xe đầy
@@ -435,14 +552,12 @@ def test_oldest_ticket_goes_first():
     for i in range(40):
         comment(e, f"C{i}", "Huế", 2)  # Bắc: 40 người giữ chỗ sau
     t = run_until(e, "FINISH", 1)
-    e.queued_at["út"] = t - LANE_MAX_WAIT - 1  # Út đã chờ quá lâu
     run_until(e, "BOARDING", t)
-    # PLAN-145: bình thường chuyến mới chọn tuyến đông người — nhưng Út chờ quá LANE_MAX_WAIT nên tuyến Nam đi trước
     assert e.bus.lane == "south" and e.bus.seat_of("út") is not None
 
 
-def test_new_trip_takes_the_fullest_route_unless_someone_waited_too_long():
-    """PLAN-145: chỉ một xe — chuyến mới chở tuyến đông người chờ nhất (đi cùng tuyến về đầy đủ); chưa ai chờ quá lâu."""
+def test_new_trip_takes_the_route_with_people_waiting():
+    """Chỉ một xe: chuyến mới chạy tuyến đang có người chờ (người tuyến kia đã ngồi trên xe chuyến trước)."""
     e = Engine(0.0)
     comment(e, "Út", "Cà Mau", 1)  # Nam: 1 người, chờ trước
     for i in range(10):
@@ -1002,14 +1117,18 @@ def test_loxe_follows_the_bus_on_screen(monkeypatch):
     e.drain()
     e.feature(relief.no)
     said = []
+    vias = []
     t = 3
     while t < 400 and e.featured == relief.no:
         t += 1
         e.tick(t)
-        said += [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
+        out = e.drain()
+        said += [ev["text"] for ev in out if ev["type"] == "loxe"]
+        vias += [ev["bus_no"] for ev in out if ev["type"] == "via"]
     e.feature(None)
     said_back = [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
-    assert "via" not in said and "honk" not in said  # câu nhỏ của xe chính: không nói khi không lên hình
+    # câu nhỏ của xe chính không nói khi không lên hình (xe tăng cường đang chiếu thì gọi tỉnh của nó)
+    assert said.count("via") == vias.count(relief.no) and "honk" not in said
     main_kinds = {"rest", "depart", "finish", "parcels", "pickup", "pickup_wait", "passed"}  # (thả khách: xe đang chiếu)
     assert not [x for x in said if x in main_kinds]  # câu của xe chính đều có «Xe số N.» ở đầu
     assert "screen_main" in said + said_back  # xe tăng cường tới bến cuối hoặc admin chuyển về: lơ xe báo về xe chính
@@ -1216,26 +1335,26 @@ def test_bus_greets_provinces_it_passes(real_routes):
 
 
 def test_bus_picks_up_provinces_on_its_way(real_routes):
-    """PLAN-134 C: khách Huế (làn «Hướng Đà Nẵng») lên được xe «Hướng Hà Nội» còn giường — xe đi ngang Huế; người đã giữ chỗ
+    """PLAN-134 C: khách Đà Nẵng (làn «Hướng Đà Nẵng» qua Tây Nguyên) lên được xe «Hướng Hà Nội» còn giường — xe QL1 đi ngang Đà Nẵng; người đã giữ chỗ
     làn khác mà xe đi ngang quê họ cũng được xếp lên; tỉnh ngược đường (Cà Mau) vẫn chờ xe làn mình."""
     from xe_tet.server.game.network import Network
     net = Network(real_routes, "hcm_miendong")
-    assert net.lane_of("hue") != net.lane_of("hanoi") and "hue" in net.serves(net.lane_of("hanoi"))
+    assert net.lane_of("danang") != net.lane_of("hanoi") and "danang" in net.serves(net.lane_of("hanoi"))
     assert "camau" not in net.serves(net.lane_of("hanoi"))
     e = Engine(0.0, network=net)
     comment(e, "Cà", "Cà Mau", 1)  # xe quay đầu hướng Cà Mau
-    comment(e, "Huệ", "Huế", 2)  # khác đường: giữ chỗ
-    assert e.lane_of_uid("huệ") == net.lane_of("hue")
-    e.bus.lane = net.lane_of("hanoi")  # chuyến sau chạy hướng Hà Nội: người Huế đang giữ chỗ được xếp lên luôn
+    comment(e, "Huệ", "Đà Nẵng", 2)  # khác đường: giữ chỗ
+    assert e.lane_of_uid("huệ") == net.lane_of("danang")
+    e.bus.lane = net.lane_of("hanoi")  # chuyến sau chạy hướng Hà Nội: người Đà Nẵng đang giữ chỗ được xếp lên luôn
     e._fill_from_queue()
     assert e.bus.seat_of("huệ") is not None and e.lane_of_uid("huệ") is None
     e2 = Engine(0.0, network=net)
     comment(e2, "An", "Hà Nội", 1)
-    comment(e2, "Huệ", "Huế", 2)
+    comment(e2, "Huệ", "Đà Nẵng", 2)
     comment(e2, "Út", "Cà Mau", 3)
     seated = {e2.viewers[u].province for u in e2.bus.riders()}
-    assert seated == {"hanoi", "hue"} and e2.lane_of_uid("út") == net.lane_of("camau")
-    ticket = next(ev for ev in e2.drain() if ev["type"] == "ticket" and ev["province"] == "Huế")
+    assert seated == {"hanoi", "danang"} and e2.lane_of_uid("út") == net.lane_of("camau")
+    ticket = next(ev for ev in e2.drain() if ev["type"] == "ticket" and ev["province"] == "Đà Nẵng")
     assert ticket["lane"] == "Hướng Hà Nội" and not ticket["next"]
 
 
@@ -1299,6 +1418,39 @@ def test_returning_viewer_is_remembered_and_greeted(tmp_path):
     assert any(ev["type"] == "loxe" and "An" in ev["text"] for ev in events)
     db.save_many(later.take_dirty())
     assert db.load("an")["likes"] == 9 and db.load("an")["days"] == 2
+
+
+def test_streak_days_reward_queue_priority_and_level_up(tmp_path):
+    """Anh 04/11 «chơi quài không chán»: ghé nhiều ngày liền → chuỗi ngày (mốc 3 ngày thưởng lên đầu hàng); điểm hành trình
+    (chuyến + ngày) qua mốc → báo lên cấp, huy hiệu cạnh tên. DB cũ chưa có cột streak vẫn mở được (chỉ thêm cột)."""
+    import sqlite3
+    from xe_tet.server.game import rank
+    from xe_tet.server.store import ViewerStore
+    old = sqlite3.connect(tmp_path / "x.db")
+    old.execute("CREATE TABLE viewers (uid TEXT PRIMARY KEY, name TEXT NOT NULL, home TEXT, trips INTEGER NOT NULL DEFAULT 0,"
+                " likes INTEGER NOT NULL DEFAULT 0, gifts INTEGER NOT NULL DEFAULT 0, comments INTEGER NOT NULL DEFAULT 0,"
+                " first_day TEXT NOT NULL, last_day TEXT NOT NULL, days INTEGER NOT NULL DEFAULT 1)")
+    old.execute("INSERT INTO viewers VALUES ('an', 'An', 'hanoi', 0, 0, 0, 0, '2026-12-19', '2026-12-19', 1)")
+    old.commit()
+    old.close()
+    db = ViewerStore(tmp_path / "x.db")
+    assert db.load("an")["streak"] == 1
+    for day, streak in ((20, 2), (21, 3)):
+        e = Engine(0.0, today=date(2026, 12, day))
+        e.recall = db.load
+        e.handle({"type": "like", "name": "An", "count": 1}, 1)
+        events = e.drain()
+        assert e.viewers["an"].streak == streak
+        reward = [ev for ev in events if ev["type"] == "streak"]
+        assert bool(reward) == (streak == 3) and e.viewers["an"].prio_credit == (streak == 3)
+        db.save_many(e.take_dirty())
+    assert [ev for ev in events if ev["type"] == "level_up"]  # 3 ngày ghé = 3 điểm → Khách quen
+    assert rank.badge(3) == "🎫" and rank.badge(0) == ""
+    e = Engine(0.0, today=date(2026, 12, 23))  # bỏ một ngày: chuỗi về 1
+    e.recall = db.load
+    e.handle({"type": "like", "name": "An", "count": 1}, 1)
+    assert e.viewers["an"].streak == 1
+    assert rank.to_next(9) == ("⭐ Hành khách vàng", 1) and rank.to_next(50) is None
 
 
 def test_same_hometown_riders_are_paired():
@@ -1509,7 +1661,9 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết")
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45, vendor="Cô Ba", item="bánh mì",
+                  q="Phở bò là của tỉnh nào", a="Nam Định", b="Huế", c="Hà Nội", ans="A, Nam Định",
+                  fact="Nam Định nổi tiếng với phở bò", lead="Hà Nội", rival="Cà Mau")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1590,7 +1744,7 @@ def test_toll_stops_bus_until_gifts_cover_fee_only_gifts_count():
     _driving(e)
     e.block_now("toll")
     (ev,) = [x for x in e.drain() if x["type"] == "block"]
-    assert ev["kind"] == "toll" and ev["goal"] == 20 and e.snapshot()["speed"] == 0.0
+    assert ev["block"] == "toll" and ev["goal"] == 20 and e.snapshot()["speed"] == 0.0
     km = e.trip_km()
     e.handle({"type": "like", "name": "Tim", "count": 500}, 2)
     comment(e, "Bình", "góp", 3)
@@ -1715,32 +1869,6 @@ def test_session_goal_steps_unlock_fun_for_everyone_and_money_panel():
     assert m["hour_xu"] == 105 and m["gifters"] == 2 and m["top"][0] == {"name": "B", "xu": 70}
 
 
-def test_province_race_decides_next_trip_and_resets_each_trip(monkeypatch):
-    """Đua tỉnh (anh 03/11): bình luận (1 điểm / 15 giây / người) + tim (20 tim = 1) + quà (1 xu = 5) cộng cho tỉnh quê; tỉnh
-    nhiều điểm nhất có người chờ thì chuyến mới đi hướng đó; mỗi chuyến một vòng."""
-    monkeypatch.setattr("xe_tet.server.game.engine.LANE_MAX_WAIT", 1e9)  # chuyến Hà Nội dài: tắt luật «chờ quá 10 phút»
-    e = Engine(0.0)
-    e.race_on = True  # anh 03/11 tắt mặc định (ai đặt trước lên trước); máy giữ lại
-    fill_lane(e, "Cà Mau", SEATS, 1)  # chuyến 1 hướng nam, đầy
-    comment(e, "Tây1", "Bạc Liêu", 2)  # hướng nam: hết giường → chờ
-    fill_lane(e, "Hà Nội", 3, 3, prefix="B")  # hướng bắc đông người chờ hơn
-    e.drain()
-    tay = e.viewers["tây1"].province
-    for t in (4, 5, 6):  # bình luận dồn: chỉ 1 điểm / 15 giây (lúc gõ tên tỉnh đã được 1)
-        comment(e, "Tây1", "chào cả nhà", t)
-    assert e.race[tay] == 1
-    e.handle({"type": "like", "name": "Tây1", "count": 45}, 7)
-    e.handle({"type": "like", "name": "Tây1", "count": 100}, 8)  # chỉ tim (không quà): vẫn kéo tỉnh mình lên được
-    assert {"province": "Bạc Liêu", "points": 8} in e.snapshot()["race"]  # Cà Mau nhiều điểm hơn nhưng đã ngồi hết trên xe
-    t = 9.0
-    while e.bus.no == 1:  # chạy hết chuyến 1 → chuyến 2: Bạc Liêu thắng dù hướng bắc đông người chờ hơn
-        t += 1
-        e.tick(t)
-    wins = [x for x in e.drain() if x["type"] == "race_win"]
-    assert wins and wins[-1]["province"] == "Bạc Liêu" and e.bus.seat_of("tây1") is not None
-    assert not e.race  # vòng mới
-
-
 def test_billboard_video_stops_bus_then_continues():
     """Bảng quảng cáo (anh 03/11): xe đang chạy dừng lại xem video anh tải lên rồi chạy tiếp; tự chiếu theo lịch."""
     import pytest
@@ -1818,3 +1946,558 @@ def test_focus_on_a_rider_for_a_while():
     e.focus_seat(seat + 1)
     e.focus_seat(0)
     assert e.snapshot()["focus"] is None
+
+
+def test_bus_waits_for_boarding_names_to_be_read_then_leaves():
+    """Anh 03/11: «đọc chưa xong xe đã chạy» — hết giờ đón mà lơ xe còn đọc tên thì xe chờ, tối đa NAME_HOLD_MAX giây."""
+    from xe_tet.server.game.engine import NAME_HOLD_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Huế", 1)
+    e.names_pending = True
+    e.phase_until = 10.0
+    e.tick(10.5)
+    assert e.phase == "BOARDING"
+    e.names_pending = False
+    e.tick(12.0)
+    assert e.phase == "DRIVING"
+    e2 = Engine(0.0)
+    comment(e2, "An", "Huế", 1)
+    e2.names_pending = True  # giọng đọc kẹt: không chờ mãi
+    e2.phase_until = 10.0
+    t = 10.0
+    while e2.phase == "BOARDING" and t < 10 + NAME_HOLD_MAX + 5:
+        t += 0.5
+        e2.tick(t)
+    assert e2.phase == "DRIVING" and t <= 10 + NAME_HOLD_MAX + 2
+
+
+def _driving_with_riders():
+    e = Engine(0.0)
+    e.vendor_on = True
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Bình", "Hà Nội", 2)
+    t = run_until(e, "DRIVING", 3)
+    e.drain()
+    return e, t
+
+
+def test_room_chips_in_gifts_then_vendor_boards_and_sells_while_driving():
+    """Anh 03/11: góp quà cho cô bán hàng lên xe bán nem, bì, bánh mì."""
+    from xe_tet.server.game.engine import VENDOR_STOP_S
+    e, t = _driving_with_riders()
+    e.handle({"type": "gift", "name": "An", "diamonds": 4, "gift": "Hoa hồng"}, t + 1)
+    assert e.snapshot()["vendor"] == {"stage": "pool", "paid": 4, "goal": 10, "name": "Cô Ba"}
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 6, "gift": "Hoa hồng"}, t + 2)
+    e.tick(t + 2)
+    assert e.vendor["stage"] == "stop" and e.vendor["by"] == "Bình"
+    km = e.trip_km()
+    e.tick(t + 2 + VENDOR_STOP_S - 1)
+    assert e.trip_km() == km  # xe tấp vào lề cho cô lên
+    e.tick(t + 2 + VENDOR_STOP_S + 0.1)
+    assert e.vendor["stage"] == "sell"
+    e.tick(t + 2 + VENDOR_STOP_S + 3)
+    assert e.trip_km() > km  # cô bán trong lúc xe chạy
+    comment(e, "An", "2 bánh mì", t + 10)
+    comment(e, "Bình", "xe bị gì vậy", t + 11)  # «bị» không phải «bì»
+    seats = [s for s in e.snapshot()["bus"]["seats"] if s]
+    assert {s["name"]: s["snack"] for s in seats} == {"An": "🥖", "Bình": ""}
+    comment(e, "Bình", "nem", t + 12)
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 1, "gift": "Hoa hồng"}, t + 13)  # bao cả xe món mình chọn
+    assert all(s["snack"] == "🍢" for s in e.snapshot()["bus"]["seats"] if s)
+    out = types(e.drain())
+    assert "snack" in out and "vendor_treat" in out
+    e.tick(t + 2 + VENDOR_STOP_S + 300)
+    assert e.vendor["stage"] == "sell" and e.snapshot()["vendor"]["left"] is None  # anh 03/11: bán suốt chuyến
+    e.handle({"type": "gift", "name": "An", "diamonds": 50, "gift": "Hoa hồng"}, t + 400)
+    assert e.vendor_pool["paid"] == 0  # đang bán: quà là bao cả xe, không gọi thêm cô nữa
+
+
+def test_toll_takes_gifts_first_and_admin_can_call_vendor():
+    e, t = _driving_with_riders()
+    e.fee_auto = False  # phí cố định 20 xu
+    e.block_now("toll")
+    e.handle({"type": "gift", "name": "An", "diamonds": 3, "gift": "Hoa hồng"}, t + 1)
+    assert e.vendor_pool["paid"] == 0 and e.block["paid"] == 3
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    with pytest.raises(Refused):
+        e.vendor_now()  # đang bị chặn
+    e.cover()
+    e.vendor_now()
+    assert e.vendor["stage"] == "stop"
+    comment(e, "An", "bì", t + 2)
+    assert e.viewers["an"].snack == "bi"
+
+
+def test_snack_words():
+    from xe_tet.server.game.engine import snack_of
+    assert [snack_of(x) for x in ("nem", "Bánh mì", "banh mi di", "bì", "mua bì", "bì cuốn", "xe bị gì", "bị kẹt xe rồi",
+                                  "Hà Nội", "cho em một ổ bánh mì thịt nướng nữa nha")] == [
+        "nem", "banh_mi", "banh_mi", "bi", "bi", "bi", None, None, None, None]
+
+
+def test_vendor_stays_whole_trip_and_gets_off_at_the_end():
+    import math
+    e, t = _driving_with_riders()
+    e.vendor_now()
+    e.vendor.update(stage="sell", until=math.inf)
+    e.phase = "REST"  # trạm dừng chân / thả khách giữa đường: cô vẫn ở trên xe
+    e.tick(t + 1)
+    assert e.vendor is not None
+    e.phase = "FINISH"  # hết chuyến: cô xuống
+    e.tick(t + 2)
+    assert e.vendor is None and "vendor_end" in types(e.drain())
+
+
+def test_riders_get_hungry_while_driving_and_food_fills_them():
+    """Anh 03/11: «% cơ thể … sắp đói» — mỗi khách một thanh no bụng, tụt khi xe chạy; dưới 30% thì nhắc; mua món là no lại."""
+    from xe_tet.server.game.engine import HUNGER_PER_MIN, HUNGRY
+    e, t = _driving_with_riders()
+    driving = 0.0
+    out = []
+    while e.viewers["an"].full >= HUNGRY:
+        t += 1
+        driving += e.phase == "DRIVING"
+        e.tick(t)
+        out += e.drain()
+        assert e.phase not in ("FINISH", "BOARDING"), "chuyến quá ngắn để thử"
+    assert abs(driving - (100 - HUNGRY) / HUNGER_PER_MIN * 60) < 3  # chỉ đói lúc xe chạy (trạm nghỉ không tính)
+    while not out or out[-1]["type"] != "loxe":
+        t += 1
+        e.tick(t)
+        out += e.drain()
+        if len([x for x in out if x["type"] == "hungry"]) == 2 and any(x["type"] == "loxe" and "Bình" in x["text"] for x in out):
+            break
+    assert [ev["name"] for ev in out if ev["type"] == "hungry"] == ["An", "Bình"]
+    loxe = [ev["text"] for ev in out if ev["type"] == "loxe"]
+    assert any("An" in x and "Bình" in x for x in loxe)  # một câu gọi cả hai, chưa có cô Ba: rủ góp quà gọi cô
+    seat = next(s for s in e.snapshot()["bus"]["seats"] if s and s["name"] == "An")
+    assert seat["full"] < HUNGRY
+    while e.phase != "DRIVING" or e.block or e.halt:
+        t += 1
+        e.tick(t)
+    e.vendor_now()
+    e.tick(t + 10)
+    comment(e, "An", "bánh mì", t + 11)
+    assert e.viewers["an"].full == 100 and not e.viewers["an"].hungry_told
+
+
+def test_tiktok_avatar_kept_and_shown_with_name():
+    """Anh 03/11 «cập avt cho user»: ảnh đại diện TikTok theo người — lên thẻ vé / thông báo và tên trên xe; link lạ thì bỏ."""
+    e = Engine(0.0)
+    url = "https://p16-sign-sg.tiktokcdn.com/abc~tplv.webp?x=1&y=2"
+    e.handle({"type": "comment", "uid": "tt:1", "name": "An", "text": "Huế", "avatar": url}, 1)
+    e.handle({"type": "comment", "uid": "tt:2", "name": "Bình", "text": "Huế", "avatar": 'javascript:"<x>'}, 2)
+    seats = {s["name"]: s["avatar"] for s in e.snapshot()["bus"]["seats"] if s}
+    assert seats == {"An": url, "Bình": ""}
+    tickets = [ev for ev in e.drain() if ev["type"] == "ticket"]
+    assert tickets[0]["avatar"] == url and "avatar" not in tickets[1]
+
+
+# ---- đổi gió (anh 03/11: game lặp lại chán, TikTok tưởng phát video quay sẵn) ------------------------------------
+
+def test_quiz_answers_first_try_only_and_names_fastest_three():
+    import random as _random
+    from xe_tet.server.game.engine import QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.rng = _random.Random(3)
+    e.quiz_now()
+    out = e.drain()
+    assert "quiz" in types(out)
+    ask = next(x for x in out if x["type"] == "loxe")["text"]
+    assert "A" in ask and "B" in ask and "C" in ask and "!" not in ask
+    right = "ABC"[e.quiz["answer"]]
+    wrong = "ABC"[(e.quiz["answer"] + 1) % 3]
+    comment(e, "Sai", wrong, t + 1)
+    comment(e, "Sai", right, t + 2)  # đổi đáp án không tính
+    for i, name in enumerate(["An", "Bình", "Chi", "Dũng"]):
+        comment(e, name, f"câu {right.lower()}" if i % 2 else right, t + 3 + i)
+    view = e.snapshot()["quiz"]
+    assert view["answered"] == 5 and "answer" not in view  # chưa hết giờ: không lộ đáp án
+    assert e.viewers["an"].province == "hanoi"  # gõ chữ cái không đổi vé
+    e.tick(t + QUIZ_SECONDS + 1)
+    out = e.drain()
+    end = next(x for x in out if x["type"] == "quiz_end")
+    assert end["winners"] == ["An", "Bình", "Chi"] and end["right"] == 4 and end["total"] == 5
+    assert any("An, Bình và Chi" in x.get("text", "") for x in out if x["type"] == "loxe")
+    assert e.snapshot()["quiz"]["done"]
+    comment(e, "Muộn", right, t + QUIZ_SECONDS + 2)  # hết giờ: chữ cái là bình luận thường
+    assert "muon" not in e.quiz["answers"]
+    e.tick(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.quiz is None
+
+
+def test_quiz_not_cut_off_by_toll_or_vendor():
+    """Anh 03/11 «chưa đọc câu đố đã chuyển sang thông báo khác»: trạm / công an / sự cố / cô Ba tự tới phải chờ câu đố
+    (cả thẻ đáp án) xong; anh bấm tay chặn xe giữa câu đố thì đồng hồ câu đố đứng chờ."""
+    import random as _random
+    from xe_tet.server.game.engine import QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.rng = _random.Random(3)
+    e.quiz_now()
+    e.block_plan = [(0.0, "toll")]  # trạm tới ngay
+    e._check_blocks(t + 1)
+    assert e.block is None and e.block_plan
+    assert not e._vendor_ready()
+    e.tick(t + QUIZ_SECONDS + 1)  # hết giờ trả lời: thẻ đáp án vẫn giữ chỗ
+    e._check_blocks(t + QUIZ_SECONDS + 1)
+    assert e.block is None
+    e.tick(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.quiz is None
+    e._check_blocks(t + QUIZ_SECONDS + QUIZ_RESULT_S + 2)
+    assert e.block and e.block["kind"] == "toll"
+    # bấm tay chặn giữa câu đố: câu đố không hết giờ trong lúc bị che
+    e2, t2 = _driving_with_riders()
+    e2.quiz_on = True
+    e2.quiz_now()
+    until = e2.quiz["until"]
+    e2.block_now("toll")
+    e2.tick(t2 + 30)
+    assert e2.quiz["until"] >= until + 29 and not e2.quiz["done"]
+
+
+def test_quiz_not_started_right_before_a_stop_and_waits_through_dropoff():
+    """Anh 03/11 «vừa bật câu đố lên thì nhảy»: sắp tới điểm thả thì không tự đố; lỡ tới điểm thả giữa câu đố thì đồng hồ
+    câu đố đứng chờ xe chạy tiếp (băng «Về tới …» che mất thẻ)."""
+    from xe_tet.server.game.engine import QUIZ_LEAD_S, QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.leg_seconds = 200.0
+    e.progress = 1 - (QUIZ_SECONDS + QUIZ_RESULT_S + QUIZ_LEAD_S - 5) / e.leg_seconds
+    assert not e._quiz_ready()
+    e.progress = 0.0
+    assert e._quiz_ready()
+    e.quiz_now()
+    until = e.quiz["until"]
+    e.phase = "DROPOFF"
+    e._quiz_tick(t + 20, 20.0)
+    assert e.quiz["until"] == until + 20 and not e.quiz["done"]
+
+
+def test_quiz_comes_by_itself_only_while_driving():
+    e = Engine(0.0)
+    e.quiz_on = True
+    e.quiz_gap = 60.0
+    e.next_quiz = 0.0
+    e.tick(1.0)
+    assert e.quiz is None  # đang đón khách ở bến: chưa đố
+    comment(e, "An", "Hà Nội", 2)
+    run_until(e, "DRIVING", 3)
+    e.tick(e.last_now + 1)
+    assert e.quiz is not None and not e.quiz["done"]
+
+
+def test_quiz_data_is_well_formed():
+    import random as _random
+    from xe_tet.server.game.trivia import FAMOUS, answer_of, fact, make_quiz
+    assert set(FAMOUS) <= set(BY_KEY)
+    rng = _random.Random(0)
+    for _ in range(300):
+        q = make_quiz(rng)
+        assert len(set(q["options"])) == 3 and 0 <= q["answer"] <= 2
+        if q["kind"] != "region":
+            assert q["options"][q["answer"]] == BY_KEY[q["key"]].name
+            assert normalize(BY_KEY[q["key"]].name) not in normalize(q["question"])  # câu hỏi không lộ đáp án
+    assert make_quiz(rng, prefer="namdinh")["key"] == "namdinh"
+    assert fact("namdinh") == "Nam Định nổi tiếng với phở bò"
+    assert [answer_of(x) for x in ("a", "Câu B", "đáp án c", "chọn A")] == [0, 1, 2, 0]
+    assert [answer_of(x) for x in ("ba", "a b", "Bình Định", "ok", "")] == [None] * 5
+
+
+def test_incident_ends_by_itself_likes_speed_it_up_gifts_end_it_now():
+    from xe_tet.server.game.engine import INCIDENT_LIKE_MAX, INCIDENT_SECONDS
+    e, t = _driving_with_riders()
+    e.incidents_on = True
+    e.fee_auto = False
+    e.block_now("tire")
+    out = e.drain()
+    assert e.block["kind"] == "tire" and "block" in types(out)
+    assert any("lốp" in x.get("text", "") for x in out if x["type"] == "loxe")
+    km = e.trip_km()
+    e.tick(t + 5)
+    assert e.trip_km() == km  # xe đứng thay lốp
+    e.handle({"type": "like", "name": "An", "count": 10_000}, t + 6)  # tim dồn: rút ngắn, nhưng còn ít nhất 40 % thời gian
+    assert e.block["until"] == e.block["since"] + INCIDENT_SECONDS * (1 - INCIDENT_LIKE_MAX)
+    assert e.snapshot()["block"]["left"] is not None
+    e.tick(e.block["until"] + 0.1)
+    out = e.drain()
+    assert e.block is None and any(x["type"] == "block_end" and x["by"] == "time" for x in out)
+    e.block_now("cattle")
+    e.handle({"type": "gift", "name": "Bình", "diamonds": 5, "gift": "Hoa hồng"}, e.last_now + 1)
+    assert e.block is None  # góp đủ xu: xong ngay
+
+
+def test_incidents_planned_even_with_toll_and_police_off():
+    import random as _random
+    from xe_tet.server.game.engine import INCIDENTS
+    e = Engine(0.0)
+    e.incidents_on = True
+    e.block_rng = _random.Random(1)
+    kinds = [k for _ in range(40) for _, k in e._plan_blocks(600.0)]
+    assert kinds and set(kinds) <= set(INCIDENTS)
+    e.incidents_on = False
+    assert not any(e._plan_blocks(600.0) for _ in range(20))
+
+
+def test_weather_rolls_by_region_and_lo_xe_says_it():
+    import random as _random
+    e = Engine(0.0)
+    e.rng = _random.Random(0)
+    seen = set()
+    for i in range(40):
+        e.weather_region = None
+        e._roll_weather("taynguyen", 1000.0 * i)
+        seen.add(e.weather)
+    assert seen <= {"clear", "fog", "rain"} and {"fog", "clear"} <= seen
+    assert "weather" in types(e.drain())
+    assert e.snapshot()["weather"] in seen
+
+
+def test_lo_xe_tells_a_fact_about_the_province_passed():
+    e, t = _driving_with_riders()
+    out = []
+    while e.phase == "DRIVING" and t < 2000:
+        t += 1
+        e.tick(t)
+        out += e.drain()
+    facts = [x["text"] for x in out if x["type"] == "loxe" and "nổi tiếng với" in x["text"]]
+    assert facts  # Hà Nội đi đâu cũng qua vài tỉnh có chuyện kể
+
+
+def test_ai_gets_chatter_only_when_no_question_waiting():
+    from xe_tet.server.game.engine import CHATTER_GAP
+    e, t = _driving_with_riders()
+    e.ai_reply = True
+    comment(e, "An", "về quê vui quá mọi người ơi", t)
+    comment(e, "Bình", "ok", t)  # quá ngắn: bỏ
+    comment(e, "Chi", "xe chạy êm ghê luôn", t + 1)
+    q = e.next_question(t + 2, 40.0)
+    assert q["chat"] and q["name"] == "Chi"  # câu mới nhất
+    assert e.next_question(t + 3, 40.0) is None  # giãn cách chuyện phiếm
+    e.questions.append({"uid": "x", "name": "X", "text": "bao giờ tới?", "at": t + 3})
+    assert e.next_question(t + 4, 40.0)["name"] == "X"  # câu hỏi luôn trước
+    assert e.next_question(t + 2 + CHATTER_GAP, 60.0)["name"] == "An"
+    comment(e, "Chi", "tối nay đông vui quá luôn", t + 5)
+    assert not e.chatter  # mỗi người tối đa một lần / 3 phút
+    e.ai_reply = False
+    comment(e, "Dũng", "chào cả nhà nha mọi người", t + 6)
+    assert not e.chatter
+
+
+def test_block_weather_quiz_events_keep_off_the_reserved_kind_field():
+    """Lỗi cũ: sự cố / trạm / thời tiết gửi trường «kind» → server ghi đè bằng «event», màn hình nháy sai chữ."""
+    e, t = _driving_with_riders()
+    e.incidents_on = e.blocks_on = True
+    e.fee_auto = False
+    out = []
+    for kind in ("toll", "police", "tire", "jam", "cattle"):
+        e.block_now(kind)
+        e.handle({"type": "gift", "name": "An", "diamonds": 100, "gift": "Hoa"}, t)
+        out += e.drain()
+    e.weather_region = None
+    e.weather = "?"
+    e._roll_weather("bac", t)
+    e.quiz_now()
+    out += e.drain()
+    assert [x["block"] for x in out if x["type"] == "block"] == ["toll", "police", "tire", "jam", "cattle"]
+    assert all("kind" not in x for x in out)
+
+
+def test_admin_sets_weather_by_hand():
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    e = Engine(0.0)
+    e.set_weather("fog")
+    assert e.snapshot()["weather"] == "fog" and any(x.get("sky") == "fog" for x in e.drain())
+    with pytest.raises(Refused):
+        e.set_weather("snow")
+
+
+def test_lo_xe_reads_owner_bot_ads_in_turn_and_skips_busy_moments():
+    e, t = _driving_with_riders()
+    e.ads = [{"title": "@a_bot", "desc": "A", "say": "Ghé bot A"}, {"title": "@b_bot", "desc": "B", "say": ""}]
+    e.ad_gap = 60.0
+    e.next_ad = t + 1
+    e.quiz_now()
+    e.drain()
+    e.tick(t + 2)
+    assert not [x for x in e.drain() if x["type"] == "ad"]  # đang đố: chờ
+    e.quiz = None
+    e.tick(t + 3)
+    out = e.drain()
+    assert [x["title"] for x in out if x["type"] == "ad"] == ["@a_bot"]
+    assert any(x["type"] == "loxe" and x["text"] == "Ghé bot A" for x in out)
+    e.tick(t + 30)
+    assert not [x for x in e.drain() if x["type"] == "ad"]
+    e.tick(t + 64)
+    assert [x["title"] for x in e.drain() if x["type"] == "ad"] == ["@a_bot"]  # bot 1 là bot chính: hai lần
+    e.tick(t + 125)
+    out = e.drain()
+    assert any(x["type"] == "loxe" and x["text"] == "@b_bot, B" for x in out)  # không có câu đọc: đọc tên + câu ngắn
+    e.ad_now(), e.ad_now(), e.ad_now()
+    assert [x["title"] for x in e.drain() if x["type"] == "ad"] == ["@a_bot", "@a_bot", "@b_bot"]
+    e.ads = []
+    import pytest
+    from xe_tet.server.game.engine import Refused
+    with pytest.raises(Refused):
+        e.ad_now()
+
+
+def test_ads_setting_is_cleaned():
+    from xe_tet.server.settings import clean
+    out = clean({"ads": [{"title": " @x_shop ", "desc": "a\nb", "say": "y" * 500}, {"title": ""}, "rác",
+                         {"title": "2"}, {"title": "3"}, {"title": "4"}], "ads_talk_min": 0})
+    assert out["ads"][0] == {"title": "@x_shop", "desc": "a b", "say": "y" * 200, "keys": ""}
+    assert [a["title"] for a in out["ads"]] == ["@x_shop", "2", "3"] and out["ads_talk_min"] == 2
+
+
+def test_ads_never_name_other_platforms_on_live():
+    """Anh 04/11 «live TikTok mà nói sàn khác thì cấm live»: mục quảng cáo có Shopee / Telegram / link bị bỏ; bỏ hết thì dùng
+    câu trung tính (mời ghé trang cá nhân kênh); mặc định không có tên sàn / app / bot."""
+    from xe_tet.server.game.moderation import off_platform
+    from xe_tet.server.settings import DEFAULTS, clean
+    old = [{"title": "Tele: @zt_shopee_bot", "desc": "Dán link Shopee", "say": "bot hoàn tiền trên Telegram"},
+           {"title": "@aipass_shop_bot", "desc": "Shop trên Telegram", "say": "ghé shop"}]
+    assert clean({"ads": old})["ads"] == DEFAULTS["ads"]
+    mixed = clean({"ads": [old[0], {"title": "Nhà xe", "desc": "ghé trang cá nhân", "say": "ghé trang cá nhân kênh"}]})["ads"]
+    assert [a["title"] for a in mixed] == ["Nhà xe"]
+    assert not any(off_platform(a[k]) for a in DEFAULTS["ads"] for k in ("title", "desc", "say"))
+
+
+def test_viewer_asking_for_cashback_gets_bot_named_once():
+    """PLAN-153: bình luận có từ khoá («hoàn tiền», «chat gờ pê tê») → lơ xe gọi tên đọc câu của mục đó (04/11: câu trung tính,
+    không tên sàn), mỗi người một lần mỗi mục, cả phòng 20 giây một lần; hết lượt cũng không chuyển câu đó cho AI."""
+    e, t = _driving_with_riders()
+    e.ads = [{"title": "A", "desc": "", "say": "Ghé trang cá nhân kênh", "keys": "hoàn tiền, shopee"},
+             {"title": "B", "desc": "", "say": "Hỏi lơ xe", "keys": "chatgpt, chat gpt"}]
+    e.drain()
+    comment(e, "Lan", "có hoàn tiền shopee không anh", t + 1)
+    out = e.drain()
+    assert [(x["title"], x["name"]) for x in out if x["type"] == "ad"] == [("A", "Lan")]
+    assert any(x["type"] == "loxe" and x["text"] == "Lan ơi, Ghé trang cá nhân kênh" for x in out)
+    comment(e, "Huy", "Hoàn tiền là sao", t + 5)  # cả phòng vừa được chỉ: chờ 20 giây
+    assert not [x for x in e.drain() if x["type"] == "ad"]
+    e.ai_reply = True
+    comment(e, "Lan", "hoàn tiền là sao vậy anh?", t + 30)  # Lan được chỉ rồi: im, không hỏi AI
+    assert not [x for x in e.drain() if x["type"] == "ad"] and not e.questions and not e.chatter
+    comment(e, "Lan", "có bán ChatGPT không", t + 31)  # mục khác thì vẫn đọc
+    assert [x["title"] for x in e.drain() if x["type"] == "ad"] == ["B"]
+    comment(e, "Tú", "đi shop không", t + 60)  # «shop» không phải «shopee»: không khớp
+    assert not [x for x in e.drain() if x["type"] == "ad"]
+    e.ads = []
+    comment(e, "Mai", "hoàn tiền", t + 90)
+    assert not [x for x in e.drain() if x["type"] == "ad"]
+
+
+def test_versus_two_buses_at_station_winner_departs_loser_next(real_routes):
+    """PLAN-152 (anh 04/11 «2 xe khách chuẩn bị xuất bến, xe nào win thì xe đó chạy trước»): trận đấu ở bến lúc đón khách;
+    chưa ai lên giường tới hết trận; xe dẫn điểm đứng làn đầu; người quê hướng khác không cộng; hết giờ đón xe thắng nhận
+    khách + xuất bến, xe thua giữ khách chạy chuyến ngay sau (lượt đó không đấu)."""
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e.versus_on = True
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    comment(e, "Cà", "Cà Mau", t + 1)  # đặt trước
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
+    assert camau != danang and e.snapshot()["versus"] is None  # xe đang chạy: không đấu
+    t = run_until(e, "BOARDING", t + 3)
+    out = e.drain()
+    assert "versus_start" in types(out) and e.versus_lock == [camau, danang]
+    view = e.snapshot()["versus"]
+    assert [x["lane"] for x in view["sides"]] == [camau, danang] and not view["done"]
+    assert e.bus.lane == camau and e.bus.riders() == []  # hoà: xe đặt trước đứng đầu; chưa ai lên giường
+    e.handle({"type": "like", "name": "Đà", "count": 200}, t + 1)
+    e.handle({"type": "like", "name": "Bắc0", "count": 400}, t + 1)  # quê hướng khác: không cộng
+    assert e.versus[danang] > 0 and e.versus[camau] == 0
+    assert e.bus.lane == danang  # lật kèo: xe Đà Nẵng lên làn đầu
+    comment(e, "Huế", "Huế", t + 2)  # người mới gõ quê giữa trận: vào hàng chờ, chưa lên giường
+    assert e.bus.riders() == []
+    t = run_until(e, "DRIVING", t + 2)
+    win = next(x for x in e.drain() if x["type"] == "versus_win")
+    assert win["dest"] == "Đà Nẵng" and win["rival"] == "Cà Mau" and win["points"] > win["rival_points"] == 0
+    names = {e.viewers[u].name for u in e.bus.riders()}
+    assert "Đà" in names and "Cà" not in names and e.versus_next == camau
+    comment(e, "Kiên", "Kiên Giang", t + 1)  # hướng khác chờ: lượt sau vẫn là xe thua, không đấu
+    while e.phase != "BOARDING":  # Cà còn xem (thả tim) — im lặng cả chuyến thì bị điểm danh trước khi xếp giường
+        t += 0.5
+        e.tick(t)
+        e.handle({"type": "like", "name": "Cà", "count": 1}, t)
+    assert e.bus.lane == camau and "Cà" in {e.viewers[u].name for u in e.bus.riders()}
+    assert "versus_start" not in types(e.drain()) and e.snapshot()["versus"] is None and e.versus_next is None
+
+
+def test_versus_gifts_decide_golden_minute_mvp_and_cancel(real_routes):
+    """PLAN-151 + 152: quà quyết trận (1 xu = 20 điểm, hơn 400 tim); hướng thứ ba được quà lên đầu hàng cũng không chen vào;
+    người không thuộc bên nào tặng → tiếp sức bên thua; giờ vàng = phút cuối giờ đón, quà x2, lơ xe hô; người góp nhiều
+    nhất bên thắng lên băng rôn. Tắt đối kháng giữa trận: huỷ, đón khách như thường."""
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e.versus_on = True
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    comment(e, "Cà", "Cà Mau", t + 1)
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    comment(e, "Kiên", "Kiên Giang", t + 2)
+    camau, danang = e.network.lane_of("camau"), e.network.lane_of("danang")
+    t = run_until(e, "BOARDING", t + 3)
+    e.handle({"type": "like", "name": "Cà", "count": 2000}, t)  # 100 điểm tim
+    e.handle({"type": "gift", "name": "Đà", "gift": "Kẹo", "diamonds": 10}, t)  # 200 điểm quà
+    assert e.versus[danang] == 200 and e.versus_lock == [camau, danang]
+    e.drain()
+    e.handle({"type": "gift", "name": "Kiên", "gift": "Hoa hồng", "diamonds": 1}, t + 1)  # hướng thứ ba: lên đầu hàng
+    e.handle({"type": "gift", "name": "Lạ", "gift": "Hoa hồng", "diamonds": 1}, t + 1)  # chưa có quê
+    assist = [x for x in e.drain() if x["type"] == "versus_assist"]
+    assert [x["dest"] for x in assist] == ["Cà Mau", "Cà Mau"] and e.versus[camau] == 100 + 40
+    assert [x["lane"] for x in e.snapshot()["versus"]["sides"]] == [camau, danang]  # cặp không đổi
+    while not e._versus_golden():
+        t += 0.5
+        e.tick(t)
+        assert e.phase == "BOARDING" and not e.bus.riders()
+    t += 0.5
+    e.tick(t)  # lơ xe hô ở nhịp kế tiếp
+    out = e.drain()
+    assert "versus_golden" in types(out) and e.snapshot()["versus"]["golden"]
+    e.handle({"type": "gift", "name": "Cà", "gift": "Hoa hồng", "diamonds": 1}, t)
+    assert e.versus[camau] == 140 + 40  # giờ vàng x2
+    t = run_until(e, "DRIVING", t)
+    win = next(x for x in e.drain() if x["type"] == "versus_win")
+    assert e.bus.lane == danang and win["mvp"] == "Đà" and win["mvp_points"] == 200 and e.bus.banner == "Đà"
+    assert e.versus_lock == [] and e.snapshot()["versus"] is None
+    # tắt giữa trận
+    e2 = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    e2.versus_on = True
+    for i in range(SEATS):
+        comment(e2, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e2, "DRIVING", 2)
+    comment(e2, "Cà", "Cà Mau", t + 1)
+    comment(e2, "Đà", "Đà Nẵng", t + 2)
+    t = run_until(e2, "BOARDING", t + 3)
+    assert e2.versus_lock and not e2.bus.riders()
+    e2.versus_on = False
+    e2.tick(t + 0.5)
+    assert "versus_cancel" in types(e2.drain()) and e2.versus_lock == [] and e2.bus.riders()
+
+
+def test_versus_off_or_single_lane_keeps_booking_order(real_routes):
+    from xe_tet.server.game.network import Network
+    net = Network(real_routes, "hcm_miendong")
+    e = Engine(0.0, network=net)
+    for i in range(SEATS):
+        comment(e, f"Bắc{i}", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 2)
+    comment(e, "Cà", "Cà Mau", t + 1)
+    comment(e, "Đà", "Đà Nẵng", t + 2)
+    e.handle({"type": "like", "name": "Đà", "count": 400}, t + 3)
+    assert e.snapshot()["versus"] is None  # tắt
+    run_until(e, "BOARDING", t + 4)
+    assert e.bus.lane == e.network.lane_of("camau") and "versus_win" not in types(e.drain())
+    e2 = Engine(0.0, network=net)
+    e2.versus_on = True
+    comment(e2, "Cà", "Cà Mau", 1)
+    assert e2.snapshot()["versus"] is None  # một hướng: không có ai để đấu

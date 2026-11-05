@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DB = Path(os.getenv("XE_TET_DB") or ROOT / "storage" / "db" / "xe_tet.db")
 FLUSH_SECONDS = 30.0
 
-FIELDS = ("name", "home", "trips", "likes", "gifts", "comments", "first_day", "last_day", "days")
+FIELDS = ("name", "home", "trips", "likes", "gifts", "comments", "first_day", "last_day", "days", "streak")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS viewers (
     uid TEXT PRIMARY KEY,
@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS viewers (
     comments INTEGER NOT NULL DEFAULT 0,
     first_day TEXT NOT NULL,  -- ngày đầu gặp (YYYY-MM-DD, giờ VN)
     last_day TEXT NOT NULL,
-    days INTEGER NOT NULL DEFAULT 1     -- số ngày khác nhau đã ghé live
+    days INTEGER NOT NULL DEFAULT 1,    -- số ngày khác nhau đã ghé live
+    streak INTEGER NOT NULL DEFAULT 1   -- số ngày ghé liên tiếp (game/rank.py)
 )
 """
 
@@ -40,6 +41,9 @@ class ViewerStore:
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute(SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(viewers)")}
+            if "streak" not in cols:  # DB tạo trước 04/11: chỉ thêm cột, dữ liệu cũ giữ nguyên
+                self._db.execute("ALTER TABLE viewers ADD COLUMN streak INTEGER NOT NULL DEFAULT 1")
             self._db.commit()
 
     def load(self, uid: str) -> dict | None:

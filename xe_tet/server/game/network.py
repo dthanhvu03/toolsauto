@@ -31,6 +31,9 @@ MIN_CIRCUITY = 1.2
 # Xe nhận khách dọc đường (PLAN-134 C): ghé tỉnh p trên đường tới điểm cuối của làn tốn thêm ≤ DETOUR_KM thì xe làn đó chở
 # được p (Huế lên xe Hà Nội: thêm ~0 km; Lâm Đồng: thêm ~200 km → không)
 DETOUR_KM = 50
+# Tên tỉnh trên màn (anh 03/11 «kiểm tra logic đi qua các tỉnh»): tỉnh lỵ gần nhất mỗi 10 km nhảy qua lại ở ranh giới
+# (Bắc Ninh → Bắc Giang → Bắc Ninh trong 20 km) — một đoạn ngắn hơn chừng này kẹp giữa hai đoạn cùng tỉnh thì gộp vào tỉnh đó
+FLICKER_KM = 30
 
 
 @dataclass(frozen=True)
@@ -106,6 +109,7 @@ class Network:
         self.shared_km = {key: km for ln in block["lanes"] for key, km in ln.get("shared", {}).items()}
         self.lane_by_key = {ln.key: ln for ln in self.lanes}
         self._serves: dict[str, frozenset[str]] = {}
+        self._shown: dict[str, tuple[tuple[int, str], ...]] = {}
         self.profiles = {f"{dep}:{dest}": _route(r) for dep, b in data["departures"].items() for dest, r in b["routes"].items()}
         self.graph = _graph(data)
 
@@ -208,13 +212,30 @@ class Network:
                      if abs(p.km - km) <= (TUNNEL_SPAN_KM if p.tunnel else PASS_SPAN_KM)), None)
 
     def place_at(self, province: str, km: float) -> str:
-        """Tỉnh xe đang đi qua (tỉnh lỵ gần nhất của đoạn 10 km)."""
-        places = self.profile(province).places
+        """Tỉnh xe đang đi qua (tỉnh lỵ gần nhất của đoạn 10 km, đã gộp đoạn nhảy qua lại ở ranh giới)."""
+        places = self._shown.get(province)
+        if places is None:
+            places = self._shown[province] = steady(self.profile(province).places)
         return next((p for start, p in reversed(places) if km >= start), places[0][1] if places else province)
 
     @staticmethod
     def hours(km: float) -> float:
         return km / BUS_KMH
+
+
+def steady(places: tuple[tuple[int, str], ...]) -> tuple[tuple[int, str], ...]:
+    """Gộp đoạn tỉnh ngắn (< FLICKER_KM) kẹp giữa hai đoạn cùng một tỉnh: A, B (15 km), A → A. Chỉ dùng cho tên hiện trên
+    màn / lơ xe gọi; đồ thị đường bộ vẫn dựng từ dữ liệu gốc."""
+    spans = [list(x) for i, x in enumerate(places) if i == 0 or x[1] != places[i - 1][1]]
+    changed = True
+    while changed:
+        changed = False
+        for i in range(1, len(spans) - 1):
+            if spans[i - 1][1] == spans[i + 1][1] and spans[i + 1][0] - spans[i][0] < FLICKER_KM:
+                del spans[i:i + 2]  # bỏ đoạn kẹp + đoạn sau (cùng tỉnh với đoạn trước) → nối liền đoạn trước
+                changed = True
+                break
+    return tuple((start, p) for start, p in spans)
 
 
 def _route(r: dict) -> Route:

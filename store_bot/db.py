@@ -354,6 +354,25 @@ class StoreRepository:
             )
             return _user(conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone())
 
+    def record_source(self, user_id: int, code: str) -> bool:
+        """Ghi nguồn khách (mã ?start=, PLAN-153). Gọi khi khách mới /start lần đầu; đã có thì không ghi đè."""
+        with self._tx() as conn:
+            cur = conn.execute("INSERT OR IGNORE INTO state(key, value) VALUES (?, ?)", (f"src:{user_id}", code))
+            return cur.rowcount == 1
+
+    def source_counts(self, days: int = 7) -> list[tuple[str, int]]:
+        """Khách mới theo nguồn trong `days` ngày gần nhất."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            rows = conn.execute(
+                """SELECT s.value, COUNT(*) AS n FROM state s
+                   JOIN users u ON u.user_id = CAST(substr(s.key, 5) AS INTEGER)
+                   WHERE s.key LIKE 'src:%' AND u.created_at >= ?
+                   GROUP BY s.value ORDER BY n DESC, s.value LIMIT 6""",
+                (since,),
+            ).fetchall()
+        return [(str(r[0]), int(r[1])) for r in rows]
+
     def get_user(self, user_id: int) -> User | None:
         with self._read() as conn:
             row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()

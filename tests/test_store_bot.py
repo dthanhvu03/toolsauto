@@ -809,3 +809,19 @@ def test_admin_sets_own_markup_for_one_product(fatcat, repo):
     assert repo.get_product(gpt.id).price == 186_000
     store.handle_update(_click(BUYER, "a:mka:0:p0"))
     assert telegram.answers[-1][0] == "Không có quyền." and repo.get_product(gpt.id).price == 186_000
+
+
+def test_start_source_counts_new_customers_once(bot, repo, product):
+    """PLAN-153: ?start=live / buy_<id> ghi nguồn khách mới một lần; khách cũ và mã lạ không tính."""
+    store, telegram = bot
+    NEWBIE = 900_001  # chưa từng /start (BUYER có sẵn trong fixture)
+    store.handle_update(_private(NEWBIE, "/start live"))
+    store.handle_update(_private(NEWBIE, "/start video"))
+    store.handle_update(_private(NEWBIE + 1, f"/start buy_{product}"))
+    store.handle_update(_private(NEWBIE + 2, "/start"))
+    store.handle_update(_private(NEWBIE + 2, "/start live"))
+    store.handle_update(_private(NEWBIE + 3, "/start Bad-Code!"))
+    assert repo.get_state(f"src:{NEWBIE}") == "live"
+    assert repo.get_state(f"src:{NEWBIE + 2}") is None and repo.get_state(f"src:{NEWBIE + 3}") is None
+    assert repo.source_counts() == [("kenh", 1), ("live", 1)]
+    assert "theo nguồn: kenh 1 · live 1" in msg.admin_stats(repo.stats(), None, repo.source_counts())

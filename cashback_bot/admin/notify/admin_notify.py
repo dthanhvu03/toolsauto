@@ -279,14 +279,15 @@ class AdminNotifier:
     def _active(self) -> bool:
         return self.enabled and self.chat_id is not None
 
-    def notify_new_user(self, telegram_user_id: int, username: str | None) -> None:
+    def notify_new_user(self, telegram_user_id: int, username: str | None, source: str | None = None) -> None:
         if not self._active():
             return
         total = self.repo.count_users()
         body = (
             f"🆕 <b>Người dùng mới</b> · {_who(telegram_user_id, username)}\n\n"
             f"👥 Tổng: <b>{total}</b> người dùng\n"
-            f"🕓 {_vn_now_text()}\n"
+            + (f"📍 Nguồn: <b>{source}</b>\n" if source else "")
+            + f"🕓 {_vn_now_text()}\n"
             + _details(_user_line(telegram_user_id))
         )
         self.repo.enqueue_admin_event(
@@ -760,13 +761,20 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def _dispatcher(self) -> Dispatcher:
+        return Dispatcher(
+            self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
+            self.customer_notification_test_ids,
+        )
+
+    def has_pending(self) -> bool:
+        """Còn tin hàng đợi flush_pending sẽ gửi (bot Telegram dùng để chờ getUpdates ngắn lại)."""
+        return self._dispatcher().has_due()
+
     def flush_pending(self, limit: int = 10) -> None:
         """Gửi hàng đợi chung qua Dispatcher (PLAN-079): tin admin khi bật thông báo admin, tin khách theo cờ và
         tuỳ chọn của khách."""
-        Dispatcher(
-            self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
-            self.customer_notification_test_ids,
-        ).flush(limit)
+        self._dispatcher().flush(limit)
         self.refresh_order_receipts()
 
     def refresh_order_receipts(self, limit: int = 5, now: datetime | None = None) -> int:

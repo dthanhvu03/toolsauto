@@ -24,7 +24,9 @@ from .answers import faq, is_question
 from .network import PASS_SPAN_KM, TUNNEL_SPAN_KM, Network, Trip
 from .parser import FOOD_EMOJI, normalize, parse
 from .provinces import BY_KEY, specialty_of
+from . import rank
 from .talk import hours_phrase, line, spoken_list
+from .trivia import LETTERS, answer_of, fact, make_quiz
 
 SEATS = 24
 BOARD_SECONDS = 180.0
@@ -69,7 +71,7 @@ RUSH_REST_SECONDS = 45.0
 BOARD_AVG_START = 120.0  # ước lượng giờ đón / giờ chạy một chuyến trước khi đo được chuyến thật (ước giờ chờ trên vé)
 RUN_AVG_START = 600.0
 AVG_WEIGHT = 0.4  # trung bình trượt: chuyến mới đo chiếm 40 %
-TICKET_IDLE = 30 * 60.0  # người trong hàng chờ im lặng quá lâu (đã rời phòng) → bỏ vé, nhường chỗ người đang xem
+TICKET_IDLE = 0.0  # >0: người chờ im lặng quá chừng này giây thì bỏ vé. Anh 03/11: im lặng vẫn là đang xem live → mặc định không bỏ
 QUEUE_SHOW = 6  # số người chờ hiện tên trên màn hình
 STAYING_SHOW = 8
 REST_ORDERS_SHOW = 4
@@ -82,12 +84,92 @@ RELIEF_MAX_GIFT = 6  # xe do quà được vượt mốc tự động
 RELIEF_GIFT_TIER = 3  # bậc băng rôn (100 xu): người đang giữ chỗ đạt bậc này → xe tăng cường chạy ngay làn của họ
 STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
+VENDOR_XU = 10  # anh 03/11: cả phòng góp đủ chừng này xu → cô bán hàng lên xe bán nem, bì, bánh mì (một lần mỗi chuyến)
+VENDOR_STOP_S = 5.0  # xe tấp vào lề cho cô lên
+# anh 03/11: gọi một lần là cô ở trên xe bán suốt chuyến (tới điểm thả khách cuối), xe vẫn chạy bình thường
+HUNGER_PER_MIN = 12.0  # % no bụng tụt mỗi phút xe chạy (chuyến ~8 phút: giữa chuyến bắt đầu có người «sắp đói»)
+HUNGRY = 30.0  # dưới chừng này % là «sắp đói»: hiện 😋 cạnh tên, lơ xe gọi tên nhắc mua đồ ăn
+HUNGER_TALK_GAP = 60.0  # lơ xe nhắc người sắp đói tối đa một lần / chừng này giây (gom tên)
+VENDOR_NAME = "Cô Ba"
+SNACKS = {"nem": ("Nem chua", "🍢"), "bi": ("Bì cuốn", "🌯"), "banh_mi": ("Bánh mì", "🥖")}
+VENDOR_REMIND_GAP = 90.0  # lơ xe nhắc góp gọi cô bán hàng tối đa một lần / chừng này giây
+
+
+def avatar_url(raw: object) -> str:
+    """Chỉ nhận link ảnh https gọn (đưa thẳng vào thẻ <img> trên overlay)."""
+    url = str(raw or "")
+    return url if url.startswith("https://") and len(url) <= 800 and not any(c in url for c in "\"'<> \\") else ""
+
+
+def who_of(names: list[str]) -> str:
+    """«An», «An và Bình», «An, Bình và Chi», «An, Bình, Chi và 2 người nữa» — lơ xe gọi gộp tên."""
+    if len(names) > 3:
+        return ", ".join(names[:3]) + f" và {len(names) - 3} người nữa"
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" và {names[-1]}"
+
+
+def snack_of(text: str) -> str | None:
+    """«nem», «2 bánh mì», «bì cuốn» → món; câu dài / «xe bị gì» thì không («bị» bỏ dấu cũng là «bi»)."""
+    words = normalize(text).split()
+    if not words or len(words) > 5:
+        return None
+    norm = " ".join(words)
+    if "banh mi" in norm or "banhmi" in words:
+        return "banh_mi"
+    if "nem" in words:
+        return "nem"
+    # «bì» và «bị» bỏ dấu đều là «bi»: có dấu huyền mới tính; gõ không dấu thì phải đúng «bi» / «bi cuon» / «mua bi»
+    if "bi" in words and ("bì" in text.lower() or "bi cuon" in norm or norm in ("bi", "mua bi", "cho bi", "lay bi")):
+        return "bi"
+    return None
+
+
+# ---- đổi gió cho live đỡ lặp (anh 03/11: «game lặp đi lặp lại chán», TikTok hạn chế vì tưởng phát video quay sẵn) ----
+QUIZ_GAP = 180.0  # giây giữa hai câu đố (admin đặt trên /control)
+QUIZ_SECONDS = 40.0  # giây người xem gõ A / B / C (lơ xe đọc câu hỏi đã mất ~10 giây — anh 03/11 «chưa đọc kịp»)
+QUIZ_RESULT_S = 12.0  # thẻ đáp án còn trên màn hình chừng này giây
+QUIZ_LEAD_S = 10.0  # câu đố tự bật chỉ khi còn ≥ giờ trả lời + đáp án + chừng này giây mới tới điểm dừng kế (anh 03/11:
+# «vừa bật câu đố lên thì nhảy» — băng «Về tới …» che mất)
+QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đối kháng
+QUIZ_POINTS = 3  # trả lời đúng câu đố: điểm đối kháng cho hướng quê mình
+QUIZ_RECENT = 12  # không đố lại tỉnh vừa đố
+FACT_GAP = 75.0
+ARRIVE_SHOW_KM = 10.0  # còn chừng này km tới điểm thả khách thì màn ghi tên tỉnh đó
+PLACE_HOLD_KM = 15.0  # tên tỉnh mới phải giữ chừng này km mới đổi trên màn (ranh tỉnh / nối hai tuyến: hết nhảy qua lại)  # lơ xe kể chuyện tỉnh đang đi qua tối đa một lần / chừng này giây
+INCIDENTS = {  # sự cố dọc đường: tự xong sau INCIDENT_SECONDS giây; tim làm nhanh hơn, tặng quà góp đủ thì xong ngay
+    "tire": ("🛞", "Xe xẹp lốp", "thay lốp"),
+    "jam": ("🚗", "Kẹt xe", "mở đường"),
+    "cattle": ("🐃", "Đàn trâu qua đường", "lùa trâu"),
+}
+INCIDENT_CHANCE = 0.6  # mỗi chuyến từ INCIDENT_MIN_KM: khả năng gặp một sự cố
+INCIDENT_MIN_KM = 80.0
+INCIDENT_SECONDS = 30.0
+INCIDENT_XU = 5
+INCIDENT_LIKE_S = 0.25  # mỗi tim bớt chừng này giây chờ
+INCIDENT_LIKE_MAX = 0.6  # tim bớt tối đa 60 % thời gian chờ
+WHAT = {"toll": "qua trạm", "police": "nộp phạt", **{k: v[2] for k, v in INCIDENTS.items()}}
+WEATHER_ODDS = {  # (kiểu, khả năng) khi xe vào vùng mới / xuất bến; còn lại trời quang
+    "bac": (("drizzle", 0.45), ("fog", 0.2)),
+    "trung": (("rain", 0.3), ("fog", 0.1)),
+    "taynguyen": (("fog", 0.35), ("rain", 0.2)),
+    "nam": (("rain", 0.3),),
+}
+WEATHER_TALK_GAP = 60.0
+CHATTER_GAP = 45.0  # AI đáp chuyện phiếm (không phải câu hỏi) tối đa một câu / chừng này giây
+CHATTER_PER_VIEWER = 180.0  # mỗi người được AI đáp chuyện phiếm tối đa một lần / 3 phút
+CHATTER_KEEP = 5
+NAME_HOLD_MAX = 25.0  # hết giờ đón mà lơ xe còn đọc tên người lên xe: xe chờ đọc xong, tối đa chừng này giây (anh 03/11)
+ROLL_IDLE = 15 * 60.0  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng quá chừng này → lơ xe gọi tên trước khi xếp giường
+ROLL_WAIT = 45.0  # giây chờ người được gọi tên thả tim / bình luận; giường giữ cho họ trong lúc chờ
+ROLL_MISS_MAX = 2  # lỡ điểm danh chừng này lần thì bỏ vé (lần đầu chỉ lùi xuống chuyến sau)
+SPECIALS_QUEUE_MAX = 3  # cảnh chúc Tết chờ chiếu tối đa (quà to dồn dập không làm xe đứng hàng chục phút)
 BOOST_MAX = 2.0
 BOOST_PER_LIKE = 0.01
 BOOST_HALF_LIFE = 6.0
 CHAT_COOLDOWN = 5.0
 VIA_TALK_GAP = 40.0  # giây: chuyến nén ~4 phút qua cả chục tỉnh — gọi tỉnh nào cũng gọi thì lơ xe nói liên tục
 WHERE_COOLDOWN = 15.0
+AD_ASK_GAP = 20.0  # khán giả hỏi «hoàn tiền», «chat gờ pê tê»…: lơ xe chỉ bot tối đa một lần mỗi 20 giây (PLAN-153)
 # Bắt xe dọc đường (PLAN-136): xe tuyến cố định đón khách ở điểm dừng đón trả dọc đường (Thông tư 36/2024), người đi hẹn
 # trước rồi ra điểm đón chờ. Chuyến chạy đường bị nén (nghìn km vài phút) nên điểm đón đặt theo GIÂY THẬT phía trước xe.
 PICKUP_LEAD = 20.0  # giây: điểm đón cách xe chừng này — người xem kịp thấy «ra điểm đón chờ» rồi thấy xe tới
@@ -113,6 +195,7 @@ ASK_GAP = 12.0  # giây giữa hai câu lơ xe trả lời câu hỏi có sẵn 
 ASK_PER_VIEWER = 30.0  # mỗi người hỏi tối đa 30 giây một lần (hỏi dồn không chiếm hết lời lơ xe)
 QUESTIONS_KEEP = 10  # hàng câu hỏi chờ AI: giữ 10 câu mới nhất
 SAME_HOME_GAP = 30.0  # giây giữa hai lần lơ xe ghép đôi người cùng quê
+LEVEL_TALK_GAP = 20.0  # giây giữa hai câu lơ xe chúc lên cấp / nhắc sắp lên cấp (thả cả xe cùng lúc nhiều người lên cấp)
 WELCOME_GAP = 20.0  # giây giữa hai lần lơ xe chào khách quay lại (đầu buổi nhiều người cũ vào cùng lúc)
 INVITE_LIKES = 15  # tim trong chuyến của một người chưa có vé → lơ xe gọi tên mời lên xe (người xem lặng lẽ, chưa comment)
 INVITE_GAP = 45.0  # giây giữa hai lần mời; mỗi người được mời một lần mỗi buổi
@@ -145,9 +228,6 @@ RELIEF_AUTO = False
 PICKUP_STOP_BASE = 3.5  # giây tấp vào / mở cửa (người chờ đứng 2 giây rồi mới bước lên)
 PICKUP_STOP_STEP = 1.3  # giây mỗi người bước lên
 PICKUP_JOIN = 0.4  # điểm đón sắp tới còn ≥ 40 % PICKUP_LEAD giây → người hẹn sau đứng chung điểm đó (xe dừng một lần)
-# Chọn tuyến cho chuyến mới (PLAN-145): tuyến chở được nhiều người đang chờ nhất (cả người làn khác mà xe đi ngang quê); ai chờ
-# quá LANE_MAX_WAIT giây thì tuyến của người đó được đi trước — đông mà không ai bị bỏ quên
-LANE_MAX_WAIT = 600.0  # PLAN-144 (anh 03/11 «không cần xe tăng cường nữa, nhiều xe quá anh không cover được»)
 PRIORITY_TALK_GAP = 8.0  # lơ xe báo «X tặng quà, lên đầu hàng» tối đa 8 giây / câu
 # Quà = xe chạy nhanh (anh chọn 03/11 «tặng quà để xe trước đi nhanh hơn», mỗi xu cộng giây): mỗi xu thêm TURBO_PER_XU giây
 # chạy gấp TURBO_MULT, cộng dồn tối đa TURBO_MAX giây; chỉ trừ lúc xe đang chạy — xe tới quê / về bến sớm, chuyến sau tới sớm
@@ -182,14 +262,16 @@ BLOCK_FULL_RATE = 1.0
 GOAL_STEPS = ((0.1, "lixi", "🧧 mưa lì xì cả màn hình"), (0.3, "lantern", "🏮 thả đèn lồng"),
               (0.6, "firework", "🎆 pháo hoa lớn"), (1.0, "party", "🎉 cả xe dừng lại chúc Tết"))
 MONEY_WINDOW = 3600.0  # bảng doanh thu /control: quà trong 1 giờ gần nhất
-# Đua tỉnh (anh 03/11 duyệt): bình luận + tim + quà cộng điểm cho tỉnh quê; mỗi chuyến một vòng — tỉnh nhiều điểm nhất mà có
-# người đang chờ thì chuyến mới đi hướng tỉnh đó (sau luật «chờ quá 10 phút đi trước»). Trộn hành động miễn phí: không thành
-# game «chấm điểm chỉ bằng quà» (TikTok hạn chế), người không tặng vẫn kéo được tỉnh mình lên.
-RACE_PER_COMMENT = 1
-RACE_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây (không spam lấy điểm)
-RACE_LIKES_PER_POINT = 20
-RACE_PER_XU = 5
-RACE_TALK_GAP = 30.0
+# Điểm đối kháng từ hành động miễn phí (người không tặng vẫn góp được); quà tính riêng theo versus_xu (PLAN-151)
+VS_PER_COMMENT = 1
+VS_COMMENT_GAP = 15.0  # mỗi người một điểm bình luận / 15 giây (không spam lấy điểm)
+VS_LIKES_PER_POINT = 20
+# Đối kháng (anh 03/11 «game đối kháng như mấy chỗ live khác»): hai hướng đứng đầu hàng chờ đấu nhau — ai quê thuộc hướng
+# nào thì bình luận / tim / quà cộng điểm cho hướng đó; vào bến, hướng nhiều điểm hơn chạy trước
+VERSUS_TALK_GAP = 30.0
+VERSUS_XU = 20  # điểm đối kháng mỗi xu (PLAN-151: quà quyết trận; 1 xu = 400 tim) — /control chỉnh được
+VERSUS_GOLDEN_S = 60.0  # giờ vàng: chừng này giây cuối trước khi xe về bến, điểm quà x2 (0 = tắt)
+VERSUS_FINAL_S = 20.0  # lơ xe hô «còn thua N điểm» lúc còn chừng này giây
 # Bảng quảng cáo bên đường (anh 03/11): video anh tải lên; xe đang chạy dừng lại xem hết rồi chạy tiếp
 SHOW_LEG_WINDOW = (0.15, 0.8)
 FOCUS_SECONDS = 12.0  # /control bấm vào một khách: máy quay zoom vào cửa sổ giường người đó chừng này giây (anh 03/11)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
@@ -293,8 +375,8 @@ class Viewer:
     vip: bool = False
     fireworks: bool = False
     likes_trip: int = 0
-    race_at: float = -1e9  # lần cuối bình luận được điểm đua tỉnh
-    race_likes: int = 0  # tim lẻ chưa đủ một điểm đua tỉnh
+    vs_at: float = -1e9  # lần cuối bình luận được điểm đối kháng
+    vs_likes: int = 0  # tim lẻ chưa đủ một điểm đối kháng
     trips: int = 0
     followed: bool = False
     switched: bool = False
@@ -313,6 +395,7 @@ class Viewer:
     first_day: str = ""
     last_day: str = ""
     days: int = 0
+    streak: int = 0  # số ngày ghé live liên tiếp (rank.py)
     returning: bool = False  # đã gặp ở buổi live trước → lơ xe chào lại (một lần mỗi buổi)
     gift_trip: int = 0  # xu cộng dồn trong chuyến này → tính bậc quà
     last_seen: float = 0.0  # lần cuối có bất kỳ tương tác nào (TikTok không báo ai rời phòng)
@@ -323,6 +406,14 @@ class Viewer:
     stage_comments: int = 0
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
     prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
+    avatar: str = ""  # ảnh đại diện TikTok (https)
+    full: float = 100.0  # % no bụng lúc đang trên xe (anh 03/11: «% cơ thể … sắp đói»)
+    hungry_told: bool = False
+    snack: str | None = None  # món mua của cô bán hàng chuyến này (nem / bì / bánh mì) — hiện cạnh tên trên xe
+    roll_missed: int = 0  # số lần lỡ điểm danh liên tiếp (có tương tác lại thì về 0)
+    roll_skip: int = -1  # lỡ điểm danh ở chuyến số này → chuyến đó không xếp giường nữa (lùi xuống chuyến sau)
+    last_chatter: float = -1e9  # lần cuối được AI đáp chuyện phiếm
+    quiz_score: int = 0  # số câu đố trả lời đúng trong buổi
     priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
 
 
@@ -378,6 +469,7 @@ class Engine:
         self.paused = False
         self.rng = random.Random()  # bốc câu lơ xe (test truyền hạt giống cố định nếu cần)
         self.viewers: dict[str, Viewer] = {}
+        self.avatars: dict[str, str] = {}  # tên hiện → ảnh đại diện TikTok
         self.outbox: list[dict] = []
         self.queues: dict[str, list[str]] = {ln.key: [] for ln in self.network.lanes}  # vé chờ theo làn
         self.queued_at: dict[str, float] = {}  # giờ bắt đầu chờ của từng vé (giữ nguyên khi đổi tỉnh cùng làn)
@@ -396,6 +488,25 @@ class Engine:
         self.fine_xu = 10
         self.cover_seconds = 0.0  # 0: chờ tới khi góp đủ (admin bấm bù lỗ); > 0: tự bù lỗ sau chừng này giây
         self.block_rng = random.Random()
+        self.incidents_on = False  # server bật theo cài đặt; engine trần (test) không gặp sự cố
+        self.incident_xu = INCIDENT_XU
+        self.quiz_on = False  # server bật theo cài đặt
+        self.quiz_gap = QUIZ_GAP
+        self.quiz: dict | None = None  # câu đố đang hỏi / vừa có đáp án
+        self.next_quiz = now + QUIZ_GAP
+        self.quiz_recent: list[str] = []
+        self.last_fact = -1e9
+        self.weather = "clear"  # clear | drizzle | rain | fog — overlay vẽ mưa / sương, lơ xe báo khi đổi
+        self.weather_region: str | None = None
+        self.last_weather_talk = -1e9
+        self.ads: list[dict] = []  # quảng cáo bot của anh: lơ xe đọc câu «say» lần lượt (server đặt theo cài đặt)
+        self.ad_gap = 8 * 60.0
+        self.next_ad = now + 120.0  # mở game: đọc quảng cáo đầu tiên sau 2 phút
+        self.ad_index = 0
+        self.ad_asked: set[tuple[str, int]] = set()  # (uid, bot) đã được lơ xe chỉ bot trong buổi — mỗi người một lần
+        self.last_ad_ask = -1e9
+        self.chatter: list[dict] = []  # chuyện phiếm chờ AI đáp (khi bật AI)
+        self.last_chatter = -1e9
         self.last_block_remind = -1e9
         self.goal_xu = 1000  # mục tiêu buổi (xu), admin đặt
         self.goal_have = 0  # xu đã góp vào vòng mục tiêu hiện tại
@@ -403,12 +514,33 @@ class Engine:
         self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
         self.started_at = now
         self.focus: dict | None = None  # {uid, until}: máy quay đang zoom vào khách này
-        self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
         self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
-        self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
-        self.race_leader: str | None = None
-        self.race_winner: str | None = None
-        self.last_race_talk = -1e9
+        self.ticket_idle = TICKET_IDLE
+        self.roll_on = True  # anh bật / tắt điểm danh trên /control
+        self.roll_idle = ROLL_IDLE
+        self.roll_wait = ROLL_WAIT
+        self.rollcalls: dict[str, float] = {}
+        self.vendor_on = False  # server bật theo cài đặt (vendor_on); test cũ về tốc độ không bị cô bán hàng chen vào
+        self.vendor_xu = VENDOR_XU
+        self.vendor: dict | None = None  # cô bán hàng đang lên xe ({stage: stop|sell, until, sold, treats})
+        self.vendor_pool: dict = {"paid": 0, "givers": {}}  # quà góp gọi cô bán hàng (chuyến này)
+        self.vendor_done = False  # chuyến này cô đã lên rồi
+        self.last_vendor_remind = -1e9
+        self.hungry_new: list[str] = []  # người vừa «sắp đói», chờ lơ xe gom tên nhắc
+        self.last_hunger_talk = -1e9
+        self.names_pending = False  # app báo: giọng đọc còn tên người lên xe chưa đọc xong
+        self.name_hold_from: float | None = None  # uid đang được gọi tên → hết giờ chờ lúc này
+        self.versus_on = False  # chế độ đối kháng (/control)
+        self.versus: Counter = Counter()  # điểm đối kháng vòng này (theo làn)
+        self.versus_leader: str | None = None
+        self.versus_done: tuple[str, str] | None = None  # trận ở bến vừa xong (làn thắng, làn thua): hai xe còn đứng tới lúc xuất bến
+        self.versus_next: str | None = None  # xe thua trận trước: giữ khách, chạy chuyến ngay sau (PLAN-152)
+        self.last_versus_talk = -1e9
+        self.versus_xu = VERSUS_XU
+        self.versus_golden_s = VERSUS_GOLDEN_S
+        self.versus_lock: list[str] = []  # hai xe đang đấu ở bến (PLAN-152): chốt lúc vào bến, không đổi giữa chừng
+        self.versus_by: dict[str, Counter] = {}  # làn → điểm góp theo uid (người góp nhiều nhất bên thắng lên băng rôn)
+        self.versus_told: set[str] = set()  # đã hô «golden» / «final» vòng này
         self.videos: list[dict] = []  # video bảng quảng cáo (server cập nhật từ thư mục)
         self.show: dict | None = None  # đang dừng xem video
         self.shows_on = False  # server bật theo cài đặt; engine trần (test) không tự chiếu
@@ -443,6 +575,7 @@ class Engine:
         self.recall: Callable[[str], dict | None] | None = None  # hồ sơ khách buổi trước (Hub gắn store.load)
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
+        self.last_level_talk = -1e9
         self.last_same_home = -1e9
         self.last_invite = -1e9
         self.fuel = 1.0  # bình xăng 0 → 1 (PLAN-137)
@@ -464,6 +597,8 @@ class Engine:
         self.ai_reply = False  # admin bật «lơ xe trả lời bằng AI» (Hub đặt theo thiết lập)
         self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
+        self.place_shown: str | None = None  # tên tỉnh đang ghi trên màn (đã giữ PLACE_HOLD_KM)
+        self.place_cand: tuple[str, float] | None = None  # tỉnh mới đang chờ đủ km
         self.last_via_talk = -1e9
         self.last_priority_talk = -1e9
         self.patrons: list[str] = []  # uid «Chủ nhà xe», «Phó nhà xe» (xu tặng trong buổi)
@@ -490,6 +625,8 @@ class Engine:
     # ---- tiện ích -------------------------------------------------------
 
     def emit(self, type_: str, **data) -> None:
+        if "avatar" not in data and (url := self.avatars.get(data.get("name") or "")):
+            data["avatar"] = url  # ảnh đại diện TikTok cạnh tên trên thẻ / thông báo (anh 03/11)
         self.outbox.append({"type": type_, **data})
 
     def talk(self, kind: str, speak: bool = True, main: bool = False, **fields) -> None:
@@ -523,6 +660,7 @@ class Engine:
             if row:  # khách đã gặp ở buổi trước (PLAN-134 D)
                 v.home, v.trips, v.likes, v.gifts, v.comments = row["home"], row["trips"], row["likes"], row["gifts"], row["comments"]
                 v.first_day, v.last_day, v.days = row["first_day"], row["last_day"], row["days"]
+                v.streak = row.get("streak") or (1 if v.days else 0)
                 v.returning = v.last_day < self._today().isoformat()
         elif name:
             v.name = name
@@ -547,7 +685,16 @@ class Engine:
     def next_question(self, now: float, max_age: float) -> dict | None:
         """Câu hỏi cũ nhất còn mới (chờ quá `max_age` giây thì bỏ: trả lời lạc nhịp còn tệ hơn không trả lời)."""
         self.questions = [q for q in self.questions if now - q["at"] <= max_age]
-        return self.questions.pop(0) if self.questions else None
+        if self.questions:
+            return self.questions.pop(0)
+        self.chatter = [c for c in self.chatter if now - c["at"] <= max_age]
+        if self.chatter and now - self.last_chatter >= CHATTER_GAP:  # không ai hỏi: đáp một câu chuyện phiếm mới nhất
+            c = self.chatter.pop()
+            self.last_chatter = now
+            if c["uid"] in self.viewers:
+                self.viewers[c["uid"]].last_chatter = now
+            return c
+        return None
 
     def _faq_answer(self, key: str, v: Viewer) -> str:
         """Câu trả lời sẵn theo tình hình thật lúc này (giọng lơ xe: không «!», không «nha»)."""
@@ -601,7 +748,8 @@ class Engine:
     def take_dirty(self) -> list[dict]:
         """Hồ sơ người xem đã đổi từ lần lấy trước (Hub ghi SQLite theo lô)."""
         rows = [{"uid": v.uid, "name": v.name, "home": v.home, "trips": v.trips, "likes": v.likes, "gifts": v.gifts,
-                 "comments": v.comments, "first_day": v.first_day, "last_day": v.last_day, "days": v.days}
+                 "comments": v.comments, "first_day": v.first_day, "last_day": v.last_day, "days": v.days,
+                 "streak": v.streak}
                 for uid in self.dirty if (v := self.viewers.get(uid))]
         self.dirty = set()
         return rows
@@ -609,20 +757,45 @@ class Engine:
     def _seen_today(self, v: Viewer, now: float) -> None:
         """Có tương tác thật (không tính vào phòng): ghi ngày ghé; khách buổi trước thì lơ xe chào lại (PLAN-134 D)."""
         today = self._today().isoformat()
-        if v.last_day != today:
+        new_day = v.last_day != today
+        if new_day:
+            before = rank.points(v.trips, v.days)
+            yesterday = (self._today() - timedelta(days=1)).isoformat()
+            v.streak = v.streak + 1 if v.last_day == yesterday else 1
             v.first_day = v.first_day or today
             v.last_day = today
             v.days += 1
+            self._level_check(v, before, now)
+            if v.streak in rank.STREAK_REWARD_DAYS:  # mốc chuỗi ngày: một suất lên đầu hàng chờ (như tặng quà lúc chưa có vé)
+                v.prio_credit = True
+                self.emit("streak", name=v.name, hue=v.hue, n=v.streak, reward=True)
+                self.talk("streak_reward", name=v.name, n=v.streak)
         self.dirty.add(v.uid)
         if v.returning and now - self.last_welcome >= WELCOME_GAP:
             v.returning = False
             self.last_welcome = now
             home = BY_KEY[v.home].name if v.home in BY_KEY else None
-            self.emit("welcome", name=v.name, hue=v.hue, trips=v.trips, home=home, days=v.days)
-            if v.trips and home:
+            self.emit("welcome", name=v.name, hue=v.hue, trips=v.trips, home=home, days=v.days, streak=v.streak)
+            if v.streak >= 2 and not (new_day and v.streak in rank.STREAK_REWARD_DAYS):
+                self.talk("welcome_streak", name=v.name, n=v.streak)
+            elif v.trips and home:
                 self.talk("welcome_trips", name=v.name, prov=home, n=v.trips)
             else:
                 self.talk("welcome_back", name=v.name)
+
+    def _level_check(self, v: Viewer, before: int, now: float) -> None:
+        """Điểm hành trình vừa tăng: qua mốc cấp → báo lên cấp; còn 1 điểm nữa → lơ xe nhắc (giãn LEVEL_TALK_GAP)."""
+        pts = rank.points(v.trips, v.days)
+        if rank.level(pts) > rank.level(before):
+            self.emit("level_up", name=v.name, hue=v.hue, title=rank.title(pts), badge=rank.badge(pts))
+            if now - self.last_level_talk >= LEVEL_TALK_GAP:
+                self.last_level_talk = now
+                self.talk("level_up", name=v.name, title=rank.LEVELS[rank.level(pts)][2])
+            return
+        nxt = rank.to_next(pts)
+        if nxt and nxt[1] == 1 and now - self.last_level_talk >= LEVEL_TALK_GAP:
+            self.last_level_talk = now
+            self.talk("level_near", name=v.name, title=nxt[0].split(" ", 1)[1])
 
     def _set_phase(self, phase: str, now: float, seconds: float) -> None:
         self.phase = phase
@@ -653,6 +826,7 @@ class Engine:
             if uid in q:
                 q.remove(uid)
         self.queued_at.pop(uid, None)
+        self.rollcalls.pop(uid, None)
         if uid in self.viewers:
             self.viewers[uid].priority = False
 
@@ -690,11 +864,25 @@ class Engine:
             self.board[v.province] -= 1
             v.province = None
 
+    def _queue_special(self, name: str) -> None:
+        """Cảnh «cả xe chúc Tết» chờ chiếu. Hàng đầy: người chưa có cảnh nào được ghép tên vào cảnh cuối — đã tặng 1000 xu thì
+        phải được chúc (anh 04/11 «tặng xong mà không được là mất uy tín»); người đã có cảnh thì thôi thêm lần nữa."""
+        if len(self.specials) < SPECIALS_QUEUE_MAX:
+            self.specials.append(name)
+        elif not any(name in entry.split(" & ") for entry in self.specials):
+            self.specials[-1] = f"{self.specials[-1]} & {name}"
+
     def _prune_queues(self) -> None:
         """Vé ma (người chờ đã rời phòng quá lâu) không được tính vào chọn làn / cao điểm / số chờ."""
         for queue in self.queues.values():
-            for uid in [u for u in queue if self.last_now - self.viewers[u].last_seen > TICKET_IDLE]:
+            for uid in [u for u in queue if self._ghost(u)]:
                 self._release(self.viewers[uid])
+        if self.next_lane and not self.queues.get(self.next_lane):  # làn anh chọn đã hết người chờ: bỏ chọn, về thứ tự đặt vé
+            self.next_lane = None
+
+    def _ghost(self, uid: str) -> bool:
+        """Vé ma: chỉ khi anh bật giới hạn im lặng (ticket_idle > 0) — TikTok không báo ai rời phòng, im lặng vẫn là đang xem."""
+        return self.ticket_idle > 0 and self.last_now - self.viewers[uid].last_seen > self.ticket_idle
 
     def waiting(self) -> int:
         return sum(len(q) for q in self.queues.values())
@@ -712,14 +900,14 @@ class Engine:
         self.boarding_started = now
         self.seated_at = []
         self.bus_counter += 1
-        self.race_winner = None
-        self.bus = Bus(self.bus_counter, lane=self._pick_lane(), banner=self.next_banner)
-        if self.race_winner:  # vòng đua tỉnh này có tỉnh thắng: báo rồi sang vòng mới
-            win = BY_KEY[self.race_winner].name
-            self.emit("race_win", province=win, points=self.race[self.race_winner])
-            self.talk("race_win", prov=win, main=True)
-        self.race.clear()
-        self.race_leader = None
+        self.versus.clear()
+        self.versus_leader = None
+        self.versus_by = {}
+        self.versus_told = set()
+        self.versus_done = None
+        pair = self._duel_pair()  # trước _pick_lane: chọn làn xong là xe thua trận trước đã được dùng lượt
+        self.versus_lock = pair
+        self.bus = Bus(self.bus_counter, lane=pair[0] if pair else self._pick_lane(), banner=self.next_banner)
         self.next_banner = None
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
@@ -730,10 +918,22 @@ class Engine:
         self.trip_gifted = False
         for v in self.viewers.values():
             v.likes_trip = 0
+            v.snack = None
+            v.full = 100.0
+            v.hungry_told = False
             v.gift_trip = 0
             v.switched = False
-        self._fill_from_queue()
-        self._set_phase("BOARDING", now, self._board_time())
+        self.name_hold_from = None
+        self.vendor = None
+        self.vendor_done = False
+        self.vendor_pool = {"paid": 0, "givers": {}}
+        self._set_phase("BOARDING", now, 0.0)
+        self._fill_from_queue()  # sau khi vào pha đón: người im lặng lâu được điểm danh trước khi xếp giường
+        self.phase_until = now + self._board_time()  # giờ đón theo số giường còn trống sau khi xếp
+        if pair:  # đối kháng ở bến (PLAN-152): hai xe đậu sẵn, hết giờ đón xe nào nhiều điểm xuất bến trước
+            self.emit("versus_start", sides=[self._dest(lane) for lane in pair])
+            self.talk("versus_start", lead=self._dest(pair[0]), rival=self._dest(pair[1]), main=True)
+            return
         today = self._today()  # câu mời lên xe theo mùa: cao điểm 23–28 Chạp, giao thừa, ngày Tết (PLAN-134 C)
         kind = {season.PEAK: "boarding_peak", season.EVE: "boarding_eve", season.TET: "boarding_tet"}.get(
             season.phase(today), "boarding")
@@ -751,8 +951,8 @@ class Engine:
         return max(FULL_BUS_SECONDS, min(FULL_HOLD_MAX, NAME_LEAD_S + recent * NAME_READ_S))
 
     def _pick_lane(self, consume: bool = True) -> str:
-        """Tuyến của chuyến mới (PLAN-145): ai chờ quá LANE_MAX_WAIT giây thì tuyến của người chờ lâu nhất đi trước (không ai bị
-        bỏ đói); còn lại chọn tuyến chở được nhiều người đang chờ nhất — tính cả người làn khác mà xe đi ngang quê họ."""
+        """Tuyến của chuyến mới: anh chọn trên /control trước; xe thua trận đối kháng trước chạy ngay sau (PLAN-152); còn
+        lại ai đặt trước đi trước, người tặng quà được ưu tiên (anh 03/11)."""
         self._prune_queues()
         waiting = [lane for lane, q in self.queues.items() if q]
         if not waiting:
@@ -762,24 +962,146 @@ class Engine:
             if consume:  # xem trước (bảng «chuyến sau» trên màn hình) thì giữ lựa chọn
                 self.next_lane = None
             return lane
-        if not self.race_on:  # anh 03/11: ai đặt trước lên trước, chỉ người tặng quà được ưu tiên
-            return self._fifo_order()[0]
-        oldest = min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
-        if self.last_now - self.queued_at.get(self.queues[oldest][0], self.last_now) > LANE_MAX_WAIT:
-            return oldest
-        people = [self.viewers[u].province for q in self.queues.values() for u in q]
+        if self.versus_next in waiting:
+            lane = self.versus_next
+            if consume:
+                self.versus_next = None
+            return lane
+        return self._fifo_order()[0]
 
-        def load(lane: str) -> int:
-            served = self.network.serves(lane)
-            return sum(1 for prov in people if prov in served)
-        # đua tỉnh: tỉnh nhiều điểm nhất (có người đang chờ) quyết hướng chuyến này
-        contenders = [(pts, key) for key, pts in self.race.items() if pts > 0 and key in people]
-        for _, key in sorted(contenders, reverse=True):
-            lanes = [lane for lane in waiting if key in self.network.serves(lane)]
-            if lanes:
-                self.race_winner = key
-                return max(lanes, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
-        return max(waiting, key=lambda lane: (min(load(lane), SEATS), lane == oldest))
+    def _duel_pair(self) -> list[str]:
+        """Hai xe đấu ở bến lượt này (PLAN-152): hai hướng đầu thứ tự chạy (quà trước, đặt sớm trước). Không đấu khi đối
+        kháng tắt, anh chọn tay hướng chuyến này, xe thua trận trước còn khách chờ chạy, hoặc dưới hai hướng có người chờ."""
+        self._prune_queues()
+        waiting = [lane for lane, q in self.queues.items() if q]
+        if not self.versus_on or self.next_lane in waiting or self.versus_next in waiting:
+            return []
+        self.versus_next = None
+        order = self._fifo_order()
+        return order[:2] if len(order) >= 2 else []
+
+    def _versus_pair(self) -> list[str]:
+        """Hai xe đang đấu: chỉ trong giờ đón khách ở bến; một bên hết người chờ giữa chừng thì trận huỷ."""
+        if not self.versus_on or not self.versus_lock or not self.boarding_open():
+            return []
+        return self.versus_lock if all(self.queues.get(lane) for lane in self.versus_lock) else []
+
+    def _versus_left(self) -> float | None:
+        """Giây tới lúc hết giờ đón (hết trận). Tạm dừng / chen cảnh thì số này đứng theo."""
+        if not self._versus_pair():
+            return None
+        return max(0.0, self.resume[1] if self.phase == "SPECIAL" else self.phase_until - self.last_now)
+
+    def _versus_golden(self) -> bool:
+        left = self._versus_left()
+        return self.versus_golden_s > 0 and left is not None and left <= self.versus_golden_s
+
+    def _versus_top(self, lane: str) -> tuple[str, int] | None:
+        """(tên, điểm) người góp nhiều nhất cho hướng này vòng này."""
+        by = self.versus_by.get(lane)
+        if not by:
+            return None
+        uid, pts = by.most_common(1)[0]
+        v = self.viewers.get(uid)
+        return (v.name, pts) if v and pts > 0 else None
+
+    def _versus_tick(self) -> None:
+        """Giờ vàng: lơ xe hô lúc mở, và một lần chừng VERSUS_FINAL_S giây cuối báo bên thua còn kém bao nhiêu. Một bên hết
+        người chờ giữa trận: huỷ trận, đón khách như thường."""
+        pair = self._versus_pair()
+        if self.versus_lock and not pair and self.boarding_open():
+            self.versus_lock = []
+            self.emit("versus_cancel")
+            self.bus.lane = self._pick_lane()
+            self._fill_from_queue()
+            return
+        if not pair:
+            return
+        left = self._versus_left()
+        if left is None or self.versus_golden_s <= 0 or left > self.versus_golden_s:
+            return
+        lead = self._versus_lead(pair)
+        other = pair[1] if lead == pair[0] else pair[0]
+        if "golden" not in self.versus_told:
+            self.versus_told.add("golden")
+            self.emit("versus_golden", seconds=round(left))
+            self.talk("versus_golden", lead=self._dest(lead), rival=self._dest(other))
+        elif "final" not in self.versus_told and left <= VERSUS_FINAL_S and self.versus[lead] > self.versus[other]:
+            self.versus_told.add("final")
+            self.talk("versus_final", rival=self._dest(other), need=self.versus[lead] - self.versus[other], secs=round(left))
+
+    def _versus_lead(self, pair: list[str]) -> str:
+        return max(pair, key=lambda lane: (self.versus[lane], -pair.index(lane)))
+
+    def _versus_end(self, now: float) -> None:
+        """Hết giờ đón trận đối kháng: xe thắng mở cửa cho khách lên rồi xuất bến (MVP lên băng rôn), xe thua chạy ngay sau."""
+        pair = self.versus_lock
+        self.versus_lock = []
+        win = self._versus_lead(pair)
+        lose = pair[1] if win == pair[0] else pair[0]
+        self.bus.lane = win
+        self.versus_done = (win, lose)
+        self.versus_next = lose
+        mvp = self._versus_top(win)
+        if mvp and self.bus.banner is None:  # người góp nhiều nhất bên thắng: tên lên băng rôn chuyến này
+            self.bus.banner = mvp[0]
+        self.emit("versus_win", lane=self.network.lane_by_key[win].label, dest=self._dest(win), points=self.versus[win],
+                  rival=self._dest(lose), rival_points=self.versus[lose], mvp=mvp[0] if mvp else None,
+                  mvp_points=mvp[1] if mvp else 0)
+        if mvp:
+            self.talk("versus_win_mvp", lead=self._dest(win), rival=self._dest(lose), name=mvp[0], main=True)
+        else:
+            self.talk("versus_win", lead=self._dest(win), rival=self._dest(lose), main=True)
+        self._fill_from_queue()
+        self.phase_until = now + self._full_hold()  # khách bên thắng lên xe, lơ xe đọc tên xong thì chạy
+
+    def _versus_score(self, v: Viewer, points: int, xu: int = 0) -> None:
+        """Điểm đối kháng cho hướng có quê người xem (vé đang có, không thì quê đã về lần trước). Quà (PLAN-151): mỗi xu
+        versus_xu điểm, giờ vàng x2; người tặng không thuộc bên nào (chưa có quê / quê hướng khác) → tiếp sức bên đang thua."""
+        key = v.province or v.home
+        pair = self._versus_pair()
+        if not pair:
+            return
+        lane = self.network.lane_of(key) if key else None
+        if xu > 0:
+            points = xu * self.versus_xu * (2 if self._versus_golden() else 1)
+            if lane not in pair:
+                lane = min(pair, key=lambda ln: (self.versus[ln], -pair.index(ln)))  # bên thua (hoà: bên đứng sau)
+                self.emit("versus_assist", name=v.name, hue=v.hue, dest=self._dest(lane), points=points, avatar=v.avatar)
+        if lane not in pair or points <= 0:
+            return
+        self.versus[lane] += points
+        self.versus_by.setdefault(lane, Counter())[v.uid] += points
+        lead = self._versus_lead(pair)
+        other = pair[1] if lead == pair[0] else pair[0]
+        self.bus.lane = lead  # xe dẫn điểm đứng làn đầu bến (màn hình: lật kèo thì hai xe đổi làn)
+        if lead != self.versus_leader and self.versus[lead] > self.versus[other]:
+            self.versus_leader = lead
+            if self.last_now - self.last_versus_talk >= VERSUS_TALK_GAP:
+                self.last_versus_talk = self.last_now
+                self.talk("versus_lead", lead=self._dest(lead), rival=self._dest(other))
+
+    def _versus_view(self) -> dict | None:
+        """Thanh PK + hai xe ở bến. Hết trận mà xe thắng chưa xuất bến: vẫn trả về (done) để màn hình giữ hai xe."""
+        pair = self._versus_pair()
+        done = not pair and self.versus_done is not None and self.boarding_open()
+        if done:
+            pair = list(self.versus_done)
+        if not pair:
+            return None
+        lead = pair[0] if done else self._versus_lead(pair)
+        sides = []
+        for lane in pair:
+            ln = self.network.lane_by_key[lane]
+            top = self._versus_top(lane)
+            sides.append({"lane": lane, "label": ln.label, "arrow": ln.arrow, "dest": self._dest(lane),
+                          "points": self.versus[lane], "waiting": len(self.queues[lane]), "lead": lane == lead,
+                          "top": top[0] if top else None})
+        left = self._versus_left()
+        golden = self._versus_golden()
+        return {"sides": sides, "chosen": self.next_lane in self.queues and bool(self.queues.get(self.next_lane)),
+                "golden": golden, "left": round(left) if golden and left is not None else None, "xu": self.versus_xu,
+                "done": done}
 
     def _fifo_order(self) -> list[str]:
         """Thứ tự các hướng chạy tiếp theo: hướng của người tặng quà đang chờ trước, rồi người đặt vé sớm nhất (anh 03/11)."""
@@ -826,6 +1148,11 @@ class Engine:
     def upcoming(self) -> list[dict]:
         """Các chuyến sắp chạy cho /control: số chuyến, hướng, bao nhiêu người chờ, ai đầu hàng."""
         order = self._fifo_order()
+        pair = self._versus_pair()
+        if pair:  # đối kháng: hướng đang dẫn điểm chạy trước
+            lead = self._versus_lead(pair)
+            order.remove(lead)
+            order.insert(0, lead)
         if self.next_lane in order:
             order.remove(self.next_lane)
             order.insert(0, self.next_lane)
@@ -852,16 +1179,37 @@ class Engine:
         return province is not None and province in self.network.serves(self.bus.lane)
 
     def _fill_from_queue(self) -> None:
+        called: list[str] = []
+        self._fill_seats(called)
+        if called:  # gọi tên một lượt (một câu) cho mọi người im lặng lâu vừa tới lượt
+            names = [self.viewers[u].name for u in called]
+            self.emit("rollcall", names=names, name=names[0], seconds=round(self.roll_wait))
+            who = ", ".join(names[:-1]) + f" và {names[-1]}" if len(names) > 1 else names[0]
+            self.talk("rollcall", speak=False, name=who if len(names) <= 4 else f"{', '.join(names[:3])} và {len(names) - 3} bạn nữa",
+                      seconds=round(self.roll_wait), main=True)
+
+    def _fill_seats(self, called: list[str]) -> None:
         """Lấy người chờ lên xe: hàng chờ làn của xe trước, rồi người chờ làn khác mà xe đi ngang quê họ — ai chờ lâu
-        trước (PLAN-134 C: khách Huế chờ xe «Hướng Đà Nẵng» lên được xe «Hướng Hà Nội» còn giường)."""
+        trước (PLAN-134 C: khách Huế chờ xe «Hướng Đà Nẵng» lên được xe «Hướng Hà Nội» còn giường). Đang đấu ở bến thì
+        chưa ai lên (chưa biết xe nào chạy)."""
+        if self._versus_pair():
+            return
         served = self.network.serves(self.bus.lane)
         others = sorted((self.queued_at.get(uid, 0.0), uid) for lane, q in self.queues.items() if lane != self.bus.lane
                         for uid in q if self.viewers[uid].province in served)
         for uid in [*list(self.queues[self.bus.lane]), *(uid for _, uid in others)]:
             if (free := self.bus.free_seat()) is None:
                 return
-            if self.last_now - self.viewers[uid].last_seen > TICKET_IDLE:  # vé ma: không chở người đã rời phòng
+            if self._ghost(uid):  # vé ma: không chở người đã rời phòng
                 self._release(self.viewers[uid])
+                continue
+            if uid in self.rollcalls or self.viewers[uid].roll_skip == self.bus.no:
+                continue  # đang chờ trả lời điểm danh / đã lỡ điểm danh chuyến này
+            if self.bus.seats.count(None) <= self._held_seats():
+                return  # giường còn lại đang giữ cho người được gọi tên (gọi tên vừa đủ số giường trống)
+            if self._needs_roll(uid):
+                self.rollcalls[uid] = self.last_now + self.roll_wait
+                called.append(uid)
                 continue
             self._unqueue(uid)
             self.bus.seats[free] = uid
@@ -869,6 +1217,157 @@ class Engine:
             # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
             # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
             self._ticket(self.viewers[uid], free, changed=False, promoted=True)
+
+    # ---- cô bán hàng lên xe (anh 03/11) ---------------------------------------------------------------------
+
+    def _vendor_ready(self) -> bool:
+        """Cô lên được lúc xe đang chạy đường bình thường (không bị chặn / đón / xem video / chen cảnh)."""
+        return (self.phase == "DRIVING" and not self.block and not self.halt and not self.show and not self.vendor
+                and not self.vendor_done and self.trip is not None and not self.quiz)
+
+    def _vendor_tick(self, now: float) -> None:
+        if self.vendor and self.vendor["stage"] == "sell" and self.phase in ("FINISH", "BOARDING"):  # hết chuyến: cô xuống
+            sold = self.vendor["sold"]
+            self.vendor = None
+            self.emit("vendor_end", name=VENDOR_NAME, sold=sum(sold.values()))
+            self.talk("vendor_end", name=VENDOR_NAME, n=sum(sold.values()), main=True)
+        elif self.vendor_on and self.vendor_pool["paid"] >= self.vendor_xu and self._vendor_ready():
+            givers = self.vendor_pool["givers"]
+            self._start_vendor(max(givers.items(), key=lambda kv: kv[1])[0] if givers else "", now)
+
+    def _hunger_tick(self, dt: float) -> None:
+        """Xe chạy thì khách đói dần; vừa xuống dưới HUNGRY thì lơ xe gom tên nhắc (cô Ba trên xe: gõ món; chưa có: góp gọi cô)."""
+        drop = HUNGER_PER_MIN * dt / 60.0
+        for uid in self.bus.riders():
+            v = self.viewers[uid]
+            v.full = max(0.0, v.full - drop)
+            if v.full < HUNGRY and not v.hungry_told:
+                v.hungry_told = True
+                self.hungry_new.append(v.name)
+                self.emit("hungry", name=v.name, seat=self.bus.seat_of(uid), full=round(v.full))
+        if self.hungry_new and self.last_now - self.last_hunger_talk >= HUNGER_TALK_GAP:
+            self.last_hunger_talk = self.last_now
+            names, self.hungry_new = self.hungry_new, []
+            self.talk("hungry_vendor" if self.vendor else "hungry_call", name=who_of(names), vendor=VENDOR_NAME, main=True)
+
+    def _feed(self, v: Viewer) -> None:
+        v.full = 100.0
+        v.hungry_told = False
+        if v.name in self.hungry_new:
+            self.hungry_new.remove(v.name)
+
+    def vendor_now(self) -> None:
+        """/control «Gọi cô bán hàng»: lên xe ngay (không cần góp), xe phải đang chạy đường."""
+        if self.vendor:
+            raise Refused("Cô bán hàng đang trên xe rồi.")
+        if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
+            raise Refused("Chỉ gọi được lúc xe đang chạy đường (không dừng đón / bị chặn / xem video).")
+        self.vendor_done = False
+        self._start_vendor("", self.last_now)
+
+    def _start_vendor(self, by: str, now: float) -> None:
+        self.vendor_done = True
+        self.vendor_pool = {"paid": 0, "givers": {}}
+        self.vendor = {"stage": "stop", "until": now + VENDOR_STOP_S, "by": by, "sold": Counter(), "treats": []}
+        place = BY_KEY[self._where()[0]].name
+        self.emit("vendor", stage="stop", name=VENDOR_NAME, by=by, place=place, seconds=round(VENDOR_STOP_S))
+        self.talk("vendor_board" if by else "vendor_board_admin", name=by, vendor=VENDOR_NAME, prov=place, main=True)
+
+    def _pay_vendor(self, v: Viewer, diamonds: int) -> str:
+        """Quà (khi không bị chặn): cô đang bán → người tặng bao cả xe món mình gõ gần nhất; chưa lên → góp gọi cô."""
+        if not self.vendor_on:
+            return ""
+        if self.vendor and self.vendor["stage"] == "sell":
+            item = v.snack or "banh_mi"
+            label, emoji = SNACKS[item]
+            for uid in self.bus.riders():
+                self.viewers[uid].snack = item
+                self._feed(self.viewers[uid])
+            self.vendor["sold"][item] += len(self.bus.riders())
+            self.vendor["treats"].append(v.name)
+            self.emit("vendor_treat", name=v.name, item=label, emoji=emoji, riders=len(self.bus.riders()))
+            self.talk("vendor_treat", name=v.name, item=label.lower(), main=True)
+            return f"{emoji} bao cả xe {label.lower()}"
+        if self.vendor or self.vendor_done or self.phase in ("FINISH", "DROPOFF") or not self.bus.riders():
+            return ""
+        pool = self.vendor_pool
+        pool["paid"] += diamonds
+        pool["givers"][v.name] = pool["givers"].get(v.name, 0) + diamonds
+        if pool["paid"] >= self.vendor_xu:
+            return "🧺 góp đủ, cô bán hàng sắp lên xe"
+        if self.last_now - self.last_vendor_remind >= VENDOR_REMIND_GAP:
+            self.last_vendor_remind = self.last_now
+            self.talk("vendor_pool", name=v.name, left=self.vendor_xu - pool["paid"], main=True)
+        return f"🧺 góp gọi cô bán hàng · {pool['paid']}/{self.vendor_xu}"
+
+    def _buy_snack(self, v: Viewer, item: str) -> None:
+        if v.snack == item and v.full >= HUNGRY:
+            return  # vừa mua món này, còn no
+        self._feed(v)
+        v.snack = item
+        self.vendor["sold"][item] += 1
+        label, emoji = SNACKS[item]
+        self.emit("snack", name=v.name, hue=v.hue, item=label, emoji=emoji, seat=self.bus.seat_of(v.uid))
+
+    def _vendor_view(self) -> dict | None:
+        if self.vendor:
+            vd = self.vendor
+            left = round(max(0.0, vd["until"] - self.last_now)) if vd["stage"] == "stop" else None
+            return {"stage": vd["stage"], "left": left, "name": VENDOR_NAME,
+                    "by": vd["by"], "sold": sum(vd["sold"].values()), "treats": vd["treats"][-3:]}
+        if self.vendor_on and not self.vendor_done and self.phase == "DRIVING" and self.bus.riders():
+            return {"stage": "pool", "paid": self.vendor_pool["paid"], "goal": self.vendor_xu, "name": VENDOR_NAME}
+        return None
+
+    def _wait_names(self, now: float) -> bool:
+        if not (self.names_pending and self.bus.riders()):
+            return False
+        if self.name_hold_from is None:
+            self.name_hold_from = now
+        return now - self.name_hold_from < NAME_HOLD_MAX
+
+    def _needs_roll(self, uid: str) -> bool:
+        """Điểm danh chỉ lúc tới lượt xếp giường ở bến (xe chính đang đón), với người im lặng lâu — im lặng vẫn có thể đang xem."""
+        return (self.roll_on and self.boarding_open()
+                and self.last_now - self.viewers[uid].last_seen > self.roll_idle)
+
+    def _held_seats(self) -> int:
+        """Giường giữ cho người đang được gọi tên ở xe này (chỉ người cùng làn / xe đi ngang quê)."""
+        served = self.network.serves(self.bus.lane)
+        return sum(1 for uid in self.rollcalls if uid in self.queued_at and self.viewers[uid].province in served)
+
+    def _answer_roll(self, v: Viewer) -> None:
+        """Người được gọi tên thả tim / bình luận / tặng quà: giữ vé, lên giường đang giữ (còn đang đón)."""
+        v.roll_missed = 0
+        v.roll_skip = -1
+        if self.rollcalls.pop(v.uid, None) is None:
+            return
+        self.emit("rollcall_ok", name=v.name)
+        self.talk("rollcall_ok", name=v.name, main=True)
+        if self.boarding_open():
+            self._fill_from_queue()
+
+    def _expire_rolls(self) -> None:
+        """Hết giờ điểm danh không ai trả lời: lần đầu lùi xuống chuyến sau, lỡ ROLL_MISS_MAX lần thì bỏ vé; giường giữ trả lại."""
+        expired = [uid for uid, until in self.rollcalls.items() if self.last_now >= until]
+        for uid in expired:
+            del self.rollcalls[uid]
+            v = self.viewers[uid]
+            if uid not in self.queued_at:  # đã bỏ / đổi vé trong lúc chờ
+                continue
+            v.roll_missed += 1
+            if v.roll_missed >= ROLL_MISS_MAX:
+                v.roll_missed = 0
+                v.roll_skip = -1
+                self._release(v)
+                self.emit("rollcall_drop", name=v.name)
+                self.talk("rollcall_drop", name=v.name, main=True)
+            else:
+                v.roll_skip = self.bus.no
+                self.emit("rollcall_skip", name=v.name)
+                self.talk("rollcall_skip", name=v.name, main=True)
+        if expired and self.boarding_open():
+            self._fill_from_queue()
 
     def _depart(self, now: float) -> None:
         """BR-3: ghé theo đường thật (`Network.plan`); trạm nghỉ ở giữa quãng (chuyến dài: 2 trạm, chuyến ngắn: không),
@@ -886,6 +1385,7 @@ class Engine:
         self.legs = legs
         self.leg_index = 0
         self.block_plan = self._plan_blocks(total)
+        self.place_shown = self.place_cand = None
         if self.boarding_started is not None:
             self.board_avg += AVG_WEIGHT * (now - self.boarding_started - self.board_avg)
         self.trip_started = now
@@ -896,6 +1396,8 @@ class Engine:
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
         self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)), main=True)
+        self.versus_done = None
+        self._roll_weather(BY_KEY[self._where()[0]].region, now, force=True)
         self._enter_driving(now)
 
     def _leg_start_km(self) -> float:
@@ -969,10 +1471,12 @@ class Engine:
             v.home = province
             v.home_now = True
             v.province = None
+            before = rank.points(v.trips, v.days)
             v.trips += 1
+            self._level_check(v, before, self.last_now)
             self.dirty.add(uid)
             fireworks = fireworks or v.fireworks
-            people.append({"name": v.name, "hue": v.hue, "vip": v.vip, "wish": pick(WISHES, f"{uid}:{bus_no}"),
+            people.append({"name": v.name, "hue": v.hue, "vip": v.vip, "badge": rank.badge(rank.points(v.trips, v.days)), "wish": pick(WISHES, f"{uid}:{bus_no}"),
                            "parcels": v.parcels})
             v.fireworks = False
             v.vip = False
@@ -1234,11 +1738,29 @@ class Engine:
             self.phase_until += dt  # đồng hồ pha đứng yên, xe không chạy
             if self.block:
                 self.block["since"] += dt
+                if "until" in self.block:
+                    self.block["until"] += dt
+            if self.quiz:
+                self.quiz["until"] += dt
             if self.show:
                 self.show["until"] += dt
                 self.show["started"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
+            if self.halt:
+                self.halt["until"] += dt  # đang đón người ven đường: bỏ tạm dừng xong vẫn đủ giờ cho họ lên xe
+            if self.vendor:
+                self.vendor["until"] += dt
+            for uid in self.rollcalls:
+                self.rollcalls[uid] += dt  # đang gọi tên: tạm dừng không ăn vào giờ trả lời
             return
         self._run_reliefs(dt)
+        if self.rollcalls:
+            self._expire_rolls()
+        self._vendor_tick(now)
+        self._quiz_tick(now, dt)
+        self._versus_tick()
+        self._ad_tick(now)
+        if self.phase == "DRIVING":
+            self._hunger_tick(dt)
         self._remind_direction(now)
         self._remind_rules(now)
         if self.specials and self.phase in SPECIAL_FROM:
@@ -1249,7 +1771,13 @@ class Engine:
 
         if self.phase == "BOARDING":
             self._maybe_switch_station(now)
-            if now >= self.phase_until:
+            if now >= self.phase_until and self._versus_pair():
+                self._versus_end(now)
+            elif now >= self.phase_until and self._held_seats():
+                self.phase_until = min(self.rollcalls.values())  # đang chờ người được gọi tên: đợi hết giờ điểm danh rồi chạy
+            elif now >= self.phase_until and self._wait_names(now):
+                self.phase_until = now + 1.0  # lơ xe đọc chưa xong tên người lên xe: chờ đọc hết rồi mới chạy
+            elif now >= self.phase_until:
                 if self.bus.riders():
                     self._depart(now)
                 else:  # xe trống: quay sang làn đang có người chờ (BR-4), cho họ lên rồi đón thêm một lúc
@@ -1258,6 +1786,11 @@ class Engine:
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
+        elif self.phase == "DRIVING" and self.vendor and self.vendor["stage"] == "stop":
+            if now >= self.vendor["until"]:  # cô lên rồi: xe chạy tiếp, cô bán trong lúc xe chạy
+                self.vendor.update(stage="sell", until=math.inf)  # bán suốt chuyến
+                self.emit("vendor", stage="sell", name=VENDOR_NAME)
+                self.talk("vendor_sell", name=VENDOR_NAME, main=True)
         elif self.phase == "DRIVING" and self.show:
             if now >= self.show["until"]:
                 self._end_show()
@@ -1302,19 +1835,25 @@ class Engine:
     # ---- trạm thu phí / công an: chặn xe, góp quà đi tiếp (anh 03/11) -----------------------------
 
     def _plan_blocks(self, total: float) -> list[tuple[float, str]]:
-        """Chỗ xe bị chặn trong chuyến: trạm thu phí cứ ~TOLL_EVERY_KM một trạm, công an ngẫu nhiên; không sát điểm dừng."""
-        if not self.blocks_on:
-            return []
+        """Chỗ xe bị chặn trong chuyến: trạm thu phí cứ ~TOLL_EVERY_KM một trạm, công an ngẫu nhiên, sự cố dọc đường (xẹp
+        lốp / kẹt xe / trâu qua đường) ngẫu nhiên; không sát điểm dừng."""
         rng = self.block_rng
-        plan = []
-        if total >= TOLL_MIN_KM:
-            n = min(TOLL_MAX, max(1, int(total // TOLL_EVERY_KM)))
-            plan += [(total * (i + 1) / (n + 1) * rng.uniform(0.9, 1.1), "toll") for i in range(n)]
-        if total >= POLICE_MIN_KM and rng.random() < POLICE_CHANCE:
-            plan.append((total * rng.uniform(0.2, 0.85), "police"))
+        plan: list[tuple[float, str]] = []
+        if self.blocks_on:
+            if total >= TOLL_MIN_KM:
+                n = min(TOLL_MAX, max(1, int(total // TOLL_EVERY_KM)))
+                plan += [(total * (i + 1) / (n + 1) * rng.uniform(0.9, 1.1), "toll") for i in range(n)]
+            if total >= POLICE_MIN_KM and rng.random() < POLICE_CHANCE:
+                plan.append((total * rng.uniform(0.2, 0.85), "police"))
+            chance = 1.0 if not self.fee_auto else max(BLOCK_KEEP_MIN, min(1.0, self._gift_rate() / BLOCK_FULL_RATE))
+            plan = [(odo, kind) for odo, kind in plan if rng.random() < chance]
+        if self.incidents_on and total >= INCIDENT_MIN_KM and rng.random() < INCIDENT_CHANCE:
+            plan.append((total * rng.uniform(0.15, 0.85), rng.choice(tuple(INCIDENTS))))  # sự cố: không tốn ai đồng nào
+        return self._clear_spots(plan, total)
+
+    def _clear_spots(self, plan: list[tuple[float, str]], total: float) -> list[tuple[float, str]]:
+        """Bỏ chỗ chặn sát điểm thả khách / trạm nghỉ / đầu cuối chuyến, và chỗ quá gần chỗ chặn trước."""
         keep: list[tuple[float, str]] = []
-        chance = 1.0 if not self.fee_auto else max(BLOCK_KEEP_MIN, min(1.0, self._gift_rate() / BLOCK_FULL_RATE))
-        plan = [(odo, kind) for odo, kind in plan if rng.random() < chance]
         for odo, kind in sorted(plan):
             if (BLOCK_CLEAR_KM < odo < total - BLOCK_CLEAR_KM and all(abs(odo - leg.km) > BLOCK_CLEAR_KM for leg in self.legs)
                     and all(abs(odo - o) > BLOCK_GAP_KM for o, _ in keep)):
@@ -1322,14 +1861,15 @@ class Engine:
         return keep
 
     def _check_blocks(self, now: float) -> None:
-        if self.block or self.halt or self.show or not self.block_plan or self.trip_km() < self.block_plan[0][0]:
-            return
+        if (self.block or self.halt or self.show or self.quiz or not self.block_plan
+                or self.trip_km() < self.block_plan[0][0]):
+            return  # đang đố vui: trạm / công an / sự cố chờ câu đố xong (không thay mất thẻ câu hỏi giữa chừng)
         _, kind = self.block_plan.pop(0)
         self._start_block(kind, now)
 
     def block_now(self, kind: str) -> None:
         """Admin bấm «Trạm thu phí» / «Công an» trên /control: chặn xe ngay (xe phải đang chạy đường)."""
-        if kind not in ("toll", "police"):
+        if kind not in WHAT:
             raise ValueError(kind)
         if self._phase_now() != "DRIVING" or self.block or self.halt or self.show:
             raise Refused("Chỉ chặn được lúc xe đang chạy đường (không đang dừng đón / bị chặn / xem video).")
@@ -1339,6 +1879,15 @@ class Engine:
     def _start_block(self, kind: str, now: float) -> None:
         place = BY_KEY[self._where()[0]].name
         speeding = False
+        if kind in INCIDENTS:
+            icon, title, _ = INCIDENTS[kind]
+            goal = self._fee(self.incident_xu)
+            self.block = {"kind": kind, "reason": title, "goal": goal, "paid": 0, "givers": {}, "since": now,
+                          "place": place, "speeding": False, "until": now + INCIDENT_SECONDS}
+            self.last_block_remind = now
+            self.emit("block", block=kind, reason=title, goal=goal, place=place, speeding=False)
+            self.talk(kind, place=place, goal=goal, main=True)
+            return
         if kind == "toll":
             reason, goal = f"Trạm thu phí {place}", self._fee(self.toll_xu)
         else:
@@ -1350,26 +1899,157 @@ class Engine:
         self.block = {"kind": kind, "reason": reason, "goal": goal, "paid": 0, "givers": {}, "since": now,
                       "place": place, "speeding": speeding}
         self.last_block_remind = now
-        self.emit("block", kind=kind, reason=reason, goal=goal, place=place, speeding=speeding)
+        self.emit("block", block=kind, reason=reason, goal=goal, place=place, speeding=speeding)
         if kind == "toll":
             self.talk("toll", place=place, goal=goal, main=True)
         else:
             self.talk("speeding" if speeding else "police", reason=reason, goal=goal, main=True)
 
-    # ---- đua tỉnh -------------------------------------------------------------------------------
+    # ---- đố vui · chuyện từng tỉnh · thời tiết (anh 03/11: live đỡ lặp, đỡ giống video quay sẵn) -------------------
 
-    def _race(self, v: Viewer, points: int) -> None:
-        """Cộng điểm đua tỉnh cho tỉnh quê của người xem (vé đang có, không thì quê đã về lần trước)."""
-        key = v.province or v.home
-        if not self.race_on or not key or points <= 0:
+    def _quiz_ready(self) -> bool:
+        return (self.quiz_on and self.phase == "DRIVING" and self.trip is not None and not self.block and not self.halt
+                and not self.show and not (self.vendor and self.vendor["stage"] == "stop")
+                and (1 - self.progress) * self.leg_seconds >= QUIZ_SECONDS + QUIZ_RESULT_S + QUIZ_LEAD_S)
+
+    def _quiz_tick(self, now: float, dt: float = 0.0) -> None:
+        q = self.quiz
+        if q and not q["done"] and (self.block or self.show or (self.vendor and self.vendor["stage"] == "stop")
+                                    or self.phase != "DRIVING"):
+            q["until"] += dt  # thẻ câu hỏi bị thay (anh bấm chặn xe / chiếu video, xe tới điểm thả / trạm nghỉ) → đồng hồ chờ
+        if q and now >= q["until"]:
+            if q["done"]:
+                self.quiz = None
+            else:
+                self._end_quiz(now)
+        elif not q and now >= self.next_quiz and self._quiz_ready():
+            self._start_quiz(now)
+
+    def quiz_now(self) -> None:
+        """Admin bấm «Đố vui ngay» trên /control."""
+        if self.quiz and not self.quiz["done"]:
+            raise Refused("Đang có câu đố rồi.")
+        self._start_quiz(self.last_now)
+
+    def _start_quiz(self, now: float) -> None:
+        prefer = self.place_now if self.phase == "DRIVING" else None  # đố về chính tỉnh xe đang chạy qua
+        q = make_quiz(self.rng, prefer, tuple(self.quiz_recent))
+        self.quiz_recent = [*self.quiz_recent, q["key"]][-QUIZ_RECENT:]
+        self.quiz = {**q, "until": now + QUIZ_SECONDS, "done": False, "answers": {}, "winners": []}
+        self.next_quiz = now + self.quiz_gap
+        a, b, c = q["options"]
+        self.emit("quiz", question=q["question"], options=q["options"], seconds=QUIZ_SECONDS)
+        self.talk("quiz_ask", q=q["question"], a=a, b=b, c=c)
+
+    def _quiz_answer(self, v: Viewer, ans: int) -> None:
+        """Mỗi người chỉ tính câu trả lời đầu tiên (không đoán dồn A rồi B rồi C)."""
+        q = self.quiz
+        if v.uid in q["answers"]:
             return
-        self.race[key] += points
-        leader = self.race.most_common(1)[0][0]
-        if leader != self.race_leader:
-            self.race_leader = leader
-            if self.last_now - self.last_race_talk >= RACE_TALK_GAP:
-                self.last_race_talk = self.last_now
-                self.talk("race_lead", prov=BY_KEY[leader].name)
+        q["answers"][v.uid] = ans
+        if ans == q["answer"]:
+            v.quiz_score += 1
+            if len(q["winners"]) < QUIZ_WINNERS:
+                q["winners"].append(v.name)
+                self._versus_score(v, QUIZ_POINTS)
+
+    def _end_quiz(self, now: float) -> None:
+        q = self.quiz
+        q.update(done=True, until=now + QUIZ_RESULT_S)
+        right = sum(1 for a in q["answers"].values() if a == q["answer"])
+        ans = f"{LETTERS[q['answer']]}, {q['options'][q['answer']]}"
+        self.emit("quiz_end", answer=LETTERS[q["answer"]], option=q["options"][q["answer"]], winners=q["winners"],
+                  right=right, total=len(q["answers"]))
+        if q["winners"]:
+            self.talk("quiz_win", ans=ans, name=who_of(q["winners"]))
+        else:
+            self.talk("quiz_none", ans=ans)
+
+    def _quiz_view(self) -> dict | None:
+        q = self.quiz
+        if not q:
+            return None
+        view = {"question": q["question"], "options": q["options"], "left": round(max(0.0, q["until"] - self.last_now)),
+                "answered": len(q["answers"]), "done": q["done"]}
+        if q["done"]:
+            view.update(answer=q["answer"], winners=q["winners"],
+                        right=sum(1 for a in q["answers"].values() if a == q["answer"]))
+        return view
+
+    def _roll_weather(self, region: str, now: float, force: bool = False) -> None:
+        """Xe vào vùng mới (hoặc xuất bến): bốc thời tiết theo vùng — mưa phùn Bắc, mưa rào Nam, sương Tây Nguyên."""
+        if region == self.weather_region and not force:
+            return
+        self.weather_region = region
+        roll, acc, kind = self.rng.random(), 0.0, "clear"
+        for k, chance in WEATHER_ODDS.get(region, ()):
+            acc += chance
+            if roll < acc:
+                kind = k
+                break
+        if kind == self.weather:
+            return
+        self.weather = kind
+        self.emit("weather", sky=kind)
+        if now - self.last_weather_talk >= WEATHER_TALK_GAP:
+            self.last_weather_talk = now
+            self.talk(f"weather_{kind}", main=True)
+
+    def _ad_tick(self, now: float) -> None:
+        """Lơ xe đọc quảng cáo bot của anh mỗi ad_gap giây, lần lượt từng bot; né lúc đang đố / bị chặn / chiếu video."""
+        if not self.ads or now < self.next_ad or self.quiz or self.block or self.show or self.phase == "SPECIAL":
+            return
+        self.ad_now()
+
+    def ad_now(self) -> None:
+        """Đọc quảng cáo kế tiếp ngay (admin bấm trên /control)."""
+        if not self.ads:
+            raise Refused("Chưa có quảng cáo nào (hoặc đang tắt).")
+        k, n = self.ad_index, len(self.ads)
+        # bot đầu danh sách là bot chính (anh 04/11: ưu tiên hoàn tiền): cứ ba lần đọc thì hai lần bot chính
+        ad = self.ads[0 if n == 1 or k % 3 != 2 else 1 + (k // 3) % (n - 1)]
+        self.ad_index += 1
+        self.next_ad = self.last_now + self.ad_gap
+        self.emit("ad", title=ad["title"], desc=ad.get("desc", ""))
+        self.loxe(ad.get("say") or f"{ad['title']}, {ad.get('desc', '')}")
+
+    def _ad_ask(self, v: Viewer, text: str, now: float) -> bool:
+        """Bình luận có từ khoá của một bot (mục «keys» trong quảng cáo): lơ xe gọi tên người hỏi, chỉ bot đó.
+        Mỗi người một lần mỗi bot trong buổi, cả phòng AD_ASK_GAP giây một lần. True khi có từ khoá (kể cả hết lượt): câu đó
+        không chuyển cho AI — AI không biết bot của anh, từng đáp sai «không hoàn tiền đâu» (8811, 04/11)."""
+        said = f" {normalize(text)} "
+        for i, ad in enumerate(self.ads):
+            keys = (normalize(k) for k in str(ad.get("keys") or "").split(","))
+            if any(k and f" {k} " in said for k in keys):
+                break
+        else:
+            return False
+        if (v.uid, i) in self.ad_asked or now - self.last_ad_ask < AD_ASK_GAP:
+            return True
+        self.ad_asked.add((v.uid, i))
+        self.last_ad_ask = now
+        self.emit("ad", title=ad["title"], desc=ad.get("desc", ""), name=v.name)
+        self.loxe(f"{v.name} ơi, {ad.get('say') or ad.get('desc') or ad['title']}")
+        return True
+
+    def set_weather(self, kind: str) -> None:
+        """Admin đổi thời tiết tay trên /control (giữ tới khi xe sang vùng mới)."""
+        if kind not in ("clear", *(k for odds in WEATHER_ODDS.values() for k, _ in odds)):
+            raise Refused("Không có kiểu thời tiết này.")
+        if kind != self.weather:
+            self.weather = kind
+            self.emit("weather", sky=kind)
+            self.last_weather_talk = self.last_now
+            self.talk(f"weather_{kind}", main=True)
+
+    def _chatter(self, v: Viewer, text: str, now: float) -> None:
+        """Chuyện phiếm (không phải lệnh, không phải câu hỏi) khi bật AI: xếp hàng cho AI đáp lại — lơ xe nói chuyện với
+        người xem thay vì chỉ đọc câu mẫu."""
+        if (len(normalize(text).split()) < 3 or now - v.last_chatter < CHATTER_PER_VIEWER or not allow_chat(text)
+                or any(c["uid"] == v.uid for c in self.chatter)):
+            return
+        self.chatter = [*self.chatter, {"uid": v.uid, "name": v.name, "text": text.strip()[:200], "at": now,
+                                        "chat": True}][-CHATTER_KEEP:]
 
     # ---- bảng quảng cáo: dừng xe xem video ----------------------------------------------------
 
@@ -1381,7 +2061,7 @@ class Engine:
         pending = self.show_pending
         if self.show or self.block or self.halt or not self.videos or self._in_pass():
             return
-        if pending is None and (not self.shows_on or now < self.next_show
+        if pending is None and (not self.shows_on or now < self.next_show or self.quiz
                                 or not SHOW_LEG_WINDOW[0] <= self.progress <= SHOW_LEG_WINDOW[1]):
             return  # tự chiếu: chỉ giữa chặng
         self.show_pending = None
@@ -1434,7 +2114,7 @@ class Engine:
                 self.emit("goal_step", fx=fx, label=label, xu=round(mark), goal=goal, name=v.name, round=self.goal_round + 1)
                 self.talk("goal_step", label=label.split(" ", 1)[1], xu=round(mark), name=v.name)
                 if fx == "party" and v.gift_trip < 1000:  # quà ≥ 1000 xu tự có cảnh chúc Tết: không chiếu hai lần
-                    self.specials.append("cả phòng")
+                    self._queue_special("cả phòng")
         if self.goal_have >= goal:
             self.goal_have -= goal
             self.goal_round += 1
@@ -1471,16 +2151,22 @@ class Engine:
 
     def _block_tick(self, now: float) -> None:
         b = self.block
-        if not self.blocks_on and not b.get("manual"):  # admin tắt tính năng giữa lúc đang bị chặn: xe đi luôn
+        # admin tắt tính năng giữa lúc đang bị chặn: xe đi luôn
+        if not (self.incidents_on if "until" in b else self.blocks_on) and not b.get("manual"):
             self.block = None
-            self.emit("block_end", kind=b["kind"], by="off", name="", paid=b["paid"], goal=b["goal"])
+            self.emit("block_end", block=b["kind"], by="off", name="", paid=b["paid"], goal=b["goal"])
+            return
+        if "until" in b:  # sự cố: tự xong khi hết giờ (tim rút ngắn), không nhắc góp quà / không bù lỗ
+            if now >= b["until"]:
+                self.block = None
+                self.emit("block_end", block=b["kind"], by="time", name="", paid=b["paid"], goal=b["goal"])
+                self.talk("incident_clear", what=WHAT[b["kind"]], main=True)
             return
         if self.cover_seconds > 0 and now - b["since"] >= self.cover_seconds:
             self.cover()
         elif now - self.last_block_remind >= BLOCK_REMIND_GAP:
             self.last_block_remind = now
-            self.talk("block_remind", left=b["goal"] - b["paid"], what="qua trạm" if b["kind"] == "toll" else "nộp phạt",
-                      main=True)
+            self.talk("block_remind", left=b["goal"] - b["paid"], what=WHAT[b["kind"]], main=True)
 
     def _pay_block(self, v: Viewer, diamonds: int) -> str:
         """Quà lúc xe đang bị chặn: góp vào phí / tiền phạt; đủ thì xe đi. Trả dòng cho thẻ quà (rỗng: không bị chặn)."""
@@ -1489,12 +2175,12 @@ class Engine:
             return ""
         b["paid"] += diamonds
         b["givers"][v.name] = b["givers"].get(v.name, 0) + diamonds
-        what = "qua trạm" if b["kind"] == "toll" else "nộp phạt"
+        what = WHAT[b["kind"]]
         if b["paid"] < b["goal"]:
             return f"🚧 góp {diamonds} xu {what} · {b['paid']}/{b['goal']}"
         top = max(b["givers"].items(), key=lambda kv: kv[1])[0]
         self.block = None
-        self.emit("block_end", kind=b["kind"], by="gifts", name=top, paid=b["paid"], goal=b["goal"])
+        self.emit("block_end", block=b["kind"], by="gifts", name=top, paid=b["paid"], goal=b["goal"])
         self.talk("block_paid", name=top, what=what, main=True)
         return f"🚧 góp đủ {b['goal']} xu, xe đi tiếp"
 
@@ -1505,8 +2191,9 @@ class Engine:
             raise Refused("Xe đang không bị chặn.")
         self.block = None
         missing = b["goal"] - b["paid"]
-        self.emit("block_end", kind=b["kind"], by="cover", name="", paid=b["paid"], goal=b["goal"])
-        self.talk("block_cover", missing=missing, what="phí trạm" if b["kind"] == "toll" else "tiền phạt", main=True)
+        self.emit("block_end", block=b["kind"], by="cover", name="", paid=b["paid"], goal=b["goal"])
+        self.talk("block_cover", missing=missing, what={"toll": "phí trạm", "police": "tiền phạt"}.get(b["kind"], "tiền thợ"),
+                  main=True)
 
     def _block_view(self) -> dict | None:
         b = self.block
@@ -1515,8 +2202,10 @@ class Engine:
         top = sorted(b["givers"].items(), key=lambda kv: -kv[1])[:3]
         return {"kind": b["kind"], "reason": b["reason"], "goal": b["goal"], "paid": b["paid"], "place": b["place"],
                 "speeding": b["speeding"], "top": [{"name": n, "xu": x} for n, x in top],
+                "left": round(max(0.0, b["until"] - self.last_now)) if "until" in b else None,
+                "total": round(b["until"] - b["since"]) if "until" in b else None,
                 "waited": round(self.last_now - b["since"]), "cover_in": round(max(0.0, self.cover_seconds - (
-                    self.last_now - b["since"]))) if self.cover_seconds > 0 else None}
+                    self.last_now - b["since"]))) if self.cover_seconds > 0 and "until" not in b else None}
 
     def speed(self) -> float:
         base = (1.0 + self.boost) * self.trip_bonus
@@ -1561,8 +2250,13 @@ class Engine:
         if not uid:
             return False
         v = self.viewer(uid, name)
-        if kind != "join":  # vào phòng chưa tính là đang xem (tránh giữ vé cho người lướt qua)
+        if (url := avatar_url(event.get("avatar"))) and v.avatar != url:
+            v.avatar = url
+            self.avatars[v.name] = url
+        if kind != "join" or v.province:  # vào phòng chưa tính là đang xem (người lướt qua); người có vé quay lại thì tính
             v.last_seen = now
+            if v.roll_missed or v.uid in self.rollcalls:
+                self._answer_roll(v)
             self._seen_today(v, now)
         if kind == "comment":
             v.comments += 1
@@ -1570,9 +2264,9 @@ class Engine:
                 v.stage_comments += 1
                 v.stage += 1
             self._on_comment(v, str(event.get("text") or ""), now)
-            if now - v.race_at >= RACE_COMMENT_GAP:
-                v.race_at = now
-                self._race(v, RACE_PER_COMMENT)
+            if now - v.vs_at >= VS_COMMENT_GAP:
+                v.vs_at = now
+                self._versus_score(v, VS_PER_COMMENT)
         elif kind == "like":
             count = max(1, min(LIKE_MAX, as_int(event.get("count"))))
             v.likes += count
@@ -1598,6 +2292,12 @@ class Engine:
         return True
 
     def _on_comment(self, v: Viewer, text: str, now: float) -> None:
+        if self.quiz and not self.quiz["done"] and (ans := answer_of(text)) is not None:
+            self._quiz_answer(v, ans)  # đang đố: «A» / «câu B» là câu trả lời
+            return
+        if self.vendor and self.bus.seat_of(v.uid) is not None and (item := snack_of(text)):
+            self._buy_snack(v, item)  # cô bán hàng đang trên xe: khách gõ «nem», «bánh mì»… là mua
+            return
         cmd = parse(text, at_rest_stop=self.phase == "REST")
         if cmd.station:
             self._vote_station(v, cmd.station, now)
@@ -1625,6 +2325,7 @@ class Engine:
             v.last_rest = now
             if cmd.kind == "food":
                 self.rest_orders[cmd.item] += 1
+                self._feed(v)  # ăn ở trạm dừng chân cũng no lại
                 self.emit("rest_action", name=v.name, hue=v.hue, action="food",
                           item=cmd.item, emoji=FOOD_EMOJI[cmd.item])
             elif cmd.kind == "wc":
@@ -1634,8 +2335,12 @@ class Engine:
             else:
                 self.emit("rest_action", name=v.name, hue=v.hue, action="shop")
         else:
-            if faq(text) or is_question(text):
+            if self._ad_ask(v, text, now):
+                pass
+            elif faq(text) or is_question(text):
                 self._question(v, text, now)
+            elif self.ai_reply:
+                self._chatter(v, text, now)
             seat = self.bus.seat_of(v.uid)
             if seat is None or now - v.last_chat < CHAT_COOLDOWN or not text.strip() or not allow_chat(text):
                 return
@@ -1714,10 +2419,12 @@ class Engine:
 
     def _place(self, v: Viewer, lane: str, changed: bool) -> None:
         """BR-2: cùng làn xe đang đón + còn giường → lên ngay; khác làn / hết giường → giữ chỗ chuyến sau của làn đó."""
-        if self.boarding_open() and not self.bus.riders() and not self._fits(v.province):
+        dueling = bool(self._versus_pair())  # đang đấu ở bến: vào hàng chờ xe hướng mình, hết trận mới lên
+        if self.boarding_open() and not dueling and not self.bus.riders() and not self._fits(v.province):
             self.bus.lane = lane  # BR-4: xe đang đón chưa có ai → quay đầu theo người đầu tiên
             self._fill_from_queue()
-        if self.boarding_open() and self._fits(v.province) and (free := self.bus.free_seat()) is not None:
+        if (self.boarding_open() and not dueling and self._fits(v.province) and (free := self.bus.free_seat()) is not None
+                and self.bus.seats.count(None) > self._held_seats()):  # giường đang giữ cho người được gọi tên: không lấy
             self.bus.seats[free] = v.uid
             self.seated_at.append(self.last_now)
             v.prio_credit = False  # có giường ngay: suất «lên đầu hàng» đã dùng cho lần đặt vé này
@@ -1936,7 +2643,7 @@ class Engine:
         lane = self.network.lane_by_key[self.bus.lane if seat is not None else self.network.lane_of(v.province)]
         km = self.network.km(v.province)
         info = {"name": v.name, "hue": v.hue, "province": BY_KEY[v.province].name, "seat": seat, "changed": changed,
-                "trip_no": v.trips + 1,
+                "trip_no": v.trips + 1, "badge": rank.badge(rank.points(v.trips, v.days)),
                 "lane": lane.label, "arrow": lane.arrow, "km": km, "departure": self.network.departure.short}
         if seat is not None:
             self.emit("ticket", **info, bus_no=self.bus.no, next=False, **extra)
@@ -1981,10 +2688,14 @@ class Engine:
         self.trip_likes += count
         v.likes_trip += count
         self.boost = min(BOOST_MAX, self.boost + count * BOOST_PER_LIKE)
-        v.race_likes += count
-        if v.race_likes >= RACE_LIKES_PER_POINT:
-            self._race(v, v.race_likes // RACE_LIKES_PER_POINT)
-            v.race_likes %= RACE_LIKES_PER_POINT
+        b = self.block
+        if b and "until" in b:  # sự cố: tim cả phòng giúp Anh Tư làm nhanh hơn
+            floor = b["since"] + INCIDENT_SECONDS * (1 - INCIDENT_LIKE_MAX)
+            b["until"] = max(floor, b["until"] - count * INCIDENT_LIKE_S)
+        v.vs_likes += count
+        if v.vs_likes >= VS_LIKES_PER_POINT:
+            self._versus_score(v, v.vs_likes // VS_LIKES_PER_POINT)
+            v.vs_likes %= VS_LIKES_PER_POINT
         for mark in LIKE_MILESTONES:
             if before < mark <= self.trip_likes:
                 self.emit("like_milestone", total=mark)
@@ -2007,15 +2718,20 @@ class Engine:
     def _watch_place(self, now: float) -> None:
         """Xe chính vào địa phận tỉnh không ai xuống (PLAN-134): lơ xe gọi bà con tỉnh đó — quê họ cũng là một phần chuyến
         đi. Mỗi VIA_TALK_GAP giây tối đa một lần."""
-        place = self._road_at(self.trip, self.trip_km())[0]
+        self._settle_place()
+        place = self._where()[0]
         if place == self.place_now:
             return
         self.place_now = place
+        self._roll_weather(BY_KEY[place].region, now)
         if now - self.last_via_talk >= VIA_TALK_GAP and any(k == place for k, _ in self.trip.via):
             self.last_via_talk = now
             name = BY_KEY[place].name
             self.emit("via", province=name, bus_no=self.bus.no)
             self.talk("via", place=name, main=True)
+        elif now - self.last_fact >= FACT_GAP and (said := fact(place)):
+            self.last_fact = now  # lơ xe kể chuyện tỉnh đang đi qua (đặc sản / thắng cảnh)
+            self.talk("fact", fact=said, main=True)
 
     def _remind_rules(self, now: float) -> None:
         """Lơ xe đọc luật chơi: đủ RULES_GAP giây, hoặc ≥ RULES_JOINS người mới vào và đã qua RULES_MIN_GAP."""
@@ -2111,14 +2827,8 @@ class Engine:
         Chuyến hiện tại phải xong trước; mỗi làn có người chờ lâu hơn người đầu hàng làn này thì đi trước một chuyến
         (BR-4 ai chờ trước đi trước).
         """
-        if not self.race_on:  # cùng thứ tự với chuyến thật sẽ chạy (quà trước, đặt sớm trước, anh chọn trên /control trước)
-            order = [u["lane"] for u in self.upcoming()]
-            older = order.index(lane) if lane in order else len(order)
-        else:
-            queue = self.queues[lane]
-            mine = self.queued_at.get(queue[0], self.last_now) if queue else self.last_now
-            older = sum(1 for key, q in self.queues.items()
-                        if key != lane and q and self.queued_at.get(q[0], self.last_now) < mine)
+        order = [u["lane"] for u in self.upcoming()]  # cùng thứ tự với chuyến thật sẽ chạy
+        older = order.index(lane) if lane in order else len(order)
         trips = 1 + position // SEATS + older
         return self.bus.no + trips, self._eta_minutes(trips)
 
@@ -2278,8 +2988,8 @@ class Engine:
         self.gift_log = [(t, x) for t, x in self.gift_log if t >= self.last_now - GIFT_RATE_WINDOW] + [(self.last_now, diamonds)]
         self.money_log = [m for m in self.money_log if m[0] >= self.last_now - MONEY_WINDOW] + [(self.last_now, diamonds, v.name)]
         self._advance_goal(v, diamonds)
-        self._race(v, diamonds * RACE_PER_XU)
-        paid = self._pay_block(v, diamonds)
+        self._versus_score(v, 0, diamonds)
+        paid = self._pay_block(v, diamonds) or self._pay_vendor(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
         self.turbo_by = v.name
@@ -2301,7 +3011,7 @@ class Engine:
         if tier >= 4:
             # mỗi lần vượt thêm một mốc 1000 xu = thêm một lần cả xe chúc Tết (tối đa 3 lần / lần tặng)
             for _ in range(min(SPECIALS_PER_GIFT, total // 1000 - before // 1000)):
-                self.specials.append(v.name)
+                self._queue_special(v.name)
         # quà Tết lên gầm xe: người có vé (đang ngồi / giữ chỗ / xe tăng cường) tặng quà → thêm một thùng mang tên mình
         parcel = (ticketed or any(v.uid in r.riders for r in self.reliefs)) and v.parcels < PARCELS_MAX
         v.parcels += int(parcel)
@@ -2346,7 +3056,25 @@ class Engine:
             return self.network.departure.province, dict(FLAT)  # ở bến / về bến: cảnh của bến đi
         if self._phase_now() != "DRIVING":
             return leg.target, dict(FLAT)
-        return self._road_at(self.trip, self.trip_km())
+        place, terrain = self._road_at(self.trip, self.trip_km())
+        if leg.kind == "stop" and leg.km - self.trip_km() <= ARRIVE_SHOW_KM:
+            return leg.target, terrain  # sắp tới điểm thả khách: ghi đúng tỉnh đó (tỉnh lỵ sát ranh như TP.HCM — Đồng Nai)
+        return self.place_shown or place, terrain
+
+    def _settle_place(self) -> None:
+        """Tên tỉnh trên màn đổi khi tỉnh mới đã giữ PLACE_HOLD_KM km (gọi mỗi nhịp lúc xe chạy)."""
+        odo = self.trip_km()
+        raw = self._road_at(self.trip, odo)[0]
+        leg = self.current_leg()
+        if leg and leg.kind == "stop" and leg.km - odo <= ARRIVE_SHOW_KM:
+            raw = self.place_shown = leg.target  # sắp tới điểm thả: đổi ngay (khớp `_where`), rời đi thì giữ tên này
+            self.place_cand = None
+        if raw == self.place_shown or self.place_shown is None:
+            self.place_shown, self.place_cand = raw, None
+        elif self.place_cand is None or self.place_cand[0] != raw:
+            self.place_cand = (raw, odo)
+        elif odo - self.place_cand[1] >= PLACE_HOLD_KM:
+            self.place_shown, self.place_cand = raw, None
 
     def _road_at(self, trip: Trip, odo: float) -> tuple[str, dict]:
         """Tỉnh đang đi qua + độ quanh co, đèo / hầm, chiều dốc ở km `odo` của chuyến `trip`."""
@@ -2387,7 +3115,9 @@ class Engine:
         out = []
         for uid in uids:
             v = self.viewers.get(uid) if uid else None
-            out.append({"name": v.name, "hue": v.hue, "vip": v.vip,
+            out.append({"name": v.name, "hue": v.hue, "vip": v.vip, "badge": rank.badge(rank.points(v.trips, v.days)), "snack": SNACKS[v.snack][1] if v.snack else "",
+                        "full": math.floor(v.full),  # làm tròn xuống: 29,9% là «sắp đói» (dưới 30)
+                        "avatar": v.avatar,
                         "province": BY_KEY[v.province].name if v.province else ""} if v else None)
         return out
 
@@ -2448,12 +3178,18 @@ class Engine:
             "speed": 0.0 if self.halt or self.block or self.show else round(self.speed(), 3),
             "show": {"url": self.show["url"], "title": self.show["title"], "seconds": self.show["seconds"],
                      "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
-            "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
+            "versus": self._versus_view(),
             "upcoming": self.upcoming(),
             "focus": self._focus_view(),
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
+            "vendor": self._vendor_view(),
+            "quiz": self._quiz_view(),
+            "weather": self.weather,
+            "name_hold": self.phase == "BOARDING" and self.name_hold_from is not None,
+            "rollcall": [{"name": self.viewers[u].name, "left": round(max(0.0, t - self.last_now))}
+                         for u, t in self.rollcalls.items()][:5],
             "halt": {"place": self.halt["place"], "people": self.halt["people"],
                      "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,
             "leg_seconds": self.leg_seconds,

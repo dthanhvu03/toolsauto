@@ -116,6 +116,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Thôi xong, chạy nhanh quá bị bắn tốc độ, phạt {goal} xu, bà con góp quà nộp phạt giùm.",
             "Công an bắn tốc độ, xe chạy quá tốc độ rồi, phạt {goal} xu, góp quà cho xe đi tiếp.",
         ),
+        "rollcall": (
+            "{name} còn ở đây không, thả tim hoặc bình luận trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} lên xe rồi, còn xem thì thả cái tim cho Anh Tư biết, giường đang giữ.",
+        ),
+        "rollcall_ok": (
+            "{name} có mặt, mời lên giường.",
+            "Rồi, {name} còn đây, lên xe lẹ.",
+        ),
+        "rollcall_skip": (
+            "Gọi hoài không thấy {name}, giường này nhường người sau, {name} đi chuyến tới.",
+            "{name} chắc đang bận, vé vẫn giữ, lùi xuống chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "Hai lần gọi không thấy {name}, Anh Tư nhả vé cho bà con khác, quay lại thì gõ tỉnh đặt lại.",
+            "{name} vắng hai chuyến rồi, vé nhường người khác, về lại thì gõ tỉnh là có vé.",
+        ),
         "block_remind": (
             "Còn thiếu {left} xu nữa là {what}, ai tặng quà góp thêm cho xe đi tiếp.",
             "Xe đang đứng chờ, thiếu {left} xu {what}, bà con góp quà một chút.",
@@ -123,6 +139,86 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_paid": (
             "Đủ tiền rồi, cảm ơn {name} với bà con góp quà, xe {what} chạy tiếp.",
             "Cảm ơn {name}, góp đủ rồi, Anh Tư {what} xong, lên đường.",
+        ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi đó, gõ nem, bì hay bánh mì cho {vendor} mang tới giường.",
+            "Coi bộ {name} đói bụng rồi, {vendor} đang đi bán nè, gõ tên món là có.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, bà con góp quà gọi {vendor} lên xe bán nem, bì, bánh mì.",
+            "Bụng {name} kêu rồi đó, ai góp quà gọi {vendor} lên bán đồ ăn.",
+        ),
+        "quiz_ask": (  # đố vui (anh 03/11): gõ A, B, C
+            "Đố vui nè bà con, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người đúng sớm nhất được đọc tên.",
+            "Anh Tư đố cái, {q}. A là {a}, B là {b}, C là {c}. Gõ A, B hay C lẹ lên.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} trả lời đúng sớm nhất, giỏi quá trời, cộng điểm cho tỉnh nhà.",
+            "Đúng rồi, {ans}. Hoan hô {name}, đố câu sau nhanh tay nữa nghe.",
+        ),
+        "quiz_none": (
+            "Hổng ai trúng hết, đáp án là {ans}. Câu sau bà con ráng nghen.",
+            "Đáp án là {ans}, lần này chưa ai đúng, để câu sau.",
+        ),
+        "fact": (
+            "Xe đang chạy ngang, {fact}, ai quê ở đây thả cái tim coi.",
+            "Bà con biết hông, {fact}, về Tết nhớ ghé.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn lất phất rồi bà con, lạnh thì đắp mền vô.",
+            "Trời mưa phùn, đường trơn, bác tài chạy chậm chút cho chắc.",
+        ),
+        "weather_rain": (
+            "Trời đổ mưa rồi, ai ngồi gần cửa sổ kéo rèm lại giùm.",
+            "Mưa rào tới rồi, bác tài bật gạt nước chạy từ từ.",
+        ),
+        "weather_fog": (
+            "Sương mù dày quá, bác tài bật đèn sương mù chạy chậm lại.",
+            "Sương giăng kín đường rồi bà con, ngó ra cửa sổ thấy mờ mờ đẹp ghê.",
+        ),
+        "weather_clear": (
+            "Trời tạnh rồi, nắng lên đẹp quá bà con.",
+            "Hết mưa rồi, đường khô ráo, xe chạy bon bon.",
+        ),
+        "tire": (  # sự cố dọc đường: tự xong, tim làm nhanh hơn
+            "Chết, xe xẹp lốp ở {place}, Anh Tư xuống thay liền, bà con thả tim cho Anh Tư làm lẹ, tặng {goal} xu gọi thợ là xong ngay.",
+            "Nổ lốp rồi bà con, đợi Anh Tư thay cái bánh, thả tim tiếp sức coi.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi bà con, xe nhích từng chút, thả tim cho đường thông lẹ.",
+            "Đường {place} kẹt cứng, ráng chờ chút, bà con thả tim, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe dừng chờ chút, thả tim cho trâu đi lẹ.",
+            "Ê trâu ơi tránh đường cho xe về quê ăn Tết, bà con thả tim cho đàn trâu qua lẹ.",
+        ),
+        "incident_clear": (
+            "Xong rồi bà con, {what} xong, xe chạy tiếp.",
+            "Ổn rồi, cảm ơn bà con thả tim, xe lên đường.",
+        ),
+        "vendor_pool": (
+            "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là cô Ba lên xe bán nem, bì, bánh mì.",
+            "Cảm ơn {name}, còn {left} xu nữa là có nem chua, bánh mì lên tận giường.",
+        ),
+        "vendor_board": (
+            "Nhờ {name} góp quà, xe tấp vô {prov} rước {vendor} bán nem, bì, bánh mì lên xe.",
+            "{vendor} lên xe rồi bà con, cảm ơn {name}, ai ăn gì gõ nem, bì hay bánh mì.",
+        ),
+        "vendor_board_admin": (
+            "Xe tấp vô {prov} cho {vendor} lên bán nem, bì, bánh mì.",
+            "{vendor} bán hàng rong lên xe rồi, ai đói gõ nem, bì, bánh mì.",
+        ),
+        "vendor_sell": (
+            "{name} đi dọc xe nè, gõ nem, bì hay bánh mì là có liền, tặng quà là bao cả xe.",
+            "Nem chua, bì cuốn, bánh mì nóng đây, gõ tên món là {name} đưa tận giường.",
+        ),
+        "vendor_treat": (
+            "{name} bao cả xe {item}, bà con cảm ơn {name} một tiếng.",
+            "Chịu chơi quá, {name} bao nguyên xe {item}.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cảm ơn bà con, cô xuống xe đây.",
+            "Hết hàng rồi, {name} xuống xe, chúc bà con ăn ngon thượng lộ bình an.",
         ),
         "block_cover": (
             "Thôi Anh Tư bù lỗ {missing} xu {what} cho xe đi, về quê ăn Tết quan trọng hơn.",
@@ -132,13 +228,45 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Mục tiêu buổi live tới {xu} xu rồi, cảm ơn {name} với bà con, {label} cho cả phòng.",
             "Qua mốc {xu} xu, {label} nè bà con, cảm ơn {name}.",
         ),
-        "race_lead": (  # đua tỉnh (anh 03/11)
-            "Đua tỉnh nè bà con, {prov} đang dẫn đầu, tỉnh nào bình luận, thả tim, tặng quà nhiều là chuyến sau đi tỉnh đó.",
-            "{prov} vượt lên dẫn đầu đua tỉnh rồi, tỉnh khác đâu, bình luận thả tim kéo tỉnh mình lên.",
+        "versus_start": (  # đối kháng ở bến (PLAN-152): hai xe đậu sẵn, xe nào nhiều điểm xuất bến trước
+            "Hai xe đậu sẵn rồi bà con, xe {lead} đấu xe {rival}, quê bên nào thì bình luận, thả tim, tặng quà cho xe bên đó, xe nào nhiều điểm xuất bến trước.",
+            "Xe {lead} hay xe {rival} chạy trước đây bà con, quê bên nào kéo điểm cho xe bên đó, chưa gõ quê thì gõ tên tỉnh vô.",
         ),
-        "race_win": (
-            "{prov} thắng đua tỉnh, chuyến này Anh Tư chạy hướng {prov}, bà con chuẩn bị lên xe.",
-            "Chúc mừng {prov} thắng đua tỉnh, xe đi hướng {prov} liền.",
+        "versus_lead": (
+            "Hướng {lead} đang dẫn điểm hướng {rival} rồi, bà con {rival} đâu, thả tim kéo lên coi.",
+            "{lead} vượt lên rồi bà con, {rival} mà không kéo là chờ chuyến sau đó.",
+        ),
+        "level_up": (  # điểm hành trình qua mốc cấp (rank.py)
+            "Chúc mừng {name} lên cấp {title}, Anh Tư nhớ mặt rồi đó.",
+            "{name} giờ là {title} của nhà xe rồi, ghé bến hoài là vậy đó.",
+        ),
+        "level_near": (
+            "{name} còn đúng một chuyến hay một ngày ghé nữa là lên {title}, ráng lên.",
+            "Ê {name}, sắp lên {title} rồi, mai ghé bến tiếp là đủ.",
+        ),
+        "welcome_streak": (  # ghé live nhiều ngày liền
+            "{name} ghé bến {n} ngày liền rồi, chăm dữ vậy, Anh Tư thương.",
+            "Lại là {name}, ngày thứ {n} liên tiếp, giữ chuỗi nghen.",
+        ),
+        "streak_reward": (  # mốc chuỗi ngày: thưởng lên đầu hàng
+            "{name} ghé {n} ngày liền, Anh Tư thưởng suất lên đầu hàng, gõ tên tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name} nè, thưởng lên đầu hàng chờ, gõ tỉnh liền đi.",
+        ),
+        "versus_golden": (  # PLAN-151: một phút cuối, quà nhân đôi điểm
+            "Giờ vàng rồi bà con, một phút cuối quà tính gấp đôi điểm, {rival} còn kịp lật kèo {lead}.",
+            "Vô giờ vàng, tặng quà lúc này điểm nhân hai, bà con {rival} ráng lên.",
+        ),
+        "versus_final": (
+            "{rival} còn thua {need} điểm, {secs} giây nữa là xe xuất bến, ai lật kèo đây.",
+            "Còn {secs} giây, {rival} kém {need} điểm thôi, một món quà là lật liền.",
+        ),
+        "versus_win_mvp": (
+            "Xe {lead} thắng {rival}, công lớn nhất là {name}, tên {name} lên băng rôn xe xuất bến.",
+            "{lead} thắng rồi, cảm ơn {name} góp nhiều nhất, Anh Tư dán tên lên băng rôn xe luôn.",
+        ),
+        "versus_win": (
+            "Xe {lead} thắng đối kháng, xuất bến trước, bà con {rival} ngồi yên trên xe, chuyến sau chạy liền.",
+            "{lead} thắng {rival} rồi, xe {lead} lăn bánh trước, bà con lên xe.",
         ),
         "show_start": (  # bảng quảng cáo: dừng xe xem video
             "Dừng xe xem chút nè bà con, trên bảng đang chiếu {title}.",
@@ -371,6 +499,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Bay quá bị bắn tốc độ luôn, phạt {goal} xu, ae góp quà nộp phạt thôi.",
             "Quá tốc độ rồi ae, công an phạt {goal} xu, góp quà cho xe đi tiếp.",
         ),
+        "rollcall": (
+            "{name} ơi còn online không, thả tim trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} rồi, còn xem thì thả tim báo danh, giường đang giữ cho á.",
+        ),
+        "rollcall_ok": (
+            "{name} điểm danh rồi, lên giường liền.",
+            "{name} còn on, lên xe thôi.",
+        ),
+        "rollcall_skip": (
+            "{name} offline rồi hả, giường nhường người sau, {name} đi chuyến tới.",
+            "Gọi {name} không thấy rep, vé vẫn giữ, lùi chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "{name} vắng hai chuyến, vé nhả cho ae khác, quay lại gõ tỉnh là có vé liền.",
+            "Hai lần không thấy {name}, nhường vé nhé ae, về lại gõ tỉnh đặt lại.",
+        ),
         "block_remind": (
             "Còn thiếu {left} xu là {what}, ae góp thêm chút quà.",
             "Xe đứng im chờ ae, thiếu {left} xu {what}, góp quà đi.",
@@ -378,6 +522,86 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_paid": (
             "Đủ rồi, {name} với ae uy tín, xe {what} chạy tiếp.",
             "{name} chốt đơn, góp đủ, {what} xong, lên đường.",
+        ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi, gõ nem, bì, bánh mì để {vendor} ship tận giường.",
+            "{name} hết pin bụng rồi, order liền đi, {vendor} đang trên xe.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, ae góp quà gọi {vendor} lên bán đồ ăn.",
+            "Bụng {name} biểu tình rồi, góp quà gọi {vendor} lên xe đi ae.",
+        ),
+        "quiz_ask": (
+            "Đố vui nè ae, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người nhanh nhất được xướng tên.",
+            "Câu đố siêu dễ nè, {q}. A là {a}, B là {b}, C là {c}. Gõ đáp án lẹ đi ae.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} đỉnh nóc kịch trần, cộng điểm cho tỉnh nhà.",
+            "Chuẩn luôn, {ans}. {name} uy tín, câu sau nhanh tay nữa nghen.",
+        ),
+        "quiz_none": (
+            "Toang, không ai trúng, đáp án là {ans}. Câu sau gỡ lại ae.",
+            "Đáp án là {ans}, ae khum ai trúng hết, câu sau làm lại.",
+        ),
+        "fact": (
+            "Ae biết không, {fact}, ai quê đây điểm danh cái.",
+            "Chuyện hay nè, {fact}, Tết về nhớ ghé chéc in.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn lất phất, chill dữ thần luôn ae.",
+            "Trời mưa phùn rồi, lạnh run, ae đắp mền vô.",
+        ),
+        "weather_rain": (
+            "Mưa rồi ae ơi, không khí về quê chuẩn phim luôn.",
+            "Trời đổ mưa, tài xế chạy chậm lại cho an toàn nghen.",
+        ),
+        "weather_fog": (
+            "Sương mù dày đặc, cảnh như phim, tài xế bật đèn chạy chậm.",
+            "Sương giăng kín đường, ảo ma thật sự ae.",
+        ),
+        "weather_clear": (
+            "Tạnh rồi ae, nắng đẹp quá trời.",
+            "Hết mưa rồi, đường khô, quẩy tiếp thôi.",
+        ),
+        "tire": (
+            "Toang, xe xẹp lốp ở {place}, Anh Tư thay liền, ae thả tim tiếp sức, tặng {goal} xu gọi thợ là xong ngay.",
+            "Nổ lốp rồi ae, chờ xíu thay bánh, thả tim cho lẹ.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi ae, thả tim cho đường thông lẹ.",
+            "Kẹt cứng luôn, ae thả tim, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe đứng hình, ae thả tim cho trâu đi lẹ.",
+            "Trâu ơi tránh đường cho xe về quê, ae thả tim hối trâu đi.",
+        ),
+        "incident_clear": (
+            "Xong rồi ae, {what} xong, gét gô.",
+            "Ổn áp rồi, cảm ơn ae thả tim, chạy tiếp thôi.",
+        ),
+        "vendor_pool": (
+            "{name} góp quà gọi cô bán hàng, thêm {left} xu nữa là có nem, bì, bánh mì lên xe.",
+            "Còn {left} xu là cô Ba lên xe bán đồ ăn, {name} mở bát rồi đó ae.",
+        ),
+        "vendor_board": (
+            "{name} góp đủ, {vendor} lên xe ở {prov}, ae gõ nem, bì, bánh mì để order.",
+            "Nhờ {name}, {vendor} lên xe bán đồ ăn, order bằng cách gõ tên món.",
+        ),
+        "vendor_board_admin": (
+            "{vendor} lên xe ở {prov} bán nem, bì, bánh mì, ae order liền.",
+            "Có {vendor} bán đồ ăn lên xe, gõ nem, bì hay bánh mì.",
+        ),
+        "vendor_sell": (
+            "{name} đang đi dọc xe, gõ nem, bì, bánh mì là có, tặng quà là bao cả xe.",
+            "Order đi ae, nem chua, bì cuốn, bánh mì, {name} giao tận giường.",
+        ),
+        "vendor_treat": (
+            "{name} bao cả xe {item}, đỉnh thật sự.",
+            "Ae ơi {name} bao nguyên xe {item}, cảm ơn {name}.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cô xuống xe đây ae.",
+            "Sold out, {name} xuống xe, ae ăn ngon.",
         ),
         "block_cover": (
             "Thôi Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp, về quê là chính.",
@@ -387,13 +611,45 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Mốc {xu} xu done, {label} cho cả phòng, {name} uy tín.",
             "Cả phòng góp tới {xu} xu, mở khoá {label}, cảm ơn {name}.",
         ),
-        "race_lead": (
-            "{prov} đang top một đua tỉnh, tỉnh khác vào bình luận thả tim kéo lên đi ae.",
-            "Đua tỉnh căng lắm, {prov} dẫn đầu, tỉnh nào nhiều điểm chuyến sau đi tỉnh đó.",
+        "versus_start": (
+            "Pê ka hai xe ở bến nè ae, xe {lead} đấu xe {rival}, quê bên nào thì com men, thả tim, tặng quà cho xe bên đó, xe nào nhiều điểm xuất bến trước.",
+            "Xe {lead} hay xe {rival} lăn bánh trước đây ae, chưa gõ quê thì gõ tên tỉnh vô để vào team.",
         ),
-        "race_win": (
-            "{prov} win đua tỉnh, chuyến này chạy hướng {prov} luôn.",
-            "Team {prov} thắng rồi, xe đi {prov} ae ơi.",
+        "versus_lead": (
+            "Team {lead} đang dẫn team {rival}, team {rival} đâu rồi, thả tim gánh team đi ae.",
+            "{lead} vượt lên rồi, {rival} không kéo là chờ chuyến sau đó ae.",
+        ),
+        "level_up": (
+            "{name} lên cấp {title} rồi mọi người ơi, đỉnh nóc kịch trần.",
+            "Chúc mừng {name} up lên {title}, khách ruột uy tín.",
+        ),
+        "level_near": (
+            "{name} còn một chuyến nữa là lên {title}, gét gô.",
+            "{name} sắp up {title} rồi, mai ghé tiếp là xong.",
+        ),
+        "welcome_streak": (
+            "{name} giữ chuỗi {n} ngày liền, quá cháy.",
+            "Ngày thứ {n} liên tiếp của {name}, chuỗi đẹp đừng để đứt.",
+        ),
+        "streak_reward": (
+            "{name} chuỗi {n} ngày, thưởng lên đầu hàng luôn, gõ tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name} nè, quà là lên đầu hàng chờ, gét gô.",
+        ),
+        "versus_golden": (
+            "Giờ vàng ae ơi, một phút cuối quà x2 điểm, team {rival} lật kèo được đó.",
+            "Vào giờ vàng rồi, quà nhân đôi điểm, team {rival} gét gô.",
+        ),
+        "versus_final": (
+            "Team {rival} còn thua {need} điểm, {secs} giây nữa xe xuất bến, ai cứu đây.",
+            "Còn {secs} giây, {rival} kém {need} điểm, một món quà là lật kèo.",
+        ),
+        "versus_win_mvp": (
+            "Team {lead} win pê ka, em vi pi là {name}, tên lên băng rôn luôn.",
+            "{lead} thắng {rival}, {name} gánh team đỉnh nóc, tên dán lên băng rôn xe.",
+        ),
+        "versus_win": (
+            "Team {lead} win pê ka, xe {lead} xuất bến trước, team {rival} ngồi yên chạy chuyến sau.",
+            "{lead} thắng {rival} rồi ae, xe chạy hướng {lead} luôn.",
         ),
         "show_start": (
             "Dừng xe hóng cái bảng quảng cáo nè ae, {title}.",
@@ -625,6 +881,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Xe chạy quá tốc độ bị công an bắn tốc độ, phạt {goal} xu, mọi người góp quà giúp.",
             "Quá tốc độ rồi, phạt {goal} xu, ai góp quà là xe đi tiếp.",
         ),
+        "rollcall": (
+            "{name} còn xem không, thả tim hoặc bình luận trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} lên xe, còn ở đây thì thả tim cho Anh Tư biết.",
+        ),
+        "rollcall_ok": (
+            "{name} có mặt, mời lên xe.",
+            "Cảm ơn {name}, mời lên giường.",
+        ),
+        "rollcall_skip": (
+            "Chưa thấy {name} trả lời, giường nhường người sau, {name} đi chuyến tới.",
+            "{name} chưa có mặt, vé vẫn giữ, lùi xuống chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "Hai lần gọi không thấy {name}, vé nhường người khác, quay lại thì gõ tỉnh để đặt lại.",
+            "{name} vắng hai chuyến, Anh Tư nhả vé, về lại gõ tỉnh là có vé.",
+        ),
         "block_remind": (
             "Còn thiếu {left} xu là {what}, mọi người góp thêm quà nhé.",
             "Xe đang đứng chờ, thiếu {left} xu {what}.",
@@ -632,6 +904,86 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "block_paid": (
             "Cảm ơn {name} và mọi người, góp đủ rồi, xe {what} đi tiếp.",
             "Đủ tiền rồi, cảm ơn {name}, xe {what} lên đường.",
+        ),
+        "hungry_vendor": (
+            "{name} sắp đói rồi, gõ nem, bì hoặc bánh mì để {vendor} mang tới.",
+            "{name} đói bụng rồi, {vendor} đang bán trên xe, gõ tên món để mua.",
+        ),
+        "hungry_call": (
+            "{name} sắp đói rồi, mọi người góp quà gọi {vendor} lên xe bán đồ ăn.",
+            "{name} đói bụng rồi, góp quà để {vendor} lên xe bán nem, bì, bánh mì.",
+        ),
+        "quiz_ask": (
+            "Đố vui nè mọi người, {q}. A, {a}. B, {b}. C, {c}. Gõ A, B hoặc C, ba người đúng sớm nhất được đọc tên.",
+            "Câu đố đây, {q}. A là {a}, B là {b}, C là {c}. Mọi người gõ A, B hay C.",
+        ),
+        "quiz_win": (
+            "Đáp án là {ans}. {name} chuẩn không cần chỉnh, cộng điểm cho tỉnh nhà.",
+            "Chính xác, {ans}. Chúc mừng {name}, câu sau nhanh tay nữa.",
+        ),
+        "quiz_none": (
+            "Bó tay chấm com, chưa ai đúng, đáp án là {ans}.",
+            "Đáp án là {ans}, câu này khó quá, để câu sau.",
+        ),
+        "fact": (
+            "Mọi người biết không, {fact}, ai quê ở đây thả tim nào.",
+            "Xe đang đi ngang, {fact}, Tết này nhớ ghé.",
+        ),
+        "weather_drizzle": (
+            "Mưa phùn rồi, lạnh như nước cất, mọi người đắp chăn vào.",
+            "Trời mưa phùn lất phất, đường trơn, tài xế chạy chậm thôi.",
+        ),
+        "weather_rain": (
+            "Trời đổ mưa rồi, ai gần cửa sổ kéo rèm giúp.",
+            "Mưa rào tới, tài xế bật gạt nước, chạy từ từ.",
+        ),
+        "weather_fog": (
+            "Sương mù dày quá, tài xế bật đèn sương mù chạy chậm lại.",
+            "Sương giăng kín đường, nhìn ra cửa sổ mờ mờ đẹp lắm.",
+        ),
+        "weather_clear": (
+            "Tạnh mưa rồi, nắng lên đẹp quá.",
+            "Hết mưa rồi, đường khô ráo, xe chạy êm.",
+        ),
+        "tire": (
+            "Xe xẹp lốp ở {place} rồi, Anh Tư thay ngay, mọi người thả tim tiếp sức, tặng {goal} xu gọi thợ là xong liền.",
+            "Nổ lốp rồi, chờ chút thay bánh, mọi người thả tim cho nhanh.",
+        ),
+        "jam": (
+            "Kẹt xe ở {place} rồi, mọi người thả tim cho đường thông nhanh.",
+            "Đường kẹt cứng, thả tim nào, tặng {goal} xu là Anh Tư xin đường đi trước.",
+        ),
+        "cattle": (
+            "Đàn trâu qua đường ở {place}, xe dừng chờ, thả tim cho trâu đi nhanh.",
+            "Trâu ơi tránh đường cho xe về quê ăn Tết, mọi người thả tim nào.",
+        ),
+        "incident_clear": (
+            "Xong rồi, {what} xong, xe đi tiếp.",
+            "Ổn rồi, cảm ơn mọi người thả tim, lên đường thôi.",
+        ),
+        "vendor_pool": (
+            "Cảm ơn {name}, thêm {left} xu nữa là cô bán hàng lên xe bán nem, bì, bánh mì.",
+            "{name} góp gọi cô bán hàng, còn {left} xu nữa.",
+        ),
+        "vendor_board": (
+            "Nhờ {name} góp quà, {vendor} lên xe ở {prov}, ai muốn ăn gõ nem, bì hoặc bánh mì.",
+            "{vendor} lên xe rồi, cảm ơn {name}, mọi người gõ tên món để mua.",
+        ),
+        "vendor_board_admin": (
+            "Xe dừng ở {prov} cho {vendor} lên bán nem, bì, bánh mì.",
+            "{vendor} lên xe bán đồ ăn, mọi người gõ tên món để mua.",
+        ),
+        "vendor_sell": (
+            "{name} đang đi dọc xe, gõ nem, bì hoặc bánh mì để mua, tặng quà để bao cả xe.",
+            "Có nem chua, bì cuốn, bánh mì, mọi người gõ tên món, {name} mang tới giường.",
+        ),
+        "vendor_treat": (
+            "Cảm ơn {name} đã bao cả xe {item}.",
+            "{name} bao cả xe {item}, mọi người cảm ơn {name} nhé.",
+        ),
+        "vendor_end": (
+            "{name} bán được {n} phần, cảm ơn mọi người, cô xuống xe.",
+            "Hết hàng, {name} xuống xe, chúc mọi người ngon miệng.",
         ),
         "block_cover": (
             "Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp cho kịp về quê.",
@@ -641,13 +993,45 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Mục tiêu buổi live đạt {xu} xu, {label} cho mọi người, cảm ơn {name}.",
             "Đã tới mốc {xu} xu, {label}, cảm ơn {name} và mọi người.",
         ),
-        "race_lead": (
-            "{prov} đang dẫn đầu đua tỉnh, mọi người bình luận, thả tim, tặng quà để tỉnh mình lên đầu.",
-            "Đua tỉnh: {prov} dẫn đầu, tỉnh thắng được đi chuyến sau.",
+        "versus_start": (
+            "Đối kháng ở bến: xe {lead} đấu xe {rival}, mọi người quê bên nào thì bình luận, thả tim, tặng quà cho xe bên đó, xe nhiều điểm hơn xuất bến trước.",
+            "Xe {lead} hay xe {rival} xuất bến trước là do mọi người, ai chưa gõ quê thì gõ tên tỉnh để vào phe.",
         ),
-        "race_win": (
-            "{prov} thắng đua tỉnh, chuyến này đi hướng {prov}.",
-            "Chúc mừng {prov}, xe đi hướng {prov}.",
+        "versus_lead": (
+            "Hướng {lead} đang dẫn điểm hướng {rival}, mọi người {rival} cố lên.",
+            "{lead} đang dẫn trước {rival}, còn kịp lật kèo.",
+        ),
+        "level_up": (
+            "Chúc mừng {name} lên cấp {title}, cảm ơn đã đồng hành cùng nhà xe.",
+            "{name} vừa lên {title}, chuẩn không cần chỉnh.",
+        ),
+        "level_near": (
+            "{name} chỉ còn một chuyến hoặc một ngày ghé nữa là lên {title}.",
+            "{name} sắp lên {title} rồi, hẹn gặp lại ở bến.",
+        ),
+        "welcome_streak": (
+            "{name} ghé bến {n} ngày liên tiếp, cảm ơn đã luôn có mặt.",
+            "Ngày thứ {n} liền của {name}, giữ chuỗi nhé.",
+        ),
+        "streak_reward": (
+            "{name} ghé {n} ngày liền, nhà xe tặng suất lên đầu hàng chờ, gõ tên tỉnh là có giường trước.",
+            "Chuỗi {n} ngày của {name}, phần thưởng là lên đầu hàng chờ.",
+        ),
+        "versus_golden": (
+            "Giờ vàng bắt đầu, một phút cuối quà được tính gấp đôi điểm, {rival} vẫn còn cơ hội.",
+            "Một phút cuối rồi, quà nhân đôi điểm, hướng {rival} cố lên.",
+        ),
+        "versus_final": (
+            "{rival} đang kém {need} điểm, còn {secs} giây.",
+            "Còn {secs} giây, {rival} chỉ cách {need} điểm.",
+        ),
+        "versus_win_mvp": (
+            "Hướng {lead} thắng, cảm ơn {name} góp nhiều điểm nhất, tên {name} lên băng rôn chuyến này.",
+            "Chúc mừng {lead}, người góp nhiều nhất là {name}, tên được dán lên băng rôn xe.",
+        ),
+        "versus_win": (
+            "Xe {lead} thắng đối kháng, xuất bến trước, xe {rival} giữ khách chạy chuyến ngay sau.",
+            "Chúc mừng {lead}, xe đi hướng {lead}, {rival} hẹn chuyến sau.",
         ),
         "show_start": (
             "Xe dừng một chút để mọi người xem video trên bảng, {title}.",

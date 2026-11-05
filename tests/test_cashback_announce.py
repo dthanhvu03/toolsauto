@@ -65,3 +65,17 @@ def test_tin_gioi_thieu_theo_doi_gia_nut_mo_dung_man(tmp_path):
     messages, choices = render(BotReply(WATCH_ANNOUNCE, inline_keyboard=WATCH_ANNOUNCE_KEYBOARD))
     text = "\n".join(m.text for m in messages)
     assert choices == ("u:dh", "u:pw:l") and "Gõ deal" in text and "theodoi" in text and "/theodoi" not in text
+
+
+
+def test_tin_moi_ban_gui_moi_khach_da_tao_link(tmp_path):
+    from cashback_bot.admin.handlers.announce import ANNOUNCEMENTS, recipients
+    from tests.test_cashback_bot import NOW, FakeClient, payload, service
+
+    bot = service(tmp_path, FakeClient(payload()), customer_access_enabled=True, membership_enabled=True)
+    for user, update in ((111, 1), (222, 2)):
+        bot.handle_text(user, "u", "https://shopee.vn/product/9/8", update_id=update, now=NOW)
+    with bot.repo.connect() as conn:
+        assert sorted(recipients(conn, NOW, "invite-v1")) == [111, 222]
+    text = ANNOUNCEMENTS["invite-v1"][1]
+    assert "10% hoa hồng" in text and "6 tháng" in text and "hạng" not in text.lower()

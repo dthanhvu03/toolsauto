@@ -101,6 +101,7 @@ class Announcer:
         self.seq = 0
         self.boarding: list[tuple[str, str]] = []  # (tên, tỉnh) chờ gom
         self.board_started = 0.0
+        self.names_until = 0.0  # câu đọc tên lên xe đang phát tới lúc này (monotonic)
         self.last_board = -1e9
         self.thanked: dict[str, float] = {}
         self.voice_list: list[dict] = []  # giọng VieNeu cho /control (refresh_voices cập nhật)
@@ -123,6 +124,10 @@ class Announcer:
             if not self.boarding:
                 self.board_started = now
             self.boarding.append((event.get("name", ""), event.get("province", "")))
+        elif kind == "rollcall":  # điểm danh: gọi tên người tới lượt lên xe — ưu tiên như đọc tên lên xe, không bị bỏ vì hàng đợi dài
+            names = event.get("names") or [event.get("name", "")]  # không gửi kèm names: gọi tên không phải lúc bước lên xe
+            self.offer(line("rollcall", style=self.style(), name=names_phrase(names, BOARD_NAMES),
+                            seconds=event.get("seconds", 45)), BOARD)
         elif kind == "depart":  # xe đã chạy: người chưa kịp đọc tên thì thôi (màn hình đã sang cảnh đường)
             self.boarding = []
         elif kind == "gift" and event.get("tier_up") and "xe tăng cường" not in (event.get("perk") or ""):
@@ -150,6 +155,12 @@ class Announcer:
         names = names_phrase(raw, BOARD_NAMES)
         self.offer(line("board", style=self.style(), prov=provinces.pop(), names=names) if len(provinces) == 1
                    else line("board_mixed", style=self.style(), names=names), BOARD, raw)
+
+    def names_pending(self, now: float) -> bool:
+        """Còn tên người lên xe chưa đọc xong (đang gom / đang chờ đọc / đang phát) — xe chờ đọc hết rồi mới chạy (anh 03/11)."""
+        if not self.settings().get("voice_on", True):
+            return False
+        return bool(self.boarding) or now < self.names_until or any(item[0] == BOARD and item[3] for item in self.queue)
 
     def style(self) -> str:
         return self.settings().get("talk_style") or "mix"
@@ -186,6 +197,8 @@ class Announcer:
                 rate = float(self.settings().get("voice_rate") or 1.0)  # overlay phát nhanh / chậm theo tốc độ này
                 await self.emit({"kind": "event", "type": "speak", "url": f"/voice/{name}", "text": text,
                                  "seconds": round(seconds / rate, 2), "names": names})
+                if names:
+                    self.names_until = time.monotonic() + seconds / rate
                 if self.queue:  # đọc sẵn câu kế trong lúc câu này đang phát: không còn ~1,5 giây im giữa hai câu
                     self.render_once(self.queue[0][2])
                 await asyncio.sleep(seconds / rate + 0.3)  # đọc hết câu mới sang câu sau
@@ -217,28 +230,52 @@ class Announcer:
         for ext in (".wav", ".mp3"):
             path = VOICE_DIR / f"{key}{ext}"
             if path.exists():
-                path.touch()
-                return path.name, duration(path)
+                try:
+                    if path.stat().st_size:
+                        path.touch()
+                        return path.name, duration(path)
+                except (OSError, EOFError, wave.Error):
+                    pass
+                path.unlink(missing_ok=True)  # file hỏng / rỗng của lần đọc lỗi trước: đọc lại, không câm mãi
         if voice.startswith("ms:"):  # anh chọn giọng Microsoft
-            path = VOICE_DIR / f"{key}.mp3"
-            await edge_tts.Communicate(text, voice[3:]).save(str(path))
+            path = await self._edge(text, voice[3:], VOICE_DIR / f"{key}.mp3")
             self.prune()
             return path.name, duration(path)
+        path = VOICE_DIR / f"{key}.wav"
         try:
             res = await self.client.post(f"{VIENEU_URL}/tts", json={"text": text, "voice": voice})
             res.raise_for_status()
-            path = VOICE_DIR / f"{key}.wav"
-            path.write_bytes(res.content)
-        except Exception as exc:  # VieNeu tắt / quá tải → giọng Microsoft
+            _commit(path, res.content)
+            seconds = duration(path)
+        except Exception as exc:  # VieNeu tắt / quá tải / trả về không phải wav → giọng Microsoft
             log.warning("VieNeu không đọc được (%s), dùng edge-tts", exc)
-            path = VOICE_DIR / f"{key}.mp3"
-            await edge_tts.Communicate(text, EDGE_VOICE).save(str(path))
+            path.unlink(missing_ok=True)
+            path = await self._edge(text, EDGE_VOICE, VOICE_DIR / f"{key}.mp3")
+            seconds = duration(path)
         self.prune()
-        return path.name, duration(path)
+        return path.name, seconds
+
+    @staticmethod
+    async def _edge(text: str, voice: str, path: Path) -> Path:
+        """edge-tts mở file trước khi có tiếng: rớt mạng giữa chừng để lại file rỗng → ghi ra file tạm, đủ tiếng mới đổi tên."""
+        tmp = path.with_name(path.name + ".tmp")
+        try:
+            await edge_tts.Communicate(text, voice).save(str(tmp))
+            if not tmp.stat().st_size:
+                raise RuntimeError("edge-tts trả về file rỗng")
+            tmp.replace(path)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return path
 
     @staticmethod
     def prune() -> None:
-        files = sorted(VOICE_DIR.glob("*.*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        def mtime(p: Path) -> float:
+            try:
+                return p.stat().st_mtime
+            except FileNotFoundError:  # câu khác vừa đọc lại / xoá cùng lúc
+                return 0.0
+        files = sorted((p for p in VOICE_DIR.iterdir() if p.suffix in (".wav", ".mp3")), key=mtime, reverse=True)
         for old in files[CACHE_KEEP:]:
             old.unlink(missing_ok=True)
 
@@ -260,6 +297,15 @@ class Announcer:
         except Exception:
             vieneu = []
         self.voice_list = vieneu + list(MS_VOICES)
+
+
+def _commit(path: Path, data: bytes) -> None:
+    """Ghi rồi mới đổi tên: không bao giờ để lại file giọng dở dang trong bộ nhớ đệm."""
+    if not data:
+        raise ValueError("file giọng rỗng")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
 
 
 def duration(path: Path) -> float:

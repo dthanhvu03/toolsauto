@@ -137,6 +137,62 @@
       <button data-block="toll">🚧 Trạm thu phí ngay</button>
       <button data-block="police">👮 Công an ngay</button>
     </div>
+    <h3>🧺 Cô bán hàng lên xe — nem, bì, bánh mì</h3>
+    <p class="hint live-line" id="vendor-now">Chưa ai góp.</p>
+    <div class="row">
+      <button id="vendor-call">🧺 Gọi cô bán hàng ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="vendor_on"> Bật</label>
+      <span>Góp</span><input type="number" id="vendor-xu" min="1" max="1000" step="1" aria-label="Số xu góp gọi cô bán hàng"><span>xu</span>
+      <button id="save-vendor">Lưu</button>
+    </div>
+    <h3>⚔️ Đối kháng</h3>
+    <p class="hint">Hai hướng đứng đầu hàng chờ đấu nhau: ai quê thuộc hướng nào thì bình luận, thả tim, tặng quà cộng điểm
+      cho hướng đó. Vào bến, hướng nhiều điểm hơn chạy trước. Anh chọn tay «Chạy kế tiếp» thì lựa chọn của anh thắng.</p>
+    <p class="hint live-line" id="versus-now">–</p>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="versus_on" data-default="off"> Bật đối kháng</label>
+    </div>
+    <div class="row">
+      <span>1 xu =</span><input type="number" id="versus-xu" min="1" max="200" step="1" aria-label="Điểm đối kháng mỗi xu"><span>điểm</span>
+      <span>· giờ vàng</span><input type="number" id="versus-golden" min="0" max="180" step="5" aria-label="Số giây giờ vàng cuối vòng"><span>giây cuối (quà x2, 0 = tắt)</span>
+      <button id="save-versus">Lưu</button>
+    </div>
+    <p class="hint">Quà của người không thuộc bên nào (chưa gõ tỉnh, quê hướng khác) tính cho bên đang thua. Người góp nhiều nhất
+      bên thắng được dán tên lên băng rôn chuyến đó.</p>
+    <h3>🧠 Đố vui · 🛞 Sự cố dọc đường</h3>
+    <p class="hint live-line" id="quiz-now">Chưa có câu đố.</p>
+    <div class="row">
+      <button id="quiz-call">🧠 Đố vui ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="quiz_on"> Tự đố</label>
+      <span>mỗi</span><input type="number" id="quiz-min" min="1" max="30" step="1" aria-label="Số phút giữa hai câu đố"><span>phút</span>
+      <button id="save-quiz">Lưu</button>
+    </div>
+    <div class="row">
+      <button data-block="tire">🛞 Xẹp lốp ngay</button>
+      <button data-block="jam">🚗 Kẹt xe ngay</button>
+      <button data-block="cattle">🐃 Trâu qua đường ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="incidents_on"> Tự gặp dọc đường</label>
+    </div>
+    <div class="row">
+      <span>Thời tiết <b id="sky-now">–</b>:</span>
+      <button data-sky="clear">☀️ Quang</button><button data-sky="drizzle">🌦 Mưa phùn</button>
+      <button data-sky="rain">🌧 Mưa rào</button><button data-sky="fog">🌫 Sương mù</button>
+    </div>
+    <p class="hint">Câu đố A / B / C về đặc sản, biển số, vùng miền các tỉnh — người xem gõ A, B hoặc C, ba người đúng sớm
+      nhất được đọc tên. Sự cố tự xong sau 30 giây; tim làm nhanh hơn, tặng quà góp đủ thì xong ngay.</p>
+    <h3>📣 Quảng cáo bot của anh</h3>
+    <div class="row">
+      <button id="ad-now">📣 Lơ xe đọc quảng cáo ngay</button>
+      <label class="toggle"><input type="checkbox" data-show="ads_on"> Bật</label>
+      <span>đọc mỗi</span><input type="number" id="ads-min" min="2" max="60" step="1" aria-label="Số phút giữa hai lần lơ xe đọc quảng cáo"><span>phút</span>
+    </div>
+    <div id="ads-rows"></div>
+    <div class="row"><button id="save-ads" class="primary">Lưu quảng cáo</button></div>
+    <p class="hint">Mỗi mục: <b>tên</b> + <b>câu ngắn</b> hiện trên biển ven đường, dòng gợi ý và cạnh tên game; <b>câu đọc</b> là
+      lơ xe nói. <b>Không ghi tên sàn / app / bot</b> (Shopee, Telegram, Zalo, Facebook, link, inbox, chuyển khoản…): TikTok dừng
+      live khi kéo người sang chỗ khác — mục có những chữ đó máy tự bỏ, không lưu. Chỉ mời ghé trang cá nhân kênh; tên bot để ở bio.
+      Mục 1 là mục chính: cứ ba lần đọc thì hai lần mục 1. <b>Từ khoá</b>: khán giả bình luận có từ đó (ví dụ «hoàn tiền») thì lơ xe
+      gọi tên người đó đọc câu của mục, mỗi người một lần mỗi buổi.</p>
     <h3>📺 Bảng quảng cáo</h3>
     <p class="hint live-line" id="show-now">Đang không chiếu.</p>
     <div class="row"><button id="show-next">▶ Chiếu video kế tiếp ngay</button><button id="show-stop">⏹ Dừng video, xe chạy tiếp</button></div>
@@ -290,6 +346,15 @@
       <span>Chuyến xa nhất chạy</span><input type="number" id="trip-minutes" min="3" max="15" step="0.5" aria-label="Phút chạy đường của chuyến xa nhất"><span>phút</span>
       <button id="save-times">Lưu</button>
     </div>
+    <h3>Điểm danh lúc lên xe</h3>
+    <label class="toggle"><input type="checkbox" data-show="roll_on"> Tới lượt lên xe mà im lặng lâu thì lơ xe gọi tên — thả tim / bình luận mới giữ giường</label>
+    <div class="row" style="margin-top:8px">
+      <span>Im lặng quá</span><input type="number" id="roll-idle" min="1" max="120" step="1" aria-label="Im lặng quá bao nhiêu phút thì điểm danh"><span>phút</span>
+      <span>Chờ trả lời</span><input type="number" id="roll-wait" min="15" max="180" step="5" aria-label="Giây chờ trả lời điểm danh"><span>giây</span>
+      <button id="save-roll">Lưu</button>
+    </div>
+    <p class="hint">Không trả lời: giường nhường người sau, người đó lùi xuống chuyến sau (vé vẫn giữ). Lỡ 2 lần mới bỏ vé.
+      Người đã lên xe luôn được chở tới nơi.</p>
     <p class="hint" id="trip-hint">Chuyến gần ngắn hơn theo km (không tỉ lệ thẳng). Lơ xe nói «chừng 26 tiếng» thì đồng hồ trên xe
       chạy đủ 26 tiếng trong mấy phút đó — trời sáng / tối theo đồng hồ xe.</p>
     <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
@@ -835,6 +900,35 @@ $("save-times").onclick = () => {
 };
 document.querySelectorAll("[data-block]").forEach((b) => b.onclick = () => admin({ action: "block", kind: b.dataset.block }));
 $("cover").onclick = () => admin({ action: "cover" });
+$("save-roll").onclick = () => {
+  setControl({ roll_idle_min: +$("roll-idle").value, roll_wait_s: +$("roll-wait").value });
+  log("Đã lưu điểm danh");
+};
+$("vendor-call").onclick = () => admin({ action: "vendor" });
+$("quiz-call").onclick = () => admin({ action: "quiz" });
+$("ad-now").onclick = () => admin({ action: "ad" });
+$("ads-rows").innerHTML = [0, 1, 2].map((i) => `<div class="row">
+  <input type="text" id="ad-title-${i}" maxlength="32" placeholder="Tên bot ${i + 1}, ví dụ @ten_bot" aria-label="Tên bot ${i + 1}">
+  <input type="text" id="ad-desc-${i}" maxlength="70" placeholder="Câu ngắn trên biển" aria-label="Câu ngắn bot ${i + 1}">
+  <input type="text" id="ad-say-${i}" maxlength="200" placeholder="Câu lơ xe đọc" aria-label="Câu lơ xe đọc bot ${i + 1}">
+  <input type="text" id="ad-keys-${i}" maxlength="120" placeholder="Từ khoá khán giả gõ, cách nhau dấu phẩy" aria-label="Từ khoá bot ${i + 1}">
+</div>`).join("");
+$("save-ads").onclick = () => {
+  const ads = [0, 1, 2].map((i) => ({ title: $(`ad-title-${i}`).value, desc: $(`ad-desc-${i}`).value, say: $(`ad-say-${i}`).value,
+    keys: $(`ad-keys-${i}`).value }));
+  setControl({ ads, ads_talk_min: +$("ads-min").value });
+  log("Đã lưu quảng cáo bot");
+};
+document.querySelectorAll("[data-sky]").forEach((b) => b.onclick = () => admin({ action: "weather", sky: b.dataset.sky }));
+$("save-versus").onclick = () => setControl({ versus_xu: +$("versus-xu").value, versus_golden_s: +$("versus-golden").value });
+$("save-quiz").onclick = () => {
+  setControl({ quiz_every_min: +$("quiz-min").value });
+  log("Đã lưu nhịp đố vui");
+};
+$("save-vendor").onclick = () => {
+  setControl({ vendor_xu: +$("vendor-xu").value });
+  log("Đã lưu số xu gọi cô bán hàng");
+};
 $("save-blocks").onclick = () => {
   setControl({ toll_xu: +$("toll-xu").value, fine_xu: +$("fine-xu").value, cover_seconds: +$("cover-seconds").value });
   log("Đã lưu phí trạm / tiền phạt / tự bù lỗ");
@@ -951,12 +1045,31 @@ async function refresh() {
     $("m-top").textContent = (m.top || []).length ? "Tặng nhiều nhất giờ này: " + m.top.map((t) => `${t.name} ${t.xu} xu`).join(" · ") : "Chưa có quà trong giờ này.";
     const blk = s.block;
     $("block-now").textContent = blk
-      ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : "👮 Công an đang chặn"} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
+      ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : blk.kind === "police" ? "👮 Công an đang chặn" : "🛞 " + blk.reason} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
+        + (blk.left != null ? ` · tự xong sau ${blk.left} giây` : "")
         + (blk.cover_in != null ? ` · tự bù lỗ sau ${blk.cover_in} giây` : "")
       : "Xe đang không bị chặn.";
     $("cover").disabled = !blk;
     $("block-now").classList.toggle("alert", !!blk);
     $("show-now").classList.toggle("alert", !!s.show);
+    const vd = s.vendor;
+    $("vendor-now").textContent = !vd ? (control.vendor_on === false ? "Đang tắt." : "Chưa tới lúc (cô lên lúc xe đang chạy, mỗi chuyến một lần).")
+      : vd.stage === "pool" ? `Đang góp gọi cô bán hàng: ${vd.paid}/${vd.goal} xu`
+      : vd.stage === "stop" ? `🧺 Xe tấp vào cho cô lên · ${vd.left} giây`
+      : `🧺 Cô đang bán suốt chuyến · bán được ${vd.sold} phần`;
+    const qz = s.quiz;
+    $("quiz-now").textContent = !qz ? (control.quiz_on === false ? "Tự đố đang tắt." : "Chưa có câu đố (đố lúc xe đang chạy).")
+      : qz.done ? `Đáp án ${"ABC"[qz.answer]}: ${qz.right} người đúng` + (qz.winners.length ? ` · ${qz.winners.join(", ")}` : "")
+      : `🧠 ${qz.question} · ${qz.answered} người trả lời · còn ${qz.left} giây`;
+    $("quiz-call").disabled = !!qz && !qz.done;
+    const vs = s.versus;
+    $("versus-now").textContent = control.versus_on !== true ? "Đối kháng đang tắt."
+      : !vs ? "Chờ có ít nhất hai hướng có người chờ."
+      : vs.sides.map((x) => `${x.arrow} ${x.dest}: ${x.points} điểm · ${x.waiting} chờ${x.lead ? " 👑" : ""}`).join("  ⚔️  ")
+        + (vs.golden ? ` · ⏱ GIỜ VÀNG còn ${vs.left}s` : "")
+        + (vs.chosen ? " · anh đã chọn tay hướng chạy kế tiếp" : "");
+    $("sky-now").textContent = { clear: "☀️ quang", drizzle: "🌦 mưa phùn", rain: "🌧 mưa rào", fog: "🌫 sương mù" }[s.weather] || "–";
+    $("vendor-call").disabled = !!vd && vd.stage !== "pool";
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
     if (!timesLoaded) {  // không ghi đè khi admin đang gõ
       $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
@@ -966,6 +1079,20 @@ async function refresh() {
       $("toll-xu").value = control.toll_xu ?? 20;
       $("fine-xu").value = control.fine_xu ?? 10;
       $("cover-seconds").value = control.cover_seconds ?? 60;
+      $("roll-idle").value = control.roll_idle_min ?? 15;
+      $("vendor-xu").value = control.vendor_xu ?? 10;
+      $("quiz-min").value = control.quiz_every_min ?? 3;
+      $("versus-xu").value = control.versus_xu ?? 20;
+      $("versus-golden").value = control.versus_golden_s ?? 60;
+      $("ads-min").value = control.ads_talk_min ?? 8;
+      [0, 1, 2].forEach((i) => {
+        const ad = (control.ads || [])[i] || {};
+        $(`ad-title-${i}`).value = ad.title || "";
+        $(`ad-desc-${i}`).value = ad.desc || "";
+        $(`ad-say-${i}`).value = ad.say || "";
+        $(`ad-keys-${i}`).value = ad.keys || "";
+      });
+      $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;
       $("goal-xu").value = control.goal_xu ?? 1000;

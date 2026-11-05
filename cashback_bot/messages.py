@@ -57,12 +57,15 @@ DESCRIPTION_WALLET = (
 
 
 def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
-                  show_voucher: bool = False) -> Keyboard:
+                  show_voucher: bool = False, show_invite: bool = False) -> Keyboard:
     second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
+    orders: tuple[tuple[str, str], ...] = (("📦 Đơn hàng của tôi", "u:p:orders"),)
+    if show_invite:
+        orders += (("🤝 Mời bạn", "u:p:invite"),)
     rows: Keyboard = (
-        (("📦 Đơn hàng của tôi", "u:p:orders"),),
+        orders,
         (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:tips")),
         second,
     )
@@ -151,13 +154,137 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
     )
 
 
-def hang_message() -> str:
+RANK_NAMES = {"BRONZE": "🥉 Đồng", "SILVER": "🥈 Bạc", "GOLD": "🥇 Vàng"}
+
+
+def _need_text(orders: int, vnd: int) -> str:
+    parts = []
+    if orders:
+        parts.append(f"<b>{orders}</b> đơn")
+    if vnd:
+        parts.append(f"<b>{format_vnd(vnd)}</b> tiền hoàn")
+    return " và ".join(parts) or "rất ít"
+
+
+def hang_message(progress=None, values: dict | None = None) -> str:
+    """progress None: hạng chưa bật. Có progress (membership.Progress) + values (ngưỡng đang áp dụng).
+
+    Không đưa tỷ lệ chia (số nội bộ), chỉ nói hạng cao hơn thì mỗi đơn hoàn nhiều hơn.
+    """
+    if progress is None or values is None:
+        return (
+            "🏅 <b>Hạng thành viên</b>\n\n"
+            "Chương trình <b>Đồng · Bạc · Vàng</b> đang được phát triển, chưa chính thức áp dụng.\n\n"
+            "Hiện mọi khách dùng chung một cách tính, xem /cachtinh. "
+            "Bạn chưa cần đăng ký gì.\n\n"
+            "ⓘ Khi ra mắt, bot sẽ báo rõ điều kiện lên hạng, quyền lợi và thời điểm áp dụng."
+        )
+    lines = [
+        "🏅 <b>Hạng thành viên</b>\n",
+        f"Hạng của bạn: <b>{RANK_NAMES[progress.rank_code]}</b>",
+        f"Đơn hoàn thành {progress.window}: <b>{progress.orders}</b> đơn · "
+        f"<b>{format_vnd(progress.cashback_vnd)}</b> tiền hoàn\n",
+    ]
+    if progress.protected_until:
+        lines.append(f"🎁 Bạn là khách quen nên được giữ hạng Vàng tới hết <b>{progress.protected_until}</b>.")
+    elif progress.keep_orders or progress.keep_vnd:
+        lines.append(f"⏳ Cần thêm {_need_text(progress.keep_orders, progress.keep_vnd)} trước cuối tháng để "
+                     f"giữ hạng {RANK_NAMES[progress.rank_code]}.")
+    if progress.next_code is None:
+        lines.append("Bạn đang ở hạng cao nhất, mỗi đơn được hoàn mức cao nhất. 🎉\n")
+    else:
+        lines.append(f"Còn {_need_text(progress.need_orders, progress.need_vnd)} nữa là lên "
+                     f"<b>{RANK_NAMES[progress.next_code]}</b>.\n")
+    lines += [
+        "<b>Cách lên hạng</b> (tính trong tháng trước + tháng này)",
+        "• 🥉 Đồng: hạng khi mới dùng bot.",
+        f"• 🥈 Bạc: {values['silver_orders']} đơn và {format_vnd(values['silver_vnd'])} tiền hoàn.",
+        f"• 🥇 Vàng: {values['gold_orders']} đơn và {format_vnd(values['gold_vnd'])} tiền hoàn.",
+        "Hạng càng cao, mỗi đơn được hoàn càng nhiều.\n",
+        "ⓘ Đủ điều kiện là lên hạng ngay. Đầu mỗi tháng bot xét lại theo 2 tháng vừa qua; không đủ thì "
+        "xuống một bậc. Chỉ tính đơn đã hoàn thành (đã nhận hàng), đơn huỷ hay trả hàng không tính. "
+        "Hạng mới áp dụng cho link tạo sau đó, link đã tạo giữ số đã báo.",
+    ]
+    return "\n".join(lines)
+
+
+def rank_card_line(rank_code: str, bonus_vnd: int, gold_extra_vnd: int) -> str | None:
+    """Dòng hạng trên thẻ link (PLAN-154): lợi ích bằng tiền của món này, không đưa tỷ lệ.
+
+    Đồng: món này lên Vàng hoàn thêm bao nhiêu. Bạc / Vàng: đã được thêm bao nhiêu so với Đồng.
+    """
+    if rank_code == "BRONZE":
+        return f"🏅 Lên 🥇 Vàng, món này hoàn thêm {format_vnd(gold_extra_vnd)} · /hang" if gold_extra_vnd > 0 else None
+    if bonus_vnd > 0:
+        return f"🏅 Hạng {RANK_NAMES[rank_code]}: đã cộng thêm {format_vnd(bonus_vnd)} so với hạng Đồng"
+    return None
+
+
+# --- Mời bạn (PLAN-155) ------------------------------------------------------------------------------
+
+INVITE_RESULTS = {
+    "ok": "🤝 Đã ghi nhận bạn được bạn bè mời. Bạn vẫn nhận đủ tiền hoàn như mọi người, không bị trừ gì. "
+          "Gửi link sản phẩm Shopee cho bot để bắt đầu nhé!",
+    "unknown": "⚠️ Mã mời không đúng. Kiểm tra lại mã (6 ký tự) với người mời bạn.",
+    "self": "⚠️ Đây là mã mời của chính bạn. Gửi mã này cho bạn bè nhé, xem ở 🤝 Mời bạn.",
+    "already": "ⓘ Bạn đã nhập mã mời trước đó rồi, mỗi người chỉ nhập một lần.",
+    "old_user": "ⓘ Mã mời chỉ dành cho người mới (chưa tạo link nào và vào bot chưa quá 7 ngày).",
+    "mutual": "ⓘ Bạn đã mời người này rồi nên không nhập mã của họ được.",
+}
+
+
+def invite_page(stats, bot_username: str, share_percent: int, months: int) -> str:
+    """stats: referral.Stats. Thưởng tính theo % hoa hồng sàn trả (không phải tỷ lệ chia của khách)."""
+    link = f"https://t.me/{bot_username}?start=ref_{stats.code}"
+    return "\n".join([
+        "🤝 <b>Mời bạn — nhận thưởng mỗi đơn của bạn bè</b>\n",
+        f"Mã mời của bạn: <code>{stats.code}</code>",
+        f"• Telegram: gửi bạn link {link}",
+        f"• Zalo: bạn nhắn bot Zalo <b>ref {stats.code}</b>\n",
+        f"Mỗi đơn bạn bè mua qua bot trong <b>{months} tháng</b> đầu, bạn nhận thêm <b>{share_percent}% hoa hồng</b> "
+        "của đơn đó. Bạn bè vẫn nhận đủ tiền hoàn của họ, không bị trừ gì.\n",
+        f"Đã mời: <b>{stats.invited}</b> người",
+        f"Thưởng đang chờ Shopee trả: <b>{format_vnd(stats.waiting_vnd)}</b>",
+        f"Thưởng đã vào ví: <b>{format_vnd(stats.in_wallet_vnd)}</b>\n",
+        "ⓘ Chỉ tính người mới (chưa tạo link nào). Thưởng vào 👛 Ví cùng lúc với đơn của bạn bè; đơn huỷ "
+        "hoặc trả hàng thì không có thưởng. Không tính vào hạng thành viên của bạn.",
+    ])
+
+
+def invite_notice(kind: str, reward_vnd: int) -> str:
+    if kind == "order":
+        return (f"🤝 <b>Bạn bè bạn mời vừa có đơn!</b>\n\nThưởng mời bạn khoảng <b>{format_vnd(reward_vnd)}</b>, "
+                "vào ví khi Shopee trả hoa hồng của đơn. Xem ở 🤝 Mời bạn.")
+    if kind == "paid":
+        return f"🤝 Thưởng mời bạn <b>{format_vnd(reward_vnd)}</b> đã vào 👛 Ví của bạn."
+    if kind == "clawback":
+        return (f"🤝 Shopee giảm hoa hồng một đơn của bạn bè nên thưởng mời bạn được trừ "
+                f"<b>{format_vnd(reward_vnd)}</b> trong 👛 Ví.")
+    return f"🤝 Một đơn của bạn bè đã huỷ hoặc trả hàng nên khoản thưởng {format_vnd(reward_vnd)} không còn."
+
+
+def rank_up_notice(rank_code: str) -> str:
     return (
-        "🏅 <b>Hạng thành viên</b>\n\n"
-        "Chương trình <b>Đồng · Bạc · Vàng</b> đang được phát triển, chưa chính thức áp dụng.\n\n"
-        "Hiện mọi khách dùng chung một cách tính, xem /cachtinh. "
-        "Bạn chưa cần đăng ký gì.\n\n"
-        "ⓘ Khi ra mắt, bot sẽ báo rõ điều kiện lên hạng, quyền lợi và thời điểm áp dụng."
+        f"🎉 <b>Chúc mừng, bạn đã lên hạng {RANK_NAMES[rank_code]}!</b>\n\n"
+        "Từ giờ, link bạn tạo mới được hoàn nhiều hơn mỗi đơn. Link đã tạo trước đó giữ số đã báo.\n"
+        "Xem hạng của bạn ở 🏅 Hạng thành viên (/hang)."
+    )
+
+
+def rank_down_notice(rank_code: str) -> str:
+    return (
+        f"🏅 <b>Hạng tháng này của bạn: {RANK_NAMES[rank_code]}</b>\n\n"
+        "2 tháng vừa qua chưa đủ đơn để giữ hạng cũ, nên hạng xuống một bậc. Link đã tạo vẫn giữ số đã báo.\n"
+        "Mua thêm qua bot là lên lại ngay khi đủ điều kiện, xem ở /hang."
+    )
+
+
+def rank_keep_notice(rank_code: str, need_orders: int, need_vnd: int) -> str:
+    return (
+        f"⏳ <b>Giữ hạng {RANK_NAMES[rank_code]}</b>\n\n"
+        f"Còn {_need_text(need_orders, need_vnd)} (đơn hoàn thành trong tháng này) để giữ hạng khi bot xét "
+        "đầu tháng sau.\n"
+        "Gửi link sản phẩm cho bot trước khi mua để đơn được tính. Xem chi tiết ở /hang."
     )
 
 
@@ -377,7 +504,8 @@ def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, v12: bool = False,
-                 tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
+                 tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
+                 rank_line: str | None = None) -> BotReply:
     """Thẻ link: tên, giá tham khảo, số hoàn, nhắc xoá món trong giỏ (khi có hoàn), lời bấm nút ngay trên nút.
     Lưu ý khác ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
@@ -387,6 +515,7 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"🛍️ <b>{safe_name}</b>" + (" · 🎵 TikTok Shop" if tiktok else ""),
         f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
         amount,
+        *([rank_line] if rank_line and cashback_vnd > 0 else []),
         *([CART_HINT] if cashback_vnd > 0 else []),
         TIKTOK_BUY_HINT if tiktok else BUY_HINT,
     ]
@@ -433,11 +562,11 @@ def with_tiktok(text: str) -> str:
 
 
 def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
-               wallet_open: bool | None = None, show_voucher: bool = False) -> BotReply:
+               wallet_open: bool | None = None, show_voucher: bool = False, show_invite: bool = False) -> BotReply:
     """wallet_open: ví mở rút thật (đổi câu ⓘ); None thì theo show_wallet. Ví xem trước: show_wallet, chưa mở."""
     open_ = show_wallet if wallet_open is None else wallet_open
     return BotReply(HOME_WALLET if open_ else HOME,
-                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals, show_voucher))
+                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals, show_voucher, show_invite))
 
 
 def page_reply(text: str) -> BotReply:
@@ -457,13 +586,14 @@ def food_link_reply(affiliate_url: str | None = None) -> BotReply:
 
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False,
-                   extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped)
+                   extra_vnd: int = 0, capped: bool = False, rank_line: str | None = None) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped, rank_line)
 
 
 def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
-                       tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped)
+                       tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
+                       rank_line: str | None = None) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped, rank_line)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------
@@ -1263,6 +1393,19 @@ WATCH_ANNOUNCE = (
     "Phiền thì gõ /thongbao tắt nha 🫶"
 )
 WATCH_ANNOUNCE_KEYBOARD: Keyboard = ((("🔥 Deal hôm nay", "u:dh"),), (("📋 Món đang theo dõi", "u:pw:l"),))
+# Tin giới thiệu mời bạn (PLAN-155, chủ bot 2026-11-05: chỉ công bố mời bạn, không công bố hạng).
+# Thưởng ghi đúng như điều khoản V5.
+INVITE_ANNOUNCE = (
+    "🤝 <b>Mời bạn bè, nhận thưởng mỗi đơn!</b>\n\n"
+    "Gửi link mời của bạn cho bạn bè. Bạn bè vào bot bằng link đó, thì mỗi đơn họ mua qua bot trong "
+    "<b>6 tháng</b>, bạn được thưởng thêm <b>10% hoa hồng</b> của đơn.\n\n"
+    "✅ Bạn bè vẫn nhận đủ tiền hoàn của họ, không bị trừ gì.\n"
+    "👛 Thưởng vào ví cùng lúc với đơn của bạn bè, rút như tiền hoàn.\n"
+    "🆕 Áp dụng cho người mới dùng bot.\n\n"
+    "👉 Bấm nút dưới (hoặc gõ /moiban) để lấy link mời.\n"
+    "Phiền thì gõ /thongbao tắt nha 🫶"
+)
+INVITE_ANNOUNCE_KEYBOARD: Keyboard = ((("🤝 Lấy link mời bạn", "u:p:invite"),),)
 DEALS_PICK_HINT = "👉 Bấm link hoặc nút bên dưới để mở Shopee mua ngay:"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"

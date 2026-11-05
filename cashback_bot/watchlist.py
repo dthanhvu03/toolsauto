@@ -217,7 +217,7 @@ def _seen(conn: sqlite3.Connection, row: sqlite3.Row, price: int | None, now: da
 
 def _alert(conn: sqlite3.Connection, service, row: sqlite3.Row, quote, now: datetime, slot: str | None = None) -> None:
     old, new = int(row["last_price_vnd"]), int(quote.price_vnd)
-    cashback = cashback_for(quote.sure_commission_vnd, service._resolve_policy(now)).cashback_vnd
+    cashback = cashback_for(quote.sure_commission_vnd, service._resolve_for(int(row["telegram_user_id"]), now)).cashback_vnd
     keyboard = [[{"text": BUY_BUTTON, "url": row["affiliate_url"]}]] if row["affiliate_url"] else []
     keyboard.append([{"text": "🔕 Ngừng theo dõi", "callback_data": f"u:pw:x:{row['id']}"},
                      {"text": "📋 Món đang theo dõi", "callback_data": LIST}])

@@ -89,7 +89,7 @@ PHRASES = (
 COMMANDS = {
     "huongdan": "hd", "donhang": "don", "hotro": "hotro", "vi": "vi", "dieukien": "dieukien",
     "cachtinh": "cachtinh", "thongbao": "thongbao", "hang": "hang", "start": "menu", "theodoi": "theodoi",
-    "deal": "deal", "magiam": "magiam",
+    "deal": "deal", "magiam": "magiam", "moiban": "moiban",
 }
 _CMD = "|".join(COMMANDS)
 _VERB_CMD = re.compile(rf"\b(Gõ|gõ|Nhắn|nhắn|Mở|mở) /({_CMD})\b")
