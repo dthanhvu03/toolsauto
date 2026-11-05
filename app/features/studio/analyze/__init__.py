@@ -52,13 +52,13 @@ def probe(path: str) -> dict:
     }
 
 
-def _compute(kind: str, asset: StudioAsset) -> object:
+def _compute(kind: str, asset: StudioAsset, language: str | None = None) -> object:
     if kind == "probe":
         return probe(asset.path)
     if kind == "transcript":
         if not asset.has_audio:
             return {"lang": None, "lines": []}
-        lines, lang = speech.transcribe(asset.path, language=None)
+        lines, lang = speech.transcribe(asset.path, language=language)  # None = Whisper tự nhận
         return {"lang": lang, "lines": [{"start": x["start"], "end": x["end"], "text": x["text"]} for x in lines]}
     if kind == "silences":
         return [asdict(s) for s in segments.silences(asset.path)] if asset.has_audio else []
@@ -75,12 +75,16 @@ def run(db: Session, task: StudioTask) -> StageResult:
     if "probe" in kinds:  # probe trước: transcript / silences cần biết có tiếng hay không
         kinds = ["probe", *[k for k in kinds if k != "probe"]]
 
+    # PLAN-157: ngôn ngữ audio chọn lúc tải lên (Audio→Doc); trống / "auto" → Whisper tự nhận.
+    language = str((task.payload or {}).get("language") or "").strip().lower() or None
+    if language == "auto":
+        language = None
     done = {r.kind for r in db.query(StudioAnalysis.kind).filter_by(asset_id=asset.id)}
     ran = []
     for kind in kinds:
         if kind in done:
             continue
-        data = _compute(kind, asset)
+        data = _compute(kind, asset, language)
         if kind == "probe":
             asset.duration = data["duration"] or None
             asset.width = data["width"] or None

@@ -25,6 +25,7 @@ from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
 from app.core.media import tts
 from app.features.studio import editor, entry, progress, setup, source, store
+from app.features.studio.doc import config as doc_config
 from app.features.studio.doc import service as doc_service
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
@@ -403,14 +404,41 @@ def doc_upload(
     file: UploadFile = File(...),
     channel_id: int | None = Form(None),
     title: str = Form(""),
+    language: str = Form(""),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Upload audio thuyết minh → flow ``audio_doc``."""
+    """Upload audio thuyết minh → flow ``audio_doc``. ``language`` trống / ``auto`` = Whisper tự nhận."""
     try:
-        task = entry.accept_audio_doc(db, file.file, file.filename or "", channel_id=channel_id, title=title)
+        task = entry.accept_audio_doc(
+            db, file.file, file.filename or "", channel_id=channel_id, title=title, language=language,
+        )
     except ValueError as exc:
         raise _bad(exc) from exc
     return {"ok": True, "task_id": task.id, "flow": task.flow}
+
+
+@router.get("/doc/config")
+def doc_config_view(db: Session = Depends(get_db)) -> dict:
+    """Cấu hình Audio→Doc UI cần (không lộ key) + danh sách ngôn ngữ — chỉnh ở /app/settings."""
+    return doc_config.ui(db)
+
+
+@router.post("/doc/projects/{project_id}/shots/{shot_id}/search")
+def doc_search_images(project_id: int, shot_id: str, body: dict | None = None, db: Session = Depends(get_db)) -> dict:
+    """Tìm ảnh internet cho cảnh. Body ``{"keywords": [...]}`` (tuỳ chọn) — từ khóa đầu tiên là câu tìm."""
+    try:
+        return doc_service.search_images(db, project_id, shot_id, (body or {}).get("keywords"))
+    except doc_service.DocError as exc:
+        raise _bad(exc) from exc
+
+
+@router.post("/doc/projects/{project_id}/shots/{shot_id}/pick")
+def doc_pick_image(project_id: int, shot_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    """Chọn ảnh gợi ý ``{"index": n}`` → tải về, gắn vào cảnh, quyền tự điền theo giấy phép."""
+    try:
+        return doc_service.pick_image(db, project_id, shot_id, int(body.get("index", -1)))
+    except (doc_service.DocError, ValueError, TypeError) as exc:
+        raise _bad(exc) from exc
 
 
 @router.get("/doc/projects/{project_id}")

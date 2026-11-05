@@ -1,4 +1,8 @@
-"""API logic POC: load/save DocState, gắn ảnh, dựng ProjectSpec preview, quyền."""
+"""
+Logic Audio→Doc: DocState, sửa cảnh / transcript, gắn ảnh (tải lên hoặc chọn từ internet), quyền, dựng ProjectSpec.
+
+Tham số đọc từ ``DocConfig`` (Cài đặt vận hành → Studio — Audio→Doc) — không hardcode ở đây (PLAN-157).
+"""
 from __future__ import annotations
 
 import shutil
@@ -6,29 +10,33 @@ import time
 from pathlib import Path
 from typing import BinaryIO
 
+import httpx
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioAnalysis, StudioAsset, StudioProject
 from app.features.studio import paths, store
 from app.features.studio.contracts import ProjectStatus
+from app.features.studio.doc import config as doc_config
+from app.features.studio.doc.config import DocConfig
+from app.features.studio.doc.images import download, licenses
+from app.features.studio.doc.images import search as image_search
 from app.features.studio.doc.manifest import write_manifest
-from app.features.studio.doc.rights import check_export
+from app.features.studio.doc.rights import allowed, check_export
 from app.features.studio.doc.schema import DocState, ImageRef, RightsStatus, Shot, TranscriptSeg
-from app.features.studio.doc.seed import lines_to_segments
 from app.features.studio.spec import (
     Audio,
     AudioTrack,
     Canvas,
     Clip,
+    KenBurns,
     ProjectSpec,
     SubLine,
     Subtitles,
 )
 
-FIXTURES = paths.ROOT / "fixtures"
 PLACEHOLDER_NAME = "placeholder_illustration.png"
-_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
+_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}  # ảnh pipeline ffmpeg đọc được
 
 
 class DocError(ValueError):
@@ -36,17 +44,13 @@ class DocError(ValueError):
 
 
 def ensure_placeholder_image(db: Session) -> StudioAsset:
-    src = FIXTURES / PLACEHOLDER_NAME
+    src = paths.ROOT / "fixtures" / PLACEHOLDER_NAME
     if not src.is_file():
-        raise DocError(f"thiếu fixture {src}")
+        raise DocError(f"thiếu ảnh nền tạm {src}")
     asset, _ = store.add_asset(
         db, src, kind="image", origin="brand", move=False,
-        title="POC placeholder illustration", credit="internal-placeholder",
-        width=1280, height=720,
+        title="Ảnh nền tạm (chưa có ảnh)", credit="internal-placeholder",
     )
-    if asset.duration is None:
-        asset.duration = 0.0
-        db.commit()
     return asset
 
 
@@ -75,9 +79,14 @@ def _audit(state: DocState, action: str, **extra) -> None:
     state.audit.append({"action": action, "ts": int(time.time()), **extra})
 
 
+def window_ms(state: DocState, cfg: DocConfig) -> int:
+    return doc_config.window_end_ms(cfg, state.duration_ms)
+
+
 def detail(db: Session, project_id: int) -> dict:
     project, state = get_state(db, project_id)
-    gate = check_export(state)
+    cfg = doc_config.load(db)
+    gate = check_export(state, cfg, end_ms=window_ms(state, cfg))
     audio = db.get(StudioAsset, state.audio_asset_id)
     return {
         "project": {
@@ -104,8 +113,33 @@ def detail(db: Session, project_id: int) -> dict:
             "blockers": gate.blockers,
             "missing_images": gate.missing_images,
             "can_export": gate.ok,
+            "window_end_ms": window_ms(state, cfg),
         },
+        "config": doc_config.public(cfg),
     }
+
+
+def _checked(model, data: dict, what: str):
+    """Kiểm qua schema trước khi ghi — giá trị sai không được lọt vào DocState (lưu rồi sẽ không mở lại được)."""
+    try:
+        return model.model_validate(data)
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise DocError(f"{what} không hợp lệ: {exc}") from exc
+
+
+def _shot_index(state: DocState, shot_id: str) -> int:
+    for i, s in enumerate(state.shots):
+        if s.shot_id == shot_id:
+            return i
+    raise DocError(f"không có shot {shot_id}")
+
+
+def _clean_keywords(raw: object) -> list[str]:
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    if not isinstance(raw, list):
+        raise DocError("keywords phải là danh sách chữ")
+    return [str(k).strip()[:80] for k in raw if str(k).strip()][:8]
 
 
 def update_transcript(db: Session, project_id: int, segments: list[dict]) -> dict:
@@ -124,21 +158,6 @@ def update_transcript(db: Session, project_id: int, segments: list[dict]) -> dic
     return detail(db, project_id)
 
 
-def _shot_index(state: DocState, shot_id: str) -> int:
-    for i, s in enumerate(state.shots):
-        if s.shot_id == shot_id:
-            return i
-    raise DocError(f"không có shot {shot_id}")
-
-
-def _checked(model, data: dict, what: str):
-    """Kiểm qua schema trước khi ghi — giá trị sai không được lọt vào DocState (lưu rồi sẽ không mở lại được)."""
-    try:
-        return model.model_validate(data)
-    except (ValidationError, ValueError, TypeError) as exc:
-        raise DocError(f"{what} không hợp lệ: {exc}") from exc
-
-
 def update_shot(db: Session, project_id: int, shot_id: str, patch: dict) -> dict:
     project, state = get_state(db, project_id)
     idx = _shot_index(state, shot_id)
@@ -147,6 +166,8 @@ def update_shot(db: Session, project_id: int, shot_id: str, patch: dict) -> dict
         data["motion"] = patch["motion"]
     if "narration" in patch:
         data["narration"] = str(patch["narration"] or "")
+    if "keywords" in patch:
+        data["keywords"] = _clean_keywords(patch["keywords"])
     for key in ("start_ms", "end_ms"):
         if key in patch:
             data[key] = patch[key]
@@ -157,6 +178,10 @@ def update_shot(db: Session, project_id: int, shot_id: str, patch: dict) -> dict
     _audit(state, "shot_edit", shot_id=shot_id)
     save_state(db, project.asset_id, state)
     return detail(db, project_id)
+
+
+def _image_status(ref: ImageRef, cfg: DocConfig) -> str:
+    return "APPROVED" if ref.rights_status in allowed(cfg) else "HAS_IMAGE"
 
 
 def attach_image(
@@ -173,6 +198,7 @@ def attach_image(
     illustration: bool = False,
     proof_note: str = "",
 ) -> dict:
+    """Ảnh anh tải lên cho một cảnh."""
     project, state = get_state(db, project_id)
     shot = state.shots[_shot_index(state, shot_id)]
     suffix = Path(filename or "").suffix.lower()
@@ -198,9 +224,76 @@ def attach_image(
         rights_status=status,
         illustration=bool(illustration),
         proof_note=proof_note[:500],
+        provider="upload",
     )
-    shot.status = "HAS_IMAGE"
+    shot.status = _image_status(shot.selected, doc_config.load(db))
     _audit(state, "attach_image", shot_id=shot_id, asset_id=asset.id, rights=status.value)
+    save_state(db, project.asset_id, state)
+    return detail(db, project_id)
+
+
+def search_images(
+    db: Session, project_id: int, shot_id: str, keywords: object = None, *, http: httpx.Client | None = None,
+) -> dict:
+    """Tìm ảnh gợi ý cho một cảnh ở các nguồn đang bật; từ khóa đầu tiên là câu tìm. Lưu kết quả vào DocState."""
+    project, state = get_state(db, project_id)
+    shot = state.shots[_shot_index(state, shot_id)]
+    if keywords is not None:
+        shot.keywords = _clean_keywords(keywords)
+    query = shot.keywords[0] if shot.keywords else ""
+    if not query:
+        raise DocError("cảnh chưa có từ khóa — gõ từ khóa rồi tìm")
+    cfg = doc_config.load(db)
+    found, notes = image_search.search(query, cfg, http=http)
+    shot.candidates = found
+    shot.search_note = "; ".join(notes)
+    _audit(state, "image_search", shot_id=shot_id, query=query, n=len(found))
+    save_state(db, project.asset_id, state)
+    return detail(db, project_id)
+
+
+def pick_image(
+    db: Session, project_id: int, shot_id: str, index: int, *, http: httpx.Client | None = None,
+) -> dict:
+    """Tải ảnh gợi ý thứ ``index`` về, gắn vào cảnh; quyền tự điền theo giấy phép (``doc.auto_verify_licenses``)."""
+    project, state = get_state(db, project_id)
+    shot = state.shots[_shot_index(state, shot_id)]
+    if not 0 <= int(index) < len(shot.candidates):
+        raise DocError("không có ảnh gợi ý này — tìm lại")
+    cand = shot.candidates[int(index)]
+    cfg = doc_config.load(db)
+    own = http is None
+    http = http or image_search.client(cfg)
+    stem = paths.inbox_dir() / f"docweb-{project_id}-{shot_id}-{int(time.time())}"
+    try:
+        dest = download.fetch(http, cand.image_url, stem, cfg)
+    except download.DownloadError as exc:
+        raise DocError(str(exc)) from exc
+    finally:
+        if own:
+            http.close()
+    asset, _ = store.add_asset(
+        db, dest, kind="image", origin="web", move=True,
+        title=(cand.title or cand.provider)[:200], credit=(cand.author or cand.provider)[:255],
+        source_url=cand.source_page or cand.image_url,
+    )
+    status = licenses.rights_for(cand.license, cfg)
+    proof = f"{cand.provider}: {cand.source_page or cand.image_url}"
+    if cand.license_url:
+        proof += f" · {cand.license_url}"
+    shot.selected = ImageRef(
+        asset_id=asset.id,
+        source_page=(cand.source_page or cand.image_url)[:500],
+        credit=(cand.author or cand.provider)[:255],
+        license=cand.license if cand.license != "unknown" else "",
+        rights_status=status,
+        proof_note=proof[:500] if status == RightsStatus.RIGHTS_VERIFIED else "",
+        provider=cand.provider,
+        license_url=cand.license_url[:500],
+        author=cand.author[:255],
+    )
+    shot.status = _image_status(shot.selected, cfg)
+    _audit(state, "pick_image", shot_id=shot_id, asset_id=asset.id, provider=cand.provider, rights=status.value)
     save_state(db, project.asset_id, state)
     return detail(db, project_id)
 
@@ -219,19 +312,43 @@ def set_shot_rights(db: Session, project_id: int, shot_id: str, patch: dict) -> 
     if "illustration" in patch:
         data["illustration"] = bool(patch["illustration"])
     shot.selected = _checked(ImageRef, data, f"quyền ảnh {shot_id}")
-    if shot.selected.rights_status in (RightsStatus.APPROVED, RightsStatus.RIGHTS_VERIFIED):
-        shot.status = "APPROVED"
+    shot.status = _image_status(shot.selected, doc_config.load(db))
     _audit(state, "rights_edit", shot_id=shot_id, rights=shot.selected.rights_status.value)
     save_state(db, project.asset_id, state)
     return detail(db, project_id)
 
 
-def build_preview_spec(db: Session, state: DocState) -> ProjectSpec:
-    """Chỉ các shot trong cửa sổ preview có ảnh; audio master không đổi tốc độ."""
-    end_ms = min(state.preview_end_ms, state.duration_ms or state.preview_end_ms)
+def _sub_lines(state: DocState, end_ms: int, max_chars: int) -> list[SubLine]:
+    """Phụ đề bám đúng mốc lời thoại; câu dài hơn ``max_chars`` tách thành nhiều câu chia theo thời gian."""
+    out: list[SubLine] = []
+    for seg in state.transcript:
+        text = (seg.reviewed_text or seg.raw_text).strip()
+        start, end = seg.start_ms, min(seg.end_ms, end_ms)
+        if not text or end <= start or start >= end_ms:
+            continue
+        words = text.split()
+        parts: list[list[str]] = [[]]
+        for w in words:
+            if parts[-1] and len(" ".join(parts[-1] + [w])) > max_chars:
+                parts.append([])
+            parts[-1].append(w)
+        total = sum(len(" ".join(p)) for p in parts) or 1
+        t = start
+        for p in parts:
+            piece = " ".join(p)
+            span = (end - start) * len(piece) / total
+            out.append(SubLine(start=t / 1000.0, end=(t + span) / 1000.0, text=piece))
+            t += span
+    return out
+
+
+def build_preview_spec(db: Session, state: DocState, cfg: DocConfig) -> ProjectSpec:
+    """
+    Cảnh trong cửa sổ dựng → clip ảnh (thiếu ảnh dùng ảnh nền tạm). Audio gốc không đổi tốc độ.
+    Cảnh liền nhau dùng cùng một ảnh đứng yên được gộp thành một clip (bớt input ffmpeg với bài dài).
+    """
+    end_ms = window_ms(state, cfg)
     clips: list[Clip] = []
-    sub_lines: list[SubLine] = []
-    cursor = 0.0
     for shot in state.shots:
         if shot.start_ms >= end_ms:
             break
@@ -239,50 +356,49 @@ def build_preview_spec(db: Session, state: DocState) -> ProjectSpec:
         if shot_end <= shot.start_ms:
             continue
         if shot.selected is None:
-            img = ensure_placeholder_image(db)
-            asset_id = img.id
-            motion = "static"
+            asset_id, motion = ensure_placeholder_image(db).id, "static"
         else:
-            asset_id = shot.selected.asset_id
-            motion = shot.motion
+            asset_id, motion = shot.selected.asset_id, shot.motion
         dur = (shot_end - shot.start_ms) / 1000.0
+        last = clips[-1] if clips else None
+        if last is not None and last.asset == asset_id and last.motion == "static" and motion == "static":
+            clips[-1] = last.model_copy(update={"end": (last.end or 0.0) + dur})
+            continue
         clips.append(Clip(asset=asset_id, start=0.0, end=dur, motion=motion))  # type: ignore[arg-type]
-        text = shot.narration.strip()
-        if not text:
-            # lấy reviewed transcript giao với khoảng shot
-            parts = [
-                s.reviewed_text for s in state.transcript
-                if s.end_ms > shot.start_ms and s.start_ms < shot_end and s.reviewed_text.strip()
-            ]
-            text = " ".join(parts)[:180]
-        if text:
-            sub_lines.append(SubLine(start=cursor, end=cursor + dur, text=text))
-        cursor += dur
     if not clips:
-        img = ensure_placeholder_image(db)
-        clips = [Clip(asset=img.id, start=0.0, end=min(30.0, end_ms / 1000.0), motion="static")]
+        clips = [Clip(asset=ensure_placeholder_image(db).id, start=0.0, end=max(1.0, end_ms / 1000.0))]
+    lines = _sub_lines(state, end_ms, cfg.subtitle_max_chars) if cfg.subtitles else []
     return ProjectSpec(
-        canvas=Canvas(w=1920, h=1080, fps=30, fit="crop"),
+        canvas=Canvas(w=cfg.width, h=cfg.height, fps=cfg.fps, fit=cfg.fit),  # type: ignore[arg-type]
         clips=clips,
-        audio=Audio(
-            original=0.0,
-            tracks=[AudioTrack(asset=state.audio_asset_id, volume=1.0, start=0.0)],
+        audio=Audio(original=0.0, tracks=[AudioTrack(asset=state.audio_asset_id, volume=cfg.voice_volume, start=0.0)]),
+        subtitles=Subtitles(
+            enabled=bool(lines), source="lines", lines=lines,
+            font_size=cfg.subtitle_font_size, margin_v=cfg.subtitle_margin_v,
         ),
-        subtitles=Subtitles(enabled=bool(sub_lines), source="lines", lines=sub_lines, font_size=48, margin_v=80),
-        credit="audio-doc-poc",
+        credit=cfg.credit or None,
+        motion=KenBurns(
+            zoom_max=cfg.kb_zoom_max, zoom_per_sec=cfg.kb_zoom_per_sec,
+            pan_zoom=cfg.kb_pan_zoom, upscale=cfg.kb_upscale,
+        ),
     )
 
 
 def prepare_preview(db: Session, project_id: int, *, require_rights: bool = True) -> dict:
     """
-    Kiểm quyền (nếu bật), ghi ProjectSpec + manifest. Caller (entry/router) xếp flow ``rerender``.
+    Kiểm quyền (nếu bật), ghi ProjectSpec + manifest. Caller (entry) xếp flow ``doc_preview``.
     Không import pipeline — tuân ADR-061 import-linter.
     """
     project, state = get_state(db, project_id)
-    gate = check_export(state)
+    cfg = doc_config.load(db)
+    state.preview_end_ms = window_ms(state, cfg)
+    gate = check_export(state, cfg, end_ms=state.preview_end_ms)
     if require_rights and not gate.ok:
         raise DocError("không render được: " + "; ".join(gate.blockers[:8]))
-    spec = build_preview_spec(db, state)
+    try:
+        spec = build_preview_spec(db, state, cfg)
+    except ValidationError as exc:
+        raise DocError(f"cấu hình dựng không hợp lệ: {exc}") from exc
     project.spec = spec.model_dump(mode="json")
     project.status = ProjectStatus.DRAFT
     project.error = None
@@ -297,17 +413,3 @@ def prepare_preview(db: Session, project_id: int, *, require_rights: bool = True
         "blockers": gate.blockers,
         "manifest": str(manifest),
     }
-
-
-def sync_transcript_from_analysis(db: Session, asset_id: int) -> None:
-    """Sau analyze: nếu DocState đã có thì bổ sung transcript nếu đang trống."""
-    raw = store.analysis(db, asset_id, "doc")
-    if not raw:
-        return
-    state = DocState.model_validate(raw)
-    if state.transcript:
-        return
-    transcript = store.analysis(db, asset_id, "transcript") or {}
-    state.transcript = lines_to_segments(list(transcript.get("lines") or []))
-    state.language = transcript.get("lang") or state.language
-    save_state(db, asset_id, state)

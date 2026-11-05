@@ -1,3 +1,11 @@
+## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet (code xong, chưa commit)
+
+- **System State:** nhánh `feat/xe-tet`, chưa commit. Web_Dashboard + worker Studio (Studio_Heavy/Light đang stopped) chưa có code mới.
+- **Done (proof trong PLAN-157, ADR-065):** 38 key `doc.*` ở /app/settings (ngôn ngữ, thời gian, khung, phụ đề, hiệu ứng, 5 nguồn ảnh + key, từ khóa AI, luật quyền); chia cảnh theo câu Whisper / khoảng lặng (bỏ MU–Roma); chọn ngôn ngữ khi tải lên; tìm ảnh Wikimedia / Openverse / Pexels / Pixabay / Google, bấm chọn, quyền tự điền theo giấy phép; dựng theo đoạn (80 cảnh 1080p: 510 MB RAM). Test doc 24 qua.
+- **Next Action (chủ bot):** duyệt → commit + push; `pm2 restart Web_Dashboard`; bật `Studio_Heavy` `Studio_Light` khi cần dựng; nhập key Pexels/Pixabay/Google nếu muốn dùng.
+
+- **Đang làm:** Audio→Doc: cấu hình `doc.*` trên /app/settings, thời gian theo audio, chọn ngôn ngữ, ảnh internet (Wikimedia / Openverse / Pexels / Pixabay / Google) + AI rút từ khóa. Executor Claude Code, chủ bot duyệt trực tiếp.
+
 ## Phiên 2026-11-05 (audio-doc-review) — PLAN-156: rà soát + sửa POC Audio→Doc của Cursor (chưa commit)
 
 - **Sự cố:** test render POC làm WSL hết RAM → WSL khởi động lại (Cursor «connection failed»). cashback-bot / cashback-zalo tự lên lại 09:30Z (đã có code mới).

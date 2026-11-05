@@ -1,5 +1,6 @@
 """
-ADR-064 / PLAN-156 — bước ``doc_plan``: tạo DocState + StudioProject, dừng chờ người.
+ADR-064 / PLAN-156 / PLAN-157 — bước ``doc_plan``: chia cảnh theo audio, AI rút từ khóa tìm ảnh,
+tạo DocState + StudioProject, dừng chờ người gắn ảnh. Tham số đọc từ ``doc/config.py``.
 """
 from __future__ import annotations
 
@@ -8,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.database.models import StudioAnalysis, StudioAsset, StudioProject, StudioTask
 from app.features.studio import store
 from app.features.studio.contracts import ProjectStatus, StageError, StageResult
-from app.features.studio.doc import seed
+from app.features.studio.doc import config as doc_config
+from app.features.studio.doc import keywords, seed
 from app.features.studio.doc.schema import DocState
 from app.features.studio.doc.service import build_preview_spec, ensure_placeholder_image
 from app.features.studio.spec import ProjectSpec
@@ -21,6 +23,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
     if asset.kind != "audio":
         raise StageError(f"audio_doc cần asset audio, nhận {asset.kind}", retryable=False)
 
+    cfg = doc_config.load(db)
     raw = store.analysis(db, asset.id, "doc")
     if raw:
         state = DocState.model_validate(raw)
@@ -31,7 +34,11 @@ def run(db: Session, task: StudioTask) -> StageResult:
             duration_ms=int(round(float(asset.duration or 0.0) * 1000)),
             transcript_lines=list(transcript.get("lines") or []),
             lang=transcript.get("lang"),
+            cfg=cfg,
         )
+        if cfg.ai_keywords and state.shots:
+            n = keywords.suggest(state.shots, state.language)
+            state.audit.append({"action": "ai_keywords", "shots": n})
         db.add(StudioAnalysis(asset_id=asset.id, kind="doc", data=state.model_dump(mode="json")))
         db.commit()
 
@@ -47,7 +54,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
         )
 
     ensure_placeholder_image(db)
-    spec: ProjectSpec = build_preview_spec(db, state)
+    spec: ProjectSpec = build_preview_spec(db, state, cfg)
     project = StudioProject(
         channel_id=(task.payload or {}).get("channel_id"),
         template_id=None,

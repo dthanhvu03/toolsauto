@@ -97,9 +97,11 @@ def accept_audio_doc(
     *,
     channel_id: int | None = None,
     title: str = "",
+    language: str = "",
 ) -> StudioTask:
     """
     ADR-064: upload MP3/WAV/M4A → flow ``audio_doc`` (intake → analyze → doc_plan).
+    ``language``: mã ngôn ngữ audio cho Whisper (PLAN-157); trống / ``auto`` = tự nhận.
     Không tự render; người gắn ảnh + quyền rồi gọi ``queue_doc_preview``.
     """
     suffix = Path(filename or "").suffix.lower()
@@ -117,11 +119,14 @@ def accept_audio_doc(
     }
     if channel_id is not None:
         payload["channel_id"] = channel_id
+    lang = (language or "").strip().lower()
+    if lang and lang != "auto":
+        payload["language"] = lang[:8]
     return pipeline.start(db, "audio_doc", payload=payload)
 
 
 def queue_doc_preview(db: Session, project_id: int, *, require_rights: bool = True) -> dict:
-    """Chuẩn bị spec documentary rồi xếp ``rerender``."""
+    """Chuẩn bị spec documentary rồi xếp flow ``doc_preview`` (chỉ bước render)."""
     from app.features.studio.doc import service as doc_service
 
     prepared = doc_service.prepare_preview(db, project_id, require_rights=require_rights)

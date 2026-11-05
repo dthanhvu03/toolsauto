@@ -56,6 +56,24 @@ class ImageRef(_Strict):
     rights_status: RightsStatus = RightsStatus.UNKNOWN
     illustration: bool = False
     proof_note: str = ""
+    provider: str = "upload"  # upload | wikimedia | openverse | pexels | pixabay | google
+    license_url: str = ""
+    author: str = ""
+
+
+class Candidate(_Strict):
+    """Một ảnh gợi ý từ internet (PLAN-157) — chưa tải về, chỉ là kết quả tìm."""
+
+    provider: str
+    image_url: str
+    thumb_url: str = ""
+    source_page: str = ""
+    title: str = ""
+    author: str = ""
+    license: str = ""  # đã chuẩn hoá: cc0 | pdm | cc-by | cc-by-sa | cc-by-nc… | pexels | pixabay | unknown
+    license_url: str = ""
+    width: int = 0
+    height: int = 0
 
 
 class Shot(_Strict):
@@ -67,6 +85,9 @@ class Shot(_Strict):
     motion: Motion = "slow_zoom_in"
     selected: ImageRef | None = None
     status: str = "EMPTY"  # EMPTY | HAS_IMAGE | APPROVED
+    keywords: list[str] = Field(default_factory=list)  # từ khóa tìm ảnh (AI đề xuất, sửa được)
+    candidates: list[Candidate] = Field(default_factory=list)  # kết quả tìm gần nhất
+    search_note: str = ""  # nguồn nào lỗi / thiếu key ở lần tìm gần nhất
 
 
 class DocState(_Strict):
@@ -78,9 +99,5 @@ class DocState(_Strict):
     transcript: list[TranscriptSeg] = Field(default_factory=list)
     beats: list[StoryBeat] = Field(default_factory=list)
     shots: list[Shot] = Field(default_factory=list)
-    preview_end_ms: int = 60_000  # POC: preview tối đa 60s
+    preview_end_ms: int = 0  # mốc cuối bản dựng (ms); ghi lại từ cấu hình doc.preview_sec mỗi lần dựng
     audit: list[dict] = Field(default_factory=list)
-
-
-# Trạng thái quyền cho phép đưa vào bản xuất / preview phát hành
-EXPORTABLE_RIGHTS = frozenset({RightsStatus.RIGHTS_VERIFIED, RightsStatus.APPROVED})

@@ -107,20 +107,21 @@ def _ken_burns(src: str, out: str, i: int, spec: ProjectSpec, dur: float) -> str
     motion = spec.clips[i].motion
     if motion not in _MOTIONS:
         return _fit_chain(src, out, i, spec)
-    c = spec.canvas
+    c, kb = spec.canvas, spec.motion
     frames = max(1, int(round(dur * c.fps)))
-    # Phóng ảnh lên 2× khung rồi zoompan để tránh vỡ pixel khi zoom.
-    sw, sh = c.w * 2, c.h * 2
+    # Phóng ảnh lên ``upscale`` × khung rồi zoompan để tránh vỡ pixel khi zoom (số chẵn cho yuv420p).
+    sw, sh = (int(round(c.w * kb.upscale / 2)) * 2, int(round(c.h * kb.upscale / 2)) * 2)
+    step, top, pan = f"{kb.zoom_per_sec / c.fps:.6g}", f"{kb.zoom_max:.6g}", f"{kb.pan_zoom:.6g}"
     if motion == "slow_zoom_in":
-        z, x, y = "min(1+0.0015*on,1.2)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        z, x, y = f"min(1+{step}*on,{top})", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
     elif motion == "slow_zoom_out":
-        z, x, y = "if(eq(on,1),1.2,max(1.2-0.0015*on,1))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        z, x, y = f"if(eq(on,1),{top},max({top}-{step}*on,1))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
     elif motion == "pan_left":
-        z = "1.15"
+        z = pan
         x = f"(iw-iw/zoom)*(1-on/{frames})"
         y = "ih/2-(ih/zoom/2)"
     else:  # pan_right
-        z = "1.15"
+        z = pan
         x = f"(iw-iw/zoom)*(on/{frames})"
         y = "ih/2-(ih/zoom/2)"
     flip = ""

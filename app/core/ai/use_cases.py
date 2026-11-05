@@ -32,6 +32,7 @@ class AIPurpose:
     SPLIT_PLAN = "split_plan"  # ADR-041: chọn chỗ cắt video dài
     FIRST_COMMENT = "first_comment"
     DUB_TRANSLATE = "dub_translate"  # ADR-060: dịch lời thoại để thuyết minh
+    DOC_KEYWORDS = "doc_keywords"  # PLAN-157: rút từ khóa tìm ảnh cho từng cảnh Audio→Doc
     GENERIC = "generic"
 
 

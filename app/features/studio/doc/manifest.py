@@ -38,8 +38,11 @@ def write_manifest(state: DocState, *, project_id: int, output_uri: str | None =
             credits.append({
                 "shot_id": shot.shot_id,
                 "asset_id": shot.selected.asset_id,
+                "provider": shot.selected.provider,
+                "author": shot.selected.author,
                 "credit": shot.selected.credit,
                 "license": shot.selected.license,
+                "license_url": shot.selected.license_url,
                 "source_page": shot.selected.source_page,
                 "seconds": f"{shot.start_ms / 1000:.2f}-{shot.end_ms / 1000:.2f}",
             })

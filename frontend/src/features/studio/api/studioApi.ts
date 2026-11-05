@@ -70,11 +70,27 @@ export function uploadFile(
 }
 
 /** ADR-064 Audio → Documentary POC */
-export const uploadDocAudio = (file: File, opts: { channelId?: number | null; title?: string } = {}) => {
+export type DocConfig = {
+  default_language: string;
+  preview_sec: number;
+  canvas: string;
+  sources: string[];
+  ai_keywords: boolean;
+  rights_ok: string;
+  rights_need_proof: boolean;
+  languages: { code: string; label: string }[];
+  settings_url: string;
+};
+export const fetchDocConfig = () => getJson<DocConfig>(`${BASE}/doc/config`);
+export const uploadDocAudio = (
+  file: File,
+  opts: { channelId?: number | null; title?: string; language?: string } = {}
+) => {
   const form = new FormData();
   form.append("file", file);
   if (opts.channelId) form.append("channel_id", String(opts.channelId));
   if (opts.title) form.append("title", opts.title);
+  if (opts.language) form.append("language", opts.language);
   return sendForm<{ ok: boolean; task_id: number; flow: string }>(`${BASE}/doc/upload`, form);
 };
 export const fetchDocProject = (id: number) => getJson<Record<string, unknown>>(`${BASE}/doc/projects/${id}`);
@@ -103,6 +119,18 @@ export const attachDocImage = (
   form.append("proof_note", meta.proof_note || "");
   return sendForm<Record<string, unknown>>(`${BASE}/doc/projects/${projectId}/shots/${encodeURIComponent(shotId)}/image`, form);
 };
+export const searchDocImages = (projectId: number, shotId: string, keywords: string[]) =>
+  sendJson<Record<string, unknown>>(
+    `${BASE}/doc/projects/${projectId}/shots/${encodeURIComponent(shotId)}/search`,
+    "POST",
+    { keywords }
+  );
+export const pickDocImage = (projectId: number, shotId: string, index: number) =>
+  sendJson<Record<string, unknown>>(
+    `${BASE}/doc/projects/${projectId}/shots/${encodeURIComponent(shotId)}/pick`,
+    "POST",
+    { index }
+  );
 export const requestDocPreview = (id: number, requireRights = true) =>
   sendJson<{ ok: boolean; task_id: number; blockers: string[] }>(`${BASE}/doc/projects/${id}/preview`, "POST", {
     require_rights: requireRights,

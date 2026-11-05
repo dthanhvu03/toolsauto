@@ -1,91 +1,29 @@
-"""Seed beats/shots theo BRD §9.2 (MU–Roma). Mốc ms cắt theo duration thực tế của audio."""
+"""
+Chia audio thành đoạn ý (beat) và cảnh (shot) theo đúng audio tải lên (PLAN-157).
+
+- Cảnh bám câu Whisper: gộp câu liền nhau tới gần ``shot_sec``; câu dài hơn ``shot_max_sec`` cắt đều;
+  cảnh ngắn hơn ``shot_min_sec`` gộp vào cảnh bên cạnh. Dòng thời gian liền mạch: cảnh đầu từ 0, cảnh cuối tới hết audio,
+  khoảng không lời nằm trong cảnh đứng trước.
+- Đoạn ý mới khi hai câu cách nhau ≥ ``beat_pause_sec`` hoặc đoạn ý đã dài ≥ ``beat_max_sec``.
+- Audio không có lời: chia đều theo ``shot_sec``.
+Mọi ngưỡng đọc từ ``DocConfig`` (Cài đặt vận hành → Studio — Audio→Doc).
+"""
 from __future__ import annotations
 
-from app.features.studio.doc.schema import (
-    DocState,
-    FactStatus,
-    Shot,
-    StoryBeat,
-    TranscriptSeg,
-)
+from dataclasses import dataclass, field
 
-# (start_ms, end_ms, summary, entities, fact_status, image_hint, motion)
-_BEATS: list[tuple[int, int, str, list[str], FactStatus, str, str]] = [
-    (0, 59_000, "Hook: đêm ngược dòng, áp lực Carrick",
-     ["Manchester United", "Carrick", "Old Trafford"], FactStatus.UNVERIFIED,
-     "Old Trafford đêm thi đấu, Carrick, cầu thủ MU", "slow_zoom_in"),
-    (59_000, 79_000, "Giới thiệu kênh và CTA",
-     [], FactStatus.OPINION, "Ảnh rộng sân/khán đài hoặc nhận diện kênh", "static"),
-    (79_000, 177_000, "MU bị dẫn 0–2, tâm lý và bối cảnh",
-     ["Carrick", "Manchester United", "AS Roma"], FactStatus.UNVERIFIED,
-     "Carrick đường biên, cầu thủ MU cuối hiệp một", "pan_left"),
-    (177_000, 279_000, "Roma ghi hai bàn, lỗi phòng ngự",
-     ["Matías Soulé", "Donyell Malen", "AS Roma"], FactStatus.UNVERIFIED,
-     "Soulé 11', Malen pen 17'", "slow_zoom_in"),
-    (279_000, 397_000, "HLV điều chỉnh, nhân sự, pressing",
-     ["Carrick", "Matheus Cunha", "Bruno Fernandes"], FactStatus.OPINION,
-     "Carrick, Cunha, Bruno, toàn cảnh đội hình", "pan_right"),
-    (397_000, 468_000, "Penalty Bruno, Cunha gỡ hòa và ấn định 3–2",
-     ["Bruno Fernandes", "Matheus Cunha"], FactStatus.UNVERIFIED,
-     "Bruno pen 58', Cunha 83' và 86'", "slow_zoom_in"),
-    (468_000, 539_000, "Cunha thẻ đỏ; ý nghĩa chiến thắng",
-     ["Matheus Cunha", "Carrick"], FactStatus.UNVERIFIED,
-     "Cunha trong trận, Carrick, đội bóng", "slow_zoom_out"),
-    (539_000, 564_036, "Câu hỏi khán giả, CTA và kết",
-     ["Carrick", "Old Trafford"], FactStatus.OPINION,
-     "Carrick, toàn cảnh Old Trafford", "static"),
-]
+from app.features.studio.doc.config import DocConfig
+from app.features.studio.doc.schema import DocState, FactStatus, Shot, StoryBeat, TranscriptSeg
 
-_SHOT_TARGET_MS = 7_000  # ~4–10s; mặc định 7s
+SUMMARY_CHARS = 120
 
 
-def _clamp_beats(duration_ms: int) -> list[StoryBeat]:
-    out: list[StoryBeat] = []
-    for i, (a, b, summary, entities, fact, hint, _motion) in enumerate(_BEATS, start=1):
-        start = min(a, duration_ms)
-        end = min(b, duration_ms)
-        if end <= start:
-            continue
-        out.append(StoryBeat(
-            beat_id=f"BEAT-{i:02d}",
-            start_ms=start,
-            end_ms=end,
-            summary=summary,
-            entities=entities,
-            fact_status=fact,
-            image_hint=hint,
-        ))
-    if not out and duration_ms > 0:
-        out.append(StoryBeat(
-            beat_id="BEAT-01", start_ms=0, end_ms=duration_ms,
-            summary="Toàn bộ audio", fact_status=FactStatus.UNVERIFIED,
-        ))
-    return out
-
-
-def _shots_for_beats(beats: list[StoryBeat]) -> list[Shot]:
-    shots: list[Shot] = []
-    n = 0
-    motions = ["slow_zoom_in", "pan_left", "slow_zoom_out", "pan_right", "static"]
-    for beat in beats:
-        pos = beat.start_ms
-        local = 0
-        while pos < beat.end_ms:
-            local += 1
-            n += 1
-            end = min(pos + _SHOT_TARGET_MS, beat.end_ms)
-            if end - pos < 1_500 and local > 1:
-                break
-            shots.append(Shot(
-                shot_id=f"SHOT-{beat.beat_id[-2:]}-{local:02d}",
-                beat_id=beat.beat_id,
-                start_ms=pos,
-                end_ms=end,
-                narration=beat.summary if local == 1 else "",
-                motion=motions[(n - 1) % len(motions)],  # type: ignore[arg-type]
-            ))
-            pos = end
-    return shots
+@dataclass
+class _Group:
+    start: int
+    end: int
+    texts: list[str] = field(default_factory=list)
+    new_beat: bool = False
 
 
 def lines_to_segments(lines: list[dict]) -> list[TranscriptSeg]:
@@ -96,10 +34,134 @@ def lines_to_segments(lines: list[dict]) -> list[TranscriptSeg]:
         end_ms = int(round(float(line.get("end") or 0) * 1000))
         if end_ms < start_ms:
             end_ms = start_ms
-        segs.append(TranscriptSeg(
-            start_ms=start_ms, end_ms=end_ms, raw_text=text, reviewed_text=text,
-        ))
+        segs.append(TranscriptSeg(start_ms=start_ms, end_ms=end_ms, raw_text=text, reviewed_text=text))
     return segs
+
+
+def _units(segs: list[TranscriptSeg], duration_ms: int, max_ms: int) -> list[tuple[int, int, str]]:
+    """Câu có lời, cắt trong [0, duration]; câu dài hơn ``max_ms`` chia đều (chữ chia theo số từ)."""
+    out: list[tuple[int, int, str]] = []
+    for seg in sorted(segs, key=lambda x: x.start_ms):
+        s, e = max(0, seg.start_ms), min(duration_ms, seg.end_ms)
+        text = (seg.reviewed_text or seg.raw_text).strip()
+        if e <= s or not text:
+            continue
+        n = max(1, -(-(e - s) // max_ms))  # ceil
+        words = text.split()
+        for k in range(n):
+            ps, pe = s + (e - s) * k // n, s + (e - s) * (k + 1) // n
+            chunk = " ".join(words[len(words) * k // n: len(words) * (k + 1) // n])
+            out.append((ps, pe, chunk))
+    return out
+
+
+def _group(units: list[tuple[int, int, str]], cfg: DocConfig) -> list[_Group]:
+    target, max_ms = int(cfg.shot_sec * 1000), int(cfg.shot_max_sec * 1000)
+    pause_ms, beat_max = int(cfg.beat_pause_sec * 1000), int(cfg.beat_max_sec * 1000)
+    groups: list[_Group] = []
+    cur: _Group | None = None
+    beat_start = 0
+    prev_end: int | None = None
+    for s, e, text in units:
+        if cur is None:
+            cur = _Group(start=s, end=e, texts=[text], new_beat=True)
+        else:
+            new_beat = (prev_end is not None and s - prev_end >= pause_ms) or s - beat_start >= beat_max
+            if new_beat or e - cur.start > max_ms or cur.end - cur.start >= target:
+                groups.append(cur)
+                cur = _Group(start=s, end=e, texts=[text], new_beat=new_beat)
+                if new_beat:
+                    beat_start = s
+            else:
+                cur.end = e
+                cur.texts.append(text)
+        prev_end = e
+    if cur is not None:
+        groups.append(cur)
+    return groups
+
+
+def _timeline(groups: list[_Group], duration_ms: int, cfg: DocConfig) -> list[_Group]:
+    """Nối liền: mỗi cảnh kéo tới đầu cảnh sau; gộp cảnh quá ngắn; cắt cảnh quá dài (khoảng lặng dài)."""
+    min_ms, max_ms = int(cfg.shot_min_sec * 1000), int(cfg.shot_max_sec * 1000)
+    if not groups:
+        return []
+    groups[0].start = 0
+    for a, b in zip(groups, groups[1:]):
+        a.end = b.start
+    groups[-1].end = duration_ms
+
+    merged: list[_Group] = []
+    for g in groups:
+        if merged and (g.end - g.start < min_ms or merged[-1].end - merged[-1].start < min_ms) and not g.new_beat:
+            merged[-1].end = g.end
+            merged[-1].texts += g.texts
+        else:
+            merged.append(g)
+    if len(merged) > 1 and merged[-1].end - merged[-1].start < min_ms:  # đuôi ngắn → gộp vào cảnh trước
+        tail = merged.pop()
+        merged[-1].end = tail.end
+        merged[-1].texts += tail.texts
+
+    out: list[_Group] = []
+    for g in merged:
+        span = g.end - g.start
+        n = max(1, -(-span // max_ms)) if span > max_ms else 1
+        for k in range(n):
+            out.append(_Group(
+                start=g.start + span * k // n,
+                end=g.start + span * (k + 1) // n,
+                texts=g.texts if k == 0 else [],
+                new_beat=g.new_beat and k == 0,
+            ))
+    return out
+
+
+def _even(duration_ms: int, cfg: DocConfig) -> list[_Group]:
+    step = max(1, int(cfg.shot_sec * 1000))
+    beat_ms = max(step, int(cfg.beat_max_sec * 1000))
+    out = [_Group(start=s, end=min(s + step, duration_ms), new_beat=(s % beat_ms) < step)
+           for s in range(0, duration_ms, step)]
+    if len(out) > 1 and out[-1].end - out[-1].start < int(cfg.shot_min_sec * 1000):
+        out[-2].end = out.pop().end
+    return out
+
+
+def plan(duration_ms: int, segs: list[TranscriptSeg], cfg: DocConfig) -> tuple[list[StoryBeat], list[Shot]]:
+    if duration_ms <= 0:
+        return [], []
+    units = _units(segs, duration_ms, max(1, int(cfg.shot_max_sec * 1000)))
+    groups = _timeline(_group(units, cfg), duration_ms, cfg) if units else _even(duration_ms, cfg)
+    if groups:
+        groups[0].new_beat = True
+
+    beats: list[StoryBeat] = []
+    shots: list[Shot] = []
+    local = 0
+    motions = cfg.motions or ("static",)
+    for g in groups:
+        if g.new_beat:
+            beats.append(StoryBeat(
+                beat_id=f"BEAT-{len(beats) + 1:02d}", start_ms=g.start, end_ms=g.end,
+                fact_status=FactStatus.UNVERIFIED,
+            ))
+            local = 0
+        beat = beats[-1]
+        beat.end_ms = g.end
+        local += 1
+        text = " ".join(t for t in g.texts if t).strip()
+        shots.append(Shot(
+            shot_id=f"SHOT-{beat.beat_id[-2:]}-{local:02d}",
+            beat_id=beat.beat_id,
+            start_ms=g.start,
+            end_ms=g.end,
+            narration=text,
+            motion=motions[(len(shots)) % len(motions)],  # type: ignore[arg-type]
+        ))
+    for beat in beats:
+        text = " ".join(s.narration for s in shots if s.beat_id == beat.beat_id and s.narration)
+        beat.summary = text[:SUMMARY_CHARS]
+    return beats, shots
 
 
 def build_initial_state(
@@ -108,16 +170,18 @@ def build_initial_state(
     duration_ms: int,
     transcript_lines: list[dict],
     lang: str | None,
+    cfg: DocConfig,
 ) -> DocState:
     duration_ms = max(0, int(duration_ms))
-    beats = _clamp_beats(duration_ms)
+    segs = lines_to_segments(transcript_lines)
+    beats, shots = plan(duration_ms, segs, cfg)
     return DocState(
         audio_asset_id=audio_asset_id,
         duration_ms=duration_ms,
         language=lang,
-        transcript=lines_to_segments(transcript_lines),
+        transcript=segs,
         beats=beats,
-        shots=_shots_for_beats(beats),
-        preview_end_ms=min(60_000, duration_ms or 60_000),
-        audit=[{"action": "seed", "beats": len(beats)}],
+        shots=shots,
+        preview_end_ms=duration_ms if cfg.preview_ms <= 0 else min(cfg.preview_ms, duration_ms),
+        audit=[{"action": "seed", "beats": len(beats), "shots": len(shots)}],
     )
