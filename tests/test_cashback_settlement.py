@@ -479,7 +479,7 @@ class TestReimportRejected:
 
     def test_chung_tu_chua_bi_go_van_bao_trung(self, world):
         bot, engine = world
-        batch = _matched(bot, engine)
+        _matched(bot, engine)
         other = engine.create_batch("2026-11", "test")
         with pytest.raises(EvidenceError, match="duplicate_evidence"):
             engine.import_document(other, _bank(period="2026-11"), "test")
