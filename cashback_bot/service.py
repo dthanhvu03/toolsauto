@@ -71,7 +71,7 @@ from cashback_bot.product_data import ProductDataClient, ProductDataError, quote
 from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
 from cashback_bot.shopee_url import food_url, is_shopee_food_link, parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
-from cashback_bot.wallet import BANKS, BankAccount, Split, Wallet, parse_bank_text
+from cashback_bot.wallet import BANKS, BankAccount, Split, Transition, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
 
@@ -499,17 +499,37 @@ class CashbackService:
             )
 
     def _referral_sync(self, moment: datetime) -> None:
-        """PLAN-155: dòng thưởng mời bạn theo đơn của người được mời; báo người mời."""
+        """PLAN-155: dòng thưởng mời bạn theo đơn của người được mời; báo người mời, báo admin khoản bị trừ."""
         if not self.settings.referral_enabled:
             return
         try:
             with self.repo.connect() as conn:
-                for item in referral.sync(conn, moment):
-                    enqueue_event(conn, event_key=f"ref:{item.kind}:{item.conversion_id}", event_type="REFERRAL",
-                                  chat_id=item.user_id, message_html=invite_notice(item.kind, item.reward_vnd),
+                blocked = referral.block_same_bank(conn, moment)
+                notices = referral.sync(conn, moment)
+                for item in notices:
+                    enqueue_event(conn, event_key=f"ref:{item.kind}:{item.conversion_id}:{item.reward_vnd}",
+                                  event_type="REFERRAL", chat_id=item.user_id,
+                                  message_html=invite_notice(item.kind, item.reward_vnd),
                                   audience="customer", category="wallet")
+                # Thưởng đang giữ cho yêu cầu rút mà vừa bị huỷ / trừ: chuyển cần kiểm tra ngay trong lượt này.
+                payouts.flag_cancelled_reservations(conn, moment)
         except sqlite3.Error:
             logger.exception("[Cashback] cập nhật thưởng mời bạn thất bại")
+            return
+        for invitee, referrer in blocked:
+            logger.warning("[Cashback] mời bạn: khoá lượt mời %s ← %s (trùng tài khoản ngân hàng)", invitee, referrer)
+            if self.settings.admin_chat_id is not None:
+                self.repo.enqueue_admin_event(
+                    event_key=f"ref:block:{invitee}", event_type="REFERRAL_BLOCK", chat_id=self.settings.admin_chat_id,
+                    message_html=f"⚠️ <b>Mời bạn: khoá lượt mời</b>\n\nNgười mời <code>{referrer}</code> và người được mời "
+                                 f"<code>{invitee}</code> từng khai cùng tài khoản ngân hàng. Mọi thưởng của lượt "
+                                 "mời này đã huỷ.")
+        for item in notices:
+            if self.admin_notifier and (item.kind == "clawback" or (item.kind == "cancelled"
+                                                                     and item.previous == "available")):
+                self.admin_notifier.notify_wallet_clawback(Transition(
+                    item.conversion_id, item.user_id, item.previous, "clawback" if item.kind == "clawback" else "cancelled",
+                    referral.ITEM_NAME, -item.reward_vnd, None, None))
 
     def _invite_code(self, user_id: int, code: str, text: str, now: datetime) -> BotReply:
         """Khách gửi mã mời (`/start ref_MÃ` hoặc `ref MÃ`). Gắn được thì báo cả người mời."""

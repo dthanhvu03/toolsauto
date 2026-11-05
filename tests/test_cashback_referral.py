@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from cashback_bot import membership, money_flow, referral
+from cashback_bot import insights, membership, money_flow, referral
+from unittest.mock import MagicMock
 from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_VERSION
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 from tests.test_cashback_wallet import _financially_ready, _order
@@ -200,3 +201,86 @@ def test_dieu_khoan_v5_co_muc_moi_ban():
     assert DRAFT_VERSION == "V5"
     body = {key: text for key, _label, text in DRAFT_SECTIONS}["moi_ban"]
     assert "10% hoa hồng" in body and "6 tháng" in body and "một tầng" in body.lower() and len(body) < 3_500
+
+
+# --- Vá sau rà soát (2026-11-05) -----------------------------------------------------------------------
+
+
+def _ready(tmp_path, **overrides):
+    bot = _bot(tmp_path, **overrides)
+    _financially_ready(bot, users=(REFERRER, FRIEND))
+    bot.wallet.set_enabled(True)
+    bot.wallet.set_hold_days(0)
+    bot.handle_text(FRIEND, "ban", f"ref {_code(bot)}", update_id=1, now=NOW)
+    return bot, _sub(bot, FRIEND, 2)
+
+
+def test_dong_thuong_khong_lo_mon_ban_be_mua(tmp_path):
+    bot, sub = _ready(tmp_path)
+    _order(bot, sub, commission=10_000)
+    bot.refresh_wallet(datetime(2026, 10, 21, 10, tzinfo=timezone.utc))
+    names = [row["item_name"] for row in bot.wallet.entries(REFERRER)]
+    assert names == ["🤝 Thưởng mời bạn"]
+
+
+def test_trung_tai_khoan_ngan_hang_thi_khoa_va_huy_thuong(tmp_path):
+    bot, sub = _ready(tmp_path, admin_chat_id=ADMIN)
+    _order(bot, sub, commission=10_000)
+    bot.refresh_wallet(datetime(2026, 10, 21, 10, tzinfo=timezone.utc))
+    with bot.repo.connect() as conn:
+        for user in (REFERRER, FRIEND):
+            conn.execute("INSERT INTO bank_account_history (telegram_user_id, bank_code, account_last4, account_sha, "
+                         "account_name, action, created_at) VALUES (?, 'VCB', '1234', 'same-sha', 'A', 'add', ?)",
+                         (user, referral._stamp(NOW)))
+    bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
+    assert _ref_rows(bot)[0]["status"] == "cancelled"
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT blocked_reason FROM referrals").fetchone()[0] == "same_bank"
+        assert conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'REFERRAL_BLOCK'").fetchone()[0] == 1
+    _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z", approved=True)
+    bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+    assert _ref_rows(bot)[0]["status"] == "cancelled" and bot.wallet.balance(REFERRER).withdrawable_vnd == 0
+
+
+def test_don_goc_huy_khi_thuong_dang_giu_cho_yeu_cau_rut_thi_gan_co_ngay(tmp_path):
+    bot, sub = _ready(tmp_path)
+    bot.admin_notifier = MagicMock()
+    _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z", approved=True)
+    bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+    with bot.repo.connect() as conn:
+        payout = conn.execute(
+            "INSERT INTO cashback_payouts (telegram_user_id, amount_vnd, status, bank_code, account_no, account_name, "
+            "created_at) VALUES (?, 1000, 'requested', 'VCB', '0001', 'A', '2026-10-22T02:00:00Z')", (REFERRER,)).lastrowid
+        conn.execute("INSERT INTO payout_allocations (payout_id, conversion_id, amount_vnd, created_at) "
+                     "VALUES (?, 'o1:ref', 1000, '2026-10-22T02:00:00Z')", (payout,))
+    _order(bot, sub, status="CANCELLED", complete="2026-10-22T00:00:00Z")
+    bot.refresh_wallet(datetime(2026, 10, 23, tzinfo=timezone.utc))
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT status FROM cashback_payouts WHERE id = ?", (payout,)).fetchone()[0] == "needs_review"
+    calls = [c.args[0] for c in bot.admin_notifier.notify_wallet_clawback.call_args_list]
+    assert any(t.conversion_id == "o1:ref" and t.status == "cancelled" for t in calls)
+
+
+def test_shopee_giam_hoa_hong_sau_khi_vao_vi_thi_tru_thuong(tmp_path):
+    bot, sub = _ready(tmp_path)
+    bot.admin_notifier = MagicMock()
+    _order(bot, sub, status="COMPLETED", commission=10_000, complete="2026-10-22T00:00:00Z", approved=True)
+    bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+    _order(bot, sub, status="COMPLETED", commission=6_000, complete="2026-10-22T00:00:00Z", approved=True)
+    bot.refresh_wallet(datetime(2026, 10, 23, tzinfo=timezone.utc))
+    rows = {r["conversion_id"]: r["cashback_vnd"] for r in _ref_rows(bot)}
+    assert rows == {"o1:ref": 1_000, "o1:ref:clawback:1": -400}
+    assert bot.wallet.balance(REFERRER).withdrawable_vnd == 600
+    bot.refresh_wallet(datetime(2026, 10, 24, tzinfo=timezone.utc))
+    assert len(_ref_rows(bot)) == 2  # không trừ hai lần
+    with bot.repo.connect() as conn:
+        assert money_flow._entry_totals(conn)["o1"] == 4_200 + 600  # 70% × 6.000 + thưởng còn lại
+
+
+def test_thong_ke_khong_dem_dong_thuong_la_don(tmp_path):
+    bot, sub = _ready(tmp_path)
+    _order(bot, sub, commission=10_000)
+    bot.refresh_wallet(datetime(2026, 10, 21, 10, tzinfo=timezone.utc))
+    with bot.repo.connect() as conn:
+        money = insights.money(conn, datetime(2026, 10, 1, tzinfo=timezone.utc), 30)
+    assert (money.orders, money.customers, money.cashback) == (1, 1, 8_000)

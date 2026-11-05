@@ -257,6 +257,9 @@ def invite_notice(kind: str, reward_vnd: int) -> str:
                 "vào ví khi Shopee trả hoa hồng của đơn. Xem ở 🤝 Mời bạn.")
     if kind == "paid":
         return f"🤝 Thưởng mời bạn <b>{format_vnd(reward_vnd)}</b> đã vào 👛 Ví của bạn."
+    if kind == "clawback":
+        return (f"🤝 Shopee giảm hoa hồng một đơn của bạn bè nên thưởng mời bạn được trừ "
+                f"<b>{format_vnd(reward_vnd)}</b> trong 👛 Ví.")
     return f"🤝 Một đơn của bạn bè đã huỷ hoặc trả hàng nên khoản thưởng {format_vnd(reward_vnd)} không còn."
 
 
