@@ -18,8 +18,8 @@ from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import (
     DEALS_ANNOUNCE,
     DEALS_ANNOUNCE_KEYBOARD,
-    MEMBER_ANNOUNCE,
-    MEMBER_ANNOUNCE_KEYBOARD,
+    INVITE_ANNOUNCE,
+    INVITE_ANNOUNCE_KEYBOARD,
     WALLET_ANNOUNCE,
     WALLET_ANNOUNCE_KEYBOARD,
     WATCH_ANNOUNCE,
@@ -38,14 +38,11 @@ ANNOUNCEMENTS: dict[str, tuple[str, str, Keyboard]] = {
     "deals-v1": ("Deal hời 20:08 · báo giảm giá · TikTok Shop", DEALS_ANNOUNCE, DEALS_ANNOUNCE_KEYBOARD),
     "wallet-v1": ("Ví hoàn tiền xem trước · điều khoản V3", WALLET_ANNOUNCE, WALLET_ANNOUNCE_KEYBOARD),
     "watch-v1": ("Theo dõi giá · deal gửi liền · ShopeeFood sắp có", WATCH_ANNOUNCE, WATCH_ANNOUNCE_KEYBOARD),
-    "member-v1": ("Hạng Vàng tới 31/12 · mời bạn · rút tiền đã mở", MEMBER_ANNOUNCE, MEMBER_ANNOUNCE_KEYBOARD),
+    "invite-v1": ("Mời bạn bè nhận thưởng mỗi đơn", INVITE_ANNOUNCE, INVITE_ANNOUNCE_KEYBOARD),
 }
 
-# Tin chỉ đúng với một nhóm khách: mã → điều kiện SQL thêm trên telegram_user_id. «member-v1» nói «bạn đang ở hạng
-# Vàng» nên chỉ gửi khách cũ được xếp Vàng lúc bật hạng (khách mới sau đó là Đồng).
-AUDIENCE_SQL: dict[str, str] = {
-    "member-v1": "telegram_user_id IN (SELECT user_id FROM member_ranks WHERE rank_code = 'GOLD' AND reason = 'khach_cu')",
-}
+# Tin chỉ đúng với một nhóm khách: mã → điều kiện SQL thêm trên telegram_user_id (chưa tin nào cần).
+AUDIENCE_SQL: dict[str, str] = {}
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
@@ -57,8 +54,6 @@ def history_line(before: dict, after: dict) -> str:
 
 def recipients(conn: sqlite3.Connection, now: datetime, key: str | None = None) -> list[int]:
     extra = AUDIENCE_SQL.get(key or "")
-    if extra and not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'member_ranks'").fetchone():
-        return []
     users = [int(r[0]) for r in conn.execute(
         "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created'"
         + (f" AND {extra}" if extra else "") + " ORDER BY telegram_user_id")]

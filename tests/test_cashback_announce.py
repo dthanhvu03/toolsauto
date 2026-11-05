@@ -67,17 +67,15 @@ def test_tin_gioi_thieu_theo_doi_gia_nut_mo_dung_man(tmp_path):
     assert choices == ("u:dh", "u:pw:l") and "Gõ deal" in text and "theodoi" in text and "/theodoi" not in text
 
 
-def test_tin_hang_chi_gui_khach_cu_hang_vang(tmp_path):
-    """member-v1 nói «bạn đang ở hạng Vàng»: khách mới (Đồng) sau lúc bật hạng không nhận."""
-    from cashback_bot import membership
-    from cashback_bot.admin.handlers.announce import recipients
+
+def test_tin_moi_ban_gui_moi_khach_da_tao_link(tmp_path):
+    from cashback_bot.admin.handlers.announce import ANNOUNCEMENTS, recipients
     from tests.test_cashback_bot import NOW, FakeClient, payload, service
 
-    old = service(tmp_path, FakeClient(payload()), customer_access_enabled=True)
-    old.handle_text(111, "cu", "https://shopee.vn/product/9/8", update_id=1, now=NOW)
     bot = service(tmp_path, FakeClient(payload()), customer_access_enabled=True, membership_enabled=True)
-    bot.handle_text(222, "moi", "https://shopee.vn/product/9/8", update_id=2, now=NOW)
+    for user, update in ((111, 1), (222, 2)):
+        bot.handle_text(user, "u", "https://shopee.vn/product/9/8", update_id=update, now=NOW)
     with bot.repo.connect() as conn:
-        assert membership.rank_of(conn, 222) == "BRONZE"
-        assert recipients(conn, NOW, "member-v1") == [111]
-        assert sorted(recipients(conn, NOW, "deals-v1")) == [111, 222]
+        assert sorted(recipients(conn, NOW, "invite-v1")) == [111, 222]
+    text = ANNOUNCEMENTS["invite-v1"][1]
+    assert "10% hoa hồng" in text and "6 tháng" in text and "hạng" not in text.lower()
