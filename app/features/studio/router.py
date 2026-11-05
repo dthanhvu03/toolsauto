@@ -25,6 +25,7 @@ from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
 from app.core.media import tts
 from app.features.studio import editor, entry, progress, setup, source, store
+from app.features.studio.doc import service as doc_service
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
 
@@ -391,4 +392,90 @@ def update_template(template_id: int, body: dict, db: Session = Depends(get_db))
     try:
         return setup.template_row(setup.save_template(db, body, template_id))
     except setup.SetupError as exc:
+        raise _bad(exc) from exc
+
+
+# ── Audio → Documentary (ADR-064 / PLAN-156) ─────────────────────────────────
+
+
+@router.post("/doc/upload")
+def doc_upload(
+    file: UploadFile = File(...),
+    channel_id: int | None = Form(None),
+    title: str = Form(""),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Upload audio thuyết minh → flow ``audio_doc``."""
+    try:
+        task = entry.accept_audio_doc(db, file.file, file.filename or "", channel_id=channel_id, title=title)
+    except ValueError as exc:
+        raise _bad(exc) from exc
+    return {"ok": True, "task_id": task.id, "flow": task.flow}
+
+
+@router.get("/doc/projects/{project_id}")
+def doc_detail(project_id: int, db: Session = Depends(get_db)) -> dict:
+    try:
+        return doc_service.detail(db, project_id)
+    except doc_service.DocError as exc:
+        raise HTTPException(status_code=404 if "không có" in str(exc) else 400, detail=str(exc)) from exc
+
+
+@router.put("/doc/projects/{project_id}/transcript")
+def doc_transcript(project_id: int, body: dict, db: Session = Depends(get_db)) -> dict:
+    try:
+        return doc_service.update_transcript(db, project_id, list(body.get("segments") or []))
+    except doc_service.DocError as exc:
+        raise _bad(exc) from exc
+
+
+@router.patch("/doc/projects/{project_id}/shots/{shot_id}")
+def doc_patch_shot(project_id: int, shot_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    try:
+        return doc_service.update_shot(db, project_id, shot_id, body)
+    except doc_service.DocError as exc:
+        raise _bad(exc) from exc
+
+
+@router.post("/doc/projects/{project_id}/shots/{shot_id}/image")
+async def doc_attach_image(
+    project_id: int,
+    shot_id: str,
+    file: UploadFile = File(...),
+    source_page: str = Form(""),
+    credit: str = Form(""),
+    license: str = Form(""),
+    rights_status: str = Form("RIGHTS_UNKNOWN"),
+    illustration: bool = Form(False),
+    proof_note: str = Form(""),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        return doc_service.attach_image(
+            db, project_id, shot_id, file.file, file.filename or "image.jpg",
+            source_page=source_page, credit=credit, license=license,
+            rights_status=rights_status, illustration=illustration, proof_note=proof_note,
+        )
+    except doc_service.DocError as exc:
+        raise _bad(exc) from exc
+
+
+@router.patch("/doc/projects/{project_id}/shots/{shot_id}/rights")
+def doc_shot_rights(project_id: int, shot_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    try:
+        return doc_service.set_shot_rights(db, project_id, shot_id, body)
+    except doc_service.DocError as exc:
+        raise _bad(exc) from exc
+
+
+@router.post("/doc/projects/{project_id}/preview")
+def doc_preview(project_id: int, body: dict | None = None, db: Session = Depends(get_db)) -> dict:
+    """
+    Dựng preview. Mặc định ``require_rights=true`` (khóa nếu RIGHTS_UNKNOWN).
+    Body ``{"require_rights": false}`` chỉ để xem thử POC với placeholder — không phải xuất phát hành.
+    """
+    require = True if not body else bool(body.get("require_rights", True))
+    try:
+        return entry.queue_doc_preview(db, project_id, require_rights=require)
+    except doc_service.DocError as exc:
         raise _bad(exc) from exc

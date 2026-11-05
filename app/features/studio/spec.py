@@ -40,6 +40,8 @@ class Clip(_Strict):
     # gốc). Dùng cho lồng tiếng: giọng đọc + nền đã tách, dài đúng bằng video gốc.
     audio: list[ClipAudio] = Field(default_factory=list)
     hflip: bool = False  # lật ngang đoạn này (A/B góc nhìn — chỉ nội dung của mình, ADR-061 mục 11)
+    # ADR-064: chuyển động Ken Burns trên ảnh tĩnh (video bỏ qua).
+    motion: Literal["static", "slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right"] = "static"
 
     @model_validator(mode="after")
     def _end_after_start(self) -> "Clip":

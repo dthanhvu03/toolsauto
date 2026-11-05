@@ -49,6 +49,7 @@ modules =
     app.features.studio.fetch
     app.features.studio.intake
     app.features.studio.analyze
+    app.features.studio.doc
     app.features.studio.dub
     app.features.studio.compose
     app.features.studio.render
@@ -63,6 +64,7 @@ source_modules =
     app.features.studio.fetch
     app.features.studio.intake
     app.features.studio.analyze
+    app.features.studio.doc
     app.features.studio.dub
     app.features.studio.compose
     app.features.studio.render

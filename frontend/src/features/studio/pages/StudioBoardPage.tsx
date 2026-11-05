@@ -43,9 +43,14 @@ export function StudioBoardPage() {
       />
       <div className="mt-4 flex flex-col gap-2">
         <UploadBox channels={setup.data?.channels ?? []} />
-        <Link to="/app/go/studio-tiktok" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
-          <Link2 className="size-4" /> Lấy video từ link TikTok…
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/app/go/studio-doc" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
+            Audio → Documentary (POC)
+          </Link>
+          <Link to="/app/go/studio-tiktok" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
+            <Link2 className="size-4" /> Lấy video từ link TikTok…
+          </Link>
+        </div>
       </div>
       <Toast text={toast.text} seq={toast.seq} />
       <JobsPanel hideDone />

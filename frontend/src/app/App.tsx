@@ -21,6 +21,7 @@ import { StudioEditorPage } from "@/features/studio/pages/StudioEditorPage";
 import { StudioAssetsPage } from "@/features/studio/pages/StudioAssetsPage";
 import { StudioSetupPage } from "@/features/studio/pages/StudioSetupPage";
 import { StudioTiktokPage } from "@/features/studio/pages/StudioTiktokPage";
+import { StudioDocPage } from "@/features/studio/pages/StudioDocPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="go/studio-assets" element={<StudioAssetsPage />} />
             <Route path="go/studio-setup" element={<StudioSetupPage />} />
             <Route path="go/studio-tiktok" element={<StudioTiktokPage />} />
+            <Route path="go/studio-doc" element={<StudioDocPage />} />
             <Route path="go/viral" element={<ViralPage />} />
             <Route path="go/viral-sources" element={<ViralSourcesPage />} />
             <Route path="go/compliance" element={<CompliancePage />} />

@@ -1,3 +1,9 @@
+## Phiên 2026-11-05 (audio-doc-review) — PLAN-156: rà soát + sửa POC Audio→Doc của Cursor (chưa commit)
+
+- **Sự cố:** test render POC làm WSL hết RAM → WSL khởi động lại (Cursor «connection failed»). cashback-bot / cashback-zalo tự lên lại 09:30Z (đã có code mới).
+- **Done (proof trong PLAN-156):** Ken Burns `zoompan d=1` (RAM preview 9 clip 1080p 2,8 GB → 0,8 GB); kiểm schema trước khi lưu shot / quyền / transcript; chạy lại doc_plan không tạo dự án trùng; lỗi TS `StudioDocPage`. Test doc 8 qua, studio 166 qua (2 lỗi sẵn `dub_long`), tsc sạch.
+- **Next Action:** Cursor tiếp PLAN-156 (UI preview, docstring «rerender»). Chưa commit — chủ bot duyệt rồi commit cùng phần của Cursor.
+
 ## Phiên 2026-11-05 (cb-speed) — Rà soát timeout / trùng / tốc độ gửi tin, vá 2 chỗ chậm
 
 - **Số đo (từ 29/10):** thẻ link Telegram ~1s sau khi tạo; AddLiveTag 0 timeout / 94 link; 0 tin trùng (60 phút), 0 tin cách ly, 0 gửi hỏng / 1.223 tin hàng đợi; hàng đợi TB ~46s, deal TB ~4 phút (loạt tin). Zalo inbox ghi received_at = replied_at nên chưa đo được tốc độ trả lời Zalo.

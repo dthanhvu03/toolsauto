@@ -36,7 +36,15 @@ export type ProjectsResponse = {
 };
 
 export type ClipAudio = { asset: number; volume: number };
-export type Clip = { asset: number; start: number; end: number | null; audio: ClipAudio[]; hflip: boolean };
+export type ClipMotion = "static" | "slow_zoom_in" | "slow_zoom_out" | "pan_left" | "pan_right";
+export type Clip = {
+  asset: number;
+  start: number;
+  end: number | null;
+  audio: ClipAudio[];
+  hflip: boolean;
+  motion?: ClipMotion;
+};
 export type SubLine = { start: number; end: number; text: string };
 export type TextOverlay = { text: string; start: number; end: number | null; pos: "top" | "center" | "bottom"; size: number };
 export type AudioTrack = { asset: number; volume: number; start: number; loop: boolean };

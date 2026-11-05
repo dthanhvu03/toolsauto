@@ -69,6 +69,45 @@ export function uploadFile(
   return sendForm<Ok & { flow: string }>(`${BASE}/upload`, form);
 }
 
+/** ADR-064 Audio → Documentary POC */
+export const uploadDocAudio = (file: File, opts: { channelId?: number | null; title?: string } = {}) => {
+  const form = new FormData();
+  form.append("file", file);
+  if (opts.channelId) form.append("channel_id", String(opts.channelId));
+  if (opts.title) form.append("title", opts.title);
+  return sendForm<{ ok: boolean; task_id: number; flow: string }>(`${BASE}/doc/upload`, form);
+};
+export const fetchDocProject = (id: number) => getJson<Record<string, unknown>>(`${BASE}/doc/projects/${id}`);
+export const saveDocTranscript = (id: number, segments: object[]) =>
+  sendJson<Record<string, unknown>>(`${BASE}/doc/projects/${id}/transcript`, "PUT", { segments });
+export const attachDocImage = (
+  projectId: number,
+  shotId: string,
+  file: File,
+  meta: {
+    source_page?: string;
+    credit?: string;
+    license?: string;
+    rights_status?: string;
+    illustration?: boolean;
+    proof_note?: string;
+  }
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("source_page", meta.source_page || "");
+  form.append("credit", meta.credit || "");
+  form.append("license", meta.license || "");
+  form.append("rights_status", meta.rights_status || "RIGHTS_UNKNOWN");
+  form.append("illustration", meta.illustration ? "true" : "false");
+  form.append("proof_note", meta.proof_note || "");
+  return sendForm<Record<string, unknown>>(`${BASE}/doc/projects/${projectId}/shots/${encodeURIComponent(shotId)}/image`, form);
+};
+export const requestDocPreview = (id: number, requireRights = true) =>
+  sendJson<{ ok: boolean; task_id: number; blockers: string[] }>(`${BASE}/doc/projects/${id}/preview`, "POST", {
+    require_rights: requireRights,
+  });
+
 export const fetchSetup = () => getJson<SetupResponse>(`${BASE}/setup`);
 export const createChannel = (body: Partial<Channel>) => sendJson<Channel>(`${BASE}/channels`, "POST", body);
 export const updateChannel = (id: number, body: Partial<Channel>) => sendJson<Channel>(`${BASE}/channels/${id}`, "PATCH", body);
