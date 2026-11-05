@@ -69,6 +69,7 @@ SHORTCUTS = {
     "dieukien": "/dieukien", "thongbao": "/thongbao", "hang": "/hang", "deal": "/deal",
     "theodoi": "/theodoi",
     "magiam": "/magiam",
+    "moiban": "/moiban",
 }
 
 

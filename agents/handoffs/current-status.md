@@ -1,3 +1,9 @@
+## Phiên 2026-11-05 (cb-referral) — PLAN-155: Mời bạn 10% / 6 tháng (code xong, CHƯA bật)
+
+- **System State:** hạng (PLAN-154) đang chạy từ 02:52Z (22 GOLD). Mời bạn tắt (`CASHBACK_REFERRAL_ENABLED` chưa có). Thẻ link dòng hạng + mời bạn cần restart.
+- **Done (proof):** xem PLAN-155. 1194 test qua (`b9` lỗi sẵn). Migrate thử trên bản sao DB thật: 6 trigger thay, số tiền không đổi.
+- **Next Action (chủ bot):** /admin → Điều khoản → tạo nháp V5 → công bố → `CASHBACK_REFERRAL_ENABLED=true` → `systemctl restart cashback-bot cashback-zalo`.
+
 ## Phiên 2026-11-05 (cb-rank) — PLAN-154: hạng Đồng / Bạc / Vàng xét theo 2 tháng (code xong, CHƯA bật production)
 
 - **System State:** nhánh `feat/xe-tet`, chưa commit. Cờ `CASHBACK_MEMBERSHIP_ENABLED` chưa có trong `.env` → bot chạy như cũ (mọi khách 70%) kể cả sau restart.

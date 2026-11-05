@@ -57,12 +57,15 @@ DESCRIPTION_WALLET = (
 
 
 def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
-                  show_voucher: bool = False) -> Keyboard:
+                  show_voucher: bool = False, show_invite: bool = False) -> Keyboard:
     second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
+    orders: tuple[tuple[str, str], ...] = (("📦 Đơn hàng của tôi", "u:p:orders"),)
+    if show_invite:
+        orders += (("🤝 Mời bạn", "u:p:invite"),)
     rows: Keyboard = (
-        (("📦 Đơn hàng của tôi", "u:p:orders"),),
+        orders,
         (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:tips")),
         second,
     )
@@ -215,6 +218,46 @@ def rank_card_line(rank_code: str, bonus_vnd: int, gold_extra_vnd: int) -> str |
     if bonus_vnd > 0:
         return f"🏅 Hạng {RANK_NAMES[rank_code]}: đã cộng thêm {format_vnd(bonus_vnd)} so với hạng Đồng"
     return None
+
+
+# --- Mời bạn (PLAN-155) ------------------------------------------------------------------------------
+
+INVITE_RESULTS = {
+    "ok": "🤝 Đã ghi nhận bạn được bạn bè mời. Bạn vẫn nhận đủ tiền hoàn như mọi người, không bị trừ gì. "
+          "Gửi link sản phẩm Shopee cho bot để bắt đầu nhé!",
+    "unknown": "⚠️ Mã mời không đúng. Kiểm tra lại mã (6 ký tự) với người mời bạn.",
+    "self": "⚠️ Đây là mã mời của chính bạn. Gửi mã này cho bạn bè nhé, xem ở 🤝 Mời bạn.",
+    "already": "ⓘ Bạn đã nhập mã mời trước đó rồi, mỗi người chỉ nhập một lần.",
+    "old_user": "ⓘ Mã mời chỉ dành cho người mới (chưa tạo link nào và vào bot chưa quá 7 ngày).",
+    "mutual": "ⓘ Bạn đã mời người này rồi nên không nhập mã của họ được.",
+}
+
+
+def invite_page(stats, bot_username: str, share_percent: int, months: int) -> str:
+    """stats: referral.Stats. Thưởng tính theo % hoa hồng sàn trả (không phải tỷ lệ chia của khách)."""
+    link = f"https://t.me/{bot_username}?start=ref_{stats.code}"
+    return "\n".join([
+        "🤝 <b>Mời bạn — nhận thưởng mỗi đơn của bạn bè</b>\n",
+        f"Mã mời của bạn: <code>{stats.code}</code>",
+        f"• Telegram: gửi bạn link {link}",
+        f"• Zalo: bạn nhắn bot Zalo <b>ref {stats.code}</b>\n",
+        f"Mỗi đơn bạn bè mua qua bot trong <b>{months} tháng</b> đầu, bạn nhận thêm <b>{share_percent}% hoa hồng</b> "
+        "của đơn đó. Bạn bè vẫn nhận đủ tiền hoàn của họ, không bị trừ gì.\n",
+        f"Đã mời: <b>{stats.invited}</b> người",
+        f"Thưởng đang chờ Shopee trả: <b>{format_vnd(stats.waiting_vnd)}</b>",
+        f"Thưởng đã vào ví: <b>{format_vnd(stats.in_wallet_vnd)}</b>\n",
+        "ⓘ Chỉ tính người mới (chưa tạo link nào). Thưởng vào 👛 Ví cùng lúc với đơn của bạn bè; đơn huỷ "
+        "hoặc trả hàng thì không có thưởng. Không tính vào hạng thành viên của bạn.",
+    ])
+
+
+def invite_notice(kind: str, reward_vnd: int) -> str:
+    if kind == "order":
+        return (f"🤝 <b>Bạn bè bạn mời vừa có đơn!</b>\n\nThưởng mời bạn khoảng <b>{format_vnd(reward_vnd)}</b>, "
+                "vào ví khi Shopee trả hoa hồng của đơn. Xem ở 🤝 Mời bạn.")
+    if kind == "paid":
+        return f"🤝 Thưởng mời bạn <b>{format_vnd(reward_vnd)}</b> đã vào 👛 Ví của bạn."
+    return f"🤝 Một đơn của bạn bè đã huỷ hoặc trả hàng nên khoản thưởng {format_vnd(reward_vnd)} không còn."
 
 
 def rank_up_notice(rank_code: str) -> str:
@@ -516,11 +559,11 @@ def with_tiktok(text: str) -> str:
 
 
 def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
-               wallet_open: bool | None = None, show_voucher: bool = False) -> BotReply:
+               wallet_open: bool | None = None, show_voucher: bool = False, show_invite: bool = False) -> BotReply:
     """wallet_open: ví mở rút thật (đổi câu ⓘ); None thì theo show_wallet. Ví xem trước: show_wallet, chưa mở."""
     open_ = show_wallet if wallet_open is None else wallet_open
     return BotReply(HOME_WALLET if open_ else HOME,
-                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals, show_voucher))
+                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals, show_voucher, show_invite))
 
 
 def page_reply(text: str) -> BotReply:

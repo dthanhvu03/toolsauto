@@ -45,7 +45,9 @@ FIELDS: dict[str, tuple[str, str, int, int, int]] = {
     "gold_vnd": ("🥇 Vàng: tiền hoàn", "đ", 90_000, 0, 500_000_000),
 }
 DEFAULTS = {key: spec[2] for key, spec in FIELDS.items()}
-_COUNTED = "status IN ('holding', 'available') AND completed_at IS NOT NULL AND cashback_vnd > 0"
+# Dòng thưởng mời bạn «:ref» (PLAN-155) không tính vào hạng của người mời.
+_COUNTED = ("status IN ('holding', 'available') AND completed_at IS NOT NULL AND cashback_vnd > 0 "
+            "AND instr(conversion_id, ':ref') = 0")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS member_ranks (

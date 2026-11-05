@@ -536,17 +536,18 @@ BEGIN SELECT RAISE(ABORT, 'payout: money may have left'); END;
 -- Khoá theo dữ liệu thật, không chỉ theo bảng có tồn tại: tạo bảng rỗng (migration 007) không mở được khoá.
 -- Yêu cầu rút cần một kỳ đối soát MATCHED và quyết định thuế mới nhất APPROVED; khoản vào ví cần đơn đã SETTLED
 -- (settlement._sync_conversion_settlement chỉ gán khi đơn nằm trong kỳ MATCHED). Dòng thu hồi (số âm) không bị chặn.
+-- Dòng thưởng giới thiệu «<đơn>:ref» (PLAN-155) xét theo đơn gốc: chỉ vào ví khi đơn gốc đã SETTLED.
 CREATE TRIGGER IF NOT EXISTS financial_lock_v2_payout_insert BEFORE INSERT ON cashback_payouts
 WHEN NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
     OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED'
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no matched settlement or tax decision'); END;
 CREATE TRIGGER IF NOT EXISTS financial_lock_v2_entry_insert BEFORE INSERT ON cashback_entries
 WHEN NEW.status = 'available' AND NEW.cashback_vnd > 0 AND NOT EXISTS (
-    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND settlement_status = 'SETTLED')
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1) AND settlement_status = 'SETTLED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: entry not in a matched settlement'); END;
 CREATE TRIGGER IF NOT EXISTS financial_lock_v2_entry_update BEFORE UPDATE OF status ON cashback_entries
 WHEN NEW.status = 'available' AND OLD.status != 'available' AND NEW.cashback_vnd > 0 AND NOT EXISTS (
-    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND settlement_status = 'SETTLED')
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1) AND settlement_status = 'SETTLED')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: entry not in a matched settlement'); END;
 
 -- Hạn mức rút. Dòng mới nhất có hiệu lực; chỉ ACTIVE có người duyệt mới được dùng. Mặc định không có dòng nào.
@@ -947,6 +948,11 @@ FINANCIAL_LOCK_TRIGGERS = (
     "financial_lock_entry_insert", "financial_lock_entry_update", "financial_lock_payout_insert",
     "financial_lock_payout_paid", "financial_lock_payout_progress",
 )
+# PLAN-155: trigger xét theo đơn gốc của dòng «:ref». Bản cũ (so đúng conversion_id) xoá để tạo lại.
+REF_AWARE_TRIGGERS = (
+    "financial_lock_v2_entry_insert", "financial_lock_v2_entry_update", "financial_lock_platform_entry_insert",
+    "financial_lock_platform_entry_update", "ledger_cashback_cap_insert", "ledger_cashback_cap_update",
+)
 CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
 
 
@@ -962,12 +968,19 @@ FOOD_PLATFORM = "shopeefood"
 # Sổ ví (rà soát 2026-10-26): phần khách không vượt hoa hồng (trừ dòng đã huỷ: giữ số đã chốt để thấy khoản bị trừ);
 # khoản đã vào ví thì số tiền không đổi được nữa
 # (huỷ / thu hồi đi bằng trạng thái và dòng «:clawback:» riêng).
+# Dòng thưởng giới thiệu «<đơn>:ref» (PLAN-155) ghi hoa hồng 0 (không đếm hai lần) nên trần là hoa hồng của đơn gốc.
 LEDGER_GUARD_SQL = """
 CREATE TRIGGER IF NOT EXISTS ledger_cashback_cap_insert BEFORE INSERT ON cashback_entries
-WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > NEW.commission_vnd
+WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > (CASE
+    WHEN instr(NEW.conversion_id, ':ref') > 0
+    THEN COALESCE((SELECT commission_vnd FROM cashback_entries WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1)), 0)
+    ELSE NEW.commission_vnd END)
 BEGIN SELECT RAISE(ABORT, 'ledger_guard: cashback above commission'); END;
 CREATE TRIGGER IF NOT EXISTS ledger_cashback_cap_update BEFORE UPDATE OF cashback_vnd, commission_vnd ON cashback_entries
-WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > NEW.commission_vnd
+WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > (CASE
+    WHEN instr(NEW.conversion_id, ':ref') > 0
+    THEN COALESCE((SELECT commission_vnd FROM cashback_entries WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1)), 0)
+    ELSE NEW.commission_vnd END)
 BEGIN SELECT RAISE(ABORT, 'ledger_guard: cashback above commission'); END;
 CREATE TRIGGER IF NOT EXISTS ledger_available_frozen BEFORE UPDATE OF cashback_vnd ON cashback_entries
 WHEN OLD.status = 'available' AND NEW.cashback_vnd != OLD.cashback_vnd
@@ -976,11 +989,11 @@ BEGIN SELECT RAISE(ABORT, 'ledger_guard: available amount is frozen'); END;
 PLATFORM_LOCK_SQL = """
 CREATE TRIGGER IF NOT EXISTS financial_lock_platform_entry_insert BEFORE INSERT ON cashback_entries
 WHEN NEW.status = 'available' AND EXISTS (
-    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND platform != 'shopee')
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1) AND platform != 'shopee')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement source for this platform'); END;
 CREATE TRIGGER IF NOT EXISTS financial_lock_platform_entry_update BEFORE UPDATE OF status ON cashback_entries
 WHEN NEW.status = 'available' AND OLD.status != 'available' AND EXISTS (
-    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND platform != 'shopee')
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = substr(NEW.conversion_id, 1, instr(NEW.conversion_id || ':ref', ':ref') - 1) AND platform != 'shopee')
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement source for this platform'); END;
 """
 NARROW_SOURCE = "report_list_narrow"
@@ -1109,6 +1122,10 @@ class TrackingRepository:
             for name in FINANCIAL_LOCK_TRIGGERS:
                 row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?", (name,)).fetchone()
                 if row is not None and "shopee_settlements" in (row[0] or ""):
+                    conn.execute(f"DROP TRIGGER {name}")
+            for name in REF_AWARE_TRIGGERS:
+                row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?", (name,)).fetchone()
+                if row is not None and "':ref'" not in (row[0] or ""):
                     conn.execute(f"DROP TRIGGER {name}")
             conn.executescript(SCHEMA)
             conn.executescript(CANCEL_SCHEMA_PATH.read_text(encoding="utf-8"))

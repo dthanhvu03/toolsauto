@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from cashback_bot import payouts
 
 CLAWBACK_TAG = ":clawback:"
+# Dòng thưởng mời bạn «<id>:ref» (PLAN-155): phần chi cho khách của chính đơn đó.
+REF_TAG = ":ref"
 MATCHED = "MATCHED"
 
 # Tên gọi tiền dùng chung cho admin, khách (Telegram, Zalo) và web. Đổi chữ ở đây, không viết lại ở từng màn.
@@ -153,10 +155,10 @@ def _items(conn: sqlite3.Connection, batch: sqlite3.Row) -> list[sqlite3.Row]:
 
 
 def _entry_totals(conn: sqlite3.Connection) -> dict[str, int]:
-    """Tiền hoàn chưa huỷ theo đơn gốc (dòng trừ lại «<id>:clawback:<n>» cộng vào đơn gốc)."""
+    """Tiền hoàn chưa huỷ theo đơn gốc (dòng trừ lại «<id>:clawback:<n>» và thưởng mời bạn «<id>:ref» cộng vào đơn gốc)."""
     totals: dict[str, int] = {}
     for row in conn.execute("SELECT conversion_id, cashback_vnd FROM cashback_entries WHERE status != 'cancelled'"):
-        key = str(row["conversion_id"]).split(CLAWBACK_TAG)[0]
+        key = str(row["conversion_id"]).split(CLAWBACK_TAG)[0].split(REF_TAG)[0]
         totals[key] = totals.get(key, 0) + int(row["cashback_vnd"])
     return totals
 

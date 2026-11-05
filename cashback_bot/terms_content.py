@@ -7,6 +7,8 @@ lấy từ retention.py lúc tạo bản nháp. CHỈ công bố cùng lúc bậ
 và đã có việc tự xoá dữ liệu hết hạn (điều khoản hứa cả hai).
 V4 (PLAN-154, chủ bot chốt 2026-11-05): thêm mục 🏅 Hạng thành viên. Các mục khác giữ nguyên V3. Công bố trước
 khi bật CASHBACK_MEMBERSHIP_ENABLED.
+V5 (PLAN-155, chủ bot chốt 2026-11-05): thêm mục 🤝 Mời bạn. Các mục khác giữ nguyên V4. Công bố trước khi bật
+CASHBACK_REFERRAL_ENABLED.
 
 Viết theo đúng chức năng bot đang chạy (audit PLAN-077 mục 3). Không hứa thời hạn rút, mức rút hay cam kết
 chi trả. Khi chức năng đổi (mở ví, hạng thành viên), phải ra phiên bản mới, không sửa bản đã công bố.
@@ -17,13 +19,17 @@ from __future__ import annotations
 
 from cashback_bot import retention
 from cashback_bot.membership import GRANDFATHER_UNTIL_TEXT
+from cashback_bot.referral import SHARE_BPS, TERM
 
-DRAFT_VERSION = "V4"
+SHARE_PERCENT = SHARE_BPS // 100
+TERM_MONTHS = TERM.days // 30
+
+DRAFT_VERSION = "V5"
 DRAFT_TITLE = "Điều khoản sử dụng chương trình hoàn tiền"
 
 # (mã, tiêu đề nút, nội dung HTML Telegram)
 def draft_sections(keep: dict[str, int]) -> tuple[tuple[str, str, str], ...]:
-    """Các mục V4 (V3 + Hạng thành viên). `keep`: thời hạn lưu (retention.load) ghi vào mục 🛡 Dữ liệu cá nhân."""
+    """Các mục V5 (V3 + Hạng thành viên + Mời bạn). `keep`: thời hạn lưu (retention.load) ghi vào mục 🛡 Dữ liệu cá nhân."""
     period = {key: retention.period(key, value) for key, value in keep.items()}
     return (
         (
@@ -125,6 +131,25 @@ def draft_sections(keep: dict[str, int]) -> tuple[tuple[str, str, str], ...]:
             "• Xem hạng và số còn thiếu ở 🏅 Hạng thành viên (/hang).",
         ),
         (
+            "moi_ban",
+            "🤝 Mời bạn",
+            "<b>1. Cách mời</b>\n"
+            "• Mỗi tài khoản có một mã mời riêng, xem ở 🤝 Mời bạn (/moiban). Người được mời mở link mời trên "
+            "Telegram hoặc nhắn <b>ref &lt;mã&gt;</b> cho bot Zalo.\n"
+            "• Chỉ áp dụng cho người mới: chưa tạo link nào và vào bot chưa quá 7 ngày. Mỗi người chỉ nhập một mã, "
+            "đã nhập thì không đổi. Không tự mời chính mình, không mời chéo nhau.\n\n"
+            "<b>2. Thưởng</b>\n"
+            f"• Với mỗi đơn người được mời mua qua link bot trong <b>{TERM_MONTHS} tháng</b> kể từ lúc nhập mã, người "
+            f"mời được thưởng <b>{SHARE_PERCENT}% hoa hồng</b> sàn trả cho đơn đó.\n"
+            "• Thưởng do người vận hành trả từ phần của mình. Người được mời vẫn nhận đủ tiền hoàn, không bị trừ.\n"
+            "• Chỉ một tầng: không có thưởng cho người mời của người mời.\n\n"
+            "<b>3. Ghi nhận và chi trả</b>\n"
+            "• Thưởng đi theo đơn của người được mời: vào 👛 Ví cùng lúc khi đơn đó vào ví, theo đúng điều kiện ở "
+            "mục 💰 Ghi nhận và cách tính. Đơn huỷ, trả hàng, sàn từ chối hoặc gắn gian lận thì không có thưởng.\n"
+            "• Thưởng đã vào ví rút như tiền hoàn. Thưởng mời bạn không tính vào hạng thành viên.\n"
+            "• Tạo tài khoản ảo, tự mời mình hoặc gian lận thì thưởng bị huỷ sau khi người vận hành kiểm tra.",
+        ),
+        (
             "vi",
             "👛 Ví và rút tiền",
             "<b>1. Điều kiện rút</b>\n"
@@ -160,6 +185,7 @@ def draft_sections(keep: dict[str, int]) -> tuple[tuple[str, str, str], ...]:
             "trạng thái, hoa hồng.\n"
             "• Khi dùng ví: ngân hàng, số tài khoản và tên chủ tài khoản bạn khai; lịch sử yêu cầu rút và chứng từ "
             "chuyển khoản (mã giao dịch).\n"
+            "• Khi dùng 🤝 Mời bạn: mã mời, ai mời ai và thời điểm nhập mã.\n"
             "• Nội dung bạn gửi trong yêu cầu hỗ trợ.\n"
             "• Tin nhắn không phải link sản phẩm không được lưu nội dung.\n"
             "• Bot không hỏi mật khẩu, OTP, cookie Shopee hay thông tin thẻ. Đừng gửi những thông tin này.\n\n"

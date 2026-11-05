@@ -17,7 +17,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, shop_voucher, voucher, watchlist
+from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, referral, shop_voucher, voucher, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -44,7 +44,10 @@ from cashback_bot.messages import (
     bank_pick_reply,
     bank_prompt_reply,
     entry_notice,
+    INVITE_RESULTS,
     hang_message,
+    invite_notice,
+    invite_page,
     rank_card_line,
     rank_down_notice,
     rank_keep_notice,
@@ -173,6 +176,7 @@ class CashbackService:
         try:
             with self.repo.connect() as conn:
                 membership.ensure_schema(conn)
+                referral.ensure_schema(conn)
                 if not self.settings.membership_enabled:
                     return
                 seeded = membership.seed_existing(conn, datetime.now(timezone.utc))
@@ -349,7 +353,8 @@ class CashbackService:
         wallet = self.wallet.settings()
         if name == "home":
             return home_reply(show_rank=self.settings.membership_enabled, show_wallet=True, show_deals=deals.enabled(self.repo),
-                              wallet_open=wallet.enabled, show_voucher=voucher.ready(self.repo))
+                              wallet_open=wallet.enabled, show_voucher=voucher.ready(self.repo),
+                              show_invite=self.settings.referral_enabled)
         if name == "guide":
             return page_reply(HUONGDAN)
         if name == "rules":
@@ -374,6 +379,11 @@ class CashbackService:
             return page_reply(hang_message())
         if name == "wallet" and user_id is not None:
             return self._wallet_page(user_id)
+        if name == "invite" and user_id is not None and self.settings.referral_enabled:
+            with self.repo.connect() as conn:
+                stats = referral.stats(conn, user_id, datetime.now(timezone.utc))
+            return page_reply(invite_page(stats, self.settings.bot_username, referral.SHARE_BPS // 100,
+                                          referral.TERM.days // 30))
         return None
 
     # --- Ví (PLAN-066) -------------------------------------------------------
@@ -464,6 +474,7 @@ class CashbackService:
         """Gọi sau mỗi lần đồng bộ Shopee: cập nhật sổ, ví bật thì báo khách đơn đổi trạng thái."""
         moment = now or datetime.now(timezone.utc)
         transitions = self.wallet.refresh(moment, self._real_cashback)
+        self._referral_sync(moment)
         self._promote(moment)
         settings = self.wallet.settings()
         recent = (moment - NEW_ORDER_NOTICE_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -486,6 +497,35 @@ class CashbackService:
                     item.estimated_vnd,
                 ),
             )
+
+    def _referral_sync(self, moment: datetime) -> None:
+        """PLAN-155: dòng thưởng mời bạn theo đơn của người được mời; báo người mời."""
+        if not self.settings.referral_enabled:
+            return
+        try:
+            with self.repo.connect() as conn:
+                for item in referral.sync(conn, moment):
+                    enqueue_event(conn, event_key=f"ref:{item.kind}:{item.conversion_id}", event_type="REFERRAL",
+                                  chat_id=item.user_id, message_html=invite_notice(item.kind, item.reward_vnd),
+                                  audience="customer", category="wallet")
+        except sqlite3.Error:
+            logger.exception("[Cashback] cập nhật thưởng mời bạn thất bại")
+
+    def _invite_code(self, user_id: int, code: str, text: str, now: datetime) -> BotReply:
+        """Khách gửi mã mời (`/start ref_MÃ` hoặc `ref MÃ`). Gắn được thì báo cả người mời."""
+        with self.repo.connect() as conn:
+            result = referral.attach(conn, user_id, code, now)
+            referrer = referral.referrer_of(conn, user_id) if result == "ok" else None
+            if referrer is not None:
+                enqueue_event(conn, event_key=f"ref:join:{user_id}", event_type="REFERRAL", chat_id=referrer,
+                              message_html="🤝 Có thêm một người bạn dùng mã mời của bạn. Bạn sẽ được thưởng khi "
+                                           "họ mua qua bot. Xem ở 🤝 Mời bạn.",
+                              audience="customer", category="wallet")
+        notice = INVITE_RESULTS[result]
+        if _command_name(text) == "/start":
+            home = self._page("home", user_id)
+            return replace(home, text=f"{notice}\n\n{home.text}")
+        return BotReply(notice)
 
     def _promote(self, moment: datetime) -> None:
         """PLAN-154: xét tháng, lên hạng, nhắc giữ hạng (lúc khởi động và sau mỗi lần cập nhật ví); báo khách."""
@@ -594,10 +634,15 @@ class CashbackService:
         if not self.allowed(telegram_user_id):
             return BotReply(CLOSED)
 
+        code = referral.parse(stripped) if self.settings.referral_enabled else None
+        if code is not None:
+            return self._invite_code(telegram_user_id, code, stripped, moment)
         pages = {
             "/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet",
             "/hotro": "support", "/donhang": "orders", "/thongbao": "notify",
         }
+        if self.settings.referral_enabled:
+            pages["/moiban"] = "invite"
         if command:
             self._set_bank_waiting(telegram_user_id, None)
             self.desk.clear(telegram_user_id)

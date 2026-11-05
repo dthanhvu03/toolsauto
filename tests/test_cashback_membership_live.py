@@ -214,8 +214,8 @@ def test_trang_hang_va_tin_khong_dua_ty_le(tmp_path):
     assert "đang được phát triển" in hang_message()
 
 
-def test_dieu_khoan_v4_co_muc_hang():
-    assert DRAFT_VERSION == "V4"
+def test_dieu_khoan_tu_v4_co_muc_hang():
+    assert DRAFT_VERSION in ("V4", "V5")
     body = {key: text for key, _label, text in DRAFT_SECTIONS}["hang"]
     assert "tháng trước và tháng này" in body and "một bậc" in body and "31/12/2026" in body
     assert "%" not in body and len(body) < 3_500
