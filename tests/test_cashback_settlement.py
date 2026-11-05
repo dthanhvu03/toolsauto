@@ -439,3 +439,47 @@ class TestSettlementScreen:
         out = run(["import", "--batch", str(batch), "--file", str(bank)], bot.repo, actor="cli:test")
         assert out["status"] == MATCHED
         assert run(["show", "--batch", str(batch)], bot.repo)["bot_vnd"] == 10_000
+
+
+# --- Nhập lại chứng từ từng bị gỡ (2026-11-05: nút «Đã nhận đúng» lỗi duplicate_evidence) ----------------
+
+
+def _unconfirm(bot, batch, evidence_id):
+    """Gỡ xác nhận ngân hàng bấm nhầm như ngày 03/11 (làm tay trên DB)."""
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE settlement_batches SET bank_evidence_id = NULL, bank_received_vnd = NULL WHERE id = ?", (batch,))
+        conn.execute("UPDATE settlement_evidence SET verification = 'REJECTED' WHERE id = ?", (evidence_id,))
+
+
+class TestReimportRejected:
+    def test_cung_noi_dung_dung_lai_chung_tu_cu(self, world):
+        bot, engine = world
+        batch = engine.create_batch("2026-10", "test")
+        engine.import_document(batch, _payment(), "test")
+        first = engine.import_document(batch, _bank(), "test")
+        _unconfirm(bot, batch, first)
+        engine.reconcile(batch, "test")
+        assert engine.import_document(batch, _bank(), "test") == first
+        assert engine.evaluate(batch).status == MATCHED
+        with bot.repo.connect() as conn:
+            assert conn.execute("SELECT verification FROM settlement_evidence WHERE id = ?", (first,)).fetchone()[0] == "VERIFIED"
+            assert conn.execute("SELECT COUNT(*) FROM settlement_audit WHERE action = 'evidence_revive'").fetchone()[0] == 1
+
+    def test_cung_ma_khac_so_thi_nhuong_cho_ban_moi(self, world):
+        bot, engine = world
+        batch = engine.create_batch("2026-10", "test")
+        engine.import_document(batch, _payment(), "test")
+        first = engine.import_document(batch, _bank(received=PAYOUT - 1), "test")
+        _unconfirm(bot, batch, first)
+        second = engine.import_document(batch, _bank(), "test")
+        assert second != first and engine.evaluate(batch).status == MATCHED
+        with bot.repo.connect() as conn:
+            ref = conn.execute("SELECT document_ref FROM settlement_evidence WHERE id = ?", (first,)).fetchone()[0]
+        assert ref == f"BANK-TX-1#rejected-{first}"
+
+    def test_chung_tu_chua_bi_go_van_bao_trung(self, world):
+        bot, engine = world
+        batch = _matched(bot, engine)
+        other = engine.create_batch("2026-11", "test")
+        with pytest.raises(EvidenceError, match="duplicate_evidence"):
+            engine.import_document(other, _bank(period="2026-11"), "test")

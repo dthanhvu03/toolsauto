@@ -235,18 +235,23 @@ class SettlementEngine:
                 old = conn.execute("SELECT * FROM settlement_evidence WHERE id = ? AND batch_id = ?", (replaces, batch_id)).fetchone()
                 if old is None or old["kind"] != statement.kind or old["verification"] == "SUPERSEDED":
                     raise EvidenceError("bad_replaces")
-            try:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO settlement_evidence (batch_id, kind, source, document_ref, content_sha256, stored_name,
-                        size_bytes, parser, verification, recorded_by, recorded_at)
-                    VALUES (?, ?, 'import', ?, ?, ?, ?, ?, 'RECEIVED', ?, ?)
-                    """,
-                    (batch_id, statement.kind, statement.document_ref, digest, f"{digest}.json", len(raw), FORMAT, actor, now),
-                )
-            except sqlite3.IntegrityError:
-                raise EvidenceError("duplicate_evidence") from None
-            evidence_id = int(cursor.lastrowid)
+            revived = self._revive_rejected(conn, batch_id, statement, digest, actor, now)
+            if revived is not None:
+                evidence_id = revived
+            else:
+                try:
+                    cursor = conn.execute(
+                        """
+                        INSERT INTO settlement_evidence (batch_id, kind, source, document_ref, content_sha256,
+                            stored_name, size_bytes, parser, verification, recorded_by, recorded_at)
+                        VALUES (?, ?, 'import', ?, ?, ?, ?, ?, 'RECEIVED', ?, ?)
+                        """,
+                        (batch_id, statement.kind, statement.document_ref, digest, f"{digest}.json", len(raw), FORMAT,
+                         actor, now),
+                    )
+                except sqlite3.IntegrityError:
+                    raise EvidenceError("duplicate_evidence") from None
+                evidence_id = int(cursor.lastrowid)
             self._store(digest, bytes(raw))
             if replaces is not None:
                 conn.execute(
@@ -283,6 +288,31 @@ class SettlementEngine:
             })
         self.reconcile(batch_id, actor)
         return evidence_id
+
+    def _revive_rejected(self, conn: sqlite3.Connection, batch_id: int, statement, digest: str, actor: str,
+                         now: str) -> int | None:
+        """Chứng từ từng bị gỡ (REJECTED) chặn bản nhập lại vì UNIQUE (sha) / (kind, document_ref) — 2026-11-05: nút
+        «Đã nhận đúng» lỗi duplicate_evidence sau khi gỡ xác nhận bấm nhầm.
+
+        Cùng nội dung, cùng kỳ, cùng loại: dùng lại chứng từ đó (về RECEIVED), trả id. Cùng mã nhưng khác nội dung:
+        đổi document_ref của bản bị gỡ thành «…#rejected-<id>» để nhường chỗ, trả None (nhập bản mới như thường).
+        Chứng từ chưa bị gỡ không đụng tới: vẫn báo duplicate_evidence. Mỗi lần đều ghi settlement_audit.
+        """
+        same = conn.execute("SELECT * FROM settlement_evidence WHERE content_sha256 = ?", (digest,)).fetchone()
+        if same is not None:
+            if same["verification"] != "REJECTED" or same["batch_id"] != batch_id or same["kind"] != statement.kind:
+                return None
+            conn.execute("UPDATE settlement_evidence SET verification = 'RECEIVED' WHERE id = ?", (same["id"],))
+            self._audit(conn, batch_id, "evidence_revive", actor, {"evidence_id": int(same["id"]), "sha256": digest})
+            return int(same["id"])
+        named = conn.execute("SELECT * FROM settlement_evidence WHERE kind = ? AND document_ref = ?",
+                             (statement.kind, statement.document_ref)).fetchone()
+        if named is not None and named["verification"] == "REJECTED":
+            renamed = f"{named['document_ref']}#rejected-{named['id']}"
+            conn.execute("UPDATE settlement_evidence SET document_ref = ? WHERE id = ?", (renamed, named["id"]))
+            self._audit(conn, batch_id, "evidence_rename_rejected", actor,
+                        {"evidence_id": int(named["id"]), "document_ref": renamed, "at": now})
+        return None
 
     def mark_viewed(self, evidence_id: int, admin_id: int) -> bool:
         """Admin đã xem chứng từ. KHÔNG phải xác minh, không đổi trạng thái kỳ hay hoa hồng."""

@@ -1,3 +1,9 @@
+## Phiên 2026-11-05 (cb-payout-k2-fix) — Kỳ Shopee #2 MATCHED + sửa nút «Đã nhận đúng»
+
+- **System State:** kỳ #2 (2026-11, `…261102`) **MATCHED**, NH nhận 16.392đ (chủ bot xác nhận 05/11). 2 đơn kỳ #2 SETTLED → vào ví ở lượt đồng bộ kế. Chủ bot đã công bố V5 (04:08Z).
+- **Done (proof):** nút «✅ Đã nhận đúng 16.392đ» lỗi `duplicate_evidence` (blocker 03/11). Được chủ bot xác nhận tiền đã về: backup `data/backups/cashback-before-reattach-k2-bank-20261105.sqlite`; evidence #6 → RECEIVED, batch #2 bank_evidence_id=6 / bank_received_vnd=16392, audit `bank_reconfirm`; `reconcile(2)` → MATCHED, evidence #6 VERIFIED. Code: `SettlementEngine._revive_rejected` — nhập lại chứng từ từng bị gỡ (cùng nội dung → dùng lại; cùng mã khác số → đổi mã bản cũ `#rejected-<id>`). Test 3 mới; cashback suite qua (trừ `b9` sẵn).
+- **Next Action:** chờ lượt đồng bộ kế (hoặc /admin → Đồng bộ ngay) để 2 đơn kỳ #2 vào ví và báo khách. Restart để có code mới.
+
 ## Phiên 2026-11-05 (cb-referral) — PLAN-155: Mời bạn 10% / 6 tháng (code xong, CHƯA bật)
 
 - **System State:** hạng (PLAN-154) đang chạy từ 02:52Z (22 GOLD). Mời bạn tắt (`CASHBACK_REFERRAL_ENABLED` chưa có). Thẻ link dòng hạng + mời bạn cần restart.
