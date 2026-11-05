@@ -1,8 +1,8 @@
-## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet (code xong, chưa commit)
+## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet
 
-- **System State:** nhánh `feat/xe-tet`, chưa commit. Web_Dashboard + worker Studio (Studio_Heavy/Light đang stopped) chưa có code mới.
+- **System State:** commit `b6e48c4` (code) + `5223c01` (bản build SPA, lần build trước là 03/11) đã push `feat/xe-tet`. 10:4xZ: `pm2 restart Web_Dashboard`, bật lại `Studio_Heavy` / `Studio_Light` (tắt từ ~31/10); worker nhận ngay việc tồn #81 (link → render → chờ duyệt, không tự đăng).
 - **Done (proof trong PLAN-157, ADR-065):** 38 key `doc.*` ở /app/settings (ngôn ngữ, thời gian, khung, phụ đề, hiệu ứng, 5 nguồn ảnh + key, từ khóa AI, luật quyền); chia cảnh theo câu Whisper / khoảng lặng (bỏ MU–Roma); chọn ngôn ngữ khi tải lên; tìm ảnh Wikimedia / Openverse / Pexels / Pixabay / Google, bấm chọn, quyền tự điền theo giấy phép; dựng theo đoạn (80 cảnh 1080p: 510 MB RAM). Test doc 24 qua.
-- **Next Action (chủ bot):** duyệt → commit + push; `pm2 restart Web_Dashboard`; bật `Studio_Heavy` `Studio_Light` khi cần dựng; nhập key Pexels/Pixabay/Google nếu muốn dùng.
+- **Next Action (chủ bot):** mở /app/go/studio-doc thử 1 audio; nhập key Pexels/Pixabay/Google ở /app/settings nếu muốn dùng; chưa thử tìm ảnh thật trên web.
 
 - **Đang làm:** Audio→Doc: cấu hình `doc.*` trên /app/settings, thời gian theo audio, chọn ngôn ngữ, ảnh internet (Wikimedia / Openverse / Pexels / Pixabay / Google) + AI rút từ khóa. Executor Claude Code, chủ bot duyệt trực tiếp.
 
