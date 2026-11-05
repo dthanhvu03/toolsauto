@@ -45,6 +45,7 @@ from cashback_bot.messages import (
     bank_prompt_reply,
     entry_notice,
     hang_message,
+    rank_card_line,
     rank_down_notice,
     rank_keep_notice,
     rank_up_notice,
@@ -722,7 +723,8 @@ class CashbackService:
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
-        card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
+        card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped),
+                      rank_line=self._rank_line(telegram_user_id, quote.sure_commission_vnd, resolution, moment))
         if watchlist.enabled(self.repo):
             card = replace(card, inline_keyboard=watchlist.card_row(sub_id) + (card.inline_keyboard or ()))
         if shop_voucher.enabled(self.repo) and quote.shop_id:
@@ -923,7 +925,8 @@ class CashbackService:
         if not saved:
             return BotReply(GENERIC_FAIL)
         render = render_success_v12 if v12 else render_success
-        return render(name, price_vnd, priced.cashback_vnd, made.affiliate_link, tiktok=True)
+        return render(name, price_vnd, priced.cashback_vnd, made.affiliate_link, tiktok=True,
+                      rank_line=self._rank_line(telegram_user_id, commission_vnd, resolution, moment))
 
     def _first_link(self, user_id: int) -> bool:
         with self.repo.connect() as conn:
@@ -968,6 +971,25 @@ class CashbackService:
             with self.repo.connect() as conn:
                 rank = membership.rank_of(conn, user_id)
         return replace(base, share_bps=membership.share_bps(rank, self.admin_panel._safe_rates(), base.share_bps))
+
+    def _rank_line(self, user_id: int, commission_vnd: int, resolution: PolicyResolution, now: datetime) -> str | None:
+        """Dòng hạng trên thẻ link: tiền thêm nhờ hạng của món này (PLAN-154). Hạng tắt hoặc lỗi đọc thì không hiện."""
+        if not self.settings.membership_enabled:
+            return None
+        try:
+            with self.repo.connect() as conn:
+                rank = membership.rank_of(conn, user_id)
+            cap = self._resolve_policy(now).share_bps
+        except sqlite3.Error:
+            return None
+        rates = self.admin_panel._safe_rates()
+
+        def cash(code: str) -> int:
+            share = membership.share_bps(code, rates, cap)
+            return cashback_for(commission_vnd, replace(resolution, share_bps=share)).cashback_vnd
+
+        mine = cashback_for(commission_vnd, resolution).cashback_vnd
+        return rank_card_line(rank, mine - cash("BRONZE"), cash("GOLD") - mine)
 
     def _snapshot_record(self, resolution: PolicyResolution, priced) -> dict | None:
         return policy_snapshot.record(resolution, priced) if self._snapshots_on else None

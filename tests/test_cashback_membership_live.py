@@ -237,3 +237,18 @@ def test_admin_doi_nguong_va_chan_vang_thap_hon_bac(tmp_path):
     assert "Chưa lưu" in refused.text
     with sqlite3.connect(tmp_path / "cashback.sqlite") as conn:
         assert membership.thresholds(conn)["silver_orders"] == 2
+
+
+def test_the_link_hien_tien_them_nho_hang(tmp_path):
+    _bot(tmp_path).handle_text(OLD, "cu", LINK, update_id=1, now=NOW)
+    bot = _bot(tmp_path, membership_enabled=True)
+    gold = bot.handle_text(OLD, "cu", LINK, update_id=2, now=NOW).text
+    assert "🏅 Hạng 🥇 Vàng: đã cộng thêm 2.000đ so với hạng Đồng" in gold
+    bronze = bot.handle_text(NEW, "moi", LINK, update_id=3, now=NOW).text
+    assert "🏅 Lên 🥇 Vàng, món này hoàn thêm 2.000đ · /hang" in bronze
+    for text in (gold, bronze):
+        assert "%" not in text
+
+
+def test_tat_hang_the_link_khong_co_dong_hang(tmp_path):
+    assert "🏅" not in _bot(tmp_path).handle_text(NEW, "moi", LINK, update_id=1, now=NOW).text

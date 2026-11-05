@@ -23,6 +23,7 @@
 - `terms_content.py`: mẫu **V4** = V3 + mục «🏅 Hạng thành viên» (không ghi số ngưỡng, dẫn sang /hang).
 - Admin: `admin/handlers/membership.py` (c:mb:*), nút trong RANK_KEYBOARD, route sau `policy`, Lịch sử `membership_thresholds`.
 - `config.py`: cờ `CASHBACK_MEMBERSHIP_ENABLED` (mặc định tắt).
+- Thẻ link (Shopee + TikTok) có dòng hạng: Đồng «Lên 🥇 Vàng, món này hoàn thêm X · /hang»; Bạc/Vàng «đã cộng thêm X so với hạng Đồng» (tham khảo LetyShops: cho khách thấy lợi ích hạng bằng tiền, không lộ %).
 
 ## Bật trên production (chủ bot làm)
 1. /admin → Điều khoản → «📝 Tạo bản nháp V4 từ mẫu» → xem → công bố.

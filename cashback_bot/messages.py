@@ -205,6 +205,18 @@ def hang_message(progress=None, values: dict | None = None) -> str:
     return "\n".join(lines)
 
 
+def rank_card_line(rank_code: str, bonus_vnd: int, gold_extra_vnd: int) -> str | None:
+    """Dòng hạng trên thẻ link (PLAN-154): lợi ích bằng tiền của món này, không đưa tỷ lệ.
+
+    Đồng: món này lên Vàng hoàn thêm bao nhiêu. Bạc / Vàng: đã được thêm bao nhiêu so với Đồng.
+    """
+    if rank_code == "BRONZE":
+        return f"🏅 Lên 🥇 Vàng, món này hoàn thêm {format_vnd(gold_extra_vnd)} · /hang" if gold_extra_vnd > 0 else None
+    if bonus_vnd > 0:
+        return f"🏅 Hạng {RANK_NAMES[rank_code]}: đã cộng thêm {format_vnd(bonus_vnd)} so với hạng Đồng"
+    return None
+
+
 def rank_up_notice(rank_code: str) -> str:
     return (
         f"🎉 <b>Chúc mừng, bạn đã lên hạng {RANK_NAMES[rank_code]}!</b>\n\n"
@@ -446,7 +458,8 @@ def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, v12: bool = False,
-                 tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
+                 tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
+                 rank_line: str | None = None) -> BotReply:
     """Thẻ link: tên, giá tham khảo, số hoàn, nhắc xoá món trong giỏ (khi có hoàn), lời bấm nút ngay trên nút.
     Lưu ý khác ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
@@ -456,6 +469,7 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"🛍️ <b>{safe_name}</b>" + (" · 🎵 TikTok Shop" if tiktok else ""),
         f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
         amount,
+        *([rank_line] if rank_line and cashback_vnd > 0 else []),
         *([CART_HINT] if cashback_vnd > 0 else []),
         TIKTOK_BUY_HINT if tiktok else BUY_HINT,
     ]
@@ -526,13 +540,14 @@ def food_link_reply(affiliate_url: str | None = None) -> BotReply:
 
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False,
-                   extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped)
+                   extra_vnd: int = 0, capped: bool = False, rank_line: str | None = None) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped, rank_line)
 
 
 def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
-                       tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped)
+                       tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
+                       rank_line: str | None = None) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped, rank_line)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------
