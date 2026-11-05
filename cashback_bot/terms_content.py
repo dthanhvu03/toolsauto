@@ -5,6 +5,8 @@ V1 công bố 2026-10-24. V2 (PLAN-083): bot có thêm kênh Zalo; chỉ đổi 
 V3 (reports/CASHBACK_TERMS_V3_DRAFT.md, chủ bot duyệt 2026-10-26): mở ví và rút tiền, thu hồi, thời hạn lưu dữ liệu
 lấy từ retention.py lúc tạo bản nháp. CHỈ công bố cùng lúc bật ví, sau khi bot đọc được báo cáo thanh toán Shopee
 và đã có việc tự xoá dữ liệu hết hạn (điều khoản hứa cả hai).
+V4 (PLAN-154, chủ bot chốt 2026-11-05): thêm mục 🏅 Hạng thành viên. Các mục khác giữ nguyên V3. Công bố trước
+khi bật CASHBACK_MEMBERSHIP_ENABLED.
 
 Viết theo đúng chức năng bot đang chạy (audit PLAN-077 mục 3). Không hứa thời hạn rút, mức rút hay cam kết
 chi trả. Khi chức năng đổi (mở ví, hạng thành viên), phải ra phiên bản mới, không sửa bản đã công bố.
@@ -14,13 +16,14 @@ Mỗi mục là một tin Telegram, giữ dưới 3.500 ký tự.
 from __future__ import annotations
 
 from cashback_bot import retention
+from cashback_bot.membership import GRANDFATHER_UNTIL_TEXT
 
-DRAFT_VERSION = "V3"
+DRAFT_VERSION = "V4"
 DRAFT_TITLE = "Điều khoản sử dụng chương trình hoàn tiền"
 
 # (mã, tiêu đề nút, nội dung HTML Telegram)
 def draft_sections(keep: dict[str, int]) -> tuple[tuple[str, str, str], ...]:
-    """Các mục V3. `keep`: thời hạn lưu (retention.load) ghi vào mục 🛡 Dữ liệu cá nhân."""
+    """Các mục V4 (V3 + Hạng thành viên). `keep`: thời hạn lưu (retention.load) ghi vào mục 🛡 Dữ liệu cá nhân."""
     period = {key: retention.period(key, value) for key, value in keep.items()}
     return (
         (
@@ -96,6 +99,30 @@ def draft_sections(keep: dict[str, int]) -> tuple[tuple[str, str, str], ...]:
             "• Khoản đã chi được <b>trừ vào các khoản hoàn sau</b> của bạn. Khi còn khoản phải trừ, bạn tạm chưa "
             "rút được cho tới khi trừ đủ. Bot không yêu cầu bạn chuyển trả tiền.\n"
             "• Đơn bị sàn gắn cờ gian lận không được vào ví.",
+        ),
+        (
+            "hang",
+            "🏅 Hạng thành viên",
+            "<b>1. Ba hạng</b>\n"
+            "• Có ba hạng: 🥉 Đồng, 🥈 Bạc, 🥇 Vàng. Hạng càng cao, phần hoa hồng chia cho bạn ở mỗi đơn càng lớn.\n"
+            "• Tài khoản mới bắt đầu ở hạng Đồng. Tài khoản đã dùng bot trước khi chương trình hạng bắt đầu "
+            f"được xếp hạng Vàng và giữ hạng Vàng tới hết {GRANDFATHER_UNTIL_TEXT}.\n"
+            "• Một người dùng cả Telegram và Zalo là hai tài khoản, mỗi tài khoản có hạng riêng.\n\n"
+            "<b>2. Lên hạng và xét hạng</b>\n"
+            "• Bot tính các đơn <b>đã hoàn thành</b> (đã nhận hàng) qua link của bạn trong <b>tháng trước và "
+            "tháng này</b>. Đơn huỷ, trả hàng, lượt bấm link hay số link tạo ra không được tính.\n"
+            "• Đủ cả số đơn và số tiền hoàn của hạng cao hơn thì lên hạng ngay.\n"
+            "• Đầu mỗi tháng, bot xét lại theo 2 tháng vừa qua. Không đủ điều kiện của hạng đang có thì xuống "
+            "<b>một bậc</b>. Giữa tháng hạng không bị giảm.\n"
+            "• Điều kiện từng hạng đang áp dụng luôn hiện ở 🏅 Hạng thành viên (/hang). Người vận hành có thể đổi "
+            "điều kiện; điều kiện mới dùng từ lần xét sau, hạng bạn đang có giữ nguyên tới lúc đó.\n\n"
+            "<b>3. Áp dụng</b>\n"
+            "• Hạng mới áp dụng cho link tạo sau khi đổi hạng. Link đã tạo giữ cách tính lúc tạo.\n"
+            "• Đơn được tính để lên hạng mà sau đó bị sàn huỷ hoặc thu hồi hoa hồng thì không được tính ở lần "
+            "xét sau. Hạng có được nhờ gian lận có thể bị điều chỉnh sau khi người vận hành kiểm tra.\n"
+            "• Phần chia của từng hạng chỉ thay đổi bằng phiên bản điều khoản mới, áp dụng cho link tạo sau "
+            "ngày hiệu lực.\n"
+            "• Xem hạng và số còn thiếu ở 🏅 Hạng thành viên (/hang).",
         ),
         (
             "vi",

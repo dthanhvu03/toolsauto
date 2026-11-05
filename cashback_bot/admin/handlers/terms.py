@@ -88,7 +88,7 @@ class TermsAdmin:
         rows = [((f"👁 #{item.id} {item.version} · {STATUS_LABELS[item.status]}", f"c:tm:v:{item.id}"),) for item in items[:6]]
         if not any(item.version == DRAFT_VERSION for item in items):
             rows.insert(0, ((f"📝 Tạo bản nháp {DRAFT_VERSION} từ mẫu", "c:tm:new"),))
-            lines.append(f"ⓘ Mẫu {DRAFT_VERSION} có ví và rút tiền: chỉ công bố khi chuẩn bị bật ví. Mục dữ liệu cá nhân "
+            lines.append(f"ⓘ Mẫu {DRAFT_VERSION} có ví, rút tiền và 🏅 Hạng thành viên: công bố trước khi bật hạng. Mục dữ liệu cá nhân "
                          "ghi thời hạn lưu đang cài ở 🗄 lúc tạo bản nháp.")
         rows.append((("🗄 Thời hạn lưu dữ liệu", "c:rt:home"),))
         return BotReply("\n".join(lines), inline_keyboard=(*rows, BACK_MENU))

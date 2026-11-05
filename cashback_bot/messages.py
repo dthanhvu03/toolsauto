@@ -151,13 +151,82 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
     )
 
 
-def hang_message() -> str:
+RANK_NAMES = {"BRONZE": "🥉 Đồng", "SILVER": "🥈 Bạc", "GOLD": "🥇 Vàng"}
+
+
+def _need_text(orders: int, vnd: int) -> str:
+    parts = []
+    if orders:
+        parts.append(f"<b>{orders}</b> đơn")
+    if vnd:
+        parts.append(f"<b>{format_vnd(vnd)}</b> tiền hoàn")
+    return " và ".join(parts) or "rất ít"
+
+
+def hang_message(progress=None, values: dict | None = None) -> str:
+    """progress None: hạng chưa bật. Có progress (membership.Progress) + values (ngưỡng đang áp dụng).
+
+    Không đưa tỷ lệ chia (số nội bộ), chỉ nói hạng cao hơn thì mỗi đơn hoàn nhiều hơn.
+    """
+    if progress is None or values is None:
+        return (
+            "🏅 <b>Hạng thành viên</b>\n\n"
+            "Chương trình <b>Đồng · Bạc · Vàng</b> đang được phát triển, chưa chính thức áp dụng.\n\n"
+            "Hiện mọi khách dùng chung một cách tính, xem /cachtinh. "
+            "Bạn chưa cần đăng ký gì.\n\n"
+            "ⓘ Khi ra mắt, bot sẽ báo rõ điều kiện lên hạng, quyền lợi và thời điểm áp dụng."
+        )
+    lines = [
+        "🏅 <b>Hạng thành viên</b>\n",
+        f"Hạng của bạn: <b>{RANK_NAMES[progress.rank_code]}</b>",
+        f"Đơn hoàn thành {progress.window}: <b>{progress.orders}</b> đơn · "
+        f"<b>{format_vnd(progress.cashback_vnd)}</b> tiền hoàn\n",
+    ]
+    if progress.protected_until:
+        lines.append(f"🎁 Bạn là khách quen nên được giữ hạng Vàng tới hết <b>{progress.protected_until}</b>.")
+    elif progress.keep_orders or progress.keep_vnd:
+        lines.append(f"⏳ Cần thêm {_need_text(progress.keep_orders, progress.keep_vnd)} trước cuối tháng để "
+                     f"giữ hạng {RANK_NAMES[progress.rank_code]}.")
+    if progress.next_code is None:
+        lines.append("Bạn đang ở hạng cao nhất, mỗi đơn được hoàn mức cao nhất. 🎉\n")
+    else:
+        lines.append(f"Còn {_need_text(progress.need_orders, progress.need_vnd)} nữa là lên "
+                     f"<b>{RANK_NAMES[progress.next_code]}</b>.\n")
+    lines += [
+        "<b>Cách lên hạng</b> (tính trong tháng trước + tháng này)",
+        "• 🥉 Đồng: hạng khi mới dùng bot.",
+        f"• 🥈 Bạc: {values['silver_orders']} đơn và {format_vnd(values['silver_vnd'])} tiền hoàn.",
+        f"• 🥇 Vàng: {values['gold_orders']} đơn và {format_vnd(values['gold_vnd'])} tiền hoàn.",
+        "Hạng càng cao, mỗi đơn được hoàn càng nhiều.\n",
+        "ⓘ Đủ điều kiện là lên hạng ngay. Đầu mỗi tháng bot xét lại theo 2 tháng vừa qua; không đủ thì "
+        "xuống một bậc. Chỉ tính đơn đã hoàn thành (đã nhận hàng), đơn huỷ hay trả hàng không tính. "
+        "Hạng mới áp dụng cho link tạo sau đó, link đã tạo giữ số đã báo.",
+    ]
+    return "\n".join(lines)
+
+
+def rank_up_notice(rank_code: str) -> str:
     return (
-        "🏅 <b>Hạng thành viên</b>\n\n"
-        "Chương trình <b>Đồng · Bạc · Vàng</b> đang được phát triển, chưa chính thức áp dụng.\n\n"
-        "Hiện mọi khách dùng chung một cách tính, xem /cachtinh. "
-        "Bạn chưa cần đăng ký gì.\n\n"
-        "ⓘ Khi ra mắt, bot sẽ báo rõ điều kiện lên hạng, quyền lợi và thời điểm áp dụng."
+        f"🎉 <b>Chúc mừng, bạn đã lên hạng {RANK_NAMES[rank_code]}!</b>\n\n"
+        "Từ giờ, link bạn tạo mới được hoàn nhiều hơn mỗi đơn. Link đã tạo trước đó giữ số đã báo.\n"
+        "Xem hạng của bạn ở 🏅 Hạng thành viên (/hang)."
+    )
+
+
+def rank_down_notice(rank_code: str) -> str:
+    return (
+        f"🏅 <b>Hạng tháng này của bạn: {RANK_NAMES[rank_code]}</b>\n\n"
+        "2 tháng vừa qua chưa đủ đơn để giữ hạng cũ, nên hạng xuống một bậc. Link đã tạo vẫn giữ số đã báo.\n"
+        "Mua thêm qua bot là lên lại ngay khi đủ điều kiện, xem ở /hang."
+    )
+
+
+def rank_keep_notice(rank_code: str, need_orders: int, need_vnd: int) -> str:
+    return (
+        f"⏳ <b>Giữ hạng {RANK_NAMES[rank_code]}</b>\n\n"
+        f"Còn {_need_text(need_orders, need_vnd)} (đơn hoàn thành trong tháng này) để giữ hạng khi bot xét "
+        "đầu tháng sau.\n"
+        "Gửi link sản phẩm cho bot trước khi mua để đơn được tính. Xem chi tiết ở /hang."
     )
 
 

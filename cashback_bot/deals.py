@@ -394,7 +394,8 @@ def keywords_for(now: datetime) -> slice:
 def build(repo: TrackingRepository, service, market: MarketSearchClient, history: PriceHistoryClient,
           now: datetime, pause: Callable[[float], None] = clock.sleep) -> dict[str, list[dict]]:
     """Deal của mọi danh mục trong một lượt quét. Số hoàn tính như thẻ link, theo chính sách lúc quét."""
-    resolution = service._resolve_policy(now)
+    # Tin deal gửi chung nhiều khách: tính theo mức Đồng (thấp nhất) để không báo cao hơn link khách sẽ nhận (PLAN-154).
+    resolution = service._resolve_for(None, now)
     result: dict[str, list[dict]] = {}
     for key in CATEGORIES:
         products: dict[int, dict] = {}

@@ -17,7 +17,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import deals, order_notify, payouts, policy_snapshot, shop_voucher, voucher, watchlist
+from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, shop_voucher, voucher, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -45,6 +45,9 @@ from cashback_bot.messages import (
     bank_prompt_reply,
     entry_notice,
     hang_message,
+    rank_down_notice,
+    rank_keep_notice,
+    rank_up_notice,
     home_reply,
     how_to_calc,
     food_link_reply,
@@ -61,7 +64,6 @@ from cashback_bot.messages import (
 )
 from cashback_bot.price_watch import PriceHistoryClient
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
-from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
 from cashback_bot.shopee_url import food_url, is_shopee_food_link, parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
@@ -149,7 +151,7 @@ class CashbackService:
             settings.admin_user_ids,
             settings.cashback_rate_percent,
             calculator_label=calculator,
-            membership_on=MEMBERSHIP_CUTOVER,
+            membership_on=settings.membership_enabled,
             fee_default_bps=settings.estimate_fee_bps,
             tax_default_bps=settings.estimate_tax_reserve_bps,
             estimate_policy=policy,
@@ -163,6 +165,22 @@ class CashbackService:
         )
         self._snapshots_on = False
         self._backfill_snapshots()
+        self._seed_membership()
+
+    def _seed_membership(self) -> None:
+        """PLAN-154: lần đầu bật hạng, khách đã có lên Vàng (giữ 70%). Khách mới sau đó mặc định Đồng."""
+        try:
+            with self.repo.connect() as conn:
+                membership.ensure_schema(conn)
+                if not self.settings.membership_enabled:
+                    return
+                seeded = membership.seed_existing(conn, datetime.now(timezone.utc))
+        except sqlite3.Error:
+            logger.exception("[Cashback] xếp hạng khách cũ thất bại")
+            return
+        if seeded:
+            logger.info("[Cashback] hạng thành viên: %s khách cũ lên Vàng", seeded)
+        self._promote(datetime.now(timezone.utc))
 
     def _policy_defaults(self) -> policy_snapshot.PolicyDefaults:
         return policy_snapshot.PolicyDefaults(
@@ -329,7 +347,7 @@ class CashbackService:
     def _page_body(self, name: str, user_id: int | None = None) -> BotReply | None:
         wallet = self.wallet.settings()
         if name == "home":
-            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=True, show_deals=deals.enabled(self.repo),
+            return home_reply(show_rank=self.settings.membership_enabled, show_wallet=True, show_deals=deals.enabled(self.repo),
                               wallet_open=wallet.enabled, show_voucher=voucher.ready(self.repo))
         if name == "guide":
             return page_reply(HUONGDAN)
@@ -348,6 +366,10 @@ class CashbackService:
                 return page_reply(how_to_calc(self._v12_ready(), wallet.hold_days, wallet.min_withdraw_vnd))
             return page_reply(how_to_calc(self._v12_ready()))
         if name == "rank":
+            if self.settings.membership_enabled and user_id is not None:
+                with self.repo.connect() as conn:
+                    now = datetime.now(timezone.utc)
+                    return page_reply(hang_message(membership.progress(conn, user_id, now), membership.thresholds(conn)))
             return page_reply(hang_message())
         if name == "wallet" and user_id is not None:
             return self._wallet_page(user_id)
@@ -441,6 +463,7 @@ class CashbackService:
         """Gọi sau mỗi lần đồng bộ Shopee: cập nhật sổ, ví bật thì báo khách đơn đổi trạng thái."""
         moment = now or datetime.now(timezone.utc)
         transitions = self.wallet.refresh(moment, self._real_cashback)
+        self._promote(moment)
         settings = self.wallet.settings()
         recent = (moment - NEW_ORDER_NOTICE_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
         for item in transitions:
@@ -462,6 +485,29 @@ class CashbackService:
                     item.estimated_vnd,
                 ),
             )
+
+    def _promote(self, moment: datetime) -> None:
+        """PLAN-154: xét tháng, lên hạng, nhắc giữ hạng (lúc khởi động và sau mỗi lần cập nhật ví); báo khách."""
+        if not self.settings.membership_enabled:
+            return
+        day = moment.astimezone(membership.ICT).strftime("%Y-%m-%d")
+        try:
+            with self.repo.connect() as conn:
+                changes = membership.tick(conn, moment)
+                for item in changes:
+                    if item.kind == "up":
+                        text = rank_up_notice(item.to_code)
+                    elif item.kind == "down":
+                        text = rank_down_notice(item.to_code)
+                    else:
+                        text = rank_keep_notice(item.to_code, item.need_orders, item.need_vnd)
+                    enqueue_event(conn, event_key=f"rank:{item.kind}:{item.user_id}:{item.to_code}:{day}",
+                                  event_type=membership.EVENT_TYPE, chat_id=item.user_id, message_html=text,
+                                  audience="customer", category="wallet")
+                    logger.info("[Cashback] hạng khách %s: %s %s → %s", item.user_id, item.kind, item.from_code,
+                                item.to_code)
+        except sqlite3.Error:
+            logger.exception("[Cashback] xét hạng thất bại")
 
     def _real_cashback(self, commission_vnd: int, row) -> Split:
         """Tiền hoàn cho hoa hồng thật, theo snapshot chính sách của link (PLAN-076, ADR-053).
@@ -691,7 +737,7 @@ class CashbackService:
                            moment: datetime) -> PolicyResolution | None:
         """Chính sách báo giá lúc `moment`; đọc DB lỗi thì ghi link bị từ chối, báo admin, trả None."""
         try:
-            return self._resolve_policy(moment)
+            return self._resolve_for(telegram_user_id, moment)
         except sqlite3.Error:
             logger.exception("[Cashback] đọc mức dự phòng thất bại")
             self._reject(update_id, telegram_user_id, original_url, "reserve_read_failed")
@@ -908,6 +954,20 @@ class CashbackService:
     def _resolve_policy(self, now: datetime) -> PolicyResolution:
         """Một lần chọn chính sách cho link báo giá lúc `now`. Báo giá và snapshot dùng chung kết quả."""
         return self.admin_panel.resolve_policy(now, v12=self._v12_ready())
+
+    def _resolve_for(self, user_id: int | None, now: datetime) -> PolicyResolution:
+        """Chính sách cho link của một khách: tỷ lệ theo hạng (PLAN-154). user_id None: mức Đồng (thấp nhất).
+
+        Hạng tắt thì như _resolve_policy. Tỷ lệ chia chung là trần, hạng không vượt.
+        """
+        base = self._resolve_policy(now)
+        if not self.settings.membership_enabled:
+            return base
+        rank = membership.DEFAULT_RANK
+        if user_id is not None:
+            with self.repo.connect() as conn:
+                rank = membership.rank_of(conn, user_id)
+        return replace(base, share_bps=membership.share_bps(rank, self.admin_panel._safe_rates(), base.share_bps))
 
     def _snapshot_record(self, resolution: PolicyResolution, priced) -> dict | None:
         return policy_snapshot.record(resolution, priced) if self._snapshots_on else None

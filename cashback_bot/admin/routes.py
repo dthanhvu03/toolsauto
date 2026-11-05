@@ -118,6 +118,11 @@ def build_router(panel: AdminPanel) -> AdminRouter:
         keeps=lambda d: d in ("c:in:cost", "c:in:f") or d.startswith("c:in:t:"),
     ))
     router.register(PolicyAdmin(panel))
+    router.register(DomainRoute(
+        "membership", lambda u, d, n: panel._membership().route(u, d, n), prefixes=("c:mb:",),
+        text=lambda u, t, n: panel._membership().consume_text(u, t, n), waiting=panel._membership_waiting,
+        keeps=lambda d: d.startswith("c:mb:e:"),
+    ))
 
     # --- Chỉ nút bấm ------------------------------------------------------------------------
     router.register(DomainRoute("stats", lambda u, d, n: _stats(panel, d, n), prefixes=("c:st:",)))
