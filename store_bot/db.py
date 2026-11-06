@@ -249,6 +249,7 @@ class Topup:
     intent_product_id: int | None = None
     intent_quantity: int | None = None
     intent_unit_price: int | None = None
+    resolved_by: str | None = None  # sepay · admin:<id> · user · expired
 
 
 @dataclass(frozen=True)
@@ -797,15 +798,17 @@ class StoreRepository:
             ).fetchone()
         return _topup(row) if row else None
 
-    def expire_topups(self, older_than_sec: int) -> int:
-        """Huỷ mã nạp chờ quá lâu. Khách lỡ chuyển vào mã đã huỷ thì webhook báo admin «không khớp» như cũ."""
+    def expire_topups(self, older_than_sec: int) -> list[int]:
+        """Huỷ mã nạp chờ quá lâu, trả id các mã vừa huỷ. Tiền lỡ về mã quá hạn vẫn được cộng (confirm_topup)."""
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
         with self._tx() as conn:
-            return conn.execute(
-                """UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ?
-                   WHERE status = 'pending' AND created_at < ?""",
-                (utcnow(), cutoff),
-            ).rowcount
+            ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM topups WHERE status = 'pending' AND created_at < ?", (cutoff,))]
+            conn.executemany(
+                "UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ? WHERE id = ?",
+                [(utcnow(), i) for i in ids],
+            )
+            return ids
 
     def get_topup(self, topup_id: int) -> Topup | None:
         with self._read() as conn:
@@ -1054,7 +1057,8 @@ def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False)
 def _topup(row: sqlite3.Row) -> Topup:
     return Topup(row["id"], row["user_id"], row["code"], row["amount"], row["credited"], row["status"], row["created_at"],
                  row["intent_product_id"], row["intent_quantity"],
-                 row["intent_unit_price"] if "intent_unit_price" in row.keys() else None)
+                 row["intent_unit_price"] if "intent_unit_price" in row.keys() else None,
+                 row["resolved_by"] if "resolved_by" in row.keys() else None)
 
 
 def _load_key(conn: sqlite3.Connection, key_id: int) -> ApiKey | None:

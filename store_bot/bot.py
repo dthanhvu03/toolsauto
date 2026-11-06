@@ -114,9 +114,29 @@ class StoreBot:
     def _clear_await(self, user_id: int) -> None:
         self.repo.delete_state(f"await:{user_id}")
 
-    def notify_admins(self, html: str, markup: dict | None = None, quiet: bool = False) -> None:
+    def notify_admins(self, html: str, markup: dict | None = None, quiet: bool = False) -> list[list[int]]:
+        """Gửi tin cho mọi admin. Trả [[chat_id, message_id], …] của tin gửi được (để sửa lại về sau)."""
+        sent = []
         for admin_id in self.settings.admin_ids:
-            self.tg.send_message(admin_id, html, markup, disable_notification=quiet)
+            message_id = self.tg.send_message(admin_id, html, markup, disable_notification=quiet)
+            if message_id:
+                sent.append([admin_id, message_id])
+        return sent
+
+    def close_topup_notice(self, topup: Topup | None) -> bool:
+        """Mã nạp đã xong (cộng / huỷ / hết hạn): sửa tin «Yêu cầu nạp» của admin — ghi kết quả, bỏ nút ✅ ❌.
+        Trả False nếu mã này không có tin lưu lại (mã cũ)."""
+        raw = self.repo.get_state(f"topup_msg:{topup.id}") if topup else None
+        if not raw:
+            return False
+        self.repo.delete_state(f"topup_msg:{topup.id}")
+        product = self.repo.get_product(topup.intent_product_id) if topup.intent_product_id else None
+        html = (msg.admin_topup(topup, self.repo.get_user(topup.user_id), self.settings.sepay_webhook_key is not None,
+                                product.name if product else None)
+                + "\n\n" + msg.topup_outcome(topup))
+        for chat_id, message_id in json.loads(raw):
+            self.tg.edit_message_text(chat_id, message_id, html)
+        return True
 
     def _buy_url(self, product_id: int) -> str:
         return f"https://t.me/{self.bot_username}?start=buy_{product_id}"
@@ -276,7 +296,7 @@ class StoreBot:
                 return "Mã này đã được xử lý hoặc đã huỷ.", True
             self._show(chat_id, message_id, msg.TOPUP_CANCELLED_BY_USER, keyboard([button("🛒 Mua hàng", "shop")],
                                                                                     [button("🏠 Trang chủ", "home")]))
-            self.notify_admins(msg.admin_topup_cancelled_by_user(topup, user), quiet=True)
+            self.close_topup_notice(self.repo.get_topup(topup.id))  # tin admin ghi «khách tự huỷ», bỏ nút
             return "Đã huỷ mã.", False
         elif data == "tx":
             self._set_await(user.user_id, "topup")
@@ -607,11 +627,13 @@ class StoreBot:
         self.send_topup(chat_id, topup)
         auto = self.settings.sepay_webhook_key is not None
         product_name = product.name if product else None
-        self.notify_admins(
+        sent = self.notify_admins(
             msg.admin_topup(topup, user, auto, product_name),
             keyboard([button("✅ Đã nhận tiền", f"a:tc:{topup.id}"), button("❌ Huỷ", f"a:tx:{topup.id}")]),
             quiet=auto,
         )
+        if sent:
+            self.repo.set_state(f"topup_msg:{topup.id}", json.dumps(sent))
 
     def send_topup(self, chat_id: int, topup: Topup) -> None:
         """Gửi mã QR + hướng dẫn chuyển khoản của một mã nạp."""
@@ -804,21 +826,23 @@ class StoreBot:
         elif action == "tx":
             done = self.repo.cancel_topup(ident, by)
             topup = self.repo.get_topup(ident)
-            status = "❌ Đã huỷ." if done else f"Yêu cầu đã ở trạng thái: {topup.status if topup else '?'}."
-            self._show(chat_id, message_id, f"💳 Nạp #{ident}: {status}")
+            if not (done and self.close_topup_notice(topup)):
+                self._show(chat_id, message_id, f"💳 Nạp #{ident}: {msg.topup_outcome(topup) if topup else '?'}")
         return None
 
     def _confirm_topup(self, chat_id: int, message_id: int, topup_id: int, by: str) -> str:
         topup, balance, newly = self.repo.confirm_topup(topup_id, by)
         if not newly:
-            self._show(chat_id, message_id, f"💳 Nạp #{topup_id} đã xử lý trước đó ({topup.status}).")
+            self._show(chat_id, message_id, f"💳 Nạp #{topup_id}: {msg.topup_outcome(topup)}")
             return "Đã xử lý trước đó."
-        self._show(chat_id, message_id, f"💳 Nạp #{topup_id}: ✅ đã cộng {msg.vnd(topup.credited or 0)}.")
-        self.on_topup_credited(topup, balance)
+        if self.repo.get_state(f"topup_msg:{topup_id}") is None:  # mã cũ không có tin lưu: sửa tin đang bấm
+            self._show(chat_id, message_id, f"💳 Nạp #{topup_id}: {msg.topup_outcome(topup)}")
+        self.on_topup_credited(topup, balance)  # sửa tin «Yêu cầu nạp» của mọi admin: ghi «đã cộng», bỏ nút
         return "Đã cộng tiền."
 
     def on_topup_credited(self, topup: Topup, balance: int) -> None:
         """Tiền nạp vừa được cộng (admin bấm ✅ hoặc SePay). Nạp để mua một đơn thì tự mua luôn."""
+        self.close_topup_notice(topup)
         self.tg.send_message(topup.user_id, msg.topup_credited(topup.credited or 0, balance))
         if topup.intent_product_id is None:
             return
@@ -1166,8 +1190,10 @@ def run_background(bot: StoreBot, stop: threading.Event) -> None:
     while not stop.is_set():
         try:
             expired = bot.repo.expire_topups(TOPUP_EXPIRE_SEC)
+            for topup_id in expired:
+                bot.close_topup_notice(bot.repo.get_topup(topup_id))
             if expired:
-                logger.info("[Store] huỷ %s mã nạp quá 24 giờ", expired)
+                logger.info("[Store] huỷ %s mã nạp quá 24 giờ", len(expired))
         except Exception:
             logger.exception("[Store] huỷ mã nạp quá hạn lỗi")
         if bot.fulfiller.client is not None:

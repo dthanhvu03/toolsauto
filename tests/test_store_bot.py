@@ -969,8 +969,8 @@ def test_pressing_qr_again_reuses_code_and_old_codes_expire(fatcat, repo):
     assert sum("Để mua" in h for h in telegram.texts_to(ADMIN)) == 1
     assert sum(pending[0].code in caption for _, caption in telegram.photos) == 2
 
-    assert repo.expire_topups(3600) == 0
-    assert repo.expire_topups(-1) == 1
+    assert repo.expire_topups(3600) == []
+    assert len(repo.expire_topups(-1)) == 1
     assert repo.pending_topups() == []
     assert repo.get_topup(pending[0].id).status == "cancelled"
 
@@ -1047,7 +1047,8 @@ def test_one_pending_qr_per_customer_until_confirmed_or_cancelled(fatcat, repo):
     assert repo.get_topup(first.id).status == "pending"
     store.handle_update(_click(BUYER, f"tu:{first.id}"))
     assert repo.get_topup(first.id).status == "cancelled"
-    assert any("tự huỷ mã nạp" in h for h in telegram.texts_to(ADMIN))
+    closed = [e for e in telegram.edits if e[0] == ADMIN and "Khách tự huỷ" in e[2]]
+    assert closed and closed[-1][3] is None  # tin «Yêu cầu nạp» của admin ghi kết quả, hết nút ✅ ❌
     store.handle_update(_click(BUYER, f"bq:{gpt.id}:1"))  # huỷ xong tạo được mã mới
     assert len(repo.pending_topups()) == 1 and repo.pending_topups()[0].intent_product_id == gpt.id
 
@@ -1163,3 +1164,25 @@ def test_waiting_order_auto_refunded_after_6_hours(fatcat, repo, monkeypatch):
     fake.funds = 500_000
     store.retry_pending()
     assert fake.calls == []
+
+
+def test_admin_topup_notice_closed_after_sepay_or_admin(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    store.handle_update(_click(BUYER, "ta:50000"))
+    topup = repo.pending_topups()[0]
+    assert any(cid == ADMIN and "Yêu cầu nạp" in html for cid, html, _ in telegram.sent)
+    hook = {"id": 9200, "transferType": "in", "transferAmount": 50_000, "content": topup.code}
+    client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    edit = [e for e in telegram.edits if e[0] == ADMIN and "SePay tự cộng" in e[2]]
+    assert len(edit) == 1 and edit[0][3] is None and f"Yêu cầu nạp #{topup.id}" in edit[0][2]
+    assert repo.get_state(f"topup_msg:{topup.id}") is None
+
+    store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))  # bấm nút cũ: không cộng lại
+    assert repo.get_user(BUYER).balance == 50_000
+    assert "Đã cộng 50.000đ" in telegram.edits[-1][2]
+
+    store.handle_update(_click(RESELLER, "ta:100000", "Zusem10"))
+    second = repo.pending_topups()[0]
+    store.handle_update(_click(ADMIN, f"a:tc:{second.id}", "boss"))
+    assert any("Admin xác nhận" in e[2] and e[3] is None for e in telegram.edits if e[0] == ADMIN)

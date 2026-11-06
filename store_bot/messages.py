@@ -748,9 +748,19 @@ def admin_sale(order: Order, user: User | None) -> str:
     return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
 
 
-def admin_topup_cancelled_by_user(topup: Topup, user: User) -> str:
-    return (f"❌ {esc(user.label)} tự huỷ mã nạp #{topup.id} {topup.code} ({vnd(topup.amount)}). "
-            "Lỡ tiền mã này vẫn về thì bot vẫn cộng vào ví khách (không tự mua).")
+def topup_outcome(topup: Topup) -> str:
+    """Kết quả một mã nạp, ghi vào tin «Yêu cầu nạp» của admin khi mã đã xong."""
+    by = topup.resolved_by or ""
+    if topup.status == "paid":
+        who = "SePay tự cộng" if by == "sepay" else "Admin xác nhận"
+        return f"✅ <b>Đã cộng {vnd(topup.credited or 0)}</b> · {who}"
+    if topup.status == "cancelled":
+        if by == "user":
+            return "❌ <b>Khách tự huỷ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
+        if by == "expired":
+            return "⌛ <b>Hết hạn 24 giờ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
+        return "❌ <b>Admin đã huỷ</b>"
+    return "⏳ Đang chờ"
 
 
 def admin_after_credit_failed(topup: Topup) -> str:
