@@ -101,10 +101,11 @@ function AbStats({ ov }: { ov: Overview }) {
           <thead className="text-left text-xs text-slate-500">
             <tr>
               <th className="py-1 pr-3">Bot · biến thể</th>
-              <th className="py-1 pr-3">Chờ duyệt</th>
-              <th className="py-1 pr-3">Chờ đăng</th>
               <th className="py-1 pr-3">Đã đăng</th>
-              <th className="py-1 pr-3">Bỏ</th>
+              <th className="py-1 pr-3">Khách mới</th>
+              <th className="py-1 pr-3">Tỉ lệ</th>
+              <th className="py-1 pr-3">Đã dùng bot</th>
+              <th className="py-1 pr-3">Chờ đăng</th>
               <th className="py-1">Lỗi</th>
             </tr>
           </thead>
@@ -112,13 +113,16 @@ function AbStats({ ov }: { ov: Overview }) {
             {Object.entries(ov.stats).flatMap(([bot, variants]) =>
               (["A", "B"] as const).map((v) => {
                 const c = variants[v] ?? {};
+                const k = ov.customers?.by_variant?.[bot]?.[v] ?? { customers: 0, active: 0 };
+                const posted = c.posted ?? 0;
                 return (
                   <tr key={`${bot}-${v}`} className="border-t border-slate-100">
                     <td className="py-1 pr-3">{BOT_LABEL[bot] ?? bot} · {v}</td>
-                    <td className="py-1 pr-3">{c.pending ?? 0}</td>
-                    <td className="py-1 pr-3">{c.approved ?? 0}</td>
-                    <td className="py-1 pr-3 font-semibold">{c.posted ?? 0}</td>
-                    <td className="py-1 pr-3">{c.rejected ?? 0}</td>
+                    <td className="py-1 pr-3">{posted}</td>
+                    <td className="py-1 pr-3 font-semibold text-emerald-700">{k.customers}</td>
+                    <td className="py-1 pr-3">{posted ? `${Math.round((k.customers / posted) * 100)}%` : "—"}</td>
+                    <td className="py-1 pr-3">{k.active}</td>
+                    <td className="py-1 pr-3">{(c.pending ?? 0) + (c.approved ?? 0)}</td>
                     <td className="py-1">{c.failed ?? 0}</td>
                   </tr>
                 );
@@ -128,8 +132,48 @@ function AbStats({ ov }: { ov: Overview }) {
         </table>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Khách bấm link reply sẽ vào bot với mã <code>?start=threads_…</code> — so số khách mới theo mã ở thống kê của bot.
+        Khách mới = người /start lần đầu qua link <code>?start=threads_…</code> trong reply. Tỉ lệ = khách mới / reply đã đăng.
       </p>
+    </section>
+  );
+}
+
+function Customers({ rep }: { rep: Overview["customers"] }) {
+  if (!rep) return null;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-slate-800">Khách về từ Threads</h2>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg bg-emerald-50 p-2">
+          <div className="text-2xl font-semibold text-emerald-800">{rep.total}</div>
+          <div className="text-xs text-emerald-900">khách mới</div>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-2">
+          <div className="text-2xl font-semibold text-slate-800">{rep.last_24h}</div>
+          <div className="text-xs text-slate-600">trong 24 giờ qua</div>
+        </div>
+        <div className="rounded-lg bg-indigo-50 p-2">
+          <div className="text-2xl font-semibold text-indigo-800">{rep.active}</div>
+          <div className="text-xs text-indigo-900">đã dùng bot (gửi link / nạp / mua)</div>
+        </div>
+      </div>
+      {rep.customers.length > 0 ? (
+        <ul className="mt-3 divide-y divide-slate-100 text-sm">
+          {rep.customers.map((c) => (
+            <li key={`${c.bot}-${c.user_id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+              <span className="font-medium text-slate-800">{c.username ? `@${c.username}` : `id ${c.user_id}`}</span>
+              <span className="text-xs text-slate-500">
+                {BOT_LABEL[c.bot]} · biến thể {c.variant ?? "?"} · <code>{c.code}</code>
+              </span>
+              <span className={`text-xs ${c.active ? "text-emerald-700" : "text-slate-500"}`}>{c.activity}</span>
+              <span className="ml-auto text-xs text-slate-400">{when(c.joined_at)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">Chưa có khách nào vào bot qua link Threads.</p>
+      )}
+      {rep.errors.length > 0 && <p className="mt-2 text-xs text-amber-700">{rep.errors.join(" · ")}</p>}
     </section>
   );
 }
@@ -225,6 +269,7 @@ export function ThreadsGrowthPage() {
 
       {ov.isError && <p className="text-sm text-red-600">{(ov.error as Error).message}</p>}
       {ov.data && <StatusBar ov={ov.data} />}
+      {ov.data && <Customers rep={ov.data.customers} />}
 
       <nav className="flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => {

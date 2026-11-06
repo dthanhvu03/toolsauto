@@ -338,6 +338,7 @@ def make_worker(runner, monkeypatch):
     profiles[TargetBot.CASHBOT].keywords.append("kw")
     monkeypatch.setattr(worker, "load_profiles", lambda: profiles)
     monkeypatch.setattr(worker.GrowthWorker, "_profile_path", lambda self: "/profile")
+    monkeypatch.setattr(worker.conversions, "report", lambda: {"total": 1, "last_24h": 1, "active": 0})
     disabled = []
     monkeypatch.setattr(worker.settings, "upsert_setting", lambda db, k, v, updated_by=None: disabled.append((k, v)))
     monkeypatch.setattr(worker.growth_session, "mark", lambda db, ok, err=None: disabled.append(("mark", ok)))
@@ -485,3 +486,60 @@ def test_clean_reply_fixes_glued_links():
     out = evaluator.clean_reply("ghé t.me/zt_shopee_bot?start=sai nha\nb", url)
     assert out == f"ghé nha b {url}"
     assert evaluator.clean_reply("không có link nha b", url) == "không có link nha b"
+
+
+def _bot_dbs(tmp_path):
+    import sqlite3
+
+    cb, st = tmp_path / "cashback.sqlite", tmp_path / "store.sqlite"
+    with sqlite3.connect(cb) as c:
+        c.executescript("""
+            CREATE TABLE bot_state(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE telegram_users(telegram_user_id INTEGER, username TEXT, created_at TEXT, last_seen_at TEXT);
+            CREATE TABLE link_requests(id INTEGER, telegram_user_id INTEGER);
+            INSERT INTO telegram_users VALUES (1, 'lan', '2026-11-06T01:03:18Z', NULL), (2, NULL, '2026-11-01T00:00:00Z', NULL),
+                                              (3, 'x', '2026-11-06T02:00:00Z', NULL);
+            INSERT INTO bot_state VALUES ('src:1', 'threads_cb_tier'), ('src:2', 'threads_cb_save'), ('src:3', 'canva');
+            INSERT INTO link_requests VALUES (1, 2), (2, 2);
+        """)
+    with sqlite3.connect(st) as c:
+        c.executescript("""
+            CREATE TABLE state(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE users(user_id INTEGER, username TEXT, created_at TEXT, last_seen_at TEXT);
+            CREATE TABLE topups(user_id INTEGER, credited INTEGER, status TEXT);
+            CREATE TABLE orders(user_id INTEGER, total INTEGER, refunded INTEGER);
+            INSERT INTO users VALUES (9, 'mai', '2026-11-06T03:00:00Z', NULL);
+            INSERT INTO state VALUES ('src:9', 'threads_ai_price');
+            INSERT INTO topups VALUES (9, 100000, 'paid'), (9, 50000, 'pending');
+            INSERT INTO orders VALUES (9, 80000, 0);
+        """)
+    return cb, st
+
+
+def test_conversions_report_reads_both_bots(tmp_path):
+    from app.features.threads.growth import conversions
+
+    cb, st = _bot_dbs(tmp_path)
+    rep = conversions.report(now=NOW, cashback_path=cb, store_path=st)
+    assert rep["errors"] == [] and rep["total"] == 3 and rep["active"] == 2 and rep["last_24h"] == 2
+    assert rep["by_variant"]["cashbot"]["B"] == {"customers": 1, "active": 0}
+    assert rep["by_variant"]["cashbot"]["A"] == {"customers": 1, "active": 1}
+    assert rep["by_variant"]["ai_store"]["B"] == {"customers": 1, "active": 1}
+    store = [c for c in rep["customers"] if c["bot"] == "ai_store"][0]
+    assert store["activity"] == "nạp 100.000đ · 1 đơn · 80.000đ"
+    assert {c["code"] for c in rep["customers"]} == {"threads_cb_tier", "threads_cb_save", "threads_ai_price"}
+
+
+def test_conversions_missing_db_does_not_break(tmp_path):
+    from app.features.threads.growth import conversions
+
+    cb, _ = _bot_dbs(tmp_path)
+    rep = conversions.report(now=NOW, cashback_path=cb, store_path=tmp_path / "nope.sqlite")
+    assert rep["total"] == 2 and rep["errors"] and "ai_store" in rep["errors"][0]
+
+
+def test_vn_time():
+    from app.features.threads.growth.notify import vn_time
+
+    assert vn_time("2026-11-06T01:03:18Z") == "06/11 08:03"
+    assert vn_time(None) == ""

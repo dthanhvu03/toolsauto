@@ -14,6 +14,9 @@
 - Panel hệ thống (/app/go/syspanel): thêm khung «Bot bán hàng (systemd)» CHỈ XEM — cashback-bot, cashback-zalo, store-bot,
   store-api (trạng thái, RAM, CPU, thời gian chạy, số lần restart, lệnh restart để anh tự chạy); `Threads_Growth` vào danh sách
   PM2 điều khiển được (sửa luôn test ecosystem khớp danh sách). Web_Dashboard đã restart.
+- Báo cáo nguồn khách (`growth/conversions.py`, CHỈ ĐỌC data/cashback.sqlite `bot_state` + data/store.sqlite `state`, khoá
+  `src:<user>` = mã ?start= PLAN-153): trang web khung «Khách về từ Threads» + cột Khách / Tỉ lệ theo A/B; `/keokhach` và báo cáo
+  vòng có dòng khách mới. 06/11: 1 khách `threads_cb_tier` (Cashbot B) lúc 08:03, mới /start chưa gửi link.
 - Next Action: theo dõi Telegram báo cáo / checkpoint; CHƯA `pm2 save` (Threads_Growth chưa tự lên sau khi WSL khởi động lại —
   hỏi anh trước khi save vì list PM2 còn DB_Backup đang stopped).
   Commit khi anh bảo (gồm cả phần review growth phiên 05/11).

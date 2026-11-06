@@ -33,6 +33,26 @@ export type Quota = {
   posted_last_day: number;
 };
 
+export type Customer = {
+  bot: "cashbot" | "ai_store";
+  variant: "A" | "B" | null;
+  code: string;
+  user_id: number;
+  username: string | null;
+  joined_at: string | null;
+  activity: string;
+  active: boolean;
+};
+
+export type CustomerReport = {
+  total: number;
+  active: number;
+  last_24h: number;
+  by_variant: Record<string, Record<"A" | "B", { customers: number; active: number }>>;
+  customers: Customer[];
+  errors: string[];
+};
+
 export type Overview = {
   enabled: boolean;
   worker: {
@@ -55,6 +75,7 @@ export type Overview = {
   quota: Quota;
   stats: Record<string, Record<"A" | "B", Partial<Record<GrowthStatus, number>>>>;
   counts: Record<"pending" | "approved" | "posted" | "failed", number>;
+  customers: CustomerReport;
   settings_url: string;
 };
 

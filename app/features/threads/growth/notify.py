@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app import config
@@ -78,6 +79,8 @@ def cycle_text(report: Dict[str, Any]) -> str:
             f"\n• {BOT_LABEL.get(it['bot'], it['bot'])} {it['variant']} → @{e(it['author'])} "
             f"(<a href=\"{e(link)}\">xem</a>)\n  <i>{e(it['text'][:160])}</i>"
         )
+    if report.get("customers"):
+        parts.append("\n" + customers_line(report["customers"]))
     if report.get("quota_note"):
         parts.append(f"\n⏳ {e(report['quota_note'])}")
     if report.get("errors"):
@@ -93,19 +96,49 @@ def checkpoint_text(reason: str) -> str:
     )
 
 
-def summary_text(stats: Dict[str, Any], quota, enabled: bool, login_status: str) -> str:
+_VN = timezone(timedelta(hours=7))
+
+
+def vn_time(ts: Optional[str]) -> str:
+    """'2026-11-06T01:03:18Z' → '06/11 08:03' (giờ Việt Nam)."""
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return str(ts or "")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_VN).strftime("%d/%m %H:%M")
+
+
+def customers_line(customers: Optional[Dict[str, Any]]) -> str:
+    if not customers:
+        return ""
+    return (f"👥 Khách mới từ Threads: <b>{customers.get('total', 0)}</b>"
+            f" (24h qua {customers.get('last_24h', 0)}, đã dùng bot {customers.get('active', 0)})")
+
+
+def summary_text(stats: Dict[str, Any], quota, enabled: bool, login_status: str,
+                 customers: Optional[Dict[str, Any]] = None) -> str:
     rows: List[str] = [
         f"🧵 <b>Kéo khách</b> — {'🟢 đang bật' if enabled else '⚪ đang tắt'} · đăng nhập: {html.escape(login_status)}",
         f"Hạn mức: {quota.posted_last_hour}/giờ · {quota.posted_last_day}/24h"
         + ("" if quota.allowed else f" — chờ ({html.escape(quota.reason)})"),
         "",
     ]
+    if customers:
+        rows.insert(2, customers_line(customers))
+    conv = (customers or {}).get("by_variant", {})
     for bot, variants in stats.items():
         for v, counts in variants.items():
+            n = conv.get(bot, {}).get(v, {}).get("customers", 0)
             rows.append(
-                f"{BOT_LABEL.get(bot, bot)} {v}: chờ {counts.get('pending', 0)} · đã đăng {counts.get('posted', 0)}"
-                f" · bỏ {counts.get('rejected', 0)} · lỗi {counts.get('failed', 0)}"
+                f"{BOT_LABEL.get(bot, bot)} {v}: đã đăng {counts.get('posted', 0)} → khách {n}"
+                f" · chờ {counts.get('pending', 0) + counts.get('approved', 0)} · lỗi {counts.get('failed', 0)}"
             )
+    for c in (customers or {}).get("customers", [])[:5]:
+        who = f"@{c['username']}" if c.get("username") else f"id {c['user_id']}"
+        rows.append(f"• {BOT_LABEL.get(c['bot'], c['bot'])} {c.get('variant') or '?'} — {html.escape(who)}"
+                    f" ({vn_time(c.get('joined_at'))}): {html.escape(c['activity'])}")
     return "\n".join(rows)
 
 

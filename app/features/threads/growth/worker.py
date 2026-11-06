@@ -25,7 +25,7 @@ from typing import Callable, Dict, List, Optional
 from app.core import settings
 from app.core.database.core import SessionLocal
 from app.features.threads.adapter import ThreadsSessionInvalidError
-from app.features.threads.growth import notify
+from app.features.threads.growth import conversions, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
 from app.features.threads.growth.config import TargetBot, WorkerConfig, load_profiles, load_worker_config
@@ -50,6 +50,7 @@ class CycleReport:
     quota_note: str = ""
     errors: List[str] = field(default_factory=list)
     posted_items: List[Dict] = field(default_factory=list)
+    customers: Optional[Dict] = None
 
     def as_dict(self) -> Dict:
         return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items)}
@@ -211,6 +212,10 @@ class GrowthWorker:
         if due or report.posted or report.failed:
             logger.info("growth: vòng xong %s", report.as_dict())
             if report.posted or report.failed:
+                try:
+                    report.customers = conversions.report()
+                except Exception as exc:  # báo cáo khách không được làm hỏng vòng
+                    logger.warning("growth: đọc khách mới lỗi: %s", exc)
                 self.notify.send(self.notify.cycle_text(report.as_dict()))
         return report
 

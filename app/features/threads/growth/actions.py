@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.core import settings
-from app.features.threads.growth import notify
+from app.features.threads.growth import conversions, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.config import ABVariant, load_limits, load_worker_config
 from app.features.threads.growth.runner import GrowthRunner
@@ -76,6 +76,7 @@ def overview(db: Session) -> Dict[str, Any]:
         "login": {**asdict(st), "ready": st.ready},
         "quota": asdict(quota),
         "stats": r.get_ab_summary(),
+        "customers": conversions.report(),
         "counts": {s: len(r.storage.list_posts(s, limit=1000)) for s in ("pending", "approved", "posted", "failed")},
         "settings_url": "/app/settings",
     }
@@ -107,6 +108,6 @@ def telegram_callback(db: Session, target: str) -> tuple[bool, str, Optional[str
 def telegram_summary(db: Session) -> tuple[str, list]:
     data = overview(db)
     text = notify.summary_text(
-        data["stats"], runner().posting_quota(), data["enabled"], data["login"]["login_status"]
+        data["stats"], runner().posting_quota(), data["enabled"], data["login"]["login_status"], data["customers"]
     )
     return text, notify.toggle_buttons(data["enabled"])

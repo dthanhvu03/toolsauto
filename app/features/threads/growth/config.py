@@ -71,6 +71,11 @@ _STATIC = {
 }
 
 
+def code_map() -> Dict[str, tuple]:
+    """Mã ``?start=`` → (bot, biến thể) — để đếm khách theo A/B."""
+    return {code: (bot, v) for bot, (_, _, variants) in _STATIC.items() for v, (code, _) in variants.items()}
+
+
 def _setting(key: str):
     """Giá trị trên web; DB lỗi → mặc định khai trong ``app/core/settings.py``."""
     try:
