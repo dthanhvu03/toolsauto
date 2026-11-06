@@ -1,3 +1,43 @@
+## Phiên 2026-11-06 (growth-reach) — Kéo khách: nhắm bài nhiều người xem + Cashbot chào khách từ Threads
+- Số liệu lúc bắt đầu: 35 reply → 2 khách /start (cùng Cashbot, A 1 · B 1) → 0 khách gửi link. Xem công khai (không đăng
+  nhập): reply chỉ 3–24 lượt xem vì toàn reply bài mới đăng ít người xem → nút thắt là ĐỘ PHỦ, không phải câu chữ.
+  Profile @us28qt (2.101 follower) tên/bio «Tin ở đây», bài cũ là tin xã hội — không ăn nhập săn sale (anh tự sửa tay).
+- Làm: ghi like / reply / follower tác giả từ JSON tìm kiếm → `reach` = 10·log10(1+follower) + 3·reply + like
+  (`scanner.reach_score`) — follower tác giả KHÔNG có trong kết quả tìm kiếm Threads nên thực tế reach ≈ 3·reply + like; quét thêm tab «Hàng đầu» (`growth.search_top`, mặc định bật); hàng chờ đăng theo reach giảm dần;
+  `growth.min_reach` (mặc định 0); bài chờ quá `max_post_age_hours` tự bỏ khi tới lượt. Web: thẻ bài hiện «độ phủ · 👥»;
+  ⚙️ Kéo khách thêm 2 ô mới. Cashbot: `/start threads_*` khách mới → câu chào chỉ cách lấy link (`THREADS_WELCOME`).
+- Đưa lại 11 bài #39–#49 về «Chờ đăng» (chủ bot duyệt; sao lưu DB trong scratchpad trước khi sửa).
+- Proof: test growth 41 pass; growth+cashback+settings+process 1298 pass, 1 hỏng `test_cashback_payout_safety::test_b9_…`
+  (màn admin ví «Vừa đổi tài khoản» — không dính phần /start sửa); restart Threads_Growth + Web_Dashboard, log thấy
+  «(hàng đầu)» và trình duyệt không bị diệt nữa.
+- Next Action: ANH chạy `systemctl restart cashback-bot cashback-zalo` để câu chào Threads có hiệu lực. Sau 1–2 ngày so
+  khách mới / reply giữa bài reach cao và thấp (trang web) rồi chỉnh `growth.min_reach`.
+  Hướng tiếp (chưa làm): trả lời người hỏi lại dưới reply của mình; bài đăng riêng hằng ngày trên @us28qt.
+
+## Phiên 2026-11-06 (growth-check) — Kéo khách: trình duyệt bị Maintenance diệt giữa vòng → sửa
+- Triệu chứng: vòng 13:2x (giờ VN) đăng #31–#38 rồi 11 bài #39–#49 «failed: Target page, context or browser has been closed»;
+  vòng sau 12/14 từ khóa tìm lỗi cùng câu. Gốc: `app/core/process_scan.py` WORKER_MODULES thiếu
+  `app.features.threads.growth.worker` → Maintenance (`purge_orphan_toolsauto_browsers`) coi Chromium của kéo khách là
+  «mồ côi» và diệt (log Maintenance «Killing orphan ToolsAuto browser … chrome-headless-shell»).
+- Sửa: thêm worker vào WORKER_MODULES; `growth/worker.py`: trình duyệt chết → dừng vòng, GIỮ hàng chờ (không đánh failed),
+  mỗi vòng quét 1 bài / tác giả, trước khi đăng bỏ bài trùng tác giả đã reply trong cooldown (06/11 @pisharevn lọt 4 bài);
+  `storage.posted_to_author_since`. Test growth 37 pass (+5), process_scan/orphan 76 pass, ruff sạch.
+- Proof: restart Maintenance + Threads_Growth; khi Chromium instagram_5 mở, `find_orphan_toolsauto_browsers(now+600s)` = [].
+- Chưa làm (chờ anh): 11 bài #39–#49 vẫn «failed» — đưa lại «Chờ đăng» thì bot sẽ tự đăng (trùng tác giả tự bị bỏ).
+  Ghi nhận: AI 9Router trả 404 auth → đang chạy dự phòng Gemini flash-lite; hạn mức anh đặt 15/giờ · 35/24h.
+- Chưa commit (cùng phần nút ⚙️ cài đặt theo màn hình).
+
+## Phiên 2026-11-06 (screen-settings) — Cài đặt theo màn hình: nút ⚙️ + modal (chủ bot yêu cầu trực tiếp, chỉ frontend)
+- Mỗi màn hình có nút ⚙️ ở đầu trang → modal chỉ chứa cài đặt của màn đó, chia nhóm, Lưu là có hiệu lực (cùng API
+  `PATCH /api/settings/sections/{section}` như trang Cài đặt; lưu xong làm mới dữ liệu trang). Trang «Cài đặt vận hành» giữ nguyên.
+- Khai báo màn ↔ section + nhóm ở MỘT chỗ: `frontend/src/features/settings/lib/screenSettings.ts` (Audio→Doc, Kéo khách,
+  Viral, Nguồn video, Lịch đăng, Studio, AI Studio, Tổng quan=Tích hợp, Panel hệ thống). Component
+  `features/settings/components/ScreenSettingsButton.tsx`; `PageHeader` thêm prop `actions`; `saveSection` trả boolean.
+  Bỏ link «Cài đặt Audio→Doc» / «Từ khóa, câu A/B, hạn mức» cũ (thay bằng ⚙️). Section `threads_auto` chưa có màn SPA → chỉ ở trang Cài đặt.
+- Proof: `tsc` + `vite build` sạch; Playwright trên :8000 mở modal 4 màn (nhóm đúng), sửa ô → «Có thay đổi chưa lưu» + Lưu bật,
+  «Bỏ thay đổi» trả giá trị cũ, Esc đóng, 0 lỗi JS. KHÔNG bấm Lưu thật (tránh đổi cài đặt đang chạy).
+- Next Action: thêm màn mới → thêm 1 mục vào `SCREEN_SETTINGS` + `<ScreenSettingsButton screen=…/>`.
+
 ## Phiên 2026-11-06 (audio-doc-e2e) — Chạy thật Audio→Doc trên web lần đầu, sửa 3 lỗi
 - Chạy trọn luồng qua API thật (audio TTS 24s «Vịnh Hạ Long», dự án thử **#14**): intake→Whisper→chia 3 cảnh ~15s, AI từ khóa
   đúng; tìm ảnh Wikimedia thật, chọn → tự RIGHTS_VERIFIED + tác giả/giấy phép; preview 1080p 24,3s dựng 118s, phụ đề + Ken Burns OK.

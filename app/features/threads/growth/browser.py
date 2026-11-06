@@ -76,6 +76,13 @@ def _as_dt(value: Any) -> Optional[datetime]:
         return None
 
 
+def _int(value: Any) -> int:
+    try:
+        return max(int(value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def posts_from_payload(payload: Any, keyword: str) -> List[ScannedPost]:
     """Đi khắp JSON, nhặt mọi nút giống bài Threads: có ``code`` + ``user.username`` + ``caption.text``."""
     found: dict[str, ScannedPost] = {}
@@ -100,6 +107,9 @@ def posts_from_payload(payload: Any, keyword: str) -> List[ScannedPost]:
                         keyword=keyword,
                         created_at=_as_dt(node.get("taken_at")),
                         is_reply=bool(info.get("is_reply")),
+                        likes=_int(node.get("like_count")),
+                        replies=_int(info.get("direct_reply_count")),
+                        author_followers=_int(user.get("follower_count")),
                     )
             for v in node.values():
                 visit(v)
@@ -199,9 +209,10 @@ class GrowthBrowser:
         self.page.wait_for_timeout(int(random.uniform(lo, hi) * 1000))
 
     # ── tìm bài ────────────────────────────────────────────────
-    def search_recent(self, keyword: str, limit: int = 10, max_scrolls: int = 4) -> List[ScannedPost]:
+    def search_recent(self, keyword: str, limit: int = 10, max_scrolls: int = 4, top: bool = False) -> List[ScannedPost]:
+        """Tìm bài theo từ khóa — tab «Mới nhất», hoặc «Hàng đầu» khi ``top=True``."""
         self._payloads.clear()
-        self.page.goto(ThreadsScanner.build_search_url(keyword), wait_until="domcontentloaded", timeout=60000)
+        self.page.goto(ThreadsScanner.build_search_url(keyword, top=top), wait_until="domcontentloaded", timeout=60000)
         self._pause(3.0, 5.0)
         self._check_session()
 
@@ -229,7 +240,7 @@ class GrowthBrowser:
 
         me = self.own_handle()
         result = [p for p in posts.values() if not me or p.author.lower() != me]
-        logger.info("growth.search %r → %d bài", keyword, len(result))
+        logger.info("growth.search %r%s → %d bài", keyword, " (hàng đầu)" if top else "", len(result))
         return result[:limit]
 
     # ── đăng reply ─────────────────────────────────────────────

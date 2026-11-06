@@ -6,6 +6,7 @@ Quét thật (trình duyệt) nằm ở ``growth/browser.py``; module này khôn
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import urllib.parse
 from dataclasses import dataclass
@@ -26,6 +27,23 @@ class ScannedPost:
     keyword: str
     created_at: Optional[datetime] = None
     is_reply: bool = False  # bài là reply của bài khác (không phải bài gốc)
+    likes: int = 0
+    replies: int = 0
+    author_followers: int = 0
+
+    @property
+    def reach(self) -> int:
+        return reach_score(self.likes, self.replies, self.author_followers)
+
+
+def reach_score(likes: int, replies: int, followers: int) -> int:
+    """Ước lượng bao nhiêu người sẽ thấy reply của mình dưới bài này (06/11: reply dưới bài vắng chỉ 3–24 lượt xem).
+
+    Reply nhiều = đang có người đọc phần bình luận (×3); like ×1. Follower tác giả (log: 100 → 20, 10k → 40) chỉ cộng khi
+    JSON có — kết quả tìm kiếm Threads hiện KHÔNG kèm follower của tác giả bài (06/11), nên thực tế ≈ 3·reply + like.
+    Chỉ dùng để XẾP THỨ TỰ / lọc, không phải số lượt xem thật.
+    """
+    return round(10 * math.log10(1 + max(followers, 0)) + 3 * max(replies, 0) + max(likes, 0))
 
 
 # Chữ chỉ tiếng Việt mới có (đ, ă, ơ, ư + nguyên âm mang dấu thanh) — Threads hầu như không trả detected_language.
@@ -41,9 +59,11 @@ class ThreadsScanner:
     """Tiện ích URL / mã bài Threads."""
 
     @staticmethod
-    def build_search_url(keyword: str) -> str:
+    def build_search_url(keyword: str, top: bool = False) -> str:
+        """``top=False``: tab «Mới nhất»; ``top=True``: tab «Hàng đầu» (bài đang được nhiều người xem)."""
         encoded = urllib.parse.quote(keyword)
-        return f"{THREADS_HOST}/search?q={encoded}&serp_type=default&filter=recent"
+        tail = "" if top else "&filter=recent"
+        return f"{THREADS_HOST}/search?q={encoded}&serp_type=default{tail}"
 
     @staticmethod
     def parse_post_url(url: str) -> Optional[tuple[str, str]]:

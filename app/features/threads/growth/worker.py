@@ -39,6 +39,25 @@ logger = logging.getLogger("threads_growth")
 TICK_SEC = 60
 
 
+_DEAD_BROWSER_HINTS = ("has been closed", "browser has disconnected", "target closed")
+
+
+def browser_dead(exc: BaseException) -> bool:
+    """Chromium đã chết (bị diệt / crash) — mọi thao tác sau đều lỗi, phải dừng vòng chứ không đánh lỗi từng bài."""
+    text = str(exc).lower()
+    return any(h in text for h in _DEAD_BROWSER_HINTS)
+
+
+def _parse_ts(ts: Optional[str]) -> Optional[datetime]:
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 @dataclass
 class CycleReport:
     scanned: int = 0
@@ -102,6 +121,8 @@ class GrowthWorker:
             return False
         if post.created_at and post.created_at < self.now() - timedelta(hours=cfg.max_post_age_hours):
             return False
+        if post.reach < cfg.min_reach:
+            return False
         if cfg.author_cooldown_days and self.runner.storage.replied_author_since(
             post.author, self.now() - timedelta(days=cfg.author_cooldown_days)
         ):
@@ -111,22 +132,30 @@ class GrowthWorker:
     # ── quét ───────────────────────────────────────────────────
     def scan(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> List[tuple[ScannedPost, TargetBot]]:
         found: Dict[str, tuple[ScannedPost, TargetBot]] = {}
-        jobs = [(bot, kw) for bot, prof in load_profiles().items() for kw in prof.keywords]
+        authors: set[str] = set()  # mỗi vòng tối đa 1 bài / tác giả (cooldown chỉ thấy bài đã lưu)
+        tabs = (False, True) if cfg.search_top else (False,)
+        jobs = [(bot, kw, top) for bot, prof in load_profiles().items() for kw in prof.keywords for top in tabs]
         random.shuffle(jobs)  # không quét cùng một thứ tự mỗi vòng
         with self.browser_factory(profile_path) as browser:
-            for bot, kw in jobs:
+            for bot, kw, top in jobs:
                 try:
-                    posts = browser.search_recent(kw, limit=cfg.posts_per_keyword)
+                    posts = browser.search_recent(kw, limit=cfg.posts_per_keyword, top=top)
                 except ThreadsSessionInvalidError:
                     raise
                 except Exception as exc:
+                    if browser_dead(exc):
+                        report.errors.append(f"trình duyệt bị đóng khi tìm «{kw}» — dừng quét vòng này")
+                        logger.warning("growth: trình duyệt bị đóng khi tìm %r — dừng quét", kw)
+                        break
                     report.errors.append(f"tìm «{kw}»: {exc}")
                     logger.warning("growth: tìm %r lỗi: %s", kw, exc)
                     continue
                 report.scanned += len(posts)
                 for p in posts:
-                    if p.thread_id not in found and self._fresh(p, cfg):
+                    author = (p.author or "").lower()
+                    if p.thread_id not in found and author not in authors and self._fresh(p, cfg):
                         found[p.thread_id] = (p, bot)
+                        authors.add(author)
                 self.sleep(random.uniform(4, 9))
         return list(found.values())
 
@@ -162,22 +191,42 @@ class GrowthWorker:
         if not quota.allowed:
             report.quota_note = quota.reason
             return
+        cfg = load_worker_config()
+        done_authors: set[str] = set()
         with self.browser_factory(profile_path) as browser:
             for i, post in enumerate(queue):
                 quota = self.runner.posting_quota(self.now())
                 if not quota.allowed:
                     report.quota_note = quota.reason
                     break
+                created = _parse_ts(post.get("post_created_at"))
+                if created and created < self.now() - timedelta(hours=cfg.max_post_age_hours):
+                    # Bài nằm hàng chờ quá lâu (hết suất ngày) — reply muộn chìm dưới đáy, không đáng một suất.
+                    self.runner.reject(post["id"], "bài đã cũ — quá thời gian tối đa trước khi tới lượt đăng")
+                    continue
+                author = (post["author"] or "").lower()
+                if author in done_authors or (cfg.author_cooldown_days and self.runner.storage.posted_to_author_since(
+                    post["author"], self.now() - timedelta(days=cfg.author_cooldown_days)
+                )):
+                    self.runner.reject(post["id"], "trùng tác giả — đã reply người này trong thời gian chờ")
+                    logger.info("growth: bỏ #%s — đã reply @%s gần đây", post["id"], post["author"])
+                    continue
                 text = post.get("actual_reply") or post["suggested_reply"]
                 try:
                     url = browser.reply(post["post_url"], text)
                 except ThreadsSessionInvalidError:
                     raise
                 except Exception as exc:
+                    if browser_dead(exc):
+                        # Bài này + phần còn lại giữ nguyên «Chờ đăng», vòng sau mở trình duyệt mới đăng tiếp.
+                        report.errors.append("trình duyệt bị đóng giữa chừng — vòng sau đăng tiếp")
+                        logger.warning("growth: trình duyệt bị đóng khi đăng #%s — dừng, giữ hàng chờ", post["id"])
+                        break
                     self.runner.mark_failed(post["id"], str(exc))
                     report.failed += 1
                     logger.warning("growth: đăng reply #%s lỗi: %s", post["id"], exc)
                 else:
+                    done_authors.add(author)
                     self.runner.mark_posted(post["id"], reply_url=url)
                     report.posted += 1
                     report.posted_items.append({

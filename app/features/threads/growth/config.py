@@ -160,6 +160,8 @@ class WorkerConfig:
     vietnamese_only: bool = True
     top_level_only: bool = True
     telegram_review: bool = False
+    search_top: bool = True
+    min_reach: int = 0
 
 
 def load_worker_config() -> WorkerConfig:
@@ -175,6 +177,8 @@ def load_worker_config() -> WorkerConfig:
             vietnamese_only=settings.get_bool("growth.vietnamese_only", d.vietnamese_only),
             top_level_only=settings.get_bool("growth.top_level_only", d.top_level_only),
             telegram_review=settings.get_bool("growth.telegram_review", d.telegram_review),
+            search_top=settings.get_bool("growth.search_top", d.search_top),
+            min_reach=settings.get_int("growth.min_reach", d.min_reach),
         )
     except Exception as exc:
         logger.warning("growth: không đọc được cài đặt worker, dùng mặc định — TẮT (%s)", exc)

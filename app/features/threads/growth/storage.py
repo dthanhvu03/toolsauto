@@ -17,6 +17,10 @@ _EXTRA_COLUMNS = {
     "auto_approved": "INTEGER NOT NULL DEFAULT 0",
     "post_created_at": "TEXT",
     "notified_at": "TEXT",
+    "like_count": "INTEGER NOT NULL DEFAULT 0",
+    "reply_count": "INTEGER NOT NULL DEFAULT 0",
+    "author_followers": "INTEGER NOT NULL DEFAULT 0",
+    "reach": "INTEGER NOT NULL DEFAULT 0",
 }
 
 STATUSES = ("pending", "approved", "rejected", "posted", "failed")
@@ -101,6 +105,10 @@ class GrowthStorage:
         status: str = "pending",
         auto_approved: bool = False,
         post_created_at: Optional[str] = None,
+        like_count: int = 0,
+        reply_count: int = 0,
+        author_followers: int = 0,
+        reach: int = 0,
     ) -> int:
         now_str = datetime.now(timezone.utc).isoformat()
         with self._connection() as conn:
@@ -109,8 +117,9 @@ class GrowthStorage:
                 INSERT OR IGNORE INTO growth_posts (
                     thread_id, post_url, author, content, target_bot, variant,
                     relevance_score, ai_analysis, suggested_reply, status, created_at,
-                    actual_reply, auto_approved, post_created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    actual_reply, auto_approved, post_created_at,
+                    like_count, reply_count, author_followers, reach
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     thread_id,
@@ -127,6 +136,10 @@ class GrowthStorage:
                     suggested_reply if status == "approved" else None,
                     1 if auto_approved else 0,
                     post_created_at,
+                    like_count,
+                    reply_count,
+                    author_followers,
+                    reach,
                 ),
             )
             # INSERT OR IGNORE trùng thread_id → rowcount 0 (lastrowid không đáng tin khi bị bỏ qua).
@@ -169,10 +182,10 @@ class GrowthStorage:
         return [dict(r) for r in rows]
 
     def approved_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Bài đã duyệt chờ đăng — cũ trước."""
+        """Bài đã duyệt chờ đăng — độ phủ cao trước (hạn mức/ngày có hạn, dành suất cho bài nhiều người xem), rồi cũ trước."""
         with self._connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM growth_posts WHERE status = 'approved' ORDER BY id ASC LIMIT ?", (limit,)
+                "SELECT * FROM growth_posts WHERE status = 'approved' ORDER BY reach DESC, id ASC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -186,6 +199,15 @@ class GrowthStorage:
                     (status = 'posted' AND posted_at >= ?) OR status = 'approved'
                 ) LIMIT 1
                 """,
+                (author, since.astimezone(timezone.utc).isoformat()),
+            ).fetchone()
+        return row is not None
+
+    def posted_to_author_since(self, author: str, since: datetime) -> bool:
+        """Đã ĐĂNG reply cho người này kể từ ``since`` (không tính bài đang chờ)?"""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM growth_posts WHERE lower(author) = lower(?) AND status = 'posted' AND posted_at >= ? LIMIT 1",
                 (author, since.astimezone(timezone.utc).isoformat()),
             ).fetchone()
         return row is not None

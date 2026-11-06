@@ -23,6 +23,10 @@ export type GrowthPost = {
   reply_url: string | null;
   auto_approved: number;
   post_created_at: string | null;
+  like_count: number;
+  reply_count: number;
+  author_followers: number;
+  reach: number;
 };
 
 export type Quota = {

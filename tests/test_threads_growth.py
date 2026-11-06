@@ -46,9 +46,9 @@ def runner(storage):
     return GrowthRunner(storage=storage, limits=lambda: LIMITS)
 
 
-def _save(storage, tid, bot=TargetBot.CASHBOT, variant=ABVariant.VARIANT_A):
+def _save(storage, tid, bot=TargetBot.CASHBOT, variant=ABVariant.VARIANT_A, author=None):
     return storage.save_post(
-        thread_id=tid, post_url="u", author="a", content="Mã shopee",
+        thread_id=tid, post_url="u", author=author or f"a_{tid}", content="Mã shopee",
         target_bot=bot, variant=variant, suggested_reply="r",
     )
 
@@ -295,10 +295,11 @@ class FakeBrowser:
     def __exit__(self, *exc):
         return False
 
-    def search_recent(self, keyword, limit=10):
+    def search_recent(self, keyword, limit=10, top=False):
+        """Kết quả tab «Hàng đầu» khai ở khoá ``(keyword, "top")``; mặc định tab «Mới nhất»."""
         if self.invalid:
             raise ThreadsSessionInvalidError("checkpoint")
-        return list(self.results.get(keyword, []))[:limit]
+        return list(self.results.get((keyword, "top") if top else keyword, []))[:limit]
 
     def reply(self, url, text):
         if self.reply_error:
@@ -437,6 +438,105 @@ def test_worker_stops_at_quota_and_marks_failures(make_worker, runner):
     report = w2.tick()
     assert report.posted == 2 and "/ giờ" in report.quota_note
     assert len(runner.storage.approved_queue()) == 1
+
+
+def test_worker_dead_browser_keeps_queue(make_worker, runner):
+    """Chromium bị diệt giữa vòng → dừng, KHÔNG đánh «lỗi» cả hàng chờ (06/11: 11 bài bị đánh lỗi oan)."""
+    for i in range(3):
+        _save(runner.storage, f"D{i}")
+        runner.approve_and_prepare(i + 1)
+    fb = FakeBrowser(reply_error="Page.goto: Target page, context or browser has been closed")
+    w, _ = make_worker(fb)
+    report = w.tick()
+    assert report.failed == 0 and report.errors
+    assert len(runner.storage.approved_queue()) == 3
+
+
+def test_worker_dead_browser_stops_scan(make_worker, runner):
+    class DeadSearch(FakeBrowser):
+        calls = 0
+
+        def search_recent(self, keyword, limit=10, top=False):
+            DeadSearch.calls += 1
+            raise RuntimeError("Page.goto: Target page, context or browser has been closed")
+
+    profiles = worker.load_profiles()
+    profiles[TargetBot.CASHBOT].keywords.extend(["kw2", "kw3"])
+    w, _ = make_worker(DeadSearch())
+    report = w.tick()
+    assert DeadSearch.calls == 1 and len(report.errors) == 1
+
+
+def test_worker_one_post_per_author_per_scan(make_worker, runner):
+    w, _ = make_worker(FakeBrowser({"kw": [_post("A1", "shop"), _post("A2", "SHOP"), _post("A3", "khac")]}))
+    assert w.tick().ingested == 2
+
+
+def test_worker_skips_queued_duplicate_author(make_worker, runner):
+    for i in range(3):
+        _save(runner.storage, f"S{i}", author="pisharevn" if i < 2 else "lan")
+        runner.approve_and_prepare(i + 1)
+    fb = FakeBrowser()
+    w, _ = make_worker(fb)
+    w.now = lambda: datetime.now(timezone.utc)
+    w.runner._limits = lambda: GrowthLimits(max_replies_per_hour=9, max_replies_per_day=9, min_delay_sec=0, max_delay_sec=0)
+    report = w.tick()
+    assert report.posted == 2 and len(fb.replies) == 2
+    dup = runner.storage.get_post_by_id(2)
+    assert dup["status"] == "rejected" and "trùng tác giả" in dup["error_message"]
+
+
+def test_reach_score_and_payload_engagement():
+    from app.features.threads.growth.browser import posts_from_payload
+    from app.features.threads.growth.scanner import reach_score
+
+    assert reach_score(0, 0, 0) == 0
+    assert reach_score(0, 0, 99) == 20 and reach_score(0, 0, 9999) == 40
+    assert reach_score(3, 13, 99) == 20 + 39 + 3
+    payload = {"data": [{"code": "C1", "user": {"username": "u", "follower_count": 9999}, "caption": {"text": "x"},
+                         "like_count": 4, "text_post_app_info": {"direct_reply_count": 2}}]}
+    (p,) = posts_from_payload(payload, "kw")
+    assert (p.likes, p.replies, p.author_followers, p.reach) == (4, 2, 9999, 40 + 6 + 4)
+
+
+def test_worker_scans_top_tab_and_queues_by_reach(make_worker, runner):
+    small = _post("SMALL", "nho")
+    big = _post("BIG", "lon")
+    big.author_followers, big.replies = 50_000, 20
+    w, _ = make_worker(FakeBrowser({"kw": [small], ("kw", "top"): [big]}))
+    w.runner._limits = lambda: GrowthLimits(max_replies_per_hour=1, max_replies_per_day=10, min_delay_sec=0, max_delay_sec=0)
+    w.now = lambda: datetime.now(timezone.utc)
+    report = w.tick()
+    assert report.ingested == 2 and report.posted == 1
+    assert report.posted_items[0]["author"] == "lon"  # suất duy nhất dành cho bài nhiều người xem
+    big_row = next(r for r in runner.storage.list_posts("posted"))
+    assert big_row["reach"] > 60 and big_row["author_followers"] == 50_000
+
+
+def test_worker_min_reach_filters(make_worker, runner):
+    w, _ = make_worker(FakeBrowser({"kw": [_post("SMALL", "nho")]}))
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, auto_post_min_relevance=60, min_reach=30)
+    assert w.tick().ingested == 0
+
+
+def test_worker_drops_stale_queued_post(make_worker, runner):
+    pid = _save(runner.storage, "OLDQ")
+    runner.approve_and_prepare(pid)
+    with runner.storage._connection() as c:
+        c.execute("UPDATE growth_posts SET post_created_at=? WHERE id=?", ((NOW - timedelta(hours=100)).isoformat(), pid))
+    fb = FakeBrowser()
+    w, _ = make_worker(fb)
+    w.tick()
+    assert fb.replies == [] and runner.storage.get_post_by_id(pid)["status"] == "rejected"
+
+
+def test_growth_worker_browser_is_protected_from_orphan_purge():
+    """Maintenance diệt Chromium «mồ côi»; worker kéo khách phải nằm trong danh sách chủ sở hữu hợp lệ."""
+    from app.core.process_scan import is_toolsauto_entrypoint
+
+    assert is_toolsauto_entrypoint(
+        ["/home/vu/toolsauto/venv/bin/python", "/home/vu/toolsauto/app/features/threads/growth/worker.py"], "python"
+    )
 
 
 def test_worker_checkpoint_disables(make_worker):

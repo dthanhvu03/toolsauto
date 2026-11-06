@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, LogIn, Settings } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ExternalLink, LogIn } from "lucide-react";
 import { dangerBtnClass, ghostBtnClass, primaryBtnClass } from "@/shared/ui/controls";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import * as api from "../api/threadsGrowthApi";
 import type { GrowthPost, GrowthStatus, Overview } from "../api/threadsGrowthApi";
 
@@ -66,9 +66,6 @@ function StatusBar({ ov }: { ov: Overview }) {
         >
           <LogIn className="h-3.5 w-3.5" /> Đăng nhập Threads
         </button>
-        <Link to={ov.settings_url} className={`${ghostBtnClass} ml-auto inline-flex items-center gap-1`}>
-          <Settings className="h-3.5 w-3.5" /> Từ khóa, câu A/B, hạn mức
-        </Link>
       </div>
       <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
         <div>
@@ -178,6 +175,8 @@ function Customers({ rep }: { rep: Overview["customers"] }) {
   );
 }
 
+const fmtNum = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}tr` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+
 function PostCard({ post }: { post: GrowthPost }) {
   const qc = useQueryClient();
   const [text, setText] = useState(post.actual_reply || post.suggested_reply);
@@ -199,6 +198,15 @@ function PostCard({ post }: { post: GrowthPost }) {
         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">#{post.id}</span>
         <span>{BOT_LABEL[post.target_bot]} · biến thể {post.variant}</span>
         <span>điểm {post.relevance_score}</span>
+        {post.reach > 0 && (
+          <span
+            className={post.reach >= 15 ? "font-medium text-indigo-700" : undefined}
+            title="Độ phủ = 3×reply + like của bài lúc quét — cao = nhiều người đọc phần bình luận"
+          >
+            độ phủ {post.reach} · 💬 {post.reply_count} · ♥ {post.like_count}
+            {post.author_followers > 0 && ` · 👥 ${fmtNum(post.author_followers)}`}
+          </span>
+        )}
         {post.auto_approved === 1 && <span className="text-emerald-700">tự duyệt</span>}
         <a href={post.post_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-indigo-600">
           @{post.author} <ExternalLink className="h-3 w-3" />
@@ -260,11 +268,15 @@ export function ThreadsGrowthPage() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Threads — Kéo khách</h1>
-        <p className="text-sm text-slate-500">
-          Tìm bài trên Threads theo từ khóa, AI viết reply giới thiệu Cashbot / AI Pass Store, bài đủ điểm tự đăng.
-        </p>
+      <div className="flex items-start gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Threads — Kéo khách</h1>
+          <p className="text-sm text-slate-500">
+            Tìm bài trên Threads theo từ khóa, AI viết reply giới thiệu Cashbot / AI Pass Store, bài đủ điểm tự đăng.
+            Từ khóa, câu A/B, hạn mức: bấm ⚙️.
+          </p>
+        </div>
+        <ScreenSettingsButton screen="threads-growth" className="ml-auto shrink-0" />
       </div>
 
       {ov.isError && <p className="text-sm text-red-600">{(ov.error as Error).message}</p>}

@@ -325,6 +325,17 @@ def test_start_source_chi_ghi_lan_dau_khach_moi(tmp_path):
     assert admin.sources == ["live", None, None]
 
 
+def test_start_tu_threads_co_loi_chao_rieng(tmp_path):
+    """PLAN-158: khách mới từ reply Threads được chỉ ngay cách lấy link; khách thường / khách cũ giữ trang chủ."""
+    bot = CashbackService(settings(tmp_path), repo(tmp_path), FakeClient(payload()))
+    fresh = bot.handle_text(111, "a", "/start threads_cb_save", update_id=931, now=NOW)
+    assert "từ Threads" in fresh.text and "Sao chép liên kết" in fresh.text
+    plain = bot.handle_text(222, "b", "/start", update_id=932, now=NOW)
+    assert "từ Threads" not in plain.text
+    again = bot.handle_text(111, "a", "/start threads_cb_save", update_id=933, now=NOW)
+    assert "từ Threads" not in again.text
+
+
 def test_link_khong_phai_shopee(tmp_path):
     client = FakeClient(payload())
     reply = service(tmp_path, client).handle_text(

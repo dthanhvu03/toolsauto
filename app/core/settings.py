@@ -1700,6 +1700,27 @@ TRẢ VỀ JSON LIST (Mảng các object):
         section="Threads — Kéo khách",
         description="Tìm «voucher shopee» ra nhiều bài Indonesia / Thái — bật để bỏ bài không phải tiếng Việt.",
     ),
+    "growth.search_top": SettingSpec(
+        key="growth.search_top",
+        type="bool",
+        default_getter=lambda: True,
+        title="Kéo khách: quét thêm tab «Hàng đầu»",
+        section="Threads — Kéo khách",
+        description="Ngoài bài mới nhất, đọc thêm bài đang được nhiều người xem — reply ở đó nhiều người thấy hơn "
+                    "(mỗi vòng mở gấp đôi số trang tìm kiếm).",
+    ),
+    "growth.min_reach": SettingSpec(
+        key="growth.min_reach",
+        type="int",
+        default_getter=lambda: 0,
+        title="Kéo khách: độ phủ tối thiểu",
+        section="Threads — Kéo khách",
+        description="Bỏ bài có độ phủ thấp hơn mức này. Độ phủ = 3×số reply + số like của bài lúc quét (bài 5 reply, "
+                    "3 like = 18). 0 = không lọc, chỉ ưu tiên bài độ phủ cao khi đăng.",
+        min=0,
+        max=200,
+        unit="điểm",
+    ),
     "growth.top_level_only": SettingSpec(
         key="growth.top_level_only",
         type="bool",

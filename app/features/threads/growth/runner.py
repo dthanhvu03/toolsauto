@@ -110,6 +110,10 @@ class GrowthRunner:
             status="approved" if auto else "pending",
             auto_approved=auto,
             post_created_at=post.created_at.isoformat() if post.created_at else None,
+            like_count=post.likes,
+            reply_count=post.replies,
+            author_followers=post.author_followers,
+            reach=post.reach,
         )
         logger.info(
             "Ingested thread %s (ID=%s) for %s [Variant %s]%s",

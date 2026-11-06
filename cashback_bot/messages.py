@@ -31,6 +31,13 @@ HOME_WALLET = (
     "Mua qua link của bot, bot tự theo dõi đơn và báo khi tiền hoàn vào ví."
 )
 START_MESSAGE = HOME
+# Khách mới bấm link trong reply Threads (`?start=threads_…`, PLAN-158): họ vừa đọc một bài về món đang muốn mua,
+# nên chỉ ngay cách lấy link thay vì để họ tự đọc trang chủ.
+THREADS_WELCOME = (
+    "👋 <b>Chào bạn ghé từ Threads!</b>\n"
+    "Đang định mua món nào trên Shopee thì mở món đó → bấm <b>Chia sẻ</b> → <b>Sao chép liên kết</b>, "
+    "rồi dán vào đây là bot báo ngay được hoàn bao nhiêu."
+)
 HELP = HOME
 PAGE_KEYBOARD: Keyboard = ((("◀️ Trang chủ", "u:p:home"),),)
 # Nút Lưu ý trên thẻ link: u:tip:<cờ> (2 = V1.2, t = TikTok, c = món giá cao) để trang Lưu ý nói đúng link đó.
