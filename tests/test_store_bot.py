@@ -1003,3 +1003,20 @@ def test_topup_text_without_sepay_does_not_promise_instant(fatcat, repo):
     store.handle_update(_click(BUYER, f"bq:{products[49].id}:1"))
     caption = telegram.photos[-1][1]
     assert "Shop xác nhận tiền" in caption and "ban đêm" in caption and "1 phút" not in caption
+
+
+def test_delivery_shows_upstream_order_code_and_items_verbatim(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    repo.adjust_balance(BUYER, 400_000, "test", "admin")
+    raw = "acc@mail.com|Pa<ss>|2FA KEY"
+    fake.results = [BuyResult(DELIVERED, [raw], "DH5FG3NW", None, 200, "complete")]
+    gpt = products[34]
+    store.handle_update(_click(BUYER, f"q:{gpt.id}:1"))
+    store.handle_update(_click(BUYER, telegram.edits[-1][3]["inline_keyboard"][0][0]["callback_data"]))
+    delivery = next(h for h in telegram.texts_to(BUYER) if "acc@mail.com" in h)
+    assert "🔖 Mã hàng: <code>DH5FG3NW</code>" in delivery
+    assert "<code>acc@mail.com|Pa&lt;ss&gt;|2FA KEY</code>" in delivery  # nguyên văn, chỉ thoát HTML
+    assert "🔖 Mã hàng: <code>DH5FG3NW</code>" in telegram.edits[-1][2]  # màn «Mua thành công»
+    assert any("mã DH5FG3NW" in h for h in telegram.texts_to(ADMIN))
+    store.handle_update(_click(BUYER, "ord"))
+    assert "DH5FG3NW" in telegram.edits[-1][3]["inline_keyboard"][0][0]["text"]

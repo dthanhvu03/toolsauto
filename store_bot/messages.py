@@ -250,6 +250,7 @@ def order_done(order: Order) -> str:
     return (
         f"{head}\n\n"
         f"🧾 Đơn #{order.id} · {local_time(order.created_at)}\n"
+        f"{code_line(order)}"
         f"{icon(order.product_name)} {esc(order.product_name)} × {len(order.items) if order.refunded else order.quantity}\n"
         f"💸 Đã trừ: {vnd(order.total - order.refunded)}\n"
         f"{partial}"
@@ -293,9 +294,15 @@ def order_failed(order: Order) -> str:
     )
 
 
+def code_line(order: Order) -> str:
+    """Mã hàng = mã đơn nguồn trả về, nguyên văn; khách đưa mã này khi khiếu nại."""
+    return f"🔖 Mã hàng: <code>{esc(order.upstream_order_id)}</code>\n" if order.upstream_order_id else ""
+
+
 def order_items(order: Order) -> str:
+    # Hàng giữ đúng nguyên văn nguồn trả về, không thêm bớt.
     body = "\n".join(f"<code>{esc(item)}</code>" for item in order.items)
-    return f"{icon(order.product_name)} <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n\n{body}"
+    return f"{icon(order.product_name)} <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n{code_line(order)}\n{body}"
 
 
 def items_fit_inline(order: Order) -> bool:
@@ -309,7 +316,8 @@ def orders_list(orders: list[Order]) -> str:
 
 
 def order_button(order: Order) -> str:
-    return f"{button_icon(order.product_name)}#{order.id} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
+    code = f" · {order.upstream_order_id}" if order.upstream_order_id else ""
+    return f"{button_icon(order.product_name)}#{order.id}{code} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
 
 
 def account(user: User, key: ApiKey | None, api_url: str) -> str:
@@ -717,7 +725,8 @@ def admin_topup_button(topup: Topup) -> str:
 def admin_sale(order: Order, user: User | None) -> str:
     who = esc(user.label) if user else str(order.user_id)
     via = " qua API" if order.source == "api" else ""
-    return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}"
+    code = f" · mã {esc(order.upstream_order_id)}" if order.upstream_order_id else ""
+    return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
 
 
 def admin_sold_out(product: Product) -> str:

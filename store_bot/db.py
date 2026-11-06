@@ -231,6 +231,7 @@ class Order:
     refunded: int = 0
     note: str | None = None
     waiting_funds: bool = False
+    upstream_order_id: str | None = None  # mã đơn FatCat trả về (vd DH5FG3NW) — khách đưa mã này khi khiếu nại
 
 
 @dataclass(frozen=True)
@@ -1006,7 +1007,8 @@ def _order(row: sqlite3.Row, **extra) -> Order:
     return Order(row["id"], row["user_id"], row["product_id"], row["product_name"], row["quantity"],
                  row["unit_price"], row["total"], row["source"], row["created_at"], status=row["status"],
                  refunded=row["refunded"], note=row["note"],
-                 waiting_funds=bool(row["waiting_funds"]) if "waiting_funds" in row.keys() else False, **extra)
+                 waiting_funds=bool(row["waiting_funds"]) if "waiting_funds" in row.keys() else False,
+                 upstream_order_id=row["upstream_order_id"] if "upstream_order_id" in row.keys() else None, **extra)
 
 
 def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False) -> Order:

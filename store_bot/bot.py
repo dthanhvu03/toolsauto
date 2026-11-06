@@ -535,7 +535,8 @@ class StoreBot:
         else:
             data = ("\n".join(order.items) + "\n").encode("utf-8")
             self.tg.send_document(chat_id, f"don_{order.id}.txt", data,
-                                  f"📦 Đơn #{order.id} · {msg.esc(order.product_name)} × {order.quantity}")
+                                  f"📦 Đơn #{order.id} · {msg.esc(order.product_name)} × {order.quantity}"
+                                  + (f" · mã hàng {msg.esc(order.upstream_order_id)}" if order.upstream_order_id else ""))
 
     def show_topup_menu(self, chat_id: int, message_id: int | None, user: User) -> None:
         if self.settings.bank is None:

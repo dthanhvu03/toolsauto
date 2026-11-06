@@ -58,6 +58,7 @@ def _order_json(order: Order) -> dict:
         "replayed": order.replayed,
         "status": order.status,
         "refunded": order.refunded,
+        "upstream_order_id": order.upstream_order_id,
     }
 
 
