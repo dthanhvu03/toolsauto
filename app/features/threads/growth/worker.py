@@ -49,9 +49,10 @@ class CycleReport:
     failed: int = 0
     quota_note: str = ""
     errors: List[str] = field(default_factory=list)
+    posted_items: List[Dict] = field(default_factory=list)
 
     def as_dict(self) -> Dict:
-        return self.__dict__.copy()
+        return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items)}
 
 
 class GrowthWorker:
@@ -145,6 +146,8 @@ class GrowthWorker:
                     report.pending += 1
 
         asyncio.run(_all())
+        if not cfg.telegram_review:
+            return  # tự động hoàn toàn: không hỏi duyệt từng bài, chỉ báo cáo sau vòng
         for row in self.runner.storage.unnotified_pending(limit=10):
             if self.notify.notify_pending(row):
                 self.runner.storage.mark_notified(row["id"])
@@ -176,6 +179,10 @@ class GrowthWorker:
                 else:
                     self.runner.mark_posted(post["id"], reply_url=url)
                     report.posted += 1
+                    report.posted_items.append({
+                        "id": post["id"], "bot": post["target_bot"], "variant": post["variant"],
+                        "author": post["author"], "post_url": post["post_url"], "reply_url": url, "text": text,
+                    })
                     logger.info("growth: đã reply #%s → %s", post["id"], url or post["post_url"])
                 if i < len(queue) - 1:
                     self.sleep(self.runner.next_delay_sec())
@@ -203,7 +210,7 @@ class GrowthWorker:
             return report
         if due or report.posted or report.failed:
             logger.info("growth: vòng xong %s", report.as_dict())
-            if report.ingested or report.posted or report.failed:
+            if report.posted or report.failed:
                 self.notify.send(self.notify.cycle_text(report.as_dict()))
         return report
 

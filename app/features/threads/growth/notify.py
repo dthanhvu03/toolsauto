@@ -66,14 +66,22 @@ def notify_pending(post: Dict[str, Any]) -> bool:
 
 
 def cycle_text(report: Dict[str, Any]) -> str:
+    e = html.escape
     parts = [
-        "🧵 <b>Kéo khách — xong vòng</b>",
-        f"Quét {report.get('scanned', 0)} bài · nhận {report.get('ingested', 0)}"
-        f" (tự đăng {report.get('auto', 0)}, chờ duyệt {report.get('pending', 0)})",
-        f"Đã đăng {report.get('posted', 0)} reply · lỗi {report.get('failed', 0)}",
+        f"🧵 <b>Kéo khách — đã reply {report.get('posted', 0)} bài</b>"
+        + (f" · lỗi {report['failed']}" if report.get("failed") else ""),
+        f"Vòng này quét {report.get('scanned', 0)} bài · nhận {report.get('ingested', 0)} bài mới",
     ]
+    for it in report.get("posted_items", []):
+        link = it.get("reply_url") or it.get("post_url")
+        parts.append(
+            f"\n• {BOT_LABEL.get(it['bot'], it['bot'])} {it['variant']} → @{e(it['author'])} "
+            f"(<a href=\"{e(link)}\">xem</a>)\n  <i>{e(it['text'][:160])}</i>"
+        )
     if report.get("quota_note"):
-        parts.append(f"⏳ {html.escape(report['quota_note'])}")
+        parts.append(f"\n⏳ {e(report['quota_note'])}")
+    if report.get("errors"):
+        parts.append("⚠️ " + e("; ".join(report["errors"])[:300]))
     return "\n".join(parts)
 
 

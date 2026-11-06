@@ -378,8 +378,25 @@ def test_worker_cycle_filters_ingests_and_posts(make_worker, runner):
     assert report.posted == 1 and fb.replies[0][0].endswith("/P1")
     p1 = runner.storage.get_post_by_id(1)
     assert p1["status"] == "posted" and p1["reply_url"].endswith("/P1/reply")
-    assert n.pending == [2] and runner.storage.unnotified_pending() == []
+    assert n.pending == []  # mặc định tự động hoàn toàn: không hỏi duyệt trên Telegram
     assert any(s.startswith("cycle") for s in n.sent)
+
+
+def test_worker_telegram_review_sends_pending(make_worker, runner):
+    w, n = make_worker(FakeBrowser({"kw": [_post("P2", "mai", text="Ai có mã shopee không ạ cho mình xin với")]}))
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, auto_post_min_relevance=95, telegram_review=True)
+    report = w.tick()
+    assert report.pending == 1 and n.pending == [1]
+    assert runner.storage.unnotified_pending() == []
+
+
+def test_cycle_text_lists_posted_replies():
+    from app.features.threads.growth import notify
+
+    text = notify.cycle_text({"posted": 1, "scanned": 9, "ingested": 2, "posted_items": [
+        {"id": 1, "bot": "cashbot", "variant": "A", "author": "lan", "post_url": "https://p",
+         "reply_url": "https://r", "text": "ủa b <thử>"}]})
+    assert "đã reply 1 bài" in text and 'href="https://r"' in text and "&lt;thử&gt;" in text
 
 
 def test_worker_disabled_does_nothing(make_worker):

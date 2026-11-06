@@ -1,4 +1,4 @@
-## Phiên 2026-11-06 (threads-growth) — PLAN-158: Threads kéo khách chạy thật + dọn profile (CHƯA commit)
+## Phiên 2026-11-06 (threads-growth) — PLAN-158: Threads kéo khách CHẠY TỰ ĐỘNG (commit 59c5dc9 + chế độ auto)
 - System State: gói `app/features/threads/growth/` + trang web `/app/go/threads-growth` + Telegram `/keokhach` xong, Web_Dashboard
   đã restart (06/11). Tài khoản Threads `@us28qt` (accounts id 52 `threads_growth`, profile `instagram_5`) ACTIVE.
   Worker `Threads_Growth` khai trong `ecosystem.config.js` nhưng CHƯA start; `growth.enabled` = tắt. Playwright chromium-1208
@@ -8,7 +8,11 @@
 - Reply thật đầu tiên: #13 → https://www.threads.com/@us28qt/post/DfYVsfpks3_ (06/11 07:39). Bỏ «VietQR», prompt giọng Threads,
   poller Telegram nằm trong PM2 Maintenance (đã restart). Còn 9 bài «Chờ duyệt» (#5–#12, #14).
 - Unfinished: 1 test sẵn hỏng `test_telegram_schedule::test_edit_post_gui_kem_gio_va_chu` (buffer/client.py).
-- Next Action: anh xem reply #13 trên Threads → đồng ý thì `pm2 start ecosystem.config.js --only Threads_Growth` + bật trên web.
+- 06/11 ~08:00: `pm2 start Threads_Growth` + `growth.enabled`=bật. Vòng 1: 127 bài → tự reply #15 (@us28qt/post/DfYWokRnSVW).
+  Chủ bot chốt TỰ ĐỘNG HOÀN TOÀN: `growth.auto_post_min_relevance` mặc định 40 (= điểm tối thiểu), `growth.telegram_review`
+  mặc định tắt (Telegram chỉ nhận báo cáo vòng có link từng reply). 12 bài chờ cũ (AI viết) đã chuyển «Chờ đăng».
+- Next Action: theo dõi Telegram báo cáo / checkpoint; CHƯA `pm2 save` (Threads_Growth chưa tự lên sau khi WSL khởi động lại —
+  hỏi anh trước khi save vì list PM2 còn DB_Backup đang stopped).
   Commit khi anh bảo (gồm cả phần review growth phiên 05/11).
 
 ## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet

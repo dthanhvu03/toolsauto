@@ -148,12 +148,13 @@ def load_limits() -> GrowthLimits:
 class WorkerConfig:
     enabled: bool = False
     scan_interval_min: int = 60
-    auto_post_min_relevance: int = 70
+    auto_post_min_relevance: int = 40
     max_post_age_hours: int = 48
     author_cooldown_days: int = 14
     posts_per_keyword: int = 10
     vietnamese_only: bool = True
     top_level_only: bool = True
+    telegram_review: bool = False
 
 
 def load_worker_config() -> WorkerConfig:
@@ -168,6 +169,7 @@ def load_worker_config() -> WorkerConfig:
             posts_per_keyword=settings.get_int("growth.posts_per_keyword", d.posts_per_keyword),
             vietnamese_only=settings.get_bool("growth.vietnamese_only", d.vietnamese_only),
             top_level_only=settings.get_bool("growth.top_level_only", d.top_level_only),
+            telegram_review=settings.get_bool("growth.telegram_review", d.telegram_review),
         )
     except Exception as exc:
         logger.warning("growth: không đọc được cài đặt worker, dùng mặc định — TẮT (%s)", exc)

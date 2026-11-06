@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | PLAN-158 |
-| **Status** | Reply thật đầu tiên đã đăng (06/11, #13) — chờ chủ bot cho start worker `Threads_Growth` |
+| **Status** | Đang chạy tự động (06/11) — worker `Threads_Growth` online, Telegram chỉ báo cáo |
 | **Executor** | Claude Code (chủ bot duyệt trực tiếp, >3 file) |
 | **Related** | PLAN-153, ADR-066 |
 | **Created** | 2026-11-06 |
@@ -51,5 +51,5 @@ Chủ bot chốt: tự đăng bài đủ điểm, bài thấp hơn chờ duyệt
 
 ## Còn lại
 1. ~~Reply đầu tiên~~ — xong (#13).
-2. `pm2 start ecosystem.config.js --only Threads_Growth` + bật «Kéo khách» khi anh đồng ý.
+2. ~~Start worker~~ — xong 06/11; chế độ tự động hoàn toàn (`auto_post_min_relevance`=40, `telegram_review`=tắt).
 3. Prompt mới → AI đang chèn link `?start=` vào mọi reply; theo dõi Threads có hạ reply có link không.

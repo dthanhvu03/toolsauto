@@ -1644,12 +1644,20 @@ TRẢ VỀ JSON LIST (Mảng các object):
     "growth.auto_post_min_relevance": SettingSpec(
         key="growth.auto_post_min_relevance",
         type="int",
-        default_getter=lambda: 70,
+        default_getter=lambda: 40,
         title='Kéo khách: điểm tự đăng',
         section="Threads — Kéo khách",
-        description='Bài đạt điểm này trở lên thì bot tự reply; thấp hơn (nhưng ≥ điểm tối thiểu) thì chờ anh duyệt trên web / Telegram. 100 = không tự đăng bài nào.',
+        description='Bài đạt điểm này trở lên thì bot tự reply. Đặt bằng «điểm phù hợp tối thiểu» = tự động hoàn toàn (mặc định); cao hơn thì bài ở giữa chờ duyệt trên web. 100 = không tự đăng bài nào.',
         min=0,
         max=100,
+    ),
+    "growth.telegram_review": SettingSpec(
+        key="growth.telegram_review",
+        type="bool",
+        default_getter=lambda: False,
+        title="Kéo khách: gửi bài chờ duyệt lên Telegram",
+        section="Threads — Kéo khách",
+        description="Bật: mỗi bài chờ duyệt gửi Telegram kèm nút Đăng / Bỏ / Đổi A-B. Tắt (mặc định): chỉ báo cáo reply đã đăng sau mỗi vòng.",
     ),
     "growth.max_post_age_hours": SettingSpec(
         key="growth.max_post_age_hours",
