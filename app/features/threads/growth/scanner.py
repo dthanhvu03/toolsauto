@@ -50,8 +50,14 @@ def reach_score(likes: int, replies: int, followers: int) -> int:
 _VI_CHARS = set("ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ")
 
 
+# Chữ CHỈ tiếng Việt có — «é á ô ã ê» tiếng Bồ Đào Nha / Pháp cũng có nên không đủ để nhận ra (bài tiếng Bồ lọt 06/11).
+_VI_ONLY = set("ăđơưĩũ") | {chr(c) for c in range(0x1EA0, 0x1EFA)}
+
+
 def is_vietnamese(text: str, min_chars: int = 3) -> bool:
     lowered = (text or "").lower()
+    if not any(ch in _VI_ONLY for ch in lowered):
+        return False
     return sum(1 for ch in lowered if ch in _VI_CHARS) >= min_chars
 
 

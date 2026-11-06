@@ -248,6 +248,11 @@ def test_is_vietnamese():
     assert is_vietnamese(VI_SHOPEE)
     assert not is_vietnamese("Klaim Voucher 100% milikmu di sini! shopee gratis ongkir")
     assert not is_vietnamese("Happy birthday to meee")
+    # Tiếng Bồ / Pháp có «é á ô ã» nhưng không có chữ riêng tiếng Việt.
+    assert not is_vietnamese("O Claude é TÃO MELHOR assim do que o ChatGPT? Pergunta genuína.. eu nunca usei.")
+    assert not is_vietnamese("Claude se branche maintenant sur vos comptes bancaires, réservée aux abonnés américains")
+    assert is_vietnamese("Bên nào thu chatgpt plus giá tốt không")
+    assert is_vietnamese("cần tìm canva pro vĩnh viễn")
 
 
 def test_load_profiles_reads_web_settings(monkeypatch):

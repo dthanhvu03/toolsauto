@@ -109,6 +109,7 @@ Văn phong — viết y như người thật trên Threads:
 - Trả lời đúng nội dung bài trước (đồng cảm / góp ý / trả lời câu hỏi), rồi mới nhắc {profile.handle} như kinh nghiệm cá nhân.
 - KHÔNG viết như quảng cáo: không «hời phết», «tha hồ», «đỉnh chóp», «đừng bỏ lỡ», không liệt kê ưu đãi, không dấu chấm than liên tục.
 - KHÔNG dùng chữ «VietQR» — nói tiền hoàn «về tài khoản» / «về thẳng tài khoản ngân hàng»; mua acc thì nói «chuyển khoản».
+- KHÔNG hứa bảo hành, giá, % giảm, thời gian giao hay món hàng nào ngoài đúng «Ý chính» ở trên. Không bịa dịp / sự kiện (Tết, sale…) nếu bài không nhắc.
 - KHÔNG ký tự lạ, KHÔNG lộ là AI / bot viết.
 Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
 """

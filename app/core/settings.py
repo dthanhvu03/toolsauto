@@ -1846,7 +1846,7 @@ TRẢ VỀ JSON LIST (Mảng các object):
     "growth.ai_store_b_angle": SettingSpec(
         key="growth.ai_store_b_angle",
         type="str",
-        default_getter=lambda: 'Nhấn mạnh mức giá rẻ hơn 60-80% so với mua trực tiếp qua thẻ quốc tế, có chính sách bảo hành suốt thời hạn sử dụng.',
+        default_getter=lambda: 'Giá: rẻ hơn nhiều so với tự mua bằng thẻ quốc tế, giá ghi sẵn từng món trong bot. Bảo hành tuỳ món (ghi trong mô tả món) — KHÔNG hứa bảo hành suốt hạn / 1 đổi 1.',
         title='AI Store B: góc tiếp cận',
         section="Threads — Kéo khách",
         description='',
@@ -1854,7 +1854,7 @@ TRẢ VỀ JSON LIST (Mảng các object):
     "growth.ai_store_b_hook": SettingSpec(
         key="growth.ai_store_b_hook",
         type="str",
-        default_getter=lambda: 't hay mua bên @aipass_shop_bot, giá mềm hơn tự cà thẻ ngoại nhiều mà còn bảo hành 1 đổi 1 suốt hạn dùng nữa',
+        default_getter=lambda: 't hay mua bên @aipass_shop_bot, giá mềm hơn tự cà thẻ ngoại nhiều, món nào cũng ghi giá với bảo hành rõ trước khi mua',
         title='AI Store B: câu mẫu',
         section="Threads — Kéo khách",
         description='',
