@@ -211,7 +211,7 @@ def test_unit_price_discount():
 @pytest.fixture
 def api(repo, product):
     telegram = FakeTelegram()
-    client = TestClient(create_app(_settings(), repo, telegram))
+    client = TestClient(create_app(_settings(), repo, telegram, executor=InlineExecutor()))
     raw, key = repo.issue_key(RESELLER, 200)
     return client, {"X-API-Key": raw}, key, telegram
 
@@ -531,7 +531,7 @@ def test_slow_source_retried_with_same_request_id(fatcat, repo, monkeypatch):
 
 def test_api_reseller_never_below_cost_and_gets_202(fatcat, repo):
     store, telegram, fake, products = fatcat
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     raw, _ = repo.issue_key(RESELLER, 500)  # giảm 5% > biên 2%
     headers = {"X-API-Key": raw}
     listed = {p["id"]: p for p in client.get("/api/v1/products", headers=headers).json()["products"]}
@@ -651,7 +651,7 @@ def test_pay_by_qr_buys_automatically_after_admin_confirms(fatcat, repo):
 
 def test_sepay_payment_with_intent_buys_automatically(fatcat, repo):
     store, telegram, fake, products = fatcat
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     gem = products[49]
     topup = repo.create_topup(BUYER, 19_000, gem.id, 1)
     hook = {"id": 7001, "transferType": "in", "transferAmount": 19_000, "content": topup.code}
@@ -757,11 +757,11 @@ def test_rejected_custom_emoji_is_resent_plain(monkeypatch):
                 return {"ok": False, "description": "Bad Request: custom emoji not allowed"}
             return {"ok": True, "result": {"message_id": 7}}
 
-    def fake_post(url, json=None, **_):
+    def fake_post(_session, url, json=None, **_):
         calls.append(json)
         return Response(json)
 
-    monkeypatch.setattr("store_bot.telegram_api.requests.post", fake_post)
+    monkeypatch.setattr("store_bot.telegram_api.requests.Session.post", fake_post)
     api = TelegramApi("t")
     markup = {"inline_keyboard": [[{"text": "Capcut", "callback_data": "p:1", "icon_custom_emoji_id": "1"}]]}
     assert api.send_message(1, '<tg-emoji emoji-id="1">🎬</tg-emoji> Capcut', markup) == 7
@@ -952,7 +952,7 @@ def test_api_order_waits_for_wallet_with_202(fatcat, repo):
     store.sync_upstream()
     raw, _key = repo.issue_key(RESELLER, 0)
     repo.adjust_balance(RESELLER, 200_000, "test", "admin")
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     res = client.post("/api/v1/orders", json={"product_id": products[34].id, "quantity": 1, "request_id": "r1"},
                       headers={"X-API-Key": raw})
     assert res.status_code == 202 and res.json()["status"] == "pending"
@@ -1064,7 +1064,7 @@ def test_one_pending_qr_per_customer_until_confirmed_or_cancelled(fatcat, repo):
 
 def test_late_payment_to_cancelled_code_still_credited_without_buying(fatcat, repo):
     store, telegram, fake, products = fatcat
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     gem = products[49]
     store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
     topup = repo.pending_topups()[0]
@@ -1085,7 +1085,7 @@ def test_late_payment_to_cancelled_code_still_credited_without_buying(fatcat, re
 
 def test_sepay_error_after_credit_alerts_admin_and_returns_ok(fatcat, repo, monkeypatch):
     store, telegram, fake, products = fatcat
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     topup = repo.create_topup(BUYER, 19_000, products[49].id, 1)
 
     def boom(*_a, **_k):
@@ -1168,7 +1168,7 @@ def test_waiting_order_auto_refunded_after_6_hours(fatcat, repo, monkeypatch):
 
 def test_admin_topup_notice_closed_after_sepay_or_admin(fatcat, repo):
     store, telegram, fake, products = fatcat
-    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
     store.handle_update(_click(BUYER, "ta:50000"))
     topup = repo.pending_topups()[0]
     assert any(cid == ADMIN and "Yêu cầu nạp" in html for cid, html, _ in telegram.sent)
@@ -1186,3 +1186,37 @@ def test_admin_topup_notice_closed_after_sepay_or_admin(fatcat, repo):
     second = repo.pending_topups()[0]
     store.handle_update(_click(ADMIN, f"a:tc:{second.id}", "boss"))
     assert any("Admin xác nhận" in e[2] and e[3] is None for e in telegram.edits if e[0] == ADMIN)
+
+
+def test_telegram_keeps_one_connection_per_thread():
+    api = TelegramApi("t")
+    first = api._http
+    assert api._http is first  # cùng luồng: dùng lại kết nối (không mở TLS mới mỗi tin)
+    other = []
+    worker = threading.Thread(target=lambda: other.append(api._http))
+    worker.start()
+    worker.join()
+    assert other[0] is not first  # luồng khác có Session riêng
+
+
+def test_sepay_replies_before_slow_telegram_work(fatcat, repo):
+    store, telegram, fake, products = fatcat
+
+    class Deferred:
+        def __init__(self):
+            self.jobs = []
+
+        def submit(self, fn, *args):
+            self.jobs.append((fn, args))
+
+    later = Deferred()
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, later))
+    topup = repo.create_topup(BUYER, 19_000, products[49].id, 1)
+    hook = {"id": 7300, "transferType": "in", "transferAmount": 19_000, "content": topup.code}
+    res = client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    assert res.json() == {"success": True}
+    assert repo.get_user(BUYER).balance == 19_000  # tiền đã ghi trước khi trả lời
+    assert telegram.texts_to(BUYER) == [] and later.jobs  # Telegram / tự mua chưa chạy
+    for fn, args in later.jobs:
+        fn(*args)
+    assert len(repo.list_orders(BUYER)) == 1 and any("SePay: nạp" in h for h in telegram.texts_to(ADMIN))

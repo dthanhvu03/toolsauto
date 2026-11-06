@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+from concurrent.futures import Executor, ThreadPoolExecutor
 
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -65,9 +66,11 @@ def _order_json(order: Order) -> dict:
 
 
 def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
-               fulfiller: Fulfiller | None = None) -> FastAPI:
+               fulfiller: Fulfiller | None = None, executor: Executor | None = None) -> FastAPI:
     app = FastAPI(title=f"{settings.shop_name} API", docs_url="/docs", redoc_url=None)
-    notifier = StoreBot(settings, repo, telegram, bot_username="", fulfiller=fulfiller)
+    notifier = StoreBot(settings, repo, telegram, bot_username="", fulfiller=fulfiller, executor=executor)
+    # Việc chạy sau khi đã trả lời SePay (gửi Telegram, tự mua): SePay chỉ chờ 30 giây, mỗi tin Telegram ~0,2–0,7s.
+    background = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="sepay")
 
     @app.exception_handler(StoreError)
     def _store_error(_: Request, exc: StoreError) -> JSONResponse:
@@ -185,18 +188,20 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         if topup is not None:
             topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
         if not newly:  # không có mã / mã đã trả / admin đã huỷ → anh xử lý tay
-            notifier.notify_admins(msg.admin_unmatched_transfer(amount, content))
+            background.submit(notifier.notify_admins, msg.admin_unmatched_transfer(amount, content))
             return {"success": True}
-        if newly:
-            # Tiền đã cộng (ghi DB xong). Bước báo khách / tự mua lỗi thì không trả 500 — SePay gửi lại cũng
-            # không cộng nữa (bank_ref) nên phải báo admin xử lý tay thay vì im lặng.
-            try:
-                notifier.on_topup_credited(topup, balance)
-            except Exception:
-                logger.exception("[Store] SePay: xử lý sau khi cộng nạp #%s lỗi", topup.id)
-                notifier.notify_admins(msg.admin_after_credit_failed(topup))
-            notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
+        # Tiền đã ghi DB: trả lời SePay NGAY, báo khách / tự mua / báo admin chạy sau (trước đây làm xong mới trả lời,
+        # đo thật ~6,9 giây). SePay gửi lại cũng không cộng nữa (bank_ref).
+        background.submit(_after_credit, topup, balance, amount)
         return {"success": True}
+
+    def _after_credit(topup, balance: int, amount: int) -> None:
+        try:
+            notifier.on_topup_credited(topup, balance)
+        except Exception:
+            logger.exception("[Store] SePay: xử lý sau khi cộng nạp #%s lỗi", topup.id)
+            notifier.notify_admins(msg.admin_after_credit_failed(topup))
+        notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
 
     return app
 
