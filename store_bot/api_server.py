@@ -17,6 +17,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from store_bot import messages as msg
 from store_bot.bot import StoreBot
@@ -163,8 +164,15 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         given = request.headers.get("authorization") or ""
         if not expected or not hmac.compare_digest(given.encode(), f"Apikey {expected}".encode()):
             raise HTTPException(status_code=401, detail="unauthorized")
-        payload = await request.json()
-        if payload.get("transferType") != "in":
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="bad json") from None
+        # Phần dưới gọi SQLite + Telegram (chặn tới 35 giây/tin): chạy ở luồng riêng để không đứng cả server API.
+        return await run_in_threadpool(_credit_transfer, payload)
+
+    def _credit_transfer(payload: dict) -> dict:
+        if not isinstance(payload, dict) or payload.get("transferType") != "in":
             return {"success": True}
         amount = int(payload.get("transferAmount") or 0)
         content = str(payload.get("content") or payload.get("description") or "")
@@ -177,7 +185,13 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
             return {"success": True}
         topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
         if newly:
-            notifier.on_topup_credited(topup, balance)
+            # Tiền đã cộng (ghi DB xong). Bước báo khách / tự mua lỗi thì không trả 500 — SePay gửi lại cũng
+            # không cộng nữa (bank_ref) nên phải báo admin xử lý tay thay vì im lặng.
+            try:
+                notifier.on_topup_credited(topup, balance)
+            except Exception:
+                logger.exception("[Store] SePay: xử lý sau khi cộng nạp #%s lỗi", topup.id)
+                notifier.notify_admins(msg.admin_after_credit_failed(topup))
             notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
         return {"success": True}
 

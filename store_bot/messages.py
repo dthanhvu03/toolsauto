@@ -369,6 +369,11 @@ def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str
     )
 
 
+def too_many_topups(limit: int) -> str:
+    return (f"⏳ Bạn đang có {limit} mã thanh toán chưa trả. Dùng lại mã cũ (cùng số tiền bot gửi lại đúng mã đó), "
+            "hoặc đợi mã cũ tự huỷ sau 24 giờ. Đã chuyển khoản mà chưa thấy tiền thì bấm ☎️ Hỗ trợ.")
+
+
 TOPUP_UNAVAILABLE = "💰 Shop chưa cài tài khoản nhận tiền. Nhắn admin để nạp."
 
 
@@ -727,6 +732,18 @@ def admin_sale(order: Order, user: User | None) -> str:
     via = " qua API" if order.source == "api" else ""
     code = f" · mã {esc(order.upstream_order_id)}" if order.upstream_order_id else ""
     return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
+
+
+def admin_after_credit_failed(topup: Topup) -> str:
+    want = f" để mua món #{topup.intent_product_id} × {topup.intent_quantity}" if topup.intent_product_id else ""
+    return (f"⚠️ SePay đã cộng {vnd(topup.credited or topup.amount)} (nạp #{topup.id}{want}) cho khách "
+            f"<code>{topup.user_id}</code> nhưng bước báo khách / tự mua bị lỗi. Tiền đang trong ví khách — "
+            "nhắn khách bấm mua lại, xem log store-api.")
+
+
+def admin_delivery_failed(order: Order) -> str:
+    return (f"⚠️ Gửi hàng đơn #{order.id} ({esc(order.product_name)}) cho khách <code>{order.user_id}</code> lỗi "
+            "2 lần (Telegram). Đơn đã xong, khách lấy lại ở 🧾 Đơn hàng → bấm đơn.")
 
 
 def admin_sold_out(product: Product) -> str:

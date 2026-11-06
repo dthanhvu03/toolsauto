@@ -1020,3 +1020,64 @@ def test_delivery_shows_upstream_order_code_and_items_verbatim(fatcat, repo):
     assert any("mã DH5FG3NW" in h for h in telegram.texts_to(ADMIN))
     store.handle_update(_click(BUYER, "ord"))
     assert "DH5FG3NW" in telegram.edits[-1][3]["inline_keyboard"][0][0]["text"]
+
+
+# ---------- spam / lỗi giữa chừng (06/11) ----------
+
+def test_pending_topups_capped_per_customer_and_max_amount(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    for amount in (50_000, 100_000, 200_000):
+        store.handle_update(_click(BUYER, f"ta:{amount}"))
+    store.handle_update(_click(BUYER, "ta:500000"))  # mã thứ 4 khác số tiền → từ chối
+    assert len(repo.pending_topups()) == 3
+    assert any("3 mã thanh toán chưa trả" in h for h in telegram.texts_to(BUYER))
+    store.handle_update(_click(BUYER, "ta:100000"))  # cùng số tiền → gửi lại mã cũ, không tính là mã mới
+    assert len(repo.pending_topups()) == 3
+    assert sum("Yêu cầu nạp" in h for h in telegram.texts_to(ADMIN)) == 3
+
+    store.handle_update(_click(RESELLER, "tx"))
+    store.handle_update(_private(RESELLER, "999tr", "Zusem10"))
+    assert any("tối đa 50.000.000đ" in h for h in telegram.texts_to(RESELLER))
+
+
+def test_sepay_error_after_credit_alerts_admin_and_returns_ok(fatcat, repo, monkeypatch):
+    store, telegram, fake, products = fatcat
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    topup = repo.create_topup(BUYER, 19_000, products[49].id, 1)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("tg down")
+    monkeypatch.setattr(StoreBot, "on_topup_credited", boom)
+    hook = {"id": 9001, "transferType": "in", "transferAmount": 19_000, "content": topup.code}
+    res = client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    assert res.status_code == 200 and repo.get_user(BUYER).balance == 19_000
+    assert any("bước báo khách / tự mua bị lỗi" in h for h in telegram.texts_to(ADMIN))
+    client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})  # SePay gửi lại
+    assert repo.get_user(BUYER).balance == 19_000
+    bad = client.post("/webhooks/sepay", content=b"not json",
+                      headers={"Authorization": "Apikey sepay-secret", "Content-Type": "application/json"})
+    assert bad.status_code == 400
+
+
+def test_delivery_message_retried_then_admin_alerted(fatcat, repo, monkeypatch):
+    store, telegram, fake, products = fatcat
+    monkeypatch.setattr("store_bot.bot.SEND_RETRY_SEC", 0)
+    repo.adjust_balance(BUYER, 400_000, "test", "admin")
+    order = repo.buy(BUYER, products[49].id, 1)
+    calls = []
+    real = telegram.send_message
+
+    def flaky(chat_id, html, reply_markup=None, disable_notification=False):
+        if chat_id == BUYER and "fc-49-0" in html:
+            calls.append(1)
+            return None if len(calls) == 1 else real(chat_id, html, reply_markup, disable_notification)
+        return real(chat_id, html, reply_markup, disable_notification)
+    monkeypatch.setattr(telegram, "send_message", flaky)
+    store._fulfill_now(order.id, BUYER, None)
+    assert len(calls) == 2 and any("fc-49-0" in h for h in telegram.texts_to(BUYER))
+
+    calls.clear()
+    monkeypatch.setattr(telegram, "send_message", lambda chat_id, html, *a, **k: None if chat_id == BUYER
+                        else real(chat_id, html, *a, **k))
+    store.send_items(BUYER, repo.get_order(order.id))
+    assert any("Gửi hàng đơn" in h for h in telegram.texts_to(ADMIN))

@@ -767,6 +767,11 @@ class StoreRepository:
             ).fetchone()
         return _topup(row) if row else None
 
+    def count_pending_topups(self, user_id: int) -> int:
+        with self._read() as conn:
+            return conn.execute("SELECT COUNT(*) FROM topups WHERE user_id = ? AND status = 'pending'",
+                                (user_id,)).fetchone()[0]
+
     def expire_topups(self, older_than_sec: int) -> int:
         """Huỷ mã nạp chờ quá lâu. Khách lỡ chuyển vào mã đã huỷ thì webhook báo admin «không khớp» như cũ."""
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")

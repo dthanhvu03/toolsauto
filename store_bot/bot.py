@@ -42,6 +42,9 @@ CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
 WAITING_FUNDS_CHECK_SEC = 30  # có đơn chờ ví: đọc số dư FatCat mỗi 30 giây (GET, không trừ tiền)
 TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
 TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
+MAX_PENDING_TOPUPS = 3  # chống spam: mỗi khách tối đa 3 mã nạp đang chờ (mỗi mã là 1 tin báo admin)
+MAX_TOPUP_VND = 50_000_000
+SEND_RETRY_SEC = 2
 
 
 def button(text: str, data: str, icon_id: str | None = None) -> dict:
@@ -530,11 +533,21 @@ class StoreBot:
                                 keyboard([button("➕ Nhập kho", f"a:st:{product.id}")]))
 
     def send_items(self, chat_id: int, order: Order) -> None:
+        """Gửi hàng; Telegram lỗi (mạng / 429) thì thử lại một lần, vẫn lỗi thì báo admin. Hàng luôn còn ở 🧾 Đơn hàng."""
+        for attempt in range(2):
+            if self._send_items_once(chat_id, order):
+                return
+            if attempt == 0:
+                time.sleep(SEND_RETRY_SEC)
+        logger.error("[Store] gửi hàng đơn %s cho %s lỗi", order.id, chat_id)
+        self.notify_admins(msg.admin_delivery_failed(order))
+
+    def _send_items_once(self, chat_id: int, order: Order) -> bool:
         if msg.items_fit_inline(order):
-            self.tg.send_message(chat_id, msg.order_items(order))
+            return self.tg.send_message(chat_id, msg.order_items(order)) is not None
         else:
             data = ("\n".join(order.items) + "\n").encode("utf-8")
-            self.tg.send_document(chat_id, f"don_{order.id}.txt", data,
+            return self.tg.send_document(chat_id, f"don_{order.id}.txt", data,
                                   f"📦 Đơn #{order.id} · {msg.esc(order.product_name)} × {order.quantity}"
                                   + (f" · mã hàng {msg.esc(order.upstream_order_id)}" if order.upstream_order_id else ""))
 
@@ -558,8 +571,14 @@ class StoreBot:
         if product is None and amount < self.settings.min_topup_vnd:
             self.tg.send_message(chat_id, f"Tối thiểu {msg.vnd(self.settings.min_topup_vnd)}.")
             return
+        if amount > MAX_TOPUP_VND:
+            self.tg.send_message(chat_id, f"Mỗi lần nạp tối đa {msg.vnd(MAX_TOPUP_VND)}.")
+            return
         product_id = product.id if product else None
         reused = self.repo.find_pending_topup(user.user_id, amount, product_id, quantity, TOPUP_REUSE_SEC)
+        if reused is None and self.repo.count_pending_topups(user.user_id) >= MAX_PENDING_TOPUPS:
+            self.tg.send_message(chat_id, msg.too_many_topups(MAX_PENDING_TOPUPS))
+            return
         topup = reused or self.repo.create_topup(user.user_id, amount, product_id, quantity)
         auto = self.settings.sepay_webhook_key is not None
         product_name = product.name if product else None
