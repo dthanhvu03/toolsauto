@@ -21,6 +21,8 @@ from app.constants import JobStatus, ViralStatus
 from app.core.database.models import (
     Base,
     Job,
+    RuntimeSetting,
+    RuntimeSettingAudit,
     StudioAnalysis,
     StudioAsset,
     StudioChannel,
@@ -29,6 +31,7 @@ from app.core.database.models import (
     StudioTemplate,
     ViralMaterial,
 )
+from app.core import settings as runtime_settings
 from app.core.media.ffmpeg_path import ffmpeg_available
 from app.core.notifier.service import NotifierService
 from app.features.studio import analyze, caption, dub, entry, paths, pipeline, taskqueue, worker
@@ -41,7 +44,8 @@ from app.features.viral_intake.service import ViralService
 pytestmark = pytest.mark.skipif(not ffmpeg_available(), reason="cần ffmpeg")
 
 STUDIO_TABLES = [m.__table__ for m in (StudioAsset, StudioAnalysis, StudioTemplate, StudioChannel, StudioProject, StudioTask,
-                                        ViralMaterial, Job)]  # 2 bảng cuối: cầu nối Buffer (P3)
+                                        ViralMaterial, Job,  # cầu nối Buffer (P3)
+                                        RuntimeSetting, RuntimeSettingAudit)]  # render đọc studio.segment_render_over
 
 
 def _ff(*args: str) -> None:
@@ -80,6 +84,9 @@ def db(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'studio.sqlite'}")
     Base.metadata.create_all(engine, tables=STUDIO_TABLES)
     factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # cache cài đặt (3s) có thể giữ giá trị của DB test khác
+    monkeypatch.setattr(runtime_settings, "_cache_ts", 0.0)
+    monkeypatch.setattr(runtime_settings, "_cache_values", {})
     monkeypatch.setattr(paths, "ROOT", tmp_path / "studio")
     monkeypatch.setattr(app_config, "REUP_DIR", tmp_path / "reup")
     # import app.main ở test khác có thể đã đăng ký Telegram thật — không bao giờ gửi tin từ test

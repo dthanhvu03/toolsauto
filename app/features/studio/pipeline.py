@@ -125,6 +125,6 @@ def run_task(db: Session, task: StudioTask) -> StageResult | None:
         if taskqueue.fail(db, task_id, error):
             _mark_project_failed(db, project_id, error)
         return None
-    taskqueue.done(db, task_id, result.note)
+    taskqueue.done(db, task_id, result.note, project_id=result.project_id)
     advance(db, db.get(StudioTask, task_id), result)
     return result

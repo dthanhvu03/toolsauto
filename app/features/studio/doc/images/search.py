@@ -12,7 +12,9 @@ from app.features.studio.doc.schema import Candidate
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "ToolsAuto-Studio/1.0 (audio-doc image search)"
+# Wikimedia chặn (403) User-Agent không có thông tin liên hệ — https://meta.wikimedia.org/wiki/User-Agent_policy.
+# Dùng URL dự án (không dùng email cá nhân).
+USER_AGENT = "ToolsAuto-Studio/1.0 (https://github.com/dthanhvu03/toolsauto; audio-doc image search) python-httpx"
 
 
 def client(cfg: DocConfig) -> httpx.Client:

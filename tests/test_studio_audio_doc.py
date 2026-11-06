@@ -425,7 +425,7 @@ def test_audio_doc_flow_and_rights_lock(db, monkeypatch):
     runtime_settings.upsert_setting(db, "doc.canvas", "1280x720")
     runtime_settings.upsert_setting(db, "doc.preview_sec", "8")
     mp3 = paths.ROOT / "fixtures" / "tone20.mp3"
-    entry.accept_audio_doc(db, io.BytesIO(mp3.read_bytes()), "sample.mp3", title="POC", language="vi")
+    root = entry.accept_audio_doc(db, io.BytesIO(mp3.read_bytes()), "sample.mp3", title="POC", language="vi")
     for _ in range(30):
         claimed = taskqueue.claim(db, lanes=[Lane.HEAVY, Lane.LIGHT], worker_id="t")
         if claimed is None:
@@ -434,6 +434,9 @@ def test_audio_doc_flow_and_rights_lock(db, monkeypatch):
 
     project = db.query(StudioProject).order_by(StudioProject.id.desc()).first()
     assert project is not None and project.status == ProjectStatus.DRAFT
+    # Web tìm dự án theo chuỗi việc từ việc gốc (progress.jobs) — doc_plan phải ghi project_id.
+    from app.features.studio import progress
+    assert progress.jobs(db, ids=[root.id])["jobs"][0]["project_id"] == project.id
     detail = service.detail(db, project.id)
     assert detail["doc"]["transcript"][0]["raw_text"] == "Bruno Fernandes penalty"
     assert detail["rights_gate"]["window_end_ms"] == 8_000
@@ -489,3 +492,10 @@ def test_many_image_clips_render_segment_by_segment(db):
          "-of", "csv=p=0", project.output_path], capture_output=True, text=True, check=True,
     ).stdout
     assert "video,75" in out and "audio" in out  # 3s × 25fps
+
+
+def test_user_agent_has_contact_for_wikimedia():
+    """Wikimedia trả 403 nếu User-Agent không có URL / email liên hệ (gặp thật 06/11)."""
+    from app.features.studio.doc.images import search as image_search
+
+    assert "https://" in image_search.USER_AGENT

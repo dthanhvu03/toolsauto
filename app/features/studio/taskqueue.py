@@ -74,10 +74,13 @@ def claim(db: Session, *, lanes: list[Lane | str], worker_id: str) -> StudioTask
     return task
 
 
-def done(db: Session, task_id: int, note: str = "") -> None:
+def done(db: Session, task_id: int, note: str = "", project_id: int | None = None) -> None:
     task = db.get(StudioTask, task_id)
     task.status = TaskStatus.DONE
     task.error = note or None
+    # Bước tạo dự án rồi dừng luồng (vd audio_doc/doc_plan): ghi lại để web tìm ra dự án từ việc gốc.
+    if project_id and not task.project_id:
+        task.project_id = project_id
     task.finished_at = int(time.time())
     db.commit()
 

@@ -1,3 +1,13 @@
+## Phiên 2026-11-06 (audio-doc-e2e) — Chạy thật Audio→Doc trên web lần đầu, sửa 3 lỗi
+- Chạy trọn luồng qua API thật (audio TTS 24s «Vịnh Hạ Long», dự án thử **#14**): intake→Whisper→chia 3 cảnh ~15s, AI từ khóa
+  đúng; tìm ảnh Wikimedia thật, chọn → tự RIGHTS_VERIFIED + tác giả/giấy phép; preview 1080p 24,3s dựng 118s, phụ đề + Ken Burns OK.
+- Sửa: (1) web không mở được dự án sau khi tải audio — `doc_plan` dừng luồng không ghi `project_id` vào task
+  (`taskqueue.done(project_id=…)`, test hồi quy qua `progress.jobs`); (2) Wikimedia 403 vì User-Agent thiếu URL liên hệ
+  (`doc/images/search.py`); (3) 18 test `test_studio_pipeline` hỏng từ PLAN-157 (fixture thiếu bảng runtime_settings).
+  Openverse: thêm `filter_dead=false`; dịch vụ Openverse đang 504/timeout phía họ (06/11) — app tự bỏ qua nguồn lỗi.
+- Proof: test studio 183 pass (2 lỗi cũ dub_long), ruff sạch; Web_Dashboard + Studio_Heavy/Light đã restart.
+- Lưu ý: Whisper chép giọng máy sai chính tả («Vỉnh Hà Long») → anh sửa lời trên web trước khi dựng.
+
 ## Phiên 2026-11-06 (threads-growth) — PLAN-158: Threads kéo khách CHẠY TỰ ĐỘNG (commit 59c5dc9 + chế độ auto)
 - System State: gói `app/features/threads/growth/` + trang web `/app/go/threads-growth` + Telegram `/keokhach` xong, Web_Dashboard
   đã restart (06/11). Tài khoản Threads `@us28qt` (accounts id 52 `threads_growth`, profile `instagram_5`) ACTIVE.

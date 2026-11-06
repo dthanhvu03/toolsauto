@@ -67,7 +67,8 @@ def wikimedia(client: httpx.Client, query: str, n: int, cfg: DocConfig) -> list[
 
 
 def openverse(client: httpx.Client, query: str, n: int, cfg: DocConfig) -> list[Candidate]:
-    r = client.get(OPENVERSE_API, params={"q": query, "page_size": n})
+    # filter_dead=false: bỏ bước Openverse tự kiểm link chết từng ảnh (rất chậm, hay gây 504); ảnh hỏng thì lúc tải về báo lỗi.
+    r = client.get(OPENVERSE_API, params={"q": query, "page_size": n, "filter_dead": "false"})
     r.raise_for_status()
     return [
         Candidate(
