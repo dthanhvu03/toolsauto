@@ -62,7 +62,7 @@ class Fulfiller:
         """Đồng bộ sản phẩm + số dư ví FatCat. Trả (món vừa tăng hàng, số dư). Lỗi mạng ném UpstreamError."""
         if self.client is None:
             return [], None
-        restocked = self.repo.sync_upstream(self.client.products(), self.price_for)
+        restocked = self.repo.sync_upstream(self.client.products(), self._price_fn())
         return restocked, self.refresh_funds()
 
     # ---------- tăng giá bán (state `markup`, `markup:<upstream_id>`) ----------
@@ -75,6 +75,16 @@ class Fulfiller:
 
     def price_for(self, cost: int, upstream_id: int) -> int:
         return pricing.sell_price(cost, self.discount_bps, self.own_markup(upstream_id) or self.global_markup())
+
+    def _price_fn(self):
+        """Như price_for nhưng đọc mọi mức tăng giá một lần (đồng bộ / đổi giá cả danh sách món)."""
+        states = self.repo.states_with_prefix("markup")
+        common = pricing.decode(states.get("markup")) or pricing.NO_MARKUP
+
+        def price(cost: int, upstream_id: int) -> int:
+            own = pricing.decode(states.get(f"markup:{upstream_id}"))
+            return pricing.sell_price(cost, self.discount_bps, own or common)
+        return price
 
     def preview(self, markup: Markup | None, product_id: int | None = None, days: int = 30) -> list[PriceRow]:
         """Giá từng món FatCat nếu áp dụng `markup`: chung (product_id None, món có mức riêng giữ mức riêng)
@@ -106,4 +116,4 @@ class Fulfiller:
                 self.repo.delete_state(f"markup:{product.upstream_id}")
             else:
                 self.repo.set_state(f"markup:{product.upstream_id}", markup.code)
-        return self.repo.reprice_upstream(self.price_for)
+        return self.repo.reprice_upstream(self._price_fn())

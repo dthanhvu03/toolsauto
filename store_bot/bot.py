@@ -82,6 +82,9 @@ class StoreBot:
         self.fulfiller = fulfiller or Fulfiller(repo, None)
         # Gọi FatCat có thể mất tới 40 giây: chạy ở luồng riêng để vòng nhận tin không bị đứng.
         self.executor = executor or ThreadPoolExecutor(max_workers=4, thread_name_prefix="fulfill")
+        # Nhắn «hàng mới về» cho từng khách chạy luồng RIÊNG: dùng chung 4 luồng lấy hàng thì vài đợt báo hàng
+        # chiếm hết luồng, khách vừa trả tiền phải chờ báo xong mới được lấy hàng FatCat.
+        self.broadcast_executor = executor or ThreadPoolExecutor(max_workers=1, thread_name_prefix="broadcast")
         # Nhiều món về cùng lúc thì gửi lần lượt, không chạy song song vượt giới hạn tốc độ Telegram.
         self._broadcast_lock = threading.Lock()
         self._funds_checked = 0.0
@@ -367,7 +370,8 @@ class StoreBot:
 
     def show_shop(self, chat_id: int, message_id: int | None) -> None:
         products = self.repo.list_products()
-        rows = [[button(msg.product_button(p, self.restocking(p)), f"p:{p.id}", msg.icon_id(p.name))]
+        funds = self.repo.upstream_funds()
+        rows = [[button(msg.product_button(p, self.restocking(p, funds)), f"p:{p.id}", msg.icon_id(p.name))]
                 for p in products]
         rows.append([button("🏠 Trang chủ", "home")])
         self._show(chat_id, message_id, msg.shop_list(products), keyboard(*rows))
@@ -462,11 +466,15 @@ class StoreBot:
                     self.settings.max_order_quantity)
         return limit
 
-    def restocking(self, product: Product) -> bool:
-        """Còn hàng bên FatCat nhưng ví FatCat của shop không đủ nhập 1 món: vẫn bán, đơn chờ admin nạp ví."""
+    _UNREAD = object()
+
+    def restocking(self, product: Product, funds=_UNREAD) -> bool:
+        """Còn hàng bên FatCat nhưng ví FatCat của shop không đủ nhập 1 món: vẫn bán, đơn chờ admin nạp ví.
+        Xét nhiều món thì truyền `funds` đọc một lần (khỏi mở 1 kết nối DB cho mỗi món)."""
         if product.stock <= 0 or product.upstream_id is None or not product.cost:
             return False
-        funds = self.repo.upstream_funds()
+        if funds is self._UNREAD:
+            funds = self.repo.upstream_funds()
         return funds is not None and funds < product.cost
 
     def on_waiting_funds(self, order: Order, user: User | None, chat_id: int | None, message_id: int | None) -> None:
@@ -475,10 +483,8 @@ class StoreBot:
             self._show(chat_id, message_id, msg.order_waiting_funds(order),
                        keyboard([button("↩️ Huỷ đơn, hoàn tiền vào ví", f"ow:{order.id}")],
                                 [button("🏠 Trang chủ", "home")]))
-        waiting = self.repo.waiting_orders()
-        need = sum((self.repo.get_product(o.product_id).cost or 0) * o.quantity
-                   for o in waiting if self.repo.get_product(o.product_id))
-        self.notify_admins(msg.admin_waiting_funds(order, user, self.repo.upstream_funds(), len(waiting), need))
+        count, need = self.repo.waiting_summary()  # vốn theo giá lúc bán (unit_cost), một truy vấn
+        self.notify_admins(msg.admin_waiting_funds(order, user, self.repo.upstream_funds(), count, need))
 
     def _fulfill_now(self, order_id: int, chat_id: int, message_id: int | None) -> None:
         try:
@@ -509,7 +515,7 @@ class StoreBot:
     def retry_pending(self) -> None:
         """Luồng nền: gọi lại FatCat cho đơn còn chờ, báo admin một lần nếu chờ quá lâu."""
         now = datetime.now(timezone.utc)
-        if self.repo.waiting_orders() and time.monotonic() - self._funds_checked >= WAITING_FUNDS_CHECK_SEC:
+        if self.repo.waiting_summary()[0] and time.monotonic() - self._funds_checked >= WAITING_FUNDS_CHECK_SEC:
             self._funds_checked = time.monotonic()
             self.fulfiller.refresh_funds()  # có khách đang chờ: hỏi ví FatCat dày hơn để anh nạp xong là giao
         for order in self.repo.expire_waiting(WAITING_REFUND_SEC):
@@ -554,7 +560,7 @@ class StoreBot:
         """Báo admin (có chuông) khi danh sách món bị khoá vì ví FatCat thiếu thay đổi; ví đủ lại thì xoá dấu."""
         if balance is None:
             return
-        blocked = [p for p in self.repo.list_products() if self.restocking(p)]
+        blocked = [p for p in self.repo.list_products() if self.restocking(p, balance)]
         mark = ",".join(str(p.id) for p in blocked)
         if mark == (self.repo.get_state("low_funds_alerted") or ""):
             return
@@ -1035,7 +1041,7 @@ class StoreBot:
         """Hàng mới về: đăng kênh + nhắn từng khách trong bot (như FatCat). Trả True nếu đăng kênh được."""
         posted = self.announce(product_id, added)
         if self.restock_dm_enabled():
-            self.executor.submit(self.broadcast_restock, product_id, added)
+            self.broadcast_executor.submit(self.broadcast_restock, product_id, added)
         return posted
 
     def broadcast_restock(self, product_id: int, added: int) -> None:

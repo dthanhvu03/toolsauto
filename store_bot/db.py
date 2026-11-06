@@ -156,6 +156,9 @@ UPDATE orders SET unit_cost = (SELECT p.upstream_cost FROM products p WHERE p.id
     WHERE unit_cost IS NULL AND upstream_request_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_upstream ON products(upstream_id) WHERE upstream_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, id);
+CREATE INDEX IF NOT EXISTS idx_topups_user_status ON topups(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_topups_status_created ON topups(status, created_at);
 INSERT INTO order_items(order_id, content)
     SELECT s.order_id, s.content FROM stock_items s
     WHERE s.order_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM order_items o WHERE o.order_id = s.order_id);
@@ -352,6 +355,13 @@ class StoreRepository:
         with self._tx() as conn:
             conn.execute("DELETE FROM state WHERE key = ?", (key,))
 
+    def states_with_prefix(self, prefix: str) -> dict[str, str]:
+        """Mọi state có khoá bắt đầu bằng `prefix` — một truy vấn (dùng khoảng khoá, đi theo chỉ mục)."""
+        with self._read() as conn:
+            rows = conn.execute("SELECT key, value FROM state WHERE key >= ? AND key < ?",
+                                (prefix, prefix + "\U0010ffff")).fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
     def upstream_funds(self) -> int | None:
         """Số dư ví FatCat lần đọc gần nhất (trừ dần theo đơn vừa đặt). None = chưa biết."""
         raw = self.get_state(UPSTREAM_FUNDS_KEY)
@@ -384,7 +394,7 @@ class StoreRepository:
             rows = conn.execute(
                 """SELECT s.value, COUNT(*) AS n FROM state s
                    JOIN users u ON u.user_id = CAST(substr(s.key, 5) AS INTEGER)
-                   WHERE s.key LIKE 'src:%' AND u.created_at >= ?
+                   WHERE s.key >= 'src:' AND s.key < 'src;' AND u.created_at >= ?
                    GROUP BY s.value ORDER BY n DESC, s.value LIMIT 6""",
                 (since,),
             ).fetchall()
@@ -572,6 +582,15 @@ class StoreRepository:
                 (cutoff,),
             )]
 
+    def waiting_summary(self) -> tuple[int, int]:
+        """(số đơn chờ ví, tổng vốn cần nạp) — một truy vấn, không tải cả đơn (vòng nền gọi mỗi 10 giây)."""
+        with self._read() as conn:
+            row = conn.execute(
+                """SELECT COUNT(*), SUM(COALESCE(unit_cost, 0) * quantity) FROM orders
+                   WHERE status = 'pending' AND waiting_funds = 1"""
+            ).fetchone()
+        return int(row[0] or 0), int(row[1] or 0)
+
     def waiting_orders(self) -> list[Order]:
         """Đơn khách đã trả, đang chờ admin nạp ví FatCat (cũ trước)."""
         with self._read() as conn:
@@ -582,6 +601,8 @@ class StoreRepository:
     def release_waiting(self) -> list[int]:
         """Ví FatCat đủ lại: mở các đơn chờ (cũ trước) vừa đủ số dư, giữ chỗ ví cho từng đơn. Trả id đơn được mở."""
         released = []
+        if not self.waiting_summary()[0]:
+            return released  # không giữ khoá ghi mỗi 10 giây khi chẳng có đơn chờ
         with self._tx() as conn:
             funds = _upstream_funds(conn)
             if funds is None:
@@ -738,10 +759,11 @@ class StoreRepository:
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
         with self._read() as conn:
             rows = conn.execute(
-                """SELECT o.product_id, SUM(n.items), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * n.items)
-                   FROM orders o JOIN (SELECT order_id, COUNT(*) AS items FROM order_items GROUP BY order_id) n
-                        ON n.order_id = o.id
-                   WHERE o.status IN ('done', 'partial') AND o.created_at >= ? GROUP BY o.product_id""",
+                """SELECT product_id, SUM(items), SUM(total - refunded), SUM(COALESCE(unit_cost, 0) * items)
+                   FROM (SELECT o.product_id, o.total, o.refunded, o.unit_cost,
+                                (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id) AS items
+                         FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?)
+                   WHERE items > 0 GROUP BY product_id""",
                 (since,),
             ).fetchall()
         return {row[0]: (int(row[1] or 0), int(row[2] or 0), int(row[3] or 0)) for row in rows}
@@ -801,11 +823,16 @@ class StoreRepository:
     def expire_topups(self, older_than_sec: int) -> list[int]:
         """Huỷ mã nạp chờ quá lâu, trả id các mã vừa huỷ. Tiền lỡ về mã quá hạn vẫn được cộng (confirm_topup)."""
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            if not conn.execute("SELECT 1 FROM topups WHERE status = 'pending' AND created_at < ? LIMIT 1",
+                                (cutoff,)).fetchone():
+                return []  # thường gặp: không mở giao dịch ghi
         with self._tx() as conn:
             ids = [r["id"] for r in conn.execute(
                 "SELECT id FROM topups WHERE status = 'pending' AND created_at < ?", (cutoff,))]
             conn.executemany(
-                "UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ? WHERE id = ?",
+                "UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ? WHERE id = ? "
+                "AND status = 'pending'",
                 [(utcnow(), i) for i in ids],
             )
             return ids

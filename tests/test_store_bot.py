@@ -1220,3 +1220,24 @@ def test_sepay_replies_before_slow_telegram_work(fatcat, repo):
     for fn, args in later.jobs:
         fn(*args)
     assert len(repo.list_orders(BUYER)) == 1 and any("SePay: nạp" in h for h in telegram.texts_to(ADMIN))
+
+
+def test_broadcast_uses_own_thread_not_fulfillment_pool(repo):
+    store = StoreBot(_settings(), repo, FakeTelegram(), "x")
+    assert store.broadcast_executor is not store.executor
+    assert store.broadcast_executor._max_workers == 1 and store.executor._max_workers == 4
+
+
+def test_waiting_summary_and_batched_prices(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 0
+    store.sync_upstream()
+    repo.adjust_balance(BUYER, 500_000, "test", "admin")
+    repo.buy(BUYER, products[34].id, 1, client_ref="w1")
+    repo.buy(BUYER, products[49].id, 2, client_ref="w2")
+    assert repo.waiting_summary() == (2, 151_900 + 2 * 18_620)
+    store.fulfiller.set_markup(pricing.Markup("pct", 1_000))
+    store.fulfiller.set_markup(pricing.Markup("vnd", 5_000), products[49].id)
+    fn = store.fulfiller._price_fn()
+    for p in repo.list_products():
+        assert fn(p.cost, p.upstream_id) == store.fulfiller.price_for(p.cost, p.upstream_id) == p.price
