@@ -140,6 +140,8 @@ ADDED_COLUMNS = {
         "note": "TEXT",
         "updated_at": "TEXT",
         "unit_cost": "INTEGER",  # giá vốn 1 món lúc bán (hàng FatCat); NULL = hàng tự nhập, không tính vốn
+        # 1 = khách đã trả, ví FatCat của shop chưa đủ nhập: chưa gọi FatCat, chờ admin nạp ví rồi bot tự lấy hàng.
+        "waiting_funds": "INTEGER NOT NULL DEFAULT 0",
     },
     "topups": {
         # Thanh toán QR cho một đơn (mua thẳng không cần nạp ví trước): tiền vào là bot tự mua món này.
@@ -228,6 +230,7 @@ class Order:
     status: str = "done"
     refunded: int = 0
     note: str | None = None
+    waiting_funds: bool = False
 
 
 @dataclass(frozen=True)
@@ -495,9 +498,9 @@ class StoreRepository:
             if product.stock < quantity:
                 raise StoreError("out_of_stock", available=product.stock)
             funds = _upstream_funds(conn) if product.upstream_id is not None and product.cost else None
-            if funds is not None and funds < product.cost * quantity:
-                # Ví FatCat không đủ nhập món này: chặn TRƯỚC khi trừ tiền khách (sự cố 04/11: hoàn 2 đơn 402).
-                raise StoreError("restocking")
+            # Ví FatCat không đủ nhập: vẫn bán, nhưng giữ đơn chờ admin nạp ví — không gọi FatCat để khỏi bị 402
+            # rồi hoàn tiền bắt khách mua lại (sự cố 04/11 đơn #2 #3).
+            waiting = funds is not None and funds < product.cost * quantity
             if product.max_quantity and quantity > product.max_quantity:
                 raise StoreError("bad_quantity", max=product.max_quantity)
             unit = unit_price(product.price, discount_bps)
@@ -514,10 +517,10 @@ class StoreRepository:
             order_id = int(conn.execute(
                 """INSERT INTO orders(user_id, product_id, product_name, quantity, unit_price, total, source,
                                       api_key_id, client_ref, created_at, status, upstream_request_id, updated_at,
-                                      unit_cost)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                      unit_cost, waiting_funds)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (user_id, product_id, product.name, quantity, unit, total, source, api_key_id, client_ref, now,
-                 "pending" if upstream else "done", request_id, now, product.cost),
+                 "pending" if upstream else "done", request_id, now, product.cost, int(waiting)),
             ).lastrowid)
             if not upstream:
                 item_ids = [row["id"] for row in conn.execute(
@@ -533,7 +536,7 @@ class StoreRepository:
                     (order_id, order_id),
                 )
             _move_money(conn, user_id, -total, "order", f"order:{order_id}", product.name)
-            if funds is not None:
+            if funds is not None and not waiting:
                 # Giữ chỗ trong ví FatCat để hai đơn cùng lúc không vượt số dư; lần đồng bộ sau ghi lại số thật.
                 conn.execute("UPDATE state SET value = ? WHERE key = ?",
                              (str(funds - product.cost * quantity), UPSTREAM_FUNDS_KEY))
@@ -542,11 +545,12 @@ class StoreRepository:
     # ---------- đơn lấy từ FatCat ----------
 
     def upstream_job(self, order_id: int) -> tuple[int, int, str] | None:
-        """(id sản phẩm FatCat, số lượng, request_id) của đơn đang chờ; None nếu đơn đã xong."""
+        """(id sản phẩm FatCat, số lượng, request_id) của đơn đang chờ; None nếu đơn đã xong / đang chờ ví."""
         with self._read() as conn:
             row = conn.execute(
                 """SELECT p.upstream_id, o.quantity, o.upstream_request_id FROM orders o
-                   JOIN products p ON p.id = o.product_id WHERE o.id = ? AND o.status = 'pending'""",
+                   JOIN products p ON p.id = o.product_id
+                   WHERE o.id = ? AND o.status = 'pending' AND o.waiting_funds = 0""",
                 (order_id,),
             ).fetchone()
         return (row[0], row[1], row[2]) if row else None
@@ -555,8 +559,65 @@ class StoreRepository:
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
         with self._read() as conn:
             return [row["id"] for row in conn.execute(
-                "SELECT id FROM orders WHERE status = 'pending' AND created_at <= ? ORDER BY id", (cutoff,)
+                "SELECT id FROM orders WHERE status = 'pending' AND waiting_funds = 0 AND created_at <= ? ORDER BY id",
+                (cutoff,),
             )]
+
+    def waiting_orders(self) -> list[Order]:
+        """Đơn khách đã trả, đang chờ admin nạp ví FatCat (cũ trước)."""
+        with self._read() as conn:
+            ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM orders WHERE status = 'pending' AND waiting_funds = 1 ORDER BY id")]
+            return [_load_order(conn, order_id) for order_id in ids]
+
+    def release_waiting(self) -> list[int]:
+        """Ví FatCat đủ lại: mở các đơn chờ (cũ trước) vừa đủ số dư, giữ chỗ ví cho từng đơn. Trả id đơn được mở."""
+        released = []
+        with self._tx() as conn:
+            funds = _upstream_funds(conn)
+            if funds is None:
+                return []
+            for row in conn.execute(
+                """SELECT id, quantity, COALESCE(unit_cost, 0) AS cost FROM orders
+                   WHERE status = 'pending' AND waiting_funds = 1 ORDER BY id"""
+            ).fetchall():
+                need = row["cost"] * row["quantity"]
+                if need > funds:
+                    break  # giữ thứ tự: đơn trước chưa đủ thì đơn sau cũng chờ
+                funds -= need
+                conn.execute("UPDATE orders SET waiting_funds = 0, updated_at = ? WHERE id = ?", (utcnow(), row["id"]))
+                released.append(row["id"])
+            if released:
+                conn.execute("UPDATE state SET value = ? WHERE key = ?", (str(funds), UPSTREAM_FUNDS_KEY))
+        return released
+
+    def wait_for_funds(self, order_id: int) -> tuple[Order, bool]:
+        """FatCat báo 402 (ví shop thiếu, FatCat KHÔNG trừ tiền): giữ đơn chờ ví thay vì hoàn tiền.
+        Đổi request_id mới vì id cũ đã bị từ chối. Trả (đơn, vừa chuyển sang chờ không)."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                """UPDATE orders SET waiting_funds = 1, upstream_request_id = ?, updated_at = ?
+                   WHERE id = ? AND status = 'pending' AND waiting_funds = 0""",
+                (f"aps-{secrets.token_hex(8)}", utcnow(), order_id),
+            )
+            return _load_order(conn, order_id), cur.rowcount == 1
+
+    def cancel_waiting(self, order_id: int, user_id: int) -> Order | None:
+        """Khách không chờ nữa: huỷ đơn đang chờ ví, hoàn đủ vào số dư. Đơn đã được mở lấy hàng thì không huỷ."""
+        with self._tx() as conn:
+            row = conn.execute(
+                "SELECT * FROM orders WHERE id = ? AND user_id = ? AND status = 'pending' AND waiting_funds = 1",
+                (order_id, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            _move_money(conn, user_id, row["total"], "refund", f"order:{order_id}", "khách huỷ khi chờ nhập hàng")
+            conn.execute(
+                """UPDATE orders SET status = 'failed', refunded = ?, waiting_funds = 0, note = ?, updated_at = ?
+                   WHERE id = ?""",
+                (row["total"], "khách huỷ khi chờ nhập hàng", utcnow(), order_id),
+            )
+            return _load_order(conn, order_id)
 
     def complete_upstream(self, order_id: int, items: list[str], upstream_order_id: str | None) -> tuple[Order, bool]:
         """Ghi hàng FatCat giao. Thiếu món nào hoàn tiền món đó cho khách. Chỉ chạy một lần mỗi đơn."""
@@ -944,7 +1005,8 @@ def _load_product(conn: sqlite3.Connection, product_id: int) -> Product | None:
 def _order(row: sqlite3.Row, **extra) -> Order:
     return Order(row["id"], row["user_id"], row["product_id"], row["product_name"], row["quantity"],
                  row["unit_price"], row["total"], row["source"], row["created_at"], status=row["status"],
-                 refunded=row["refunded"], note=row["note"], **extra)
+                 refunded=row["refunded"], note=row["note"],
+                 waiting_funds=bool(row["waiting_funds"]) if "waiting_funds" in row.keys() else False, **extra)
 
 
 def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False) -> Order:

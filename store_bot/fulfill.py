@@ -2,7 +2,9 @@
 
 Một đơn FatCat: bot trừ tiền khách và ghi đơn 'pending' trước (db.buy), rồi mới gọi FatCat.
 - FatCat giao đủ/thiếu → complete_upstream (thiếu thì hoàn phần thiếu).
-- FatCat từ chối chắc chắn → fail_upstream (hoàn đủ).
+- FatCat báo 402 (ví shop thiếu) → wait_for_funds: đơn chờ admin nạp ví rồi lấy lại (request_id mới).
+- FatCat từ chối chắc chắn khác → fail_upstream (hoàn đủ).
+- Biết trước ví thiếu (db.buy) → đơn tạo ở trạng thái chờ ví, không gọi FatCat; release_waiting mở lại khi ví đủ.
 - Chưa rõ (timeout, 202, 5xx…) → để nguyên 'pending'; luồng nền gọi lại cùng request_id tới khi rõ.
 """
 
@@ -33,6 +35,9 @@ class Fulfiller:
         result = self.client.buy(upstream_id, quantity, request_id)
         if result.kind == DELIVERED:
             order, newly = self.repo.complete_upstream(order_id, result.items, result.upstream_order_id)
+        elif result.kind == REJECTED and result.status_code == 402:
+            # Ví shop thiếu (FatCat không trừ tiền): giữ đơn chờ admin nạp ví, không hoàn rồi bắt khách mua lại.
+            order, newly = self.repo.wait_for_funds(order_id)
         elif result.kind == REJECTED:
             order, newly = self.repo.fail_upstream(order_id, f"FatCat {result.status_code}: {result.message}")
         else:

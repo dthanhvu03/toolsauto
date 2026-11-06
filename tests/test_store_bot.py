@@ -484,19 +484,27 @@ def test_partial_delivery_refunds_missing(fatcat, repo):
     assert any("chỉ giao 1/2" in h for h in telegram.texts_to(BUYER))
 
 
-def test_fatcat_wallet_empty_refunds_and_alerts_admin(fatcat, repo):
+def test_fatcat_402_keeps_order_waiting_then_delivers_after_admin_tops_up(fatcat, repo, monkeypatch):
     store, telegram, fake, products = fatcat
+    monkeypatch.setattr("store_bot.bot.WAITING_FUNDS_CHECK_SEC", 0)
     repo.adjust_balance(BUYER, 200_000, "test", "admin")
     fake.results = [BuyResult(REJECTED, status_code=402, message="Số dư không đủ.")]
-    order = repo.buy(BUYER, products[34].id, 1)
+    fake.funds = 1_000
+    order = repo.buy(BUYER, products[34].id, 1)  # số ví cũ còn đủ → gọi FatCat, FatCat báo 402
     store._fulfill_now(order.id, BUYER, None)
-    assert repo.get_order(order.id).status == "failed"
-    assert repo.get_user(BUYER).balance == 200_000
-    assert any("chưa lấy được hàng" in h for h in telegram.texts_to(BUYER))
-    # Lý do đúng: shop đang nhập hàng (không phải «thiếu hàng, thử lại sau ít phút»), chỉ đường hoàn về ngân hàng.
-    failed = next(h for h in telegram.texts_to(BUYER) if "chưa lấy được hàng" in h)
-    assert "đang nhập thêm hàng" in failed and "Hỗ trợ" in failed and "tạm thiếu hàng" not in failed
-    assert any("Ví FatCat không đủ tiền" in h for h in telegram.texts_to(ADMIN))
+    waiting = repo.get_order(order.id)
+    assert (waiting.status, waiting.waiting_funds, waiting.refunded) == ("pending", True, 0)
+    assert repo.get_user(BUYER).balance == 200_000 - 155_000  # không hoàn, giữ đơn
+    assert any("shop đang nhập hàng" in h for h in telegram.texts_to(BUYER))
+    assert any("chờ anh nạp ví FatCat" in h and "nạp thêm ít nhất" in h for h in telegram.texts_to(ADMIN))
+
+    store.retry_pending()  # ví vẫn thiếu → không gọi FatCat lần nữa
+    assert len(fake.calls) == 1
+    fake.funds = 300_000  # anh nạp ví
+    store.retry_pending()
+    assert len(fake.calls) == 2 and fake.calls[1][2] != fake.calls[0][2]  # request_id mới
+    assert repo.get_order(order.id).status == "done"
+    assert any("fc-34-0" in h for h in telegram.texts_to(BUYER))
 
 
 def test_slow_source_retried_with_same_request_id(fatcat, repo, monkeypatch):
@@ -581,7 +589,7 @@ def test_stats_show_cash_flow_and_profit(fatcat, repo):
     repo.confirm_topup(topup.id, "admin:1")
     good = repo.buy(BUYER, products[34].id, 1)
     store._fulfill_now(good.id, BUYER, None)
-    fake.results = [BuyResult(REJECTED, status_code=402, message="Số dư không đủ.")]
+    fake.results = [BuyResult(REJECTED, status_code=409, message="Hết hàng.")]
     bad = repo.buy(BUYER, products[34].id, 1)
     store._fulfill_now(bad.id, BUYER, None)
 
@@ -833,65 +841,117 @@ def test_start_source_counts_new_customers_once(bot, repo, product):
 
 # ---------- ví FatCat thiếu, mã QR, bảo hành (06/11) ----------
 
-def test_low_fatcat_wallet_shows_restocking_and_never_charges(fatcat, repo):
+def test_low_fatcat_wallet_still_sells_and_order_waits(fatcat, repo, monkeypatch):
     store, telegram, fake, products = fatcat
+    monkeypatch.setattr("store_bot.bot.WAITING_FUNDS_CHECK_SEC", 0)
     fake.funds = 100_000  # đủ nhập Gemini (18.620đ), không đủ GPT (151.900đ)
     store.sync_upstream()
-    store.sync_upstream()  # danh sách món bị khoá không đổi → không báo lại
+    store.sync_upstream()  # danh sách món thiếu ví không đổi → không báo lại
     alerts = [h for h in telegram.texts_to(ADMIN) if "Ví FatCat còn" in h]
     assert len(alerts) == 1 and "Chat GPT Plus" in alerts[0] and "Gemini" not in alerts[0]
 
     gpt = products[34]
     store.handle_update(_click(BUYER, "shop"))
     labels = [row[0]["text"] for row in telegram.edits[-1][3]["inline_keyboard"][:-1]]
-    assert any("Chat GPT" in t and "đang nhập hàng" in t for t in labels)
-    assert any("Gemini" in t and "còn 7" in t for t in labels)
-
+    assert any("Chat GPT" in t and "còn 44 · ⏳ giao sau ít phút" in t for t in labels)
+    assert any("Gemini" in t and t.endswith("còn 7") for t in labels)
     store.handle_update(_click(BUYER, f"p:{gpt.id}"))
-    detail = telegram.edits[-1]
-    assert "đang nhập thêm hàng" in detail[2] and "Còn:" not in detail[2]
-    assert all(not b["callback_data"].startswith("q:") for row in detail[3]["inline_keyboard"] for b in row)
-    store.handle_update(_click(BUYER, f"bq:{gpt.id}:1"))  # nút QR cũ còn trên màn hình
-    assert repo.pending_topups() == []
+    assert "vẫn đặt bình thường" in telegram.edits[-1][2]
+    assert any(b["callback_data"] == f"q:{gpt.id}:1" for row in telegram.edits[-1][3]["inline_keyboard"] for b in row)
 
     repo.adjust_balance(BUYER, 200_000, "test", "admin")
-    with pytest.raises(StoreError) as err:
-        repo.buy(BUYER, gpt.id, 1)
-    assert err.value.code == "restocking" and repo.get_user(BUYER).balance == 200_000
+    store.handle_update(_click(BUYER, f"q:{gpt.id}:1"))
+    assert "vẫn đặt bình thường" in telegram.edits[-1][2]
+    store.handle_update(_click(BUYER, telegram.edits[-1][3]["inline_keyboard"][0][0]["callback_data"]))
+    assert fake.calls == []  # biết trước ví thiếu → không gọi FatCat
+    screen = telegram.edits[-1]
+    assert "shop đang nhập hàng" in screen[2]
+    cancel = screen[3]["inline_keyboard"][0][0]
+    assert cancel["callback_data"].startswith("ow:")
+    order_id = int(cancel["callback_data"][3:])
+    assert repo.get_user(BUYER).balance == 200_000 - 155_000
+
+    store.handle_update(_click(BUYER, f"o:{order_id}"))
+    assert "chờ shop nhập hàng" in telegram.answers[-1][0]
+    fake.funds = 500_000
+    store.retry_pending()
+    assert repo.get_order(order_id).status == "done" and len(fake.calls) == 1
+    store.handle_update(_click(BUYER, cancel["callback_data"]))  # bấm huỷ sau khi đã giao → không hoàn
+    assert repo.get_user(BUYER).balance == 200_000 - 155_000
+
+
+def test_customer_cancels_waiting_order_and_gets_money_back(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 1_000
+    store.sync_upstream()
+    repo.adjust_balance(BUYER, 200_000, "test", "admin")
+    order = repo.buy(BUYER, products[34].id, 1)
+    assert order.waiting_funds
+    store.handle_update(_click(BUYER, f"ow:{order.id}"))
+    store.handle_update(_click(BUYER, f"ow:{order.id}"))  # bấm đúp không hoàn hai lần
+    done = repo.get_order(order.id)
+    assert (done.status, done.refunded) == ("failed", 155_000)
+    assert repo.get_user(BUYER).balance == 200_000
+    assert "Đã huỷ đơn theo yêu cầu" in telegram.edits[-1][2]
+    fake.funds = 500_000
+    store.retry_pending()
     assert fake.calls == []
 
-    fake.funds = 500_000  # admin nạp FatCat → mở bán lại, lần sau thiếu lại thì báo lại
+
+def test_waiting_orders_released_in_order_within_wallet(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 0
     store.sync_upstream()
-    assert not store.restocking(repo.get_product(gpt.id))
+    gem = products[49]
+    repo.adjust_balance(BUYER, 100_000, "test", "admin")
+    first = repo.buy(BUYER, gem.id, 1, client_ref="a")
+    second = repo.buy(BUYER, gem.id, 1, client_ref="b")
+    assert first.waiting_funds and second.waiting_funds
+    repo.set_state("upstream_balance", "30000")  # đủ 1 đơn (18.620đ)
+    assert repo.release_waiting() == [first.id]
+    assert repo.upstream_funds() == 30_000 - 18_620
+    assert repo.release_waiting() == []
 
 
-def test_wallet_reserved_per_order_so_two_orders_cannot_overspend(fatcat, repo):
+def test_wallet_reserved_per_order_so_second_order_waits(fatcat, repo):
     store, telegram, fake, products = fatcat
     fake.funds = 30_000
     store.sync_upstream()
     gem = products[49]
     repo.adjust_balance(BUYER, 100_000, "test", "admin")
-    assert store._max_quantity(repo.get_product(gem.id)) == 1
     first = repo.buy(BUYER, gem.id, 1, client_ref="a")
-    assert repo.upstream_funds() == 30_000 - 18_620
-    with pytest.raises(StoreError) as err:
-        repo.buy(BUYER, gem.id, 1, client_ref="b")
-    assert err.value.code == "restocking"
+    assert not first.waiting_funds and repo.upstream_funds() == 30_000 - 18_620
+    second = repo.buy(BUYER, gem.id, 1, client_ref="b")
+    assert second.waiting_funds  # ví giữ chỗ cho đơn đầu → đơn sau chờ, không gọi FatCat
     fake.funds = 11_380
     store._fulfill_now(first.id, BUYER, None)  # giao xong → đọc lại số thật
     assert repo.upstream_funds() == 11_380
 
 
-def test_paid_qr_while_wallet_low_keeps_money_and_alerts_admin(fatcat, repo):
+def test_paid_qr_while_wallet_low_creates_waiting_order(fatcat, repo):
     store, telegram, fake, products = fatcat
     gpt = products[34]
-    topup = repo.create_topup(BUYER, gpt.price, gpt.id, 1)  # khách tạo QR khi ví còn đủ
+    topup = repo.create_topup(BUYER, gpt.price, gpt.id, 1)
     fake.funds = 1_000
     store.sync_upstream()
     store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))
-    assert repo.get_user(BUYER).balance == gpt.price and fake.calls == []
-    assert any("Tiền của bạn vẫn còn nguyên" in h for h in telegram.texts_to(BUYER))
-    assert any("muốn mua" in h and "ví FatCat không đủ" in h for h in telegram.texts_to(ADMIN))
+    assert fake.calls == [] and repo.get_user(BUYER).balance == 0
+    assert len(repo.waiting_orders()) == 1
+    assert any("shop đang nhập hàng" in h for h in telegram.texts_to(BUYER))
+    assert any("chờ anh nạp ví FatCat" in h for h in telegram.texts_to(ADMIN))
+
+
+def test_api_order_waits_for_wallet_with_202(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 1_000
+    store.sync_upstream()
+    raw, _key = repo.issue_key(RESELLER, 0)
+    repo.adjust_balance(RESELLER, 200_000, "test", "admin")
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    res = client.post("/api/v1/orders", json={"product_id": products[34].id, "quantity": 1, "request_id": "r1"},
+                      headers={"X-API-Key": raw})
+    assert res.status_code == 202 and res.json()["status"] == "pending"
+    assert fake.calls == [] and any("chờ anh nạp ví FatCat" in h for h in telegram.texts_to(ADMIN))
 
 
 def test_pressing_qr_again_reuses_code_and_old_codes_expire(fatcat, repo):

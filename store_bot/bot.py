@@ -39,6 +39,7 @@ ANNOUNCE_GAP_SEC = 20 * 60  # một món không đăng kênh dày hơn mức nà
 BROADCAST_DELAY_SEC = 0.05  # ~20 tin/giây, dưới giới hạn 30 tin/giây của Telegram
 MARKUP_DAYS = 30  # xem trước dòng tăng giá theo số món bán trong 30 ngày qua
 CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
+WAITING_FUNDS_CHECK_SEC = 30  # có đơn chờ ví: đọc số dư FatCat mỗi 30 giây (GET, không trừ tiền)
 TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
 TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
 
@@ -80,6 +81,7 @@ class StoreBot:
         self.executor = executor or ThreadPoolExecutor(max_workers=4, thread_name_prefix="fulfill")
         # Nhiều món về cùng lúc thì gửi lần lượt, không chạy song song vượt giới hạn tốc độ Telegram.
         self._broadcast_lock = threading.Lock()
+        self._funds_checked = 0.0
         self.load_icons()
 
     # ---------- tiện ích ----------
@@ -268,10 +270,19 @@ class StoreBot:
             self.show_account(chat_id, message_id, user)
         elif data == "ord":
             self.show_orders(chat_id, message_id, user)
+        elif parts[0] == "ow":
+            order = self.repo.cancel_waiting(int(parts[1]), user.user_id)
+            if order is None:
+                return "Đơn đã được lấy hàng hoặc đã huỷ trước đó.", True
+            self._show(chat_id, message_id, msg.order_failed(order), keyboard([button("🛒 Sản phẩm", "shop")]))
+            self.notify_admins(msg.admin_waiting_cancelled(order, user), quiet=True)
+            return "Đã huỷ đơn, tiền đã về ví.", False
         elif parts[0] == "o":
             order = self.repo.get_order(int(parts[1]), user.user_id)
             if order is None:
                 return "Không tìm thấy đơn.", True
+            if order.status == "pending" and order.waiting_funds:
+                return "Đơn đang chờ shop nhập hàng, có hàng bot gửi ngay.", True
             if order.status == "pending":
                 return "Đơn đang lấy hàng, có hàng bot gửi ngay.", True
             if not order.items:
@@ -348,9 +359,6 @@ class StoreBot:
             self._show(chat_id, message_id, "Sản phẩm này hiện không bán.", keyboard([button("🛒 Sản phẩm", "shop")]))
             return
         limit = self._max_quantity(product)
-        if self.restocking(product):
-            self._show(chat_id, message_id, msg.RESTOCKING_NOTE, keyboard([button("🛒 Sản phẩm", "shop")]))
-            return
         if not 1 <= quantity <= limit:
             self._show(chat_id, message_id, f"Mỗi lần mua được 1–{limit} món.",
                        keyboard([button("⬅️ Quay lại", f"p:{product.id}")]))
@@ -363,7 +371,7 @@ class StoreBot:
             first = [button(f"📱 Thanh toán QR {msg.vnd(missing)}", f"bq:{product.id}:{quantity}")]
         else:
             first = [button("💰 Nạp tiền", "top")]
-        self._show(chat_id, message_id, msg.confirm_buy(product, quantity, user.balance),
+        self._show(chat_id, message_id, msg.confirm_buy(product, quantity, user.balance, self.restocking(product)),
                    keyboard(first, [button("⬅️ Quay lại", f"p:{product.id}")]))
 
     def pay_by_qr(self, chat_id: int, message_id: int | None, user: User, product_id: int, quantity: int) -> None:
@@ -387,13 +395,14 @@ class StoreBot:
         try:
             order = self.repo.buy(user.user_id, product_id, quantity, client_ref=client_ref)
         except StoreError as exc:
-            if exc.code == "restocking":
-                product = self.repo.get_product(product_id)
-                if product is not None:
-                    self.notify_admins(msg.admin_restocking_block(user, product, self.repo.upstream_funds()))
             self._show(chat_id, message_id, "❌ " + msg.error_text(exc),
                        keyboard([button("💰 Nạp tiền", "top"), button("🛒 Sản phẩm", "shop")]))
             return msg.error_text(exc), True
+        if order.status == "pending" and order.waiting_funds:
+            if order.replayed:
+                return "Đơn đang chờ shop nhập hàng.", False
+            self.on_waiting_funds(order, user, chat_id, message_id)
+            return "Đã nhận đơn, chờ shop nhập hàng.", False
         if order.status == "pending":
             self._show(chat_id, message_id, msg.order_waiting(order))
             if order.replayed:
@@ -414,14 +423,25 @@ class StoreBot:
     def _max_quantity(self, product: Product) -> int:
         limit = min(product.stock, product.max_quantity or self.settings.max_order_quantity,
                     self.settings.max_order_quantity)
-        funds = self.repo.upstream_funds() if product.upstream_id is not None and product.cost else None
-        if funds is not None:
-            limit = min(limit, max(funds, 0) // product.cost)  # không bán quá số ví FatCat nhập nổi
         return limit
 
     def restocking(self, product: Product) -> bool:
-        """Còn hàng bên FatCat nhưng ví FatCat không đủ nhập dù 1 món → khách thấy «đang nhập hàng»."""
-        return product.stock > 0 and product.upstream_id is not None and self._max_quantity(product) == 0
+        """Còn hàng bên FatCat nhưng ví FatCat của shop không đủ nhập 1 món: vẫn bán, đơn chờ admin nạp ví."""
+        if product.stock <= 0 or product.upstream_id is None or not product.cost:
+            return False
+        funds = self.repo.upstream_funds()
+        return funds is not None and funds < product.cost
+
+    def on_waiting_funds(self, order: Order, user: User | None, chat_id: int | None, message_id: int | None) -> None:
+        """Đơn đã trừ tiền khách nhưng ví FatCat thiếu: báo khách chờ (kèm nút huỷ) và báo admin nạp ví (có chuông)."""
+        if order.source == "bot" and chat_id is not None:
+            self._show(chat_id, message_id, msg.order_waiting_funds(order),
+                       keyboard([button("↩️ Huỷ đơn, hoàn tiền vào ví", f"ow:{order.id}")],
+                                [button("🏠 Trang chủ", "home")]))
+        waiting = self.repo.waiting_orders()
+        need = sum((self.repo.get_product(o.product_id).cost or 0) * o.quantity
+                   for o in waiting if self.repo.get_product(o.product_id))
+        self.notify_admins(msg.admin_waiting_funds(order, user, self.repo.upstream_funds(), len(waiting), need))
 
     def _fulfill_now(self, order_id: int, chat_id: int, message_id: int | None) -> None:
         try:
@@ -434,6 +454,9 @@ class StoreBot:
     def report_resolved(self, order: Order, result: BuyResult | None, chat_id: int | None,
                         message_id: int | None) -> None:
         """Đơn FatCat vừa chốt: báo khách (khi mua qua bot) và báo admin."""
+        if order.status == "pending" and order.waiting_funds:  # FatCat 402 → chuyển sang chờ ví
+            self.on_waiting_funds(order, self.repo.get_user(order.user_id), chat_id, message_id)
+            return
         if order.source == "bot" and chat_id is not None:
             if order.items:
                 self._show(chat_id, message_id, msg.order_done(order),
@@ -449,7 +472,17 @@ class StoreBot:
     def retry_pending(self) -> None:
         """Luồng nền: gọi lại FatCat cho đơn còn chờ, báo admin một lần nếu chờ quá lâu."""
         now = datetime.now(timezone.utc)
+        if self.repo.waiting_orders() and time.monotonic() - self._funds_checked >= WAITING_FUNDS_CHECK_SEC:
+            self._funds_checked = time.monotonic()
+            self.fulfiller.refresh_funds()  # có khách đang chờ: hỏi ví FatCat dày hơn để anh nạp xong là giao
+        released = self.repo.release_waiting()
+        for order_id in released:  # admin vừa nạp ví: lấy hàng ngay cho đơn đang chờ
+            order, result, newly = self.fulfiller.attempt(order_id)
+            if newly:
+                self.report_resolved(order, result, order.user_id, None)
         for order_id in self.repo.pending_upstream_orders(RETRY_AFTER_SEC):
+            if order_id in released:
+                continue
             order, result, newly = self.fulfiller.attempt(order_id)
             if newly:
                 self.report_resolved(order, result, order.user_id, None)
@@ -467,8 +500,6 @@ class StoreBot:
             before = product.stock - added
             if not product.on_sale or (added < self.settings.restock_announce_min and before > 0):
                 continue
-            if self.restocking(self.repo.get_product(product.id) or product):
-                continue  # ví FatCat không đủ nhập: báo «hàng mới về» là khách bấm vào cũng không mua được
             last = float(self.repo.get_state(f"announced:{product.id}") or 0)
             if now - last < ANNOUNCE_GAP_SEC:
                 continue

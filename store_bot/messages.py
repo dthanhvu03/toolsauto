@@ -138,7 +138,6 @@ def error_text(exc: StoreError) -> str:
         "product_inactive": "Sản phẩm đang tạm ngừng bán.",
         "product_blocked": "Sản phẩm này không mở cho khóa của bạn.",
         "out_of_stock": f"Không đủ hàng: chỉ còn {info.get('available', 0)}.",
-        "restocking": "Shop đang nhập thêm hàng món này, chưa mua được lúc này. Tiền của bạn vẫn còn nguyên trong ví.",
         "insufficient_balance": (
             f"Số dư không đủ: cần {vnd(info.get('need', 0))}, bạn có {vnd(info.get('balance', 0))}."
         ),
@@ -187,10 +186,9 @@ def warranty(name: str) -> str | None:
 
 
 def product_button(product: Product, restocking: bool = False) -> str:
+    stock = f"còn {product.stock}" if product.stock else "hết hàng"
     if restocking:
-        stock = "đang nhập hàng"
-    else:
-        stock = f"còn {product.stock}" if product.stock else "hết hàng"
+        stock += " · ⏳ giao sau ít phút"
     return f"{button_icon(product.name)}{product.name} · {vnd(product.price)} · {stock}"
 
 
@@ -202,22 +200,22 @@ def product_detail(product: Product, balance: int, restocking: bool = False) -> 
     guarantee = warranty(product.name)
     if guarantee:
         lines.append(f"🛡️ Bảo hành: <b>{guarantee}</b>")
-    if not restocking:
-        lines.append(f"🗄️ Còn: <b>{product.stock}</b>")
+    lines.append(f"🗄️ Còn: <b>{product.stock}</b>")
     lines.append(f"💼 Số dư của bạn: {vnd(balance)}")
     if restocking:
         lines += ["", RESTOCKING_NOTE]
-    elif not product.stock:
+    if not product.stock:
         lines += ["", "Hiện đã hết hàng. Theo dõi kênh để biết khi có hàng mới."]
     else:
         lines += ["", "Bấm số lượng bên dưới hoặc gõ số lượng muốn mua:"]
     return "\n".join(lines)
 
 
-RESTOCKING_NOTE = "⏳ Shop đang nhập thêm hàng món này, quay lại sau ít phút nhé. Chưa thanh toán được lúc này."
+RESTOCKING_NOTE = ("⏳ Shop đang nhập thêm hàng món này. Bạn vẫn đặt bình thường: bot giữ đơn và gửi hàng ngay khi "
+                   "shop nhập xong (thường ít phút). Không muốn chờ thì bấm huỷ đơn, tiền về lại ví.")
 
 
-def confirm_buy(product: Product, quantity: int, balance: int) -> str:
+def confirm_buy(product: Product, quantity: int, balance: int, restocking: bool = False) -> str:
     total = product.price * quantity
     after = balance - total
     if after >= 0:
@@ -234,6 +232,7 @@ def confirm_buy(product: Product, quantity: int, balance: int) -> str:
         f"Số lượng: <b>{quantity}</b> × {vnd(product.price)}\n"
         f"Tổng: <b>{vnd(total)}</b>\n"
         f"{guarantee_line}\n{tail}"
+        + (f"\n\n{RESTOCKING_NOTE}" if restocking else "")
     )
 
 
@@ -267,8 +266,19 @@ def order_waiting(order: Order) -> str:
     )
 
 
+def order_waiting_funds(order: Order) -> str:
+    return (
+        f"⏳ <b>Đã nhận đơn #{order.id}</b>, shop đang nhập hàng\n\n"
+        f"{icon(order.product_name)} {esc(order.product_name)} × {order.quantity} · đã trả {vnd(order.total)}\n\n"
+        "Bạn đợi shop một chút nhé: nhập hàng xong là bot gửi ngay vào đây, không cần bấm mua lại. "
+        "Không muốn chờ thì bấm ↩️ Huỷ đơn, tiền về lại ví."
+    )
+
+
 def order_failed(order: Order) -> str:
-    if (order.note or "").startswith("FatCat 402"):
+    if order.note == "khách huỷ khi chờ nhập hàng":
+        why = "Đã huỷ đơn theo yêu cầu. Tiền dùng mua món khác được, hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng."
+    elif (order.note or "").startswith("FatCat 402"):
         # Ví nguồn của shop thiếu tiền — không phải hết hàng; thử lại ngay cũng hỏng tiếp.
         why = ("Shop đang nhập thêm hàng cho món này nên chưa giao được. Tiền đã nằm trong ví của bạn: "
                "dùng mua món khác, quay lại sau, hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng.")
@@ -733,17 +743,26 @@ def admin_upstream_rejected(order: Order, status_code: int | None, message: str)
 def admin_low_funds(balance: int, products: list[Product]) -> str:
     names = "\n".join(f"• {esc(p.name)} (vốn {vnd(p.cost or 0)})" for p in products)
     return (
-        f"🐱 <b>Ví FatCat còn {vnd(balance)}</b> — không đủ nhập {len(products)} món, khách đang thấy «đang nhập hàng»:\n"
-        f"{names}\n\n👉 Nạp thêm ở bot FatCat; lần đồng bộ sau bot tự mở bán lại."
+        f"🐱 <b>Ví FatCat còn {vnd(balance)}</b> — không đủ nhập {len(products)} món:\n"
+        f"{names}\n\nKhách vẫn đặt được; đơn sẽ chờ tới khi anh nạp. 👉 Nạp thêm ở bot FatCat."
     )
 
 
-def admin_restocking_block(user: User, product: Product, balance: int | None) -> str:
-    funds = f" (ví FatCat {vnd(balance)})" if balance is not None else ""
+def admin_waiting_funds(order: Order, user: User | None, balance: int | None, count: int, need: int) -> str:
+    who = esc(user.label) if user else f"khách {order.user_id}"
+    funds = vnd(balance) if balance is not None else "?"
+    short = max(need - (balance or 0), 0)
     return (
-        f"⚠️ {esc(user.label)} muốn mua <b>{esc(product.name)}</b> nhưng ví FatCat không đủ{funds}. "
-        "Bot chưa trừ tiền khách; tiền khách (nếu vừa nạp) đang nằm trong ví bot.\n👉 Nạp thêm ở bot FatCat."
+        f"🔔 <b>Khách đã trả, chờ anh nạp ví FatCat</b>\n\n"
+        f"🧾 Đơn #{order.id} · {who}\n📦 {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}\n\n"
+        f"🐱 Ví FatCat: {funds} · {count} đơn đang chờ cần {vnd(need)}"
+        + (f" → <b>nạp thêm ít nhất {vnd(short)}</b>" if short else "")
+        + "\n👉 Nạp ở bot FatCat; nạp xong khoảng 30 giây là bot tự lấy hàng và gửi khách."
     )
+
+
+def admin_waiting_cancelled(order: Order, user: User) -> str:
+    return f"↩️ {esc(user.label)} huỷ đơn #{order.id} ({esc(order.product_name)}) khi chờ nạp ví, đã hoàn {vnd(order.refunded)}."
 
 
 def admin_upstream_stuck(order: Order) -> str:

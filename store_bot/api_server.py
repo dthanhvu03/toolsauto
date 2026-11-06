@@ -35,7 +35,6 @@ ERROR_STATUS = {
     "product_not_found": 404,
     "product_inactive": 409,
     "out_of_stock": 409,
-    "restocking": 409,  # ví FatCat của shop không đủ nhập: tạm thời, thử lại sau
 }
 
 
@@ -108,7 +107,7 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
                 "description": p.description,
                 "price": max(unit_price(p.price, key.discount_bps), p.cost or 0),
                 "list_price": p.price,
-                "stock": 0 if notifier.restocking(p) else p.stock,
+                "stock": p.stock,
                 "max_quantity": min(p.max_quantity or settings.max_order_quantity, settings.max_order_quantity),
             }
             for p in repo.list_products()
@@ -124,7 +123,10 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
             client_ref=f"api:{body.request_id}" if body.request_id else None,
             discount_bps=key.discount_bps, source="api", api_key_id=key.id,
         )
-        if order.status == "pending":
+        if order.status == "pending" and order.waiting_funds:
+            if not order.replayed:  # ví FatCat thiếu: đơn chờ admin nạp ví, đại lý hỏi lại GET /orders/{id}
+                notifier.on_waiting_funds(order, repo.get_user(key.user_id), None, None)
+        elif order.status == "pending":
             # Đơn hàng FatCat (mới, hoặc gọi lại khi đang chờ): thử lấy hàng ngay trong lượt gọi này.
             order, result, newly = notifier.fulfiller.attempt(order.id)
             if newly:
