@@ -42,7 +42,8 @@ ERROR_STATUS = {
 class OrderRequest(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
-    request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    # Bắt buộc: mạng chập đại lý gọi lại cùng request_id thì nhận lại đơn cũ, không bị trừ tiền 2 lần.
+    request_id: str = Field(min_length=1, max_length=64)
 
 
 def _order_json(order: Order) -> dict:
@@ -122,7 +123,7 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
             raise StoreError("bad_quantity", max=settings.max_order_quantity)
         order = repo.buy(
             key.user_id, body.product_id, body.quantity,
-            client_ref=f"api:{body.request_id}" if body.request_id else None,
+            client_ref=f"api:{body.request_id}",
             discount_bps=key.discount_bps, source="api", api_key_id=key.id,
         )
         if order.status == "pending" and order.waiting_funds:

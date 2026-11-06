@@ -279,6 +279,9 @@ def order_waiting_funds(order: Order) -> str:
 def order_failed(order: Order) -> str:
     if order.note == "khách huỷ khi chờ nhập hàng":
         why = "Đã huỷ đơn theo yêu cầu. Tiền dùng mua món khác được, hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng."
+    elif order.note == "tự hoàn sau 6 giờ chờ nhập hàng":
+        why = ("Xin lỗi bạn, shop chưa nhập kịp hàng nên bot tự huỷ đơn sau 6 giờ. Tiền dùng mua lại / món khác được, "
+               "hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng.")
     elif (order.note or "").startswith("FatCat 402"):
         # Ví nguồn của shop thiếu tiền — không phải hết hàng; thử lại ngay cũng hỏng tiếp.
         why = ("Shop đang nhập thêm hàng cho món này nên chưa giao được. Tiền đã nằm trong ví của bạn: "
@@ -679,6 +682,8 @@ def key_granted(key: ApiKey, raw: str, api_url: str) -> str:
         "⚠️ Gửi ngay cho họ và lưu lại: bot không lưu khóa thô nên sau này không xem lại được, "
         "mất thì phải cấp lại khóa mới.\n\n"
         f"Địa chỉ API: {url}\n\n"
+        "Mỗi lệnh mua (POST /api/v1/orders) phải kèm <code>request_id</code> riêng; gọi lại cùng request_id "
+        "thì nhận lại đơn cũ, không trừ tiền lần hai.\n\n"
         f"Khóa bán được ngay mọi sản phẩm đang bán, giảm {percent(key.discount_bps)}. "
         "Muốn chặn họ bán sản phẩm nào thì vào 📦 Sản phẩm được bán tích chặn."
     )
@@ -785,6 +790,11 @@ def admin_waiting_funds(order: Order, user: User | None, balance: int | None, co
         + (f" → <b>nạp thêm ít nhất {vnd(short)}</b>" if short else "")
         + "\n👉 Nạp ở bot FatCat; nạp xong khoảng 30 giây là bot tự lấy hàng và gửi khách."
     )
+
+
+def admin_waiting_expired(order: Order) -> str:
+    return (f"↩️ Đơn #{order.id} ({esc(order.product_name)} × {order.quantity}) chờ nạp ví FatCat quá 6 giờ → "
+            f"bot đã tự hoàn {vnd(order.refunded)} vào ví khách <code>{order.user_id}</code>.")
 
 
 def admin_waiting_cancelled(order: Order, user: User) -> str:

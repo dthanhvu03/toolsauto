@@ -147,6 +147,8 @@ ADDED_COLUMNS = {
         # Thanh toán QR cho một đơn (mua thẳng không cần nạp ví trước): tiền vào là bot tự mua món này.
         "intent_product_id": "INTEGER",
         "intent_quantity": "INTEGER",
+        # Giá 1 món lúc tạo QR: tiền về (trong 24 giờ mã còn hiệu lực) thì bán đúng giá này dù giá đã tăng.
+        "intent_unit_price": "INTEGER",
     },
 }
 POST_MIGRATE = """
@@ -170,6 +172,7 @@ KEY_PREFIX = "sk_"
 
 
 UPSTREAM_FUNDS_KEY = "upstream_balance"
+AUTO_REFUND_NOTE = "tự hoàn sau 6 giờ chờ nhập hàng"
 
 
 class StoreError(Exception):
@@ -245,6 +248,7 @@ class Topup:
     created_at: str
     intent_product_id: int | None = None
     intent_quantity: int | None = None
+    intent_unit_price: int | None = None
 
 
 @dataclass(frozen=True)
@@ -476,7 +480,8 @@ class StoreRepository:
     # ---------- orders ----------
 
     def buy(self, user_id: int, product_id: int, quantity: int, client_ref: str | None = None, *,
-            discount_bps: int = 0, source: str = "bot", api_key_id: int | None = None) -> Order:
+            discount_bps: int = 0, source: str = "bot", api_key_id: int | None = None,
+            locked_unit_price: int | None = None) -> Order:
         """Trừ tiền + lấy hàng trong cùng một giao dịch. client_ref trùng thì trả lại đơn cũ, không mua lần hai."""
         if quantity < 1:
             raise StoreError("bad_quantity")
@@ -505,6 +510,8 @@ class StoreRepository:
             if product.max_quantity and quantity > product.max_quantity:
                 raise StoreError("bad_quantity", max=product.max_quantity)
             unit = unit_price(product.price, discount_bps)
+            if locked_unit_price:
+                unit = min(unit, locked_unit_price)  # giá đã báo trên QR; giá giảm thì khách được giá mới
             if product.cost:
                 unit = max(unit, product.cost)  # giảm cho đại lý cấp dưới không bao giờ bán dưới giá vốn
             total = unit * quantity
@@ -603,8 +610,23 @@ class StoreRepository:
             )
             return _load_order(conn, order_id), cur.rowcount == 1
 
-    def cancel_waiting(self, order_id: int, user_id: int) -> Order | None:
-        """Khách không chờ nữa: huỷ đơn đang chờ ví, hoàn đủ vào số dư. Đơn đã được mở lấy hàng thì không huỷ."""
+    def expire_waiting(self, older_than_sec: int) -> list[Order]:
+        """Đơn chờ ví quá lâu (admin chưa nạp): tự hoàn đủ vào số dư khách. Trả các đơn vừa hoàn."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id FROM orders WHERE status = 'pending' AND waiting_funds = 1 AND created_at < ?",
+                (cutoff,),
+            ).fetchall()
+        done = []
+        for row in rows:
+            order = self.cancel_waiting(row["id"], row["user_id"], note=AUTO_REFUND_NOTE)
+            if order is not None:
+                done.append(order)
+        return done
+
+    def cancel_waiting(self, order_id: int, user_id: int, note: str = "khách huỷ khi chờ nhập hàng") -> Order | None:
+        """Huỷ đơn đang chờ ví (khách bấm huỷ / quá hạn), hoàn đủ vào số dư. Đơn đã được mở lấy hàng thì không huỷ."""
         with self._tx() as conn:
             row = conn.execute(
                 "SELECT * FROM orders WHERE id = ? AND user_id = ? AND status = 'pending' AND waiting_funds = 1",
@@ -612,11 +634,11 @@ class StoreRepository:
             ).fetchone()
             if row is None:
                 return None
-            _move_money(conn, user_id, row["total"], "refund", f"order:{order_id}", "khách huỷ khi chờ nhập hàng")
+            _move_money(conn, user_id, row["total"], "refund", f"order:{order_id}", note)
             conn.execute(
                 """UPDATE orders SET status = 'failed', refunded = ?, waiting_funds = 0, note = ?, updated_at = ?
                    WHERE id = ?""",
-                (row["total"], "khách huỷ khi chờ nhập hàng", utcnow(), order_id),
+                (row["total"], note, utcnow(), order_id),
             )
             return _load_order(conn, order_id)
 
@@ -740,15 +762,16 @@ class StoreRepository:
     # ---------- topups ----------
 
     def create_topup(self, user_id: int, amount: int, product_id: int | None = None,
-                     quantity: int | None = None) -> Topup:
+                     quantity: int | None = None, unit_price: int | None = None) -> Topup:
         with self._tx() as conn:
             for _ in range(10):
                 code = "NAP" + "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
                 try:
                     cur = conn.execute(
-                        """INSERT INTO topups(user_id, code, amount, created_at, intent_product_id, intent_quantity)
-                           VALUES (?, ?, ?, ?, ?, ?)""",
-                        (user_id, code, amount, utcnow(), product_id, quantity),
+                        """INSERT INTO topups(user_id, code, amount, created_at, intent_product_id, intent_quantity,
+                                              intent_unit_price)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (user_id, code, amount, utcnow(), product_id, quantity, unit_price),
                     )
                 except sqlite3.IntegrityError:
                     continue
@@ -1024,7 +1047,8 @@ def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False)
 
 def _topup(row: sqlite3.Row) -> Topup:
     return Topup(row["id"], row["user_id"], row["code"], row["amount"], row["credited"], row["status"], row["created_at"],
-                 row["intent_product_id"], row["intent_quantity"])
+                 row["intent_product_id"], row["intent_quantity"],
+                 row["intent_unit_price"] if "intent_unit_price" in row.keys() else None)
 
 
 def _load_key(conn: sqlite3.Connection, key_id: int) -> ApiKey | None:

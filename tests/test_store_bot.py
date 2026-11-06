@@ -246,12 +246,17 @@ def test_api_order_is_idempotent_and_notifies_admin(api, repo, product):
 
 def test_api_errors_have_codes(api, repo, product):
     client, headers, key, _ = api
-    poor = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1}, headers=headers)
+    no_id = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1}, headers=headers)
+    assert no_id.status_code == 422  # thiếu request_id: không cho mua (gọi lại khi mạng chập sẽ thành 2 đơn)
+    poor = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1, "request_id": "e1"},
+                       headers=headers)
     assert poor.status_code == 402 and poor.json()["error"] == "insufficient_balance"
     repo.toggle_block(key.id, product)
-    blocked = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1}, headers=headers)
+    blocked = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1, "request_id": "e2"},
+                          headers=headers)
     assert blocked.status_code == 403
-    too_many = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1000}, headers=headers)
+    too_many = client.post("/api/v1/orders", json={"product_id": product, "quantity": 1000, "request_id": "e3"},
+                           headers=headers)
     assert too_many.status_code == 400
 
 
@@ -1081,3 +1086,43 @@ def test_delivery_message_retried_then_admin_alerted(fatcat, repo, monkeypatch):
                         else real(chat_id, html, *a, **k))
     store.send_items(BUYER, repo.get_order(order.id))
     assert any("Gửi hàng đơn" in h for h in telegram.texts_to(ADMIN))
+
+
+def test_qr_price_locked_when_price_rises_but_lower_price_wins(fatcat, repo, monkeypatch):
+    store, telegram, fake, products = fatcat
+    gem = products[49]
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    topup = repo.pending_topups()[0]
+    assert topup.intent_unit_price == gem.price
+    repo.update_product(gem.id, price=gem.price + 3_000)  # giá tăng sau khi khách lấy QR
+    store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))
+    order = repo.list_orders(BUYER)[0]
+    assert (order.status, order.total) == ("done", gem.price) and repo.get_user(BUYER).balance == 0
+
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    second = repo.pending_topups()[0]
+    repo.update_product(gem.id, price=gem.price - 300)  # giá giảm (vẫn trên vốn 18.620đ) → khách được giá mới
+    store.handle_update(_click(ADMIN, f"a:tc:{second.id}", "boss"))
+    assert repo.list_orders(BUYER)[0].total == gem.price - 300
+    assert repo.get_user(BUYER).balance == 3_300  # QR thứ 2 tạo lúc giá 22.000đ, mua giá 18.700đ → dư nằm ví
+
+
+def test_waiting_order_auto_refunded_after_6_hours(fatcat, repo, monkeypatch):
+    store, telegram, fake, products = fatcat
+    fake.funds = 1_000
+    store.sync_upstream()
+    repo.adjust_balance(BUYER, 200_000, "test", "admin")
+    order = repo.buy(BUYER, products[34].id, 1)
+    store.retry_pending()
+    assert repo.get_order(order.id).status == "pending"  # chưa tới 6 giờ
+    monkeypatch.setattr("store_bot.bot.WAITING_REFUND_SEC", -1)
+    store.retry_pending()
+    done = repo.get_order(order.id)
+    assert (done.status, done.refunded) == ("failed", 155_000) and repo.get_user(BUYER).balance == 200_000
+    assert any("tự huỷ đơn sau 6 giờ" in h for h in telegram.texts_to(BUYER))
+    assert any("chờ nạp ví FatCat quá 6 giờ" in h for h in telegram.texts_to(ADMIN))
+    store.retry_pending()  # không hoàn lần 2
+    assert repo.get_user(BUYER).balance == 200_000
+    fake.funds = 500_000
+    store.retry_pending()
+    assert fake.calls == []

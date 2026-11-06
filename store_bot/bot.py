@@ -42,6 +42,7 @@ CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
 WAITING_FUNDS_CHECK_SEC = 30  # có đơn chờ ví: đọc số dư FatCat mỗi 30 giây (GET, không trừ tiền)
 TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
 TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
+WAITING_REFUND_SEC = 6 * 3600  # đơn chờ ví quá 6 giờ (admin chưa nạp) → tự hoàn về ví khách
 MAX_PENDING_TOPUPS = 3  # chống spam: mỗi khách tối đa 3 mã nạp đang chờ (mỗi mã là 1 tin báo admin)
 MAX_TOPUP_VND = 50_000_000
 SEND_RETRY_SEC = 2
@@ -394,9 +395,10 @@ class StoreBot:
         return self.buy_and_deliver(chat_id, message_id, user, product_id, quantity, f"tg:{nonce}")
 
     def buy_and_deliver(self, chat_id: int, message_id: int | None, user: User, product_id: int, quantity: int,
-                        client_ref: str) -> tuple[str | None, bool]:
+                        client_ref: str, locked_unit_price: int | None = None) -> tuple[str | None, bool]:
         try:
-            order = self.repo.buy(user.user_id, product_id, quantity, client_ref=client_ref)
+            order = self.repo.buy(user.user_id, product_id, quantity, client_ref=client_ref,
+                                  locked_unit_price=locked_unit_price)
         except StoreError as exc:
             self._show(chat_id, message_id, "❌ " + msg.error_text(exc),
                        keyboard([button("💰 Nạp tiền", "top"), button("🛒 Sản phẩm", "shop")]))
@@ -478,6 +480,10 @@ class StoreBot:
         if self.repo.waiting_orders() and time.monotonic() - self._funds_checked >= WAITING_FUNDS_CHECK_SEC:
             self._funds_checked = time.monotonic()
             self.fulfiller.refresh_funds()  # có khách đang chờ: hỏi ví FatCat dày hơn để anh nạp xong là giao
+        for order in self.repo.expire_waiting(WAITING_REFUND_SEC):
+            if order.source == "bot":
+                self.tg.send_message(order.user_id, msg.order_failed(order), keyboard([button("🛒 Sản phẩm", "shop")]))
+            self.notify_admins(msg.admin_waiting_expired(order))
         released = self.repo.release_waiting()
         for order_id in released:  # admin vừa nạp ví: lấy hàng ngay cho đơn đang chờ
             order, result, newly = self.fulfiller.attempt(order_id)
@@ -579,7 +585,8 @@ class StoreBot:
         if reused is None and self.repo.count_pending_topups(user.user_id) >= MAX_PENDING_TOPUPS:
             self.tg.send_message(chat_id, msg.too_many_topups(MAX_PENDING_TOPUPS))
             return
-        topup = reused or self.repo.create_topup(user.user_id, amount, product_id, quantity)
+        topup = reused or self.repo.create_topup(user.user_id, amount, product_id, quantity,
+                                                  product.price if product else None)
         auto = self.settings.sepay_webhook_key is not None
         product_name = product.name if product else None
         text = msg.topup_instructions(topup, bank.bank_name, bank.account_no, bank.owner, auto, product_name)
@@ -785,7 +792,7 @@ class StoreBot:
         user = self.repo.get_user(topup.user_id)
         if user is not None:
             self.buy_and_deliver(topup.user_id, None, user, topup.intent_product_id, topup.intent_quantity or 1,
-                                 f"topup:{topup.id}")
+                                 f"topup:{topup.id}", locked_unit_price=topup.intent_unit_price)
 
     def show_admin(self, chat_id: int, message_id: int | None) -> None:
         stats = self.repo.stats()
