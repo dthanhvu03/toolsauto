@@ -39,6 +39,8 @@ ANNOUNCE_GAP_SEC = 20 * 60  # một món không đăng kênh dày hơn mức nà
 BROADCAST_DELAY_SEC = 0.05  # ~20 tin/giây, dưới giới hạn 30 tin/giây của Telegram
 MARKUP_DAYS = 30  # xem trước dòng tăng giá theo số món bán trong 30 ngày qua
 CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
+TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
+TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
 
 
 def button(text: str, data: str, icon_id: str | None = None) -> dict:
@@ -318,7 +320,8 @@ class StoreBot:
 
     def show_shop(self, chat_id: int, message_id: int | None) -> None:
         products = self.repo.list_products()
-        rows = [[button(msg.product_button(p), f"p:{p.id}", msg.icon_id(p.name))] for p in products]
+        rows = [[button(msg.product_button(p, self.restocking(p)), f"p:{p.id}", msg.icon_id(p.name))]
+                for p in products]
         rows.append([button("🏠 Trang chủ", "home")])
         self._show(chat_id, message_id, msg.shop_list(products), keyboard(*rows))
 
@@ -336,7 +339,8 @@ class StoreBot:
         if limit >= 1:
             # Khách hay gõ thẳng số lượng thay vì bấm nút: nhận luôn. Gõ chữ khác thì về trang chủ như thường.
             self._set_await(user.user_id, "qty", pid=product.id, soft=True)
-        self._show(chat_id, message_id, msg.product_detail(product, user.balance), keyboard(*rows))
+        self._show(chat_id, message_id, msg.product_detail(product, user.balance, self.restocking(product)),
+                   keyboard(*rows))
 
     def show_confirm(self, chat_id: int, message_id: int | None, user: User, product_id: int, quantity: int) -> None:
         product = self.repo.get_product(product_id)
@@ -344,6 +348,9 @@ class StoreBot:
             self._show(chat_id, message_id, "Sản phẩm này hiện không bán.", keyboard([button("🛒 Sản phẩm", "shop")]))
             return
         limit = self._max_quantity(product)
+        if self.restocking(product):
+            self._show(chat_id, message_id, msg.RESTOCKING_NOTE, keyboard([button("🛒 Sản phẩm", "shop")]))
+            return
         if not 1 <= quantity <= limit:
             self._show(chat_id, message_id, f"Mỗi lần mua được 1–{limit} món.",
                        keyboard([button("⬅️ Quay lại", f"p:{product.id}")]))
@@ -380,6 +387,10 @@ class StoreBot:
         try:
             order = self.repo.buy(user.user_id, product_id, quantity, client_ref=client_ref)
         except StoreError as exc:
+            if exc.code == "restocking":
+                product = self.repo.get_product(product_id)
+                if product is not None:
+                    self.notify_admins(msg.admin_restocking_block(user, product, self.repo.upstream_funds()))
             self._show(chat_id, message_id, "❌ " + msg.error_text(exc),
                        keyboard([button("💰 Nạp tiền", "top"), button("🛒 Sản phẩm", "shop")]))
             return msg.error_text(exc), True
@@ -401,8 +412,16 @@ class StoreBot:
         return "Mua thành công!", False
 
     def _max_quantity(self, product: Product) -> int:
-        return min(product.stock, product.max_quantity or self.settings.max_order_quantity,
-                   self.settings.max_order_quantity)
+        limit = min(product.stock, product.max_quantity or self.settings.max_order_quantity,
+                    self.settings.max_order_quantity)
+        funds = self.repo.upstream_funds() if product.upstream_id is not None and product.cost else None
+        if funds is not None:
+            limit = min(limit, max(funds, 0) // product.cost)  # không bán quá số ví FatCat nhập nổi
+        return limit
+
+    def restocking(self, product: Product) -> bool:
+        """Còn hàng bên FatCat nhưng ví FatCat không đủ nhập dù 1 món → khách thấy «đang nhập hàng»."""
+        return product.stock > 0 and product.upstream_id is not None and self._max_quantity(product) == 0
 
     def _fulfill_now(self, order_id: int, chat_id: int, message_id: int | None) -> None:
         try:
@@ -448,13 +467,28 @@ class StoreBot:
             before = product.stock - added
             if not product.on_sale or (added < self.settings.restock_announce_min and before > 0):
                 continue
+            if self.restocking(self.repo.get_product(product.id) or product):
+                continue  # ví FatCat không đủ nhập: báo «hàng mới về» là khách bấm vào cũng không mua được
             last = float(self.repo.get_state(f"announced:{product.id}") or 0)
             if now - last < ANNOUNCE_GAP_SEC:
                 continue
             self.announce_restock(product.id, added)
             self.repo.set_state(f"announced:{product.id}", str(now))
         count = sum(1 for p in self.repo.list_products(include_inactive=True) if p.upstream_id is not None and p.available)
+        self.alert_low_funds(balance)
         return count, balance
+
+    def alert_low_funds(self, balance: int | None) -> None:
+        """Báo admin (có chuông) khi danh sách món bị khoá vì ví FatCat thiếu thay đổi; ví đủ lại thì xoá dấu."""
+        if balance is None:
+            return
+        blocked = [p for p in self.repo.list_products() if self.restocking(p)]
+        mark = ",".join(str(p.id) for p in blocked)
+        if mark == (self.repo.get_state("low_funds_alerted") or ""):
+            return
+        self.repo.set_state("low_funds_alerted", mark)
+        if blocked:
+            self.notify_admins(msg.admin_low_funds(balance, blocked))
 
     def after_sale(self, order: Order, user: User | None) -> None:
         """Báo admin (im lặng) mỗi đơn và báo (có chuông) khi vừa hết hàng. Bot và API cùng dùng."""
@@ -492,7 +526,9 @@ class StoreBot:
         if product is None and amount < self.settings.min_topup_vnd:
             self.tg.send_message(chat_id, f"Tối thiểu {msg.vnd(self.settings.min_topup_vnd)}.")
             return
-        topup = self.repo.create_topup(user.user_id, amount, product.id if product else None, quantity)
+        product_id = product.id if product else None
+        reused = self.repo.find_pending_topup(user.user_id, amount, product_id, quantity, TOPUP_REUSE_SEC)
+        topup = reused or self.repo.create_topup(user.user_id, amount, product_id, quantity)
         auto = self.settings.sepay_webhook_key is not None
         product_name = product.name if product else None
         text = msg.topup_instructions(topup, bank.bank_name, bank.account_no, bank.owner, auto, product_name)
@@ -504,6 +540,8 @@ class StoreBot:
             logger.exception("[Store] tạo VietQR lỗi")
         if png is None or not self.tg.send_photo(chat_id, png, text, markup):
             self.tg.send_message(chat_id, text, markup)
+        if reused:
+            return  # admin đã có tin + nút xác nhận cho mã này
         self.notify_admins(
             msg.admin_topup(topup, user, auto, product_name),
             keyboard([button("✅ Đã nhận tiền", f"a:tc:{topup.id}"), button("❌ Huỷ", f"a:tx:{topup.id}")]),
@@ -1035,6 +1073,12 @@ def run_background(bot: StoreBot, stop: threading.Event) -> None:
     """Luồng nền: gọi lại đơn FatCat đang chờ mỗi 10 giây, đồng bộ sản phẩm mỗi sync_seconds."""
     next_sync = 0.0
     while not stop.is_set():
+        try:
+            expired = bot.repo.expire_topups(TOPUP_EXPIRE_SEC)
+            if expired:
+                logger.info("[Store] huỷ %s mã nạp quá 24 giờ", expired)
+        except Exception:
+            logger.exception("[Store] huỷ mã nạp quá hạn lỗi")
         if bot.fulfiller.client is not None:
             try:
                 bot.retry_pending()

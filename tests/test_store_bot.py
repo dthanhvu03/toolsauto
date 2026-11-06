@@ -388,12 +388,13 @@ class FakeFatCat:
         self.rows = [dict(r) for r in (rows or FATCAT_ROWS)]
         self.results: list[BuyResult] = []
         self.calls: list[tuple] = []
+        self.funds = 500_000
 
     def products(self):
         return [dict(r) for r in self.rows]
 
     def balance(self):
-        return 500_000
+        return self.funds
 
     def buy(self, product_id, quantity, request_id):
         self.calls.append((product_id, quantity, request_id))
@@ -492,6 +493,9 @@ def test_fatcat_wallet_empty_refunds_and_alerts_admin(fatcat, repo):
     assert repo.get_order(order.id).status == "failed"
     assert repo.get_user(BUYER).balance == 200_000
     assert any("chưa lấy được hàng" in h for h in telegram.texts_to(BUYER))
+    # Lý do đúng: shop đang nhập hàng (không phải «thiếu hàng, thử lại sau ít phút»), chỉ đường hoàn về ngân hàng.
+    failed = next(h for h in telegram.texts_to(BUYER) if "chưa lấy được hàng" in h)
+    assert "đang nhập thêm hàng" in failed and "Hỗ trợ" in failed and "tạm thiếu hàng" not in failed
     assert any("Ví FatCat không đủ tiền" in h for h in telegram.texts_to(ADMIN))
 
 
@@ -825,3 +829,117 @@ def test_start_source_counts_new_customers_once(bot, repo, product):
     assert repo.get_state(f"src:{NEWBIE + 2}") is None and repo.get_state(f"src:{NEWBIE + 3}") is None
     assert repo.source_counts() == [("kenh", 1), ("live", 1)]
     assert "theo nguồn: kenh 1 · live 1" in msg.admin_stats(repo.stats(), None, repo.source_counts())
+
+
+# ---------- ví FatCat thiếu, mã QR, bảo hành (06/11) ----------
+
+def test_low_fatcat_wallet_shows_restocking_and_never_charges(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 100_000  # đủ nhập Gemini (18.620đ), không đủ GPT (151.900đ)
+    store.sync_upstream()
+    store.sync_upstream()  # danh sách món bị khoá không đổi → không báo lại
+    alerts = [h for h in telegram.texts_to(ADMIN) if "Ví FatCat còn" in h]
+    assert len(alerts) == 1 and "Chat GPT Plus" in alerts[0] and "Gemini" not in alerts[0]
+
+    gpt = products[34]
+    store.handle_update(_click(BUYER, "shop"))
+    labels = [row[0]["text"] for row in telegram.edits[-1][3]["inline_keyboard"][:-1]]
+    assert any("Chat GPT" in t and "đang nhập hàng" in t for t in labels)
+    assert any("Gemini" in t and "còn 7" in t for t in labels)
+
+    store.handle_update(_click(BUYER, f"p:{gpt.id}"))
+    detail = telegram.edits[-1]
+    assert "đang nhập thêm hàng" in detail[2] and "Còn:" not in detail[2]
+    assert all(not b["callback_data"].startswith("q:") for row in detail[3]["inline_keyboard"] for b in row)
+    store.handle_update(_click(BUYER, f"bq:{gpt.id}:1"))  # nút QR cũ còn trên màn hình
+    assert repo.pending_topups() == []
+
+    repo.adjust_balance(BUYER, 200_000, "test", "admin")
+    with pytest.raises(StoreError) as err:
+        repo.buy(BUYER, gpt.id, 1)
+    assert err.value.code == "restocking" and repo.get_user(BUYER).balance == 200_000
+    assert fake.calls == []
+
+    fake.funds = 500_000  # admin nạp FatCat → mở bán lại, lần sau thiếu lại thì báo lại
+    store.sync_upstream()
+    assert not store.restocking(repo.get_product(gpt.id))
+
+
+def test_wallet_reserved_per_order_so_two_orders_cannot_overspend(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    fake.funds = 30_000
+    store.sync_upstream()
+    gem = products[49]
+    repo.adjust_balance(BUYER, 100_000, "test", "admin")
+    assert store._max_quantity(repo.get_product(gem.id)) == 1
+    first = repo.buy(BUYER, gem.id, 1, client_ref="a")
+    assert repo.upstream_funds() == 30_000 - 18_620
+    with pytest.raises(StoreError) as err:
+        repo.buy(BUYER, gem.id, 1, client_ref="b")
+    assert err.value.code == "restocking"
+    fake.funds = 11_380
+    store._fulfill_now(first.id, BUYER, None)  # giao xong → đọc lại số thật
+    assert repo.upstream_funds() == 11_380
+
+
+def test_paid_qr_while_wallet_low_keeps_money_and_alerts_admin(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gpt = products[34]
+    topup = repo.create_topup(BUYER, gpt.price, gpt.id, 1)  # khách tạo QR khi ví còn đủ
+    fake.funds = 1_000
+    store.sync_upstream()
+    store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))
+    assert repo.get_user(BUYER).balance == gpt.price and fake.calls == []
+    assert any("Tiền của bạn vẫn còn nguyên" in h for h in telegram.texts_to(BUYER))
+    assert any("muốn mua" in h and "ví FatCat không đủ" in h for h in telegram.texts_to(ADMIN))
+
+
+def test_pressing_qr_again_reuses_code_and_old_codes_expire(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gem = products[49]
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    pending = repo.pending_topups()
+    assert len(pending) == 1
+    assert sum("Để mua" in h for h in telegram.texts_to(ADMIN)) == 1
+    assert sum(pending[0].code in caption for _, caption in telegram.photos) == 2
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:2"))  # khác số lượng → mã mới
+    assert len(repo.pending_topups()) == 2
+
+    assert repo.expire_topups(3600) == 0
+    assert repo.expire_topups(-1) == 2
+    assert repo.pending_topups() == []
+    assert repo.get_topup(pending[0].id).status == "cancelled"
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("Slot Canva Pro 1 Tháng BHF", "suốt thời hạn gói"),
+    ("100$ API Claude 30D (FW)", "suốt thời hạn gói"),
+    ("Chat GPT Plus Google Pay BH1D", "1 ngày"),
+    ("Link Duolingo Super 12 tháng KBH", "không có"),
+    ("Muse AI 1B Tokens (NW)", "không có"),
+    ("Link Gemini Pro 18M (BH 5P)", "chỉ 5 phút sau khi nhận"),
+    ("LINK GEMINI 18M BH 10p", "chỉ 10 phút sau khi nhận"),
+    ("Link Gemini 18 Tháng (Dùng trong 20P)", "chỉ khi dùng ngay trong 20 phút"),
+    ("CDK Gemini AI Pro 12 tháng", None),
+])
+def test_warranty_decoded_from_product_name(name, expected):
+    got = msg.warranty(name)
+    assert (got is None) if expected is None else got.startswith(expected)
+
+
+def test_product_and_confirm_show_warranty(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gpt = products[34]
+    store.handle_update(_click(BUYER, f"p:{gpt.id}"))
+    assert "🛡️ Bảo hành: <b>1 ngày</b>" in telegram.edits[-1][2]
+    store.handle_update(_click(BUYER, f"q:{gpt.id}:1"))
+    assert "🛡️ Bảo hành: 1 ngày" in telegram.edits[-1][2]
+
+
+def test_topup_text_without_sepay_does_not_promise_instant(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    store.settings = _settings(sepay_webhook_key=None)
+    store.handle_update(_click(BUYER, f"bq:{products[49].id}:1"))
+    caption = telegram.photos[-1][1]
+    assert "Shop xác nhận tiền" in caption and "ban đêm" in caption and "1 phút" not in caption

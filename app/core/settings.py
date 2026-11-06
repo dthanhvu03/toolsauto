@@ -1830,7 +1830,7 @@ TRẢ VỀ JSON LIST (Mảng các object):
     "growth.ai_store_a_angle": SettingSpec(
         key="growth.ai_store_a_angle",
         type="str",
-        default_getter=lambda: 'Tiện: chuyển khoản xong là bot tự gửi tài khoản / key trong 30 giây, 24/7, không phải chờ người bán rep tin nhắn.',
+        default_getter=lambda: 'Tiện: quét QR thanh toán xong là bot tự gửi tài khoản / key, không phải nhắn qua lại chờ người bán rep. KHÔNG hứa số giây / phút cụ thể.',
         title='AI Store A: góc tiếp cận',
         section="Threads — Kéo khách",
         description='',
@@ -1838,7 +1838,7 @@ TRẢ VỀ JSON LIST (Mảng các object):
     "growth.ai_store_a_hook": SettingSpec(
         key="growth.ai_store_a_hook",
         type="str",
-        default_getter=lambda: 'cần gấp thì b qua @aipass_shop_bot trên tele á, chuyển khoản xong là bot gửi acc liền trong 30s, đêm hôm cũng có ko phải chờ ai rep',
+        default_getter=lambda: 'cần thì b qua @aipass_shop_bot trên tele á, quét QR thanh toán xong là bot tự gửi acc, ko phải nhắn qua lại chờ ai rep',
         title='AI Store A: câu mẫu',
         section="Threads — Kéo khách",
         description='',

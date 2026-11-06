@@ -35,6 +35,7 @@ ERROR_STATUS = {
     "product_not_found": 404,
     "product_inactive": 409,
     "out_of_stock": 409,
+    "restocking": 409,  # ví FatCat của shop không đủ nhập: tạm thời, thử lại sau
 }
 
 
@@ -107,7 +108,7 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
                 "description": p.description,
                 "price": max(unit_price(p.price, key.discount_bps), p.cost or 0),
                 "list_price": p.price,
-                "stock": p.stock,
+                "stock": 0 if notifier.restocking(p) else p.stock,
                 "max_quantity": min(p.max_quantity or settings.max_order_quantity, settings.max_order_quantity),
             }
             for p in repo.list_products()

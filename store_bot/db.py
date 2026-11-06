@@ -167,6 +167,9 @@ _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # bỏ 0/O, 1/I dễ gõ nh
 KEY_PREFIX = "sk_"
 
 
+UPSTREAM_FUNDS_KEY = "upstream_balance"
+
+
 class StoreError(Exception):
     """Lỗi nghiệp vụ. code ổn định để bot và API dịch ra câu cho người đọc."""
 
@@ -340,6 +343,11 @@ class StoreRepository:
         with self._tx() as conn:
             conn.execute("DELETE FROM state WHERE key = ?", (key,))
 
+    def upstream_funds(self) -> int | None:
+        """Số dư ví FatCat lần đọc gần nhất (trừ dần theo đơn vừa đặt). None = chưa biết."""
+        raw = self.get_state(UPSTREAM_FUNDS_KEY)
+        return int(raw) if raw and raw.lstrip("-").isdigit() else None
+
     # ---------- users ----------
 
     def touch_user(self, user_id: int, username: str | None, first_name: str | None) -> User:
@@ -486,6 +494,10 @@ class StoreRepository:
                 raise StoreError("product_blocked")
             if product.stock < quantity:
                 raise StoreError("out_of_stock", available=product.stock)
+            funds = _upstream_funds(conn) if product.upstream_id is not None and product.cost else None
+            if funds is not None and funds < product.cost * quantity:
+                # Ví FatCat không đủ nhập món này: chặn TRƯỚC khi trừ tiền khách (sự cố 04/11: hoàn 2 đơn 402).
+                raise StoreError("restocking")
             if product.max_quantity and quantity > product.max_quantity:
                 raise StoreError("bad_quantity", max=product.max_quantity)
             unit = unit_price(product.price, discount_bps)
@@ -521,6 +533,10 @@ class StoreRepository:
                     (order_id, order_id),
                 )
             _move_money(conn, user_id, -total, "order", f"order:{order_id}", product.name)
+            if funds is not None:
+                # Giữ chỗ trong ví FatCat để hai đơn cùng lúc không vượt số dư; lần đồng bộ sau ghi lại số thật.
+                conn.execute("UPDATE state SET value = ? WHERE key = ?",
+                             (str(funds - product.cost * quantity), UPSTREAM_FUNDS_KEY))
             return _load_order(conn, order_id)
 
     # ---------- đơn lấy từ FatCat ----------
@@ -676,6 +692,28 @@ class StoreRepository:
                     continue
                 return _topup(conn.execute("SELECT * FROM topups WHERE id = ?", (cur.lastrowid,)).fetchone())
         raise StoreError("topup_code_exhausted")
+
+    def find_pending_topup(self, user_id: int, amount: int, product_id: int | None, quantity: int | None,
+                           max_age_sec: int) -> Topup | None:
+        """Mã nạp còn chờ y hệt (cùng số tiền, cùng món) để khách bấm QR lại thì dùng lại, không đẻ mã mới."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=max_age_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            row = conn.execute(
+                """SELECT * FROM topups WHERE user_id = ? AND status = 'pending' AND amount = ? AND created_at >= ?
+                   AND intent_product_id IS ? AND intent_quantity IS ? ORDER BY id DESC LIMIT 1""",
+                (user_id, amount, cutoff, product_id, quantity),
+            ).fetchone()
+        return _topup(row) if row else None
+
+    def expire_topups(self, older_than_sec: int) -> int:
+        """Huỷ mã nạp chờ quá lâu. Khách lỡ chuyển vào mã đã huỷ thì webhook báo admin «không khớp» như cũ."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
+        with self._tx() as conn:
+            return conn.execute(
+                """UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ?
+                   WHERE status = 'pending' AND created_at < ?""",
+                (utcnow(), cutoff),
+            ).rowcount
 
     def get_topup(self, topup_id: int) -> Topup | None:
         with self._read() as conn:
@@ -857,6 +895,11 @@ class StoreRepository:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+def _upstream_funds(conn: sqlite3.Connection) -> int | None:
+    row = conn.execute("SELECT value FROM state WHERE key = ?", (UPSTREAM_FUNDS_KEY,)).fetchone()
+    return int(row["value"]) if row and str(row["value"]).lstrip("-").isdigit() else None
 
 
 def _balance(conn: sqlite3.Connection, user_id: int) -> int:

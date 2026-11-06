@@ -37,21 +37,28 @@ class Fulfiller:
             order, newly = self.repo.fail_upstream(order_id, f"FatCat {result.status_code}: {result.message}")
         else:
             return self.repo.get_order(order_id), result, False
+        if newly and (result.kind == DELIVERED or result.status_code == 402):
+            self.refresh_funds()  # ví vừa bị trừ / vừa báo thiếu: đọc số thật để chặn bán món không nhập nổi
         return order, result, newly
+
+    def refresh_funds(self) -> int | None:
+        """Đọc lại số dư ví FatCat (GET, không trừ tiền). Lỗi mạng thì giữ số cũ."""
+        if self.client is None:
+            return None
+        try:
+            balance = self.client.balance()
+        except UpstreamError:
+            logger.warning("[Store] không đọc được số dư FatCat")
+            return None
+        self.repo.set_state("upstream_balance", str(balance))
+        return balance
 
     def sync(self) -> tuple[list[tuple[Product, int]], int | None]:
         """Đồng bộ sản phẩm + số dư ví FatCat. Trả (món vừa tăng hàng, số dư). Lỗi mạng ném UpstreamError."""
         if self.client is None:
             return [], None
         restocked = self.repo.sync_upstream(self.client.products(), self.price_for)
-        try:
-            balance = self.client.balance()
-        except UpstreamError:
-            logger.warning("[Store] không đọc được số dư FatCat")
-            balance = None
-        if balance is not None:
-            self.repo.set_state("upstream_balance", str(balance))
-        return restocked, balance
+        return restocked, self.refresh_funds()
 
     # ---------- tăng giá bán (state `markup`, `markup:<upstream_id>`) ----------
 
