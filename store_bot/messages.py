@@ -138,6 +138,7 @@ def error_text(exc: StoreError) -> str:
         "product_inactive": "Sản phẩm đang tạm ngừng bán.",
         "product_blocked": "Sản phẩm này không mở cho khóa của bạn.",
         "out_of_stock": f"Không đủ hàng: chỉ còn {info.get('available', 0)}.",
+        "shop_closed": "Shop đang tạm nghỉ, chưa nhận đơn. Thử lại khi shop mở cửa.",
         "insufficient_balance": (
             f"Số dư không đủ: cần {vnd(info.get('need', 0))}, bạn có {vnd(info.get('balance', 0))}."
         ),
@@ -151,19 +152,28 @@ def error_text(exc: StoreError) -> str:
 
 # ---------- khách ----------
 
-def home(shop_name: str, user: User) -> str:
+def home(shop_name: str, user: User, closed: str | None = None) -> str:
+    banner = f"{closed}\n\n" if closed else ""
     return (
-        f"🏪 <b>{esc(shop_name)}</b>\n\n"
+        f"🏪 <b>{esc(shop_name)}</b>\n\n{banner}"
         f"Xin chào {esc(user.first_name or user.label)}!\n"
         f"💼 Số dư: <b>{vnd(user.balance)}</b>\n\n"
         "Chọn 🛒 Mua hàng để xem sản phẩm. Thanh toán trừ thẳng vào số dư, hàng giao ngay sau khi mua."
     )
 
 
-def shop_list(products: list[Product]) -> str:
+def shop_closed(status) -> str:
+    """Câu báo khách khi shop đang nghỉ (status: hours.Status đang đóng)."""
+    when = f"mở lại lúc <b>{status.reopen}</b>" if status.reopen else "sẽ mở lại sớm"
+    return (f"🌙 <b>Shop đang tạm nghỉ</b>, {when}. Bạn vẫn xem món và nạp ví được; "
+            "đặt mua khi shop mở lại nhé.")
+
+
+def shop_list(products: list[Product], closed: str | None = None) -> str:
     if not products:
         return "🛒 Shop chưa có sản phẩm nào đang bán."
-    return "🛒 <b>Sản phẩm</b>\n\nChọn một sản phẩm để xem và mua:"
+    banner = f"{closed}\n\n" if closed else ""
+    return f"🛒 <b>Sản phẩm</b>\n\n{banner}Chọn một sản phẩm để xem và mua:"
 
 
 # Ký hiệu bảo hành trong tên món FatCat → câu khách đọc hiểu. Không khớp ký hiệu nào thì không hiện dòng bảo hành.
@@ -192,7 +202,7 @@ def product_button(product: Product, restocking: bool = False) -> str:
     return f"{button_icon(product.name)}{product.name} · {vnd(product.price)} · {stock}"
 
 
-def product_detail(product: Product, balance: int, restocking: bool = False) -> str:
+def product_detail(product: Product, balance: int, restocking: bool = False, closed: str | None = None) -> str:
     lines = [f"{icon(product.name)} <b>{esc(product.name)}</b>"]
     if product.description:
         lines += ["", esc(product.description)]
@@ -202,6 +212,9 @@ def product_detail(product: Product, balance: int, restocking: bool = False) -> 
         lines.append(f"🛡️ Bảo hành: <b>{guarantee}</b>")
     lines.append(f"🗄️ Còn: <b>{product.stock}</b>")
     lines.append(f"💼 Số dư của bạn: {vnd(balance)}")
+    if closed:
+        lines += ["", closed]
+        return "\n".join(lines)
     if restocking:
         lines += ["", RESTOCKING_NOTE]
     if not product.stock:
@@ -412,6 +425,27 @@ def restock_announcement(product: Product, added: int) -> str:
 
 
 # ---------- admin ----------
+
+def admin_hours(window, status) -> str:
+    """Màn 🌙 Giờ nghỉ của admin. window: hours.Window | None · status: hours.Status."""
+    if status.manual:
+        now = "⏸ <b>Đang ĐÓNG tay</b> — khách không đặt mua được tới khi anh bấm Mở lại."
+    elif status.closed:
+        now = f"🌙 <b>Đang trong giờ nghỉ</b>, tự mở lại lúc {status.reopen}."
+    else:
+        now = "✅ <b>Đang mở bán</b>."
+    hours = (f"Giờ nghỉ hằng ngày: <b>{window.label}</b> (giờ VN)" if window
+             else "Chưa đặt giờ nghỉ hằng ngày.")
+    return (
+        f"🌙 <b>Giờ nghỉ của shop</b>\n\n{now}\n{hours}\n\n"
+        "Lúc nghỉ: khách vẫn xem món và nạp ví, nhưng <b>không đặt mua / tạo QR mua</b>; API đại lý trả lỗi "
+        "<code>shop_closed</code>; tạm không báo «hàng mới về». QR tạo trước giờ nghỉ mà tiền về thì bot vẫn tự mua."
+    )
+
+
+ASK_HOURS = ("✍️ Gõ khung giờ nghỉ hằng ngày (giờ VN), ví dụ <code>23:30-07:30</code> hoặc <code>23h-7h</code>. "
+             "Gõ /huy để thôi.")
+
 
 def admin_home(stats: dict[str, int], upstream_balance: int | None = None) -> str:
     pending = f"\n💳 Nạp chờ duyệt: <b>{stats['pending_topups']}</b>" if stats["pending_topups"] else ""

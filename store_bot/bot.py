@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import requests
 
 from cashback_bot import vietqr
+from store_bot import hours
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.config import ConfigError, Settings, default_dotenv, load_settings
@@ -45,6 +46,8 @@ TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
 WAITING_REFUND_SEC = 6 * 3600  # đơn chờ ví quá 6 giờ (admin chưa nạp) → tự hoàn về ví khách
 MAX_TOPUP_VND = 50_000_000
 SEND_RETRY_SEC = 2
+RETRY_BUDGET_SEC = 60  # mỗi vòng nền gọi lại FatCat tối đa ~60 giây (mỗi lượt có thể chờ 40 giây)
+CLEANUP_EVERY_SEC = 3600
 
 
 def button(text: str, data: str, icon_id: str | None = None) -> dict:
@@ -88,6 +91,7 @@ class StoreBot:
         # Nhiều món về cùng lúc thì gửi lần lượt, không chạy song song vượt giới hạn tốc độ Telegram.
         self._broadcast_lock = threading.Lock()
         self._funds_checked = 0.0
+        self._retry_cursor = 0  # id đơn gọi lại gần nhất: vòng sau đi tiếp từ đây, không đơn nào bị bỏ đói
         self.load_icons()
 
     # ---------- tiện ích ----------
@@ -239,7 +243,8 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic", "amk", "amp"}:
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic", "amk", "amp",
+                                               "ahr", "ahc", "aho", "ahs", "ahx"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
                 else:
@@ -337,7 +342,7 @@ class StoreBot:
         ]
         if self.is_admin(user.user_id):
             rows.append([button("⚙️ Quản lý shop", "adm")])
-        self._show(chat_id, message_id, msg.home(self.settings.shop_name, user), keyboard(*rows))
+        self._show(chat_id, message_id, msg.home(self.settings.shop_name, user, self.closed_note()), keyboard(*rows))
 
     def send_welcome(self, chat_id: int, user: User) -> None:
         auto = self.settings.sepay_webhook_key is not None
@@ -374,12 +379,17 @@ class StoreBot:
         rows = [[button(msg.product_button(p, self.restocking(p, funds)), f"p:{p.id}", msg.icon_id(p.name))]
                 for p in products]
         rows.append([button("🏠 Trang chủ", "home")])
-        self._show(chat_id, message_id, msg.shop_list(products), keyboard(*rows))
+        self._show(chat_id, message_id, msg.shop_list(products, self.closed_note()), keyboard(*rows))
 
     def show_product(self, chat_id: int, message_id: int | None, user: User, product_id: int) -> None:
         product = self.repo.get_product(product_id)
         if product is None or not product.on_sale:
             self._show(chat_id, message_id, "Sản phẩm này hiện không bán.", keyboard([button("🛒 Xem sản phẩm khác", "shop")]))
+            return
+        closed = self.closed_note()
+        if closed:  # nghỉ: xem được món, không có nút số lượng / không chờ gõ số
+            self._show(chat_id, message_id, msg.product_detail(product, user.balance, closed=closed),
+                       keyboard([button("⬅️ Sản phẩm", "shop"), button("💰 Nạp tiền", "top")]))
             return
         limit = self._max_quantity(product)
         quick = [button(str(q), f"q:{product.id}:{q}") for q in QUICK_QUANTITIES if q <= limit]
@@ -397,6 +407,9 @@ class StoreBot:
         product = self.repo.get_product(product_id)
         if product is None or not product.on_sale:
             self._show(chat_id, message_id, "Sản phẩm này hiện không bán.", keyboard([button("🛒 Sản phẩm", "shop")]))
+            return
+        if self.closed_note():
+            self.show_product(chat_id, message_id, user, product_id)
             return
         limit = self._max_quantity(product)
         if not 1 <= quantity <= limit:
@@ -417,7 +430,8 @@ class StoreBot:
     def pay_by_qr(self, chat_id: int, message_id: int | None, user: User, product_id: int, quantity: int) -> None:
         """Mua thẳng: tạo mã QR đúng số tiền còn thiếu cho đơn này; tiền được xác nhận thì bot tự mua."""
         product = self.repo.get_product(product_id)
-        if product is None or not product.on_sale or not 1 <= quantity <= self._max_quantity(product):
+        if (product is None or not product.on_sale or self.closed_note()
+                or not 1 <= quantity <= self._max_quantity(product)):
             self.show_product(chat_id, message_id, user, product_id)
             return
         missing = product.price * quantity - user.balance
@@ -428,6 +442,10 @@ class StoreBot:
 
     def do_buy(self, chat_id: int, message_id: int, user: User, product_id: int, quantity: int,
                nonce: str) -> tuple[str | None, bool]:
+        closed = self.closed_note()
+        if closed:  # nút «Xác nhận mua» còn trên màn cũ từ trước giờ nghỉ
+            self._show(chat_id, message_id, closed, keyboard([button("🏠 Trang chủ", "home")]))
+            return "Shop đang tạm nghỉ.", True
         return self.buy_and_deliver(chat_id, message_id, user, product_id, quantity, f"tg:{nonce}")
 
     def buy_and_deliver(self, chat_id: int, message_id: int | None, user: User, product_id: int, quantity: int,
@@ -476,6 +494,26 @@ class StoreBot:
         if funds is self._UNREAD:
             funds = self.repo.upstream_funds()
         return funds is not None and funds < product.cost
+
+    def shop_status(self) -> hours.Status:
+        return hours.status(hours.parse_window(self.repo.get_state("closed_hours")),
+                            self.repo.get_state("closed_manual") == "1")
+
+    def closed_note(self) -> str | None:
+        """Câu báo khách nếu shop đang nghỉ (giờ nghỉ hằng ngày hoặc admin đóng tay), không thì None."""
+        status = self.shop_status()
+        return msg.shop_closed(status) if status.closed else None
+
+    def show_hours(self, chat_id: int, message_id: int | None) -> None:
+        window = hours.parse_window(self.repo.get_state("closed_hours"))
+        status = self.shop_status()
+        manual = self.repo.get_state("closed_manual") == "1"
+        rows = [[button("▶️ Mở lại ngay" if manual else "⏸ Đóng ngay", "aho" if manual else "ahc")],
+                [button("✍️ Đặt giờ nghỉ hằng ngày", "ahs")]]
+        if window:
+            rows.append([button("❌ Bỏ giờ nghỉ hằng ngày", "ahx")])
+        rows.append([button("⬅️ Quản lý", "adm")])
+        self._show(chat_id, message_id, msg.admin_hours(window, status), keyboard(*rows))
 
     def on_waiting_funds(self, order: Order, user: User | None, chat_id: int | None, message_id: int | None) -> None:
         """Đơn đã trừ tiền khách nhưng ví FatCat thiếu: báo khách chờ (kèm nút huỷ) và báo admin nạp ví (có chuông)."""
@@ -527,10 +565,18 @@ class StoreBot:
             order, result, newly = self.fulfiller.attempt(order_id)
             if newly:
                 self.report_resolved(order, result, order.user_id, None)
-        for order_id in self.repo.pending_upstream_orders(RETRY_AFTER_SEC):
-            if order_id in released:
-                continue
+        pending = [i for i in self.repo.pending_upstream_orders(RETRY_AFTER_SEC) if i not in released]
+        # Xoay vòng từ sau đơn gọi lần trước; hết ngân sách thời gian hoặc FatCat mất kết nối 2 lần liền thì dừng vòng
+        # này (trước đây FatCat sập + 10 đơn chờ = ~7 phút/vòng, đồng bộ / hoàn đơn chờ ví bị trễ theo).
+        pending = [i for i in pending if i > self._retry_cursor] + [i for i in pending if i <= self._retry_cursor]
+        started, offline = time.monotonic(), 0
+        for order_id in pending:
+            if time.monotonic() - started > RETRY_BUDGET_SEC or offline >= 2:
+                logger.info("[Store] gọi lại FatCat: dừng vòng (%s đơn còn chờ)", len(pending))
+                break
+            self._retry_cursor = order_id
             order, result, newly = self.fulfiller.attempt(order_id)
+            offline = offline + 1 if result is not None and result.status_code is None and not newly else 0
             if newly:
                 self.report_resolved(order, result, order.user_id, None)
                 continue
@@ -543,6 +589,8 @@ class StoreBot:
         """Đồng bộ FatCat và đăng kênh món vừa có thêm hàng. Trả (số món FatCat, số dư ví FatCat)."""
         restocked, balance = self.fulfiller.sync()
         now = time.time()
+        if self.shop_status().closed:
+            restocked = []  # đang nghỉ: không báo «hàng mới về» (khách bấm vào cũng không mua được)
         for product, added in restocked:
             before = product.stock - added
             if not product.on_sale or (added < self.settings.restock_announce_min and before > 0):
@@ -744,6 +792,21 @@ class StoreBot:
             self.show_markup_products(chat_id, message_id)
         elif data == "aic":
             self.show_admin_icons(chat_id, message_id)
+        elif data == "ahr":
+            self.show_hours(chat_id, message_id)
+        elif data in ("ahc", "aho"):
+            if data == "ahc":
+                self.repo.set_state("closed_manual", "1")
+            else:
+                self.repo.delete_state("closed_manual")
+            self.show_hours(chat_id, message_id)
+            return "Đã đóng shop." if data == "ahc" else "Đã mở lại shop."
+        elif data == "ahs":
+            self._set_await(user.user_id, "hours")
+            self._show(chat_id, message_id, msg.ASK_HOURS, keyboard([button("⬅️ Quay lại", "ahr")]))
+        elif data == "ahx":
+            self.repo.delete_state("closed_hours")
+            self.show_hours(chat_id, message_id)
         elif data == "async":
             try:
                 count, balance = self.sync_upstream()
@@ -857,6 +920,15 @@ class StoreBot:
             self.buy_and_deliver(topup.user_id, None, user, topup.intent_product_id, topup.intent_quantity or 1,
                                  f"topup:{topup.id}", locked_unit_price=topup.intent_unit_price)
 
+    def _hours_button(self) -> str:
+        status = self.shop_status()
+        if status.manual:
+            return "⏸ Shop đang ĐÓNG — mở lại"
+        window = hours.parse_window(self.repo.get_state("closed_hours"))
+        if status.closed:
+            return f"🌙 Đang nghỉ tới {status.reopen}"
+        return f"🌙 Giờ nghỉ: {window.label}" if window else "🌙 Đặt giờ nghỉ / đóng shop"
+
     def show_admin(self, chat_id: int, message_id: int | None) -> None:
         stats = self.repo.stats()
         pending = f" ({stats['pending_topups']})" if stats["pending_topups"] else ""
@@ -870,6 +942,7 @@ class StoreBot:
             [button("💲 Tăng giá bán", "amk")] if self.fulfiller.client else [],
             [button("🔑 Khóa API đại lý", "ak"), button("🎨 Logo hãng", "aic")],
             [button(f"💳 Nạp chờ duyệt{pending}", "at"), button("💵 Cộng/trừ tiền", "aa")],
+            [button(self._hours_button(), "ahr")],
             [button("📊 Thống kê", "as"), button("🏠 Trang chủ", "home")],
         ))
 
@@ -1107,6 +1180,15 @@ class StoreBot:
             if kind == "stock":
                 self._add_stock(chat_id, user, pending, text.splitlines())
                 return
+            if kind == "hours":
+                window = hours.parse_window(text)
+                if window is None:
+                    self.tg.send_message(chat_id, msg.ASK_HOURS)
+                    return
+                self.repo.set_state("closed_hours", window.code)
+                self._clear_await(user.user_id)
+                self.show_hours(chat_id, None)
+                return
             if kind == "new_product":
                 name, price_raw, desc = (text.split("|") + ["", ""])[:3]
                 price = msg.parse_amount(price_raw)
@@ -1191,9 +1273,18 @@ def _acquire_lock(path: str):
 
 
 def run_background(bot: StoreBot, stop: threading.Event) -> None:
-    """Luồng nền: gọi lại đơn FatCat đang chờ mỗi 10 giây, đồng bộ sản phẩm mỗi sync_seconds."""
+    """Luồng nền: gọi lại đơn FatCat đang chờ mỗi 10 giây, đồng bộ sản phẩm mỗi sync_seconds, dọn state mỗi giờ."""
     next_sync = 0.0
+    next_cleanup = time.monotonic() + 60
     while not stop.is_set():
+        if time.monotonic() >= next_cleanup:
+            next_cleanup = time.monotonic() + CLEANUP_EVERY_SEC
+            try:
+                removed = bot.repo.cleanup_state(time.time())
+                if removed:
+                    logger.info("[Store] dọn %s khoá state cũ", removed)
+            except Exception:
+                logger.exception("[Store] dọn state lỗi")
         try:
             expired = bot.repo.expire_topups(TOPUP_EXPIRE_SEC)
             for topup_id in expired:

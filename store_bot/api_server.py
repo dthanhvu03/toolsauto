@@ -37,6 +37,7 @@ ERROR_STATUS = {
     "product_not_found": 404,
     "product_inactive": 409,
     "out_of_stock": 409,
+    "shop_closed": 503,  # giờ nghỉ / admin đóng shop: thử lại sau
 }
 
 
@@ -124,6 +125,9 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
     def create_order(body: OrderRequest, key: ApiKey = Depends(current_key)):
         if body.quantity > settings.max_order_quantity:
             raise StoreError("bad_quantity", max=settings.max_order_quantity)
+        status = notifier.shop_status()
+        if status.closed and not repo.has_order_ref(key.user_id, f"api:{body.request_id}"):
+            raise StoreError("shop_closed", reopen=status.reopen)  # gọi lại đơn cũ (cùng request_id) vẫn trả đơn
         order = repo.buy(
             key.user_id, body.product_id, body.quantity,
             client_ref=f"api:{body.request_id}",

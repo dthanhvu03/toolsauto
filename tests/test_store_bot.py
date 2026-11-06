@@ -1241,3 +1241,116 @@ def test_waiting_summary_and_batched_prices(fatcat, repo):
     fn = store.fulfiller._price_fn()
     for p in repo.list_products():
         assert fn(p.cost, p.upstream_id) == store.fulfiller.price_for(p.cost, p.upstream_id) == p.price
+
+
+# ---------- giờ nghỉ / gọi lại có giới hạn / dọn state (06/11) ----------
+
+def test_hours_window_parse_and_status():
+    from datetime import datetime as dt
+
+    from store_bot import hours
+    w = hours.parse_window("23h30-7h30")
+    assert w.code == "23:30-07:30" and w.label == "23:30–07:30"
+    at = lambda h, m: dt(2026, 11, 7, h, m, tzinfo=hours.ICT)  # noqa: E731
+    assert hours.status(w, False, at(23, 45)) == hours.Status(True, reopen="07:30")
+    assert hours.status(w, False, at(3, 0)).closed and not hours.status(w, False, at(7, 30)).closed
+    assert not hours.status(w, False, at(12, 0)).closed
+    day = hours.parse_window("12:00-13:00")
+    assert hours.status(day, False, at(12, 30)).closed and not hours.status(day, False, at(13, 0)).closed
+    assert hours.status(None, True) == hours.Status(True, manual=True)
+    assert hours.parse_window("7-7") is None and hours.parse_window("24:00-1:00") is None
+
+
+def test_admin_sets_hours_and_closes_shop(bot, repo):
+    bot, telegram = bot
+    bot.handle_update(_click(BUYER, "ahr"))
+    assert telegram.answers[-1][0] == "Không có quyền."
+    bot.handle_update(_click(ADMIN, "adm", "boss"))
+    labels = [b["text"] for row in telegram.edits[-1][3]["inline_keyboard"] for b in row]
+    assert "🌙 Đặt giờ nghỉ / đóng shop" in labels
+    bot.handle_update(_click(ADMIN, "ahs", "boss"))
+    bot.handle_update(_private(ADMIN, "sai giờ", "boss"))
+    assert repo.get_state("closed_hours") is None
+    bot.handle_update(_private(ADMIN, "23h-7h", "boss"))
+    assert repo.get_state("closed_hours") == "23:00-07:00"
+    assert "Giờ nghỉ hằng ngày: <b>23:00–07:00</b>" in telegram.texts_to(ADMIN)[-1]
+    bot.handle_update(_click(ADMIN, "ahc", "boss"))
+    assert repo.get_state("closed_manual") == "1" and "Đang ĐÓNG tay" in telegram.edits[-1][2]
+    bot.handle_update(_click(ADMIN, "aho", "boss"))
+    assert repo.get_state("closed_manual") is None
+    bot.handle_update(_click(ADMIN, "ahx", "boss"))
+    assert repo.get_state("closed_hours") is None
+
+
+def test_closed_shop_blocks_buying_but_keeps_browse_topup_and_paid_qr(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gem = products[49]
+    paid_before = repo.create_topup(BUYER, gem.price, gem.id, 1, gem.price)  # QR tạo trước giờ nghỉ
+    repo.set_state("closed_manual", "1")
+
+    store.handle_update(_click(BUYER, "home"))
+    assert "Shop đang tạm nghỉ" in telegram.edits[-1][2]
+    store.handle_update(_click(BUYER, f"p:{gem.id}"))
+    detail = telegram.edits[-1]
+    assert "Shop đang tạm nghỉ" in detail[2]
+    assert not any(b["callback_data"].startswith(("q:", "qx:")) for row in detail[3]["inline_keyboard"] for b in row)
+    store.handle_update(_click(BUYER, f"q:{gem.id}:1"))
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    store.handle_update(_click(BUYER, f"bc:{gem.id}:1:abcd"))
+    assert [t.id for t in repo.pending_topups()] == [paid_before.id] and repo.list_orders(BUYER) == []
+
+    store.handle_update(_click(ADMIN, f"a:tc:{paid_before.id}", "boss"))  # tiền QR cũ về trong giờ nghỉ
+    assert len(repo.list_orders(BUYER)) == 1 and fake.calls  # vẫn tự mua
+    store.handle_update(_click(BUYER, "ta:50000"))  # nạp ví vẫn được
+    assert any(t.amount == 50_000 for t in repo.pending_topups())
+
+    fake.rows[0]["stock"] = 100
+    store.sync_upstream()
+    assert telegram.texts_to("@kenh") == [] and telegram.broadcasts == []  # nghỉ: không báo hàng mới
+
+
+def test_api_closed_returns_503_but_replays_existing_order(api, repo, product):
+    client, headers, key, _ = api
+    repo.adjust_balance(RESELLER, 100_000, "test", "admin")
+    body = {"product_id": product, "quantity": 1, "request_id": "z1"}
+    first = client.post("/api/v1/orders", json=body, headers=headers)
+    repo.set_state("closed_manual", "1")
+    again = client.post("/api/v1/orders", json=body, headers=headers)
+    assert again.json()["order_id"] == first.json()["order_id"]  # gọi lại đơn cũ vẫn trả đơn
+    new = client.post("/api/v1/orders", json={**body, "request_id": "z2"}, headers=headers)
+    assert new.status_code == 503 and new.json()["error"] == "shop_closed"
+
+
+def test_retry_round_stops_when_fatcat_offline_and_rotates(fatcat, repo, monkeypatch):
+    store, telegram, fake, products = fatcat
+    monkeypatch.setattr("store_bot.bot.RETRY_AFTER_SEC", -1)
+    repo.adjust_balance(BUYER, 500_000, "test", "admin")
+    ids = [repo.buy(BUYER, products[49].id, 1, client_ref=f"r{i}").id for i in range(5)]
+    fake.results = [BuyResult(PENDING, message="ConnectionError") for _ in range(20)]
+    store.retry_pending()
+    assert [c for c in fake.calls] and len(fake.calls) == 2  # mất kết nối 2 lần liền → dừng vòng
+    store.retry_pending()
+    assert len(fake.calls) == 4
+    tried = [store.repo.upstream_job(i)[2] for i in ids]
+    assert {c[2] for c in fake.calls} == set(tried[:4])  # vòng 2 đi tiếp đơn 3, 4 chứ không lặp đơn 1, 2
+
+
+def test_cleanup_state_removes_only_stale_keys(fatcat, repo):
+    import time as _t
+    store, telegram, fake, products = fatcat
+    now = _t.time()
+    repo.adjust_balance(BUYER, 100_000, "test", "admin")
+    order = repo.buy(BUYER, products[49].id, 1)
+    store._fulfill_now(order.id, BUYER, None)  # đơn xong
+    for k, v in {f"stuck_alerted:{order.id}": "1", "stuck_alerted:999999": "1", "topup_msg:424242": "[]",
+                 "announced:1": str(now - 90_000), "announced:2": str(now), "callme:5": str(now - 90_000),
+                 f"src:{BUYER}": "threads_ai_auto", f"menu_sent:{BUYER}": "1"}.items():
+        repo.set_state(k, v)
+    pending = repo.create_topup(BUYER, 10_000)
+    repo.set_state(f"topup_msg:{pending.id}", "[]")
+    repo.cleanup_state(now)
+    left = repo.states_with_prefix("")
+    assert f"stuck_alerted:{order.id}" not in left and "stuck_alerted:999999" not in left
+    assert "topup_msg:424242" not in left and f"topup_msg:{pending.id}" in left
+    assert "announced:1" not in left and "announced:2" in left and "callme:5" not in left
+    assert f"src:{BUYER}" in left and f"menu_sent:{BUYER}" in left

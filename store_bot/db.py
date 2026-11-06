@@ -582,6 +582,34 @@ class StoreRepository:
                 (cutoff,),
             )]
 
+    def cleanup_state(self, now: float, keep_sec: int = 24 * 3600) -> int:
+        """Dọn khoá state hết tác dụng (vòng nền gọi mỗi giờ). Trả số dòng đã xoá. Không đụng src:/menu_sent:/icon:/markup.
+        - stuck_alerted:<đơn> khi đơn hết chờ · topup_msg:<mã> khi mã nạp đã xong
+        - announced:<món> / callme:<khách> (giá trị = thời điểm) cũ hơn keep_sec
+        - await:<khách> (đang chờ gõ chữ) của khách không hoạt động quá keep_sec"""
+        cutoff_iso = datetime.fromtimestamp(now - keep_sec, timezone.utc).isoformat(timespec="seconds")
+        with self._tx() as conn:
+            deleted = 0
+            for sql, args in (
+                ("""DELETE FROM state WHERE key >= 'stuck_alerted:' AND key < 'stuck_alerted;'
+                    AND CAST(substr(key, 15) AS INTEGER) NOT IN (SELECT id FROM orders WHERE status = 'pending')""", ()),
+                ("""DELETE FROM state WHERE key >= 'topup_msg:' AND key < 'topup_msg;'
+                    AND CAST(substr(key, 11) AS INTEGER) NOT IN (SELECT id FROM topups WHERE status = 'pending')""", ()),
+                ("""DELETE FROM state WHERE ((key >= 'announced:' AND key < 'announced;')
+                                            OR (key >= 'callme:' AND key < 'callme;'))
+                    AND CAST(value AS REAL) < ?""", (now - keep_sec,)),
+                ("""DELETE FROM state WHERE key >= 'await:' AND key < 'await;'
+                    AND CAST(substr(key, 7) AS INTEGER) IN (SELECT user_id FROM users WHERE last_seen_at < ?)""",
+                 (cutoff_iso,)),
+            ):
+                deleted += conn.execute(sql, args).rowcount
+            return deleted
+
+    def has_order_ref(self, user_id: int, client_ref: str) -> bool:
+        with self._read() as conn:
+            return conn.execute("SELECT 1 FROM orders WHERE user_id = ? AND client_ref = ?",
+                                (user_id, client_ref)).fetchone() is not None
+
     def waiting_summary(self) -> tuple[int, int]:
         """(số đơn chờ ví, tổng vốn cần nạp) — một truy vấn, không tải cả đơn (vòng nền gọi mỗi 10 giây)."""
         with self._read() as conn:
