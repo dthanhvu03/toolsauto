@@ -154,13 +154,24 @@ function Customers({ rep }: { rep: Overview["customers"] }) {
           <div className="text-xs text-indigo-900">đã dùng bot (gửi link / nạp / mua)</div>
         </div>
       </div>
+      {Object.keys(rep.by_channel ?? {}).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+          <span>Theo kênh:</span>
+          {Object.entries(rep.by_channel).map(([ch, v]) => (
+            <span key={ch} className="rounded-full bg-slate-100 px-2 py-0.5">
+              {ch} <b>{v.customers}</b>
+              {v.active > 0 && <span className="text-emerald-700"> · dùng {v.active}</span>}
+            </span>
+          ))}
+        </div>
+      )}
       {rep.customers.length > 0 ? (
         <ul className="mt-3 divide-y divide-slate-100 text-sm">
           {rep.customers.map((c) => (
             <li key={`${c.bot}-${c.user_id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
               <span className="font-medium text-slate-800">{c.username ? `@${c.username}` : `id ${c.user_id}`}</span>
               <span className="text-xs text-slate-500">
-                {BOT_LABEL[c.bot]} · biến thể {c.variant ?? "?"} · <code>{c.code}</code>
+                {BOT_LABEL[c.bot]} · {c.channel} · <code>{c.code}</code>
               </span>
               <span className={`text-xs ${c.active ? "text-emerald-700" : "text-slate-500"}`}>{c.activity}</span>
               <span className="ml-auto text-xs text-slate-400">{when(c.joined_at)}</span>
@@ -171,6 +182,69 @@ function Customers({ rep }: { rep: Overview["customers"] }) {
         <p className="mt-3 text-sm text-slate-500">Chưa có khách nào vào bot qua link Threads.</p>
       )}
       {rep.errors.length > 0 && <p className="mt-2 text-xs text-amber-700">{rep.errors.join(" · ")}</p>}
+    </section>
+  );
+}
+
+const OWN_STATUS: Record<string, string> = { posted: "đã đăng", failed: "lỗi", skipped: "bỏ" };
+const FU_STATUS: Record<string, string> = { answered: "đã trả lời", skipped: "bỏ qua", failed: "lỗi" };
+
+/** Bài riêng bot tự đăng + người hỏi lại dưới reply của mình (PLAN-159). */
+function Activity() {
+  const own = useQuery({ queryKey: ["growth", "own-posts"], queryFn: api.fetchOwnPosts, refetchInterval: 30_000 });
+  const fu = useQuery({ queryKey: ["growth", "followups"], queryFn: api.fetchFollowups, refetchInterval: 30_000 });
+  return (
+    <section className="grid gap-3 md:grid-cols-2">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-800">Bài riêng trên tài khoản</h2>
+        <p className="text-xs text-slate-500">Deal rẻ thật từ kho Cashbot / nhắc dịp sale — theo khung giờ trong ⚙️.</p>
+        {own.data?.items.length ? (
+          <ul className="mt-2 space-y-2 text-sm">
+            {own.data.items.map((p) => (
+              <li key={p.id} className="rounded-lg bg-slate-50 p-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span>{p.kind === "sale" ? "nhắc sale" : "deal"} · khung {p.slot.slice(-5)}</span>
+                  <span className={p.status === "posted" ? "text-emerald-700" : "text-amber-700"}>
+                    {OWN_STATUS[p.status] ?? p.status}
+                  </span>
+                  {p.post_url && (
+                    <a href={p.post_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-0.5 text-indigo-600">
+                      xem <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+                <p className="mt-1 line-clamp-3 whitespace-pre-line text-slate-700">{p.text}</p>
+                {p.error_message && <p className="mt-1 text-xs text-red-600">{p.error_message}</p>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">Chưa có bài nào.</p>
+        )}
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-800">Người hỏi lại</h2>
+        <p className="text-xs text-slate-500">Ai trả lời dưới reply của mình — AI trả lời câu hỏi, bỏ qua cảm ơn / spam.</p>
+        {fu.data?.items.length ? (
+          <ul className="mt-2 space-y-2 text-sm">
+            {fu.data.items.map((f) => (
+              <li key={f.id} className="rounded-lg bg-slate-50 p-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <a href={f.post_url} target="_blank" rel="noreferrer" className="text-indigo-600">@{f.author}</a>
+                  <span className={f.status === "answered" ? "text-emerald-700" : "text-slate-500"}>
+                    {FU_STATUS[f.status] ?? f.status}
+                  </span>
+                  <span className="ml-auto">{when(f.created_at)}</span>
+                </div>
+                <p className="mt-1 text-slate-700">«{f.comment}»</p>
+                {f.reply_text && <p className="mt-1 text-slate-500">→ <i>{f.reply_text}</i></p>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">Chưa có ai hỏi lại.</p>
+        )}
+      </div>
     </section>
   );
 }
@@ -282,6 +356,7 @@ export function ThreadsGrowthPage() {
       {ov.isError && <p className="text-sm text-red-600">{(ov.error as Error).message}</p>}
       {ov.data && <StatusBar ov={ov.data} />}
       {ov.data && <Customers rep={ov.data.customers} />}
+      <Activity />
 
       <nav className="flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => {

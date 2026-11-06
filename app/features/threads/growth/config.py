@@ -71,9 +71,39 @@ _STATIC = {
 }
 
 
+# Kênh ngoài reply A/B (PLAN-159) — mỗi kênh một mã ``?start=`` để biết khách đến từ đâu.
+CHANNELS = {"post": "bài riêng", "conv": "trả lời lại", "bio": "bio profile"}
+_CHANNEL_PREFIX = {TargetBot.CASHBOT: "threads_cb_", TargetBot.AI_STORE: "threads_ai_"}
+
+
+def channel_code(bot: TargetBot, channel: str) -> str:
+    return _CHANNEL_PREFIX[bot] + channel
+
+
+def channel_url(bot: TargetBot, channel: str) -> str:
+    return f"https://t.me/{_STATIC[bot][1]}?start={channel_code(bot, channel)}"
+
+
 def code_map() -> Dict[str, tuple]:
-    """Mã ``?start=`` → (bot, biến thể) — để đếm khách theo A/B."""
-    return {code: (bot, v) for bot, (_, _, variants) in _STATIC.items() for v, (code, _) in variants.items()}
+    """Mã ``?start=`` → (bot, biến thể) — biến thể None với mã kênh (bài riêng / trả lời lại / bio)."""
+    out: Dict[str, tuple] = {
+        code: (bot, v) for bot, (_, _, variants) in _STATIC.items() for v, (code, _) in variants.items()
+    }
+    for bot in _STATIC:
+        for ch in CHANNELS:
+            out[channel_code(bot, ch)] = (bot, None)
+    return out
+
+
+def code_channel(code: str) -> str:
+    """Nhãn kênh cho báo cáo: «reply A», «bài riêng»…"""
+    hit = code_map().get(code)
+    if not hit:
+        return "khác"
+    bot, variant = hit
+    if variant is not None:
+        return f"reply {variant.value}"
+    return CHANNELS.get(code.removeprefix(_CHANNEL_PREFIX[bot]), "khác")
 
 
 def _setting(key: str):
@@ -162,6 +192,11 @@ class WorkerConfig:
     telegram_review: bool = False
     search_top: bool = True
     min_reach: int = 0
+    own_posts_enabled: bool = True
+    own_post_times: str = "11:45, 20:15"
+    followup_enabled: bool = True
+    followup_max_per_day: int = 15
+    followup_lookback_hours: int = 48
 
 
 def load_worker_config() -> WorkerConfig:
@@ -179,6 +214,11 @@ def load_worker_config() -> WorkerConfig:
             telegram_review=settings.get_bool("growth.telegram_review", d.telegram_review),
             search_top=settings.get_bool("growth.search_top", d.search_top),
             min_reach=settings.get_int("growth.min_reach", d.min_reach),
+            own_posts_enabled=settings.get_bool("growth.own_posts_enabled", d.own_posts_enabled),
+            own_post_times=str(settings.get("growth.own_post_times") or d.own_post_times),
+            followup_enabled=settings.get_bool("growth.followup_enabled", d.followup_enabled),
+            followup_max_per_day=settings.get_int("growth.followup_max_per_day", d.followup_max_per_day),
+            followup_lookback_hours=settings.get_int("growth.followup_lookback_hours", d.followup_lookback_hours),
         )
     except Exception as exc:
         logger.warning("growth: không đọc được cài đặt worker, dùng mặc định — TẮT (%s)", exc)

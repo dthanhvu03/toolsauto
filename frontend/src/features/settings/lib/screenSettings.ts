@@ -60,6 +60,11 @@ export const SCREEN_SETTINGS = {
         ],
       },
       { title: "Từ khóa tìm bài", keys: ["growth.keywords_*"] },
+      { title: "Bài riêng trên tài khoản", keys: ["growth.own_posts_enabled", "growth.own_post_times"] },
+      {
+        title: "Trả lời người hỏi lại",
+        keys: ["growth.followup_enabled", "growth.followup_max_per_day", "growth.followup_lookback_hours"],
+      },
       { title: "Câu mẫu Cashbot (A/B)", keys: ["growth.cashbot_*"] },
       { title: "Câu mẫu AI Pass Store (A/B)", keys: ["growth.ai_store_*"] },
     ],

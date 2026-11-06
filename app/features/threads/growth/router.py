@@ -44,6 +44,18 @@ def posts(status: Optional[str] = Query(None), limit: int = Query(50, ge=1, le=2
     return {"items": actions.runner().storage.list_posts(status, limit=limit)}
 
 
+@router.get("/own-posts")
+def own_posts(limit: int = Query(30, ge=1, le=100)) -> dict:
+    """Bài riêng bot tự đăng trên tài khoản (PLAN-159)."""
+    return {"items": actions.runner().storage.list_own_posts(limit=limit)}
+
+
+@router.get("/followups")
+def followups(limit: int = Query(30, ge=1, le=100)) -> dict:
+    """Người trả lời lại dưới reply của mình và bot đã trả lời / bỏ qua gì (PLAN-159)."""
+    return {"items": actions.runner().storage.list_followups(limit=limit)}
+
+
 @router.post("/posts/{post_id}/approve")
 def approve(post_id: int, body: ApproveBody) -> dict:
     try:

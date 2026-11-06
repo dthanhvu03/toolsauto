@@ -143,6 +143,35 @@ def posts_from_dom_rows(rows: Iterable[dict], keyword: str) -> List[ScannedPost]
     return posts
 
 
+def replies_to_me(payload: Any, me: str) -> List[ScannedPost]:
+    """Reply mà người khác gửi THẲNG cho ``me`` (``reply_to_author`` = mình) và mình chưa trả lời lại."""
+    me = (me or "").lstrip("@").lower()
+    found: dict[str, ScannedPost] = {}
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            user, code = node.get("user"), node.get("code")
+            if isinstance(code, str) and isinstance(user, dict) and user.get("username"):
+                info = node.get("text_post_app_info") or {}
+                target = ((info.get("reply_to_author") or {}).get("username") or "").lower()
+                author = str(user["username"])
+                text = (node.get("caption") or {}).get("text") if isinstance(node.get("caption"), dict) else None
+                if (me and target == me and author.lower() != me and text and code not in found
+                        and info.get("has_viewer_replied") is not True and info.get("can_reply") is not False):
+                    found[code] = ScannedPost(
+                        thread_id=code, post_url=f"{THREADS_HOST}/@{author}/post/{code}", author=author,
+                        content=str(text), keyword="", created_at=_as_dt(node.get("taken_at")), is_reply=True,
+                    )
+            for v in node.values():
+                visit(v)
+        elif isinstance(node, list):
+            for v in node:
+                visit(v)
+
+    visit(payload)
+    return list(found.values())
+
+
 class GrowthBrowser:
     """Bọc ``ThreadsAdapter`` (Playwright sync). Dùng: ``with GrowthBrowser(profile) as b: ...``."""
 
@@ -242,6 +271,95 @@ class GrowthBrowser:
         result = [p for p in posts.values() if not me or p.author.lower() != me]
         logger.info("growth.search %r%s → %d bài", keyword, " (hàng đầu)" if top else "", len(result))
         return result[:limit]
+
+    # ── trả lời lại / bài riêng (PLAN-159) ─────────────────────
+    def replies_to_me(self, reply_url: str) -> List[ScannedPost]:
+        """Mở reply của mình, lấy các reply người khác gửi cho mình."""
+        me = self.own_handle()
+        if not me:
+            return []
+        self._payloads.clear()
+        self.page.goto(reply_url, wait_until="domcontentloaded", timeout=60000)
+        self._pause(3.0, 5.0)
+        self._check_session()
+        self.page.mouse.wheel(0, random.randint(900, 1500))
+        self._pause(1.5, 2.5)
+        found: dict[str, ScannedPost] = {}
+        for payload in [*self._embedded_payloads(), *self._payloads]:
+            for p in replies_to_me(payload, me):
+                found.setdefault(p.thread_id, p)
+        return list(found.values())
+
+    def create_post(self, text: str) -> Optional[str]:
+        """Đăng bài mới trên tường qua hộp «New thread» (DOM 06/11: nút ``[aria-label="New thread"]`` → hộp thoại có
+        ô soạn + nút «Post»). Thành công = hộp thoại đóng. Trả link bài nếu tìm thấy, None nếu không rõ link.
+
+        Lỗi trước khi bấm Post → ``RuntimeError`` (chưa đăng gì). Sau khi bấm mà hộp không đóng → ``RuntimeError``.
+        """
+        pg = self.page
+        if (pg.viewport_size or {}).get("width", 0) < 1100:
+            pg.set_viewport_size({"width": 1280, "height": 900})  # khổ hẹp không có nút «New thread»
+        self._payloads.clear()
+        pg.goto(f"{THREADS_HOST}/", wait_until="domcontentloaded", timeout=60000)
+        self._pause(3.0, 5.0)
+        self._check_session()
+        opener = pg.locator('[aria-label="New thread"]').first
+        if not opener.count():
+            raise RuntimeError("Không thấy nút New thread")
+        opener.click(timeout=15000)
+        self._pause(1.5, 2.5)
+        dialog = pg.locator('div[role="dialog"]').last
+        box = dialog.locator('div[role="textbox"][contenteditable="true"]').first
+        if not box.count():
+            raise RuntimeError("Không thấy ô soạn bài")
+        box.click()
+        for i, line in enumerate(text.split("\n")):
+            if i:
+                pg.keyboard.press("Enter")
+            if line:
+                pg.keyboard.type(line, delay=random.randint(12, 35))
+        self._pause(1.0, 2.0)
+        head = text.strip().split("\n")[0][:20]
+        if head and head not in " ".join((box.inner_text() or "").split()):
+            pg.keyboard.press("Escape")
+            raise RuntimeError("Gõ nội dung không vào ô soạn")
+        button = dialog.get_by_role("button", name="Post", exact=True)
+        deadline = time.time() + 10
+        while time.time() < deadline and button.get_attribute("aria-disabled") == "true":
+            time.sleep(0.5)
+        button.click(timeout=10000)
+        deadline = time.time() + 30
+        while time.time() < deadline and pg.locator('div[role="dialog"]').count():
+            time.sleep(1.0)
+        if pg.locator('div[role="dialog"]').count():
+            raise RuntimeError("Đã bấm Post nhưng hộp soạn không đóng — kiểm tra tay trên Threads")
+        self._pause(2.0, 3.0)
+        return self._find_own_post(text)
+
+    def _find_own_post(self, text: str) -> Optional[str]:
+        """Link bài vừa đăng: tìm trong JSON đã bắt, không có thì mở trang cá nhân."""
+        me = self.own_handle()
+        if not me:
+            return None
+        prefix = " ".join(text.split())[:30]
+
+        def lookup() -> Optional[str]:
+            for payload in [*self._payloads, *self._embedded_payloads()]:
+                for p in posts_from_payload(payload, ""):
+                    if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
+                        return p.post_url
+            return None
+
+        url = lookup()
+        if url:
+            return url
+        try:
+            self._payloads.clear()
+            self.page.goto(f"{THREADS_HOST}/@{me}", wait_until="domcontentloaded", timeout=60000)
+            self._pause(3.0, 4.0)
+        except Exception:
+            return None
+        return lookup()
 
     # ── đăng reply ─────────────────────────────────────────────
     def reply(self, post_url: str, text: str) -> Optional[str]:

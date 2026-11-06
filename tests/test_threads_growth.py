@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.features.threads.adapter import ThreadsSessionInvalidError
-from app.features.threads.growth import actions, browser, cli, evaluator, worker
+from app.features.threads.growth import actions, browser, cli, content, evaluator, worker
 from app.features.threads.growth.config import ABVariant, GrowthLimits, TargetBot, WorkerConfig, load_profiles
 from app.features.threads.growth.evaluator import GrowthEvaluator
 from app.features.threads.growth.runner import GrowthRunner
@@ -301,6 +301,16 @@ class FakeBrowser:
             raise ThreadsSessionInvalidError("checkpoint")
         return list(self.results.get((keyword, "top") if top else keyword, []))[:limit]
 
+    comments: dict = {}
+    posts_made: list = []
+
+    def create_post(self, text):
+        self.posts_made.append(text)
+        return "https://www.threads.com/@us28qt/post/OWN1"
+
+    def replies_to_me(self, reply_url):
+        return list(self.comments.get(reply_url, []))
+
     def reply(self, url, text):
         if self.reply_error:
             raise RuntimeError(self.reply_error)
@@ -340,6 +350,9 @@ def make_worker(runner, monkeypatch):
     monkeypatch.setattr(worker, "load_profiles", lambda: profiles)
     monkeypatch.setattr(worker.GrowthWorker, "_profile_path", lambda self: "/profile")
     monkeypatch.setattr(worker.conversions, "report", lambda: {"total": 1, "last_24h": 1, "active": 0})
+    # Bài riêng: mặc định không có deal / dịp sale (không đọc DB Cashbot thật); test riêng tự đặt.
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: [])
+    monkeypatch.setattr(content, "next_sale", lambda now, days=4: None)
     disabled = []
     monkeypatch.setattr(worker.settings, "upsert_setting", lambda db, k, v, updated_by=None: disabled.append((k, v)))
     monkeypatch.setattr(worker.growth_session, "mark", lambda db, ok, err=None: disabled.append(("mark", ok)))
@@ -643,3 +656,198 @@ def test_vn_time():
 
     assert vn_time("2026-11-06T01:03:18Z") == "06/11 08:03"
     assert vn_time(None) == ""
+
+
+# ── PLAN-159: bài riêng, trả lời lại, kênh, viết lại câu mẫu ─────────────────────────────
+
+def test_clean_post_keeps_lines_and_single_tracking_link():
+    text = content.clean_post('"Deal nè mn\n\n\n- Cây lau 110k t.me/zt_shopee_bot\nvào bot https://t.me/x?start=y"', "L")
+    assert text == "Deal nè mn\n\n- Cây lau 110k\nvào bot\nL"
+
+
+def test_load_deals_reads_cashback_pool(tmp_path):
+    import json
+    import sqlite3
+
+    db = tmp_path / "cashback.sqlite"
+    now = datetime(2026, 11, 6, 8, 0, tzinfo=timezone.utc)
+    fresh, stale = "2026-11-06T07:00:00Z", "2026-11-05T00:00:00Z"
+    pool = {
+        "1": {"item_id": 1, "name": "Lau nhà", "price": 110000, "usual": 140000, "cashback": 5600, "seen": fresh,
+              "lowest_30d": True, "sold_30d": 300},
+        "2": {"item_id": 2, "name": "Jean", "price": 100000, "usual": 200000, "seen": fresh, "lowest_30d": True},
+        "3": {"item_id": 3, "name": "Cũ", "price": 1, "usual": 9, "seen": stale, "lowest_30d": True},
+        "4": {"item_id": 4, "name": "Bỏ", "price": 1, "usual": 9, "seen": fresh, "lowest_30d": True},
+        "5": {"item_id": 5, "name": "Ko thấp nhất", "price": 1, "usual": 9, "seen": fresh, "lowest_30d": False},
+    }
+    with sqlite3.connect(db) as c:
+        c.execute("CREATE TABLE bot_state (key TEXT PRIMARY KEY, value TEXT)")
+        c.execute("INSERT INTO bot_state VALUES ('deals_pool', ?), ('deals_removed', '[4]')", (json.dumps(pool),))
+    deals = content.load_deals(now, db)
+    assert [d.item_id for d in deals] == [2, 1]  # giảm 50% trước 21%
+    assert deals[1].off_pct == 21 and deals[1].cashback == 5600
+
+
+def test_next_sale_finds_big_sale_only():
+    assert content.next_sale(datetime(2026, 11, 8, 3, 0, tzinfo=timezone.utc)).label == "11.11"
+    assert content.next_sale(datetime(2026, 11, 13, 3, 0, tzinfo=timezone.utc)) is None  # 15/11 mini bị bỏ
+
+
+def test_write_own_post_sale_then_deal_and_no_repeat(monkeypatch):
+    deal = content.Deal(7, "Cây lau nhà", 110000, 140000, 5600, 300)
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: [deal])
+    now = datetime(2026, 11, 8, 5, 0, tzinfo=timezone.utc)
+    first = asyncio.run(content.write_own_post(now, set()))
+    assert first.kind == "sale" and first.text.endswith("start=threads_cb_post")
+    second = asyncio.run(content.write_own_post(now, {first.ref}))
+    assert second.kind == "deal" and second.ref == "deal:7"
+    assert asyncio.run(content.write_own_post(now, {first.ref, "deal:7"})) is None
+
+
+def test_write_own_post_ai_down_returns_none(monkeypatch):
+    async def _empty(prompt, *, purpose="generic"):
+        return "", {"fail_reason": "circuit_open"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_empty))
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: [content.Deal(7, "x", 1, 2, 0, 0)])
+    assert asyncio.run(content.write_own_post(datetime(2026, 11, 20, tzinfo=timezone.utc), set())) is None
+
+
+def test_worker_posts_own_post_once_per_slot(make_worker, runner, monkeypatch):
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: [content.Deal(7, "Cây lau", 110000, 140000, 0, 1)])
+    fb = FakeBrowser()
+    fb.posts_made = []
+    w, n = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_post_times="20:00", followup_enabled=False)
+    w.now = lambda: datetime(2026, 11, 6, 13, 40, tzinfo=timezone.utc)  # 20:40 VN — đã qua độ lệch tối đa 25 phút
+    report = w.tick()
+    assert len(fb.posts_made) == 1 and report.own_posts[0]["kind"] == "deal"
+    assert any("'own_posts': [{'kind': 'deal'" in t for t in n.sent)
+    w.tick()
+    assert len(fb.posts_made) == 1  # khung đã đăng
+    w.now = lambda: datetime(2026, 11, 6, 15, 30, tzinfo=timezone.utc)  # 22:30 VN — hết khung
+    assert not w.runner.storage.own_post_slot_done("2026-11-06 22:30")
+
+
+def test_replies_to_me_parser():
+    payload = {"x": [
+        {"code": "Q1", "user": {"username": "lan"}, "caption": {"text": "bot gì vậy b"},
+         "text_post_app_info": {"reply_to_author": {"username": "us28qt"}}},
+        {"code": "Q2", "user": {"username": "mai"}, "caption": {"text": "ib"},
+         "text_post_app_info": {"reply_to_author": {"username": "chu_bai"}}},
+        {"code": "Q3", "user": {"username": "us28qt"}, "caption": {"text": "tự reply"},
+         "text_post_app_info": {"reply_to_author": {"username": "us28qt"}}},
+        {"code": "Q4", "user": {"username": "an"}, "caption": {"text": "đã trả lời rồi"},
+         "text_post_app_info": {"reply_to_author": {"username": "us28qt"}, "has_viewer_replied": True}},
+    ]}
+    found = browser.replies_to_me(payload, "@US28QT")
+    assert [p.thread_id for p in found] == ["Q1"] and found[0].post_url.endswith("/@lan/post/Q1")
+
+
+def test_worker_followups_answer_skip_and_cap(make_worker, runner, monkeypatch):
+    pid = _save(runner.storage, "MINE")
+    runner.storage.update_status(pid, "posted", actual_reply="t hay dùng @zt_shopee_bot", reply_url="https://r/MINE")
+    q = lambda code, who, text: ScannedPost(code, f"https://www.threads.com/@{who}/post/{code}", who, text, "")  # noqa: E731
+    fb = FakeBrowser()
+    fb.comments = {"https://r/MINE": [q("C1", "lan", "bot gì vậy b"), q("C2", "mai", "cảm ơn"), q("C3", "an", "dùng sao")]}
+
+    async def _followup(bot, our, comment):
+        return ("skip", None) if comment == "cảm ơn" else ("answer", f"trả lời: {comment}")
+
+    monkeypatch.setattr(content, "write_followup", _followup)
+    w, n = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_max_per_day=1)
+    w.now = lambda: datetime.now(timezone.utc)
+    report = w.tick()
+    assert [f["author"] for f in report.followups] == ["lan"]  # tối đa 1 / ngày
+    assert fb.replies == [("https://www.threads.com/@lan/post/C1", "trả lời: bot gì vậy b")]
+    rows = {r["code"]: r["status"] for r in runner.storage.list_followups()}
+    assert rows == {"C1": "answered"}
+    # Hết suất giữa chừng → reply chưa đánh dấu «đã kiểm»: mai mở lại, trả lời tiếp C3 (C2 chỉ là «cảm ơn» → bỏ).
+    assert runner.storage.get_post_by_id(pid)["followup_checked_at"] is None
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_max_per_day=5)
+    w.last_followup = None
+    w.tick()
+    rows = {r["code"]: r["status"] for r in runner.storage.list_followups()}
+    assert rows == {"C1": "answered", "C2": "skipped", "C3": "answered"}
+    assert runner.storage.get_post_by_id(pid)["followup_checked_at"] is not None
+    assert any("'followups': [{'author': 'lan'" in t for t in n.sent)
+
+
+def test_worker_followup_ai_down_retries_later(make_worker, runner, monkeypatch):
+    pid = _save(runner.storage, "MINE")
+    runner.storage.update_status(pid, "posted", reply_url="https://r/MINE")
+    fb = FakeBrowser()
+    fb.comments = {"https://r/MINE": [ScannedPost("C1", "https://x/C1", "lan", "bot gì", "")]}
+
+    async def _down(bot, our, comment):
+        return "error", None
+
+    monkeypatch.setattr(content, "write_followup", _down)
+    w, _ = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False)
+    w.now = lambda: datetime.now(timezone.utc)
+    w.tick()
+    assert runner.storage.list_followups() == []
+    assert runner.storage.get_post_by_id(pid)["followup_checked_at"] is None  # chưa đánh dấu → lần sau kiểm lại
+
+
+def test_worker_rewrites_fallback_when_ai_back(make_worker, runner, monkeypatch):
+    ai_up = {"value": False}
+
+    async def _flaky(prompt, *, purpose="generic"):
+        if ai_up["value"]:
+            return "ủa t hay dùng bot này nè b", {"provider": "fake", "model": "m"}
+        return "", {"fail_reason": "circuit_open"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_flaky))
+    w, _ = make_worker(FakeBrowser({"kw": [_post("P1", "lan", text=VI_SHOPEE + " săn sale shopee voucher shopee")]}))
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, auto_post_min_relevance=40, own_posts_enabled=False,
+                                            followup_enabled=False)
+    w.runner._limits = lambda: GrowthLimits(max_replies_per_hour=0, max_replies_per_day=0)
+    w.tick()
+    assert runner.storage.get_post_by_id(1)["status"] == "pending"  # AI lỗi → câu mẫu, chờ duyệt
+    ai_up["value"] = True
+    w.last_rewrite = None
+    report = w.tick()
+    row = runner.storage.get_post_by_id(1)
+    assert report.rewritten == 1 and row["status"] == "approved" and not row["ai_analysis"].startswith("Fallback")
+
+
+def test_channel_codes_and_conversions_by_channel(tmp_path):
+    import sqlite3
+
+    from app.features.threads.growth import config, conversions
+
+    assert config.channel_url(TargetBot.CASHBOT, "post") == "https://t.me/zt_shopee_bot?start=threads_cb_post"
+    assert config.code_channel("threads_cb_tier") == "reply B" and config.code_channel("threads_ai_conv") == "trả lời lại"
+    cb = tmp_path / "cb.sqlite"
+    with sqlite3.connect(cb) as c:
+        c.execute("CREATE TABLE bot_state (key TEXT, value TEXT)")
+        c.execute("CREATE TABLE telegram_users (telegram_user_id INTEGER, username TEXT, created_at TEXT, last_seen_at TEXT)")
+        c.execute("CREATE TABLE link_requests (telegram_user_id INTEGER)")
+        c.executemany("INSERT INTO bot_state VALUES (?, ?)", [("src:1", "threads_cb_post"), ("src:2", "threads_cb_save")])
+        c.executemany("INSERT INTO telegram_users VALUES (?, NULL, '2026-11-06T01:00:00Z', NULL)", [(1,), (2,)])
+    rep = conversions.report(cashback_path=cb, store_path=tmp_path / "none.sqlite")
+    assert rep["by_channel"] == {"bài riêng": {"customers": 1, "active": 0}, "reply A": {"customers": 1, "active": 0}}
+
+
+def test_cycle_text_own_posts_followups_and_channels():
+    from app.features.threads.growth import notify
+
+    text = notify.cycle_text({
+        "posted": 0, "own_posts": [{"kind": "sale", "url": "https://p/1", "text": "còn 3 ngày là 11.11 <3"}],
+        "followups": [{"author": "lan", "comment": "bot gì", "text": "bot hoàn tiền nè", "url": "https://f"}],
+        "rewritten": 2,
+        "customers": {"total": 3, "last_24h": 1, "active": 1, "by_channel": {"bài riêng": {"customers": 1}}},
+    })
+    assert "đăng 1 bài riêng" in text and "trả lời lại 1 người" in text and "nhắc sale" in text
+    assert "&lt;3" in text and "@lan" in text and "viết lại 2 bài" in text and "bài riêng 1" in text
+
+
+def test_watchdog_sleep_rearms_alarm(monkeypatch):
+    alarms, slept = [], []
+    monkeypatch.setattr(worker.signal, "alarm", alarms.append)
+    monkeypatch.setattr(worker.time, "sleep", slept.append)
+    worker.watchdog_sleep(300)
+    assert slept == [300] and alarms == [300 + worker.WATCHDOG_SEC, worker.WATCHDOG_SEC]

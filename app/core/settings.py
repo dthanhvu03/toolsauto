@@ -1721,6 +1721,56 @@ TRẢ VỀ JSON LIST (Mảng các object):
         max=200,
         unit="điểm",
     ),
+    "growth.own_posts_enabled": SettingSpec(
+        key="growth.own_posts_enabled",
+        type="bool",
+        default_getter=lambda: True,
+        title="Kéo khách: tự đăng bài riêng",
+        section="Threads — Kéo khách",
+        description="Tự đăng bài trên tài khoản Threads theo các khung giờ bên dưới: deal Shopee đang rẻ thật (kho deal "
+                    "Cashbot) hoặc bài nhắc dịp sale lớn sắp tới. AI lỗi thì bỏ khung đó, không đăng câu mẫu.",
+    ),
+    "growth.own_post_times": SettingSpec(
+        key="growth.own_post_times",
+        type="str",
+        default_getter=lambda: "11:45, 20:15",
+        title="Kéo khách: giờ đăng bài riêng",
+        section="Threads — Kéo khách",
+        description="Giờ Việt Nam, cách nhau dấu phẩy — mỗi khung 1 bài (đăng lệch ngẫu nhiên tới 25 phút). "
+                    "Trưa và tối là lúc nhiều người lướt nhất.",
+    ),
+    "growth.followup_enabled": SettingSpec(
+        key="growth.followup_enabled",
+        type="bool",
+        default_getter=lambda: True,
+        title="Kéo khách: trả lời người hỏi lại",
+        section="Threads — Kéo khách",
+        description="Kiểm các reply mình đã đăng; ai trả lời lại mình (hỏi bot gì, dùng sao, có thật không…) thì AI trả "
+                    "lời đúng câu hỏi. Cảm ơn / chê / spam thì bỏ qua.",
+    ),
+    "growth.followup_max_per_day": SettingSpec(
+        key="growth.followup_max_per_day",
+        type="int",
+        default_getter=lambda: 15,
+        title="Kéo khách: tối đa trả lời lại / ngày",
+        section="Threads — Kéo khách",
+        description="Tính riêng, không trừ vào hạn mức reply bài mới.",
+        min=0,
+        max=100,
+        unit="lần",
+    ),
+    "growth.followup_lookback_hours": SettingSpec(
+        key="growth.followup_lookback_hours",
+        type="int",
+        default_getter=lambda: 48,
+        title="Kéo khách: kiểm reply đăng trong",
+        section="Threads — Kéo khách",
+        description="Chỉ kiểm người hỏi lại dưới các reply đăng trong bấy nhiêu giờ gần đây (mỗi reply kiểm lại tối đa "
+                    "3 giờ / lần).",
+        min=6,
+        max=240,
+        unit="giờ",
+    ),
     "growth.top_level_only": SettingSpec(
         key="growth.top_level_only",
         type="bool",

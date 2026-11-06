@@ -41,6 +41,7 @@ export type Customer = {
   bot: "cashbot" | "ai_store";
   variant: "A" | "B" | null;
   code: string;
+  channel: string;
   user_id: number;
   username: string | null;
   joined_at: string | null;
@@ -53,6 +54,7 @@ export type CustomerReport = {
   active: number;
   last_24h: number;
   by_variant: Record<string, Record<"A" | "B", { customers: number; active: number }>>;
+  by_channel: Record<string, { customers: number; active: number }>;
   customers: Customer[];
   errors: string[];
 };
@@ -83,6 +85,31 @@ export type Overview = {
   settings_url: string;
 };
 
+export type OwnPost = {
+  id: number;
+  slot: string;
+  kind: "deal" | "sale";
+  text: string;
+  status: "posted" | "failed" | "skipped";
+  post_url: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
+export type Followup = {
+  id: number;
+  author: string;
+  comment: string;
+  post_url: string;
+  reply_text: string | null;
+  reply_url: string | null;
+  status: "answered" | "skipped" | "failed";
+  error_message: string | null;
+  created_at: string;
+};
+
+export const fetchOwnPosts = () => getJson<{ items: OwnPost[] }>(`${BASE}/own-posts?limit=10`);
+export const fetchFollowups = () => getJson<{ items: Followup[] }>(`${BASE}/followups?limit=10`);
 export const fetchOverview = () => getJson<Overview>(`${BASE}/overview`);
 export const fetchPosts = (status: GrowthStatus) =>
   getJson<{ items: GrowthPost[] }>(`${BASE}/posts?status=${status}&limit=100`);

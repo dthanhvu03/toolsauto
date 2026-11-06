@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.features.threads.growth.config import _ROOT, ABVariant, TargetBot, code_map
+from app.features.threads.growth.config import _ROOT, ABVariant, TargetBot, code_channel, code_map
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +109,7 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
         b.value: {v.value: {"customers": 0, "active": 0} for v in ABVariant} for b in TargetBot
     }
     customers: List[Dict[str, Any]] = []
+    by_channel: Dict[str, Dict[str, int]] = {}
     errors: List[str] = []
     sources = (
         (TargetBot.CASHBOT, cashback_path or cashback_db(), _cashback_rows),
@@ -128,10 +129,14 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
             code_bot, variant = codes.get(r["code"], (bot, None))
             cust = {
                 "bot": code_bot.value, "variant": variant.value if variant else None, "code": r["code"],
+                "channel": code_channel(r["code"]),
                 "user_id": r["user_id"], "username": r["username"], "joined_at": r["joined_at"],
                 "last_seen_at": r["last_seen_at"], "activity": r["activity"], "active": r["active"],
             }
             customers.append(cust)
+            ch = by_channel.setdefault(cust["channel"], {"customers": 0, "active": 0})
+            ch["customers"] += 1
+            ch["active"] += 1 if r["active"] else 0
             if variant:
                 slot = by_variant[code_bot.value][variant.value]
                 slot["customers"] += 1
@@ -143,6 +148,7 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
         "active": sum(1 for c in customers if c["active"]),
         "last_24h": sum(1 for c in customers if (_parse(c["joined_at"]) or now - timedelta(days=99)) >= day_ago),
         "by_variant": by_variant,
+        "by_channel": by_channel,
         "customers": customers[:100],
         "errors": errors,
     }

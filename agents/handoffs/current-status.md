@@ -1,3 +1,13 @@
+## Phiên 2026-11-06 (PLAN-159) — Kéo khách ngoài reply: bài riêng, trả lời lại, 11/11, đo theo kênh
+- Chủ bot duyệt trọn gói (mục 2+3+4+6). Chi tiết + proof: `agents/plans/active/PLAN-159-threads-growth-beyond-reply.md`.
+- Bài riêng: khung 11:45 / 20:15 VN, AI viết từ kho deal Cashbot (chỉ đọc) hoặc nhắc dịp sale lớn ≤ 5 ngày; đăng qua hộp
+  «New thread» (selector adapter cũ đã hỏng: không còn «Start a thread»). Bài thật đầu tiên (nhắc 11.11):
+  https://www.threads.com/@us28qt/post/DfZLfuUid-g. Trả lời lại: mỗi 20 phút, ≤ 15 / ngày, AI SKIP câu không cần trả lời.
+- Mã kênh mới: threads_cb_post / _conv / _bio (+ threads_ai_*). Từ khóa 11/11 đã ghi vào DB cài đặt (xoá sau đợt sale).
+- AI: 9Router «no active credentials» → chủ bot đăng nhập lại http://localhost:20128; đang chạy Gemini dự phòng.
+- Next Action (chủ bot): restart cashback-bot cashback-zalo; sửa profile @us28qt + đặt link
+  https://t.me/zt_shopee_bot?start=threads_cb_bio ở bio. Theo dõi Telegram «Bài riêng» / «trả lời lại» vài ngày.
+
 ## Phiên 2026-11-06 (growth-reach) — Kéo khách: nhắm bài nhiều người xem + Cashbot chào khách từ Threads
 - Số liệu lúc bắt đầu: 35 reply → 2 khách /start (cùng Cashbot, A 1 · B 1) → 0 khách gửi link. Xem công khai (không đăng
   nhập): reply chỉ 3–24 lượt xem vì toàn reply bài mới đăng ít người xem → nút thắt là ĐỘ PHỦ, không phải câu chữ.

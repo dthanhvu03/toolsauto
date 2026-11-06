@@ -21,6 +21,7 @@ _EXTRA_COLUMNS = {
     "reply_count": "INTEGER NOT NULL DEFAULT 0",
     "author_followers": "INTEGER NOT NULL DEFAULT 0",
     "reach": "INTEGER NOT NULL DEFAULT 0",
+    "followup_checked_at": "TEXT",
 }
 
 STATUSES = ("pending", "approved", "rejected", "posted", "failed")
@@ -83,6 +84,39 @@ class GrowthStorage:
                 if col not in have:
                     conn.execute(f"ALTER TABLE growth_posts ADD COLUMN {col} {ddl}")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_growth_posts_author ON growth_posts(author, status)")
+            # PLAN-159: bài riêng trên tài khoản + trả lời người hỏi lại dưới reply của mình.
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS own_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slot TEXT UNIQUE NOT NULL,   -- ngày + giờ khung (VN): mỗi khung tối đa 1 bài
+                    kind TEXT NOT NULL,          -- deal · sale
+                    ref TEXT NOT NULL DEFAULT '',-- deal:<item>,… / sale:<ngày>:<hôm nay> — tránh đăng lặp
+                    text TEXT NOT NULL,
+                    status TEXT NOT NULL,        -- posted · failed · skipped
+                    post_url TEXT,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS followups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT UNIQUE NOT NULL,   -- mã bài của người hỏi lại
+                    growth_post_id INTEGER NOT NULL,
+                    author TEXT NOT NULL,
+                    comment TEXT NOT NULL,
+                    post_url TEXT NOT NULL,
+                    reply_text TEXT,
+                    reply_url TEXT,
+                    status TEXT NOT NULL,        -- answered · skipped · failed
+                    error_message TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
 
     def is_thread_scanned(self, thread_id: str) -> bool:
         with self._connection() as conn:
@@ -285,6 +319,90 @@ class GrowthStorage:
             if r["variant"] in counts:
                 counts[r["variant"]] = r["n"]
         return counts
+
+    # ── bài riêng (PLAN-159) ───────────────────────────────────
+    def own_post_slot_done(self, slot: str) -> bool:
+        with self._connection() as conn:
+            return conn.execute("SELECT 1 FROM own_posts WHERE slot = ?", (slot,)).fetchone() is not None
+
+    def own_post_refs(self, since: datetime) -> set[str]:
+        """Món / dịp đã đăng (hoặc đã thử) gần đây — không lặp lại."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT ref FROM own_posts WHERE created_at >= ?", (since.astimezone(timezone.utc).isoformat(),)
+            ).fetchall()
+        return {part for (ref,) in rows for part in str(ref).split(",") if part}
+
+    def save_own_post(self, slot: str, kind: str, ref: str, text: str, status: str,
+                      post_url: Optional[str] = None, error: Optional[str] = None) -> int:
+        with self._connection() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO own_posts (slot, kind, ref, text, status, post_url, error_message, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (slot, kind, ref, text, status, post_url, error, datetime.now(timezone.utc).isoformat()),
+            )
+            return cur.lastrowid if cur.rowcount else 0
+
+    def list_own_posts(self, limit: int = 30) -> List[Dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute("SELECT * FROM own_posts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── trả lời lại (PLAN-159) ─────────────────────────────────
+    def followup_targets(self, since: datetime, checked_before: datetime, limit: int) -> List[Dict[str, Any]]:
+        """Reply của mình đăng từ ``since``, lâu chưa kiểm (``followup_checked_at`` < ``checked_before``) — cũ trước."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM growth_posts
+                WHERE status = 'posted' AND reply_url IS NOT NULL AND posted_at >= ?
+                  AND (followup_checked_at IS NULL OR followup_checked_at < ?)
+                ORDER BY COALESCE(followup_checked_at, '') ASC, posted_at DESC LIMIT ?
+                """,
+                (since.astimezone(timezone.utc).isoformat(), checked_before.astimezone(timezone.utc).isoformat(), limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_followup_checked(self, post_id: int, at: datetime) -> None:
+        with self._connection() as conn:
+            conn.execute("UPDATE growth_posts SET followup_checked_at = ? WHERE id = ?",
+                         (at.astimezone(timezone.utc).isoformat(), post_id))
+
+    def followup_seen(self, code: str) -> bool:
+        with self._connection() as conn:
+            return conn.execute("SELECT 1 FROM followups WHERE code = ?", (code,)).fetchone() is not None
+
+    def save_followup(self, code: str, growth_post_id: int, author: str, comment: str, post_url: str,
+                      status: str, reply_text: Optional[str] = None, reply_url: Optional[str] = None,
+                      error: Optional[str] = None) -> int:
+        with self._connection() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO followups (code, growth_post_id, author, comment, post_url, reply_text, "
+                "reply_url, status, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (code, growth_post_id, author, comment, post_url, reply_text, reply_url, status, error,
+                 datetime.now(timezone.utc).isoformat()),
+            )
+            return cur.lastrowid if cur.rowcount else 0
+
+    def count_followups_since(self, since: datetime) -> int:
+        with self._connection() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM followups WHERE status = 'answered' AND created_at >= ?",
+                               (since.astimezone(timezone.utc).isoformat(),)).fetchone()
+        return int(row[0])
+
+    def list_followups(self, limit: int = 30) -> List[Dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute("SELECT * FROM followups ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def fallback_pending(self, limit: int) -> List[Dict[str, Any]]:
+        """Bài chờ duyệt vì AI lỗi (đang dùng câu mẫu) — để thử cho AI viết lại khi AI chạy lại."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM growth_posts WHERE status = 'pending' AND ai_analysis LIKE 'Fallback%' "
+                "ORDER BY reach DESC, id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def count_posted_since(self, since: datetime) -> int:
         with self._connection() as conn:

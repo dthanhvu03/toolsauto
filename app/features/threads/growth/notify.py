@@ -68,8 +68,13 @@ def notify_pending(post: Dict[str, Any]) -> bool:
 
 def cycle_text(report: Dict[str, Any]) -> str:
     e = html.escape
+    head = [f"đã reply {report.get('posted', 0)} bài"]
+    if report.get("own_posts"):
+        head.append(f"đăng {len(report['own_posts'])} bài riêng")
+    if report.get("followups"):
+        head.append(f"trả lời lại {len(report['followups'])} người")
     parts = [
-        f"🧵 <b>Kéo khách — đã reply {report.get('posted', 0)} bài</b>"
+        f"🧵 <b>Kéo khách — {' · '.join(head)}</b>"
         + (f" · lỗi {report['failed']}" if report.get("failed") else ""),
         f"Vòng này quét {report.get('scanned', 0)} bài · nhận {report.get('ingested', 0)} bài mới",
     ]
@@ -79,6 +84,17 @@ def cycle_text(report: Dict[str, Any]) -> str:
             f"\n• {BOT_LABEL.get(it['bot'], it['bot'])} {it['variant']} → @{e(it['author'])} "
             f"(<a href=\"{e(link)}\">xem</a>)\n  <i>{e(it['text'][:160])}</i>"
         )
+    for it in report.get("own_posts", []):
+        link = f' (<a href="{e(it["url"])}">xem</a>)' if it.get("url") else ""
+        label = "nhắc sale" if it.get("kind") == "sale" else "deal"
+        parts.append(f"\n📝 Bài riêng — {label}{link}\n  <i>{e(it['text'][:200])}</i>")
+    for it in report.get("followups", []):
+        parts.append(
+            f"\n💬 @{e(it['author'])}: «{e(it['comment'][:100])}»\n  → <i>{e(it['text'][:160])}</i>"
+            f" (<a href=\"{e(it['url'])}\">xem</a>)"
+        )
+    if report.get("rewritten"):
+        parts.append(f"\n✍️ AI viết lại {report['rewritten']} bài đang dùng câu mẫu")
     if report.get("customers"):
         parts.append("\n" + customers_line(report["customers"]))
     if report.get("quota_note"):
@@ -113,8 +129,12 @@ def vn_time(ts: Optional[str]) -> str:
 def customers_line(customers: Optional[Dict[str, Any]]) -> str:
     if not customers:
         return ""
-    return (f"👥 Khách mới từ Threads: <b>{customers.get('total', 0)}</b>"
+    line = (f"👥 Khách mới từ Threads: <b>{customers.get('total', 0)}</b>"
             f" (24h qua {customers.get('last_24h', 0)}, đã dùng bot {customers.get('active', 0)})")
+    channels = customers.get("by_channel") or {}
+    if channels:
+        line += "\n   theo kênh: " + " · ".join(f"{html.escape(k)} {v['customers']}" for k, v in channels.items())
+    return line
 
 
 def summary_text(stats: Dict[str, Any], quota, enabled: bool, login_status: str,

@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import logging
+import os
 import random
+import signal
 import sys
 import time
 from dataclasses import dataclass, field
@@ -25,10 +28,10 @@ from typing import Callable, Dict, List, Optional
 from app.core import settings
 from app.core.database.core import SessionLocal
 from app.features.threads.adapter import ThreadsSessionInvalidError
-from app.features.threads.growth import conversions, notify
+from app.features.threads.growth import content, conversions, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
-from app.features.threads.growth.config import TargetBot, WorkerConfig, load_profiles, load_worker_config
+from app.features.threads.growth.config import ABVariant, TargetBot, WorkerConfig, load_profiles, load_worker_config
 from app.features.threads.growth.evaluator import GrowthEvaluator
 from app.features.threads.growth.runner import GrowthRunner
 from app.features.threads.growth.scanner import ScannedPost, is_vietnamese
@@ -37,6 +40,27 @@ from app.utils.logger import setup_shared_logger
 logger = logging.getLogger("threads_growth")
 
 TICK_SEC = 60
+FOLLOWUP_EVERY = timedelta(minutes=20)   # nhịp kiểm người hỏi lại
+FOLLOWUP_RECHECK = timedelta(hours=3)    # mỗi reply của mình kiểm lại tối đa 3 giờ / lần
+FOLLOWUP_PAGES = 6                       # số reply của mình mở mỗi nhịp
+OWN_POST_WINDOW = timedelta(hours=2)     # khung giờ đăng bài riêng còn hiệu lực bao lâu
+OWN_POST_RETRY = timedelta(minutes=15)   # AI lỗi → thử lại trong khung
+REWRITE_EVERY = timedelta(minutes=30)    # thử cho AI viết lại bài đang dùng câu mẫu
+# 06/11: Playwright treo ngay sau khi mở trình duyệt (16 phút không một dòng log, mọi lệnh đều có timeout 60s) — PM2 không
+# biết để restart. Mọi vòng lặp của worker đều đi qua ``sleep`` → hẹn giờ lại ở đó; quá WATCHDOG_SEC không sleep = treo.
+WATCHDOG_SEC = 20 * 60
+
+
+def _hung(signum, frame) -> None:  # noqa: ARG001
+    logger.error("growth: worker không tiến triển %s phút — thoát để PM2 khởi động lại", WATCHDOG_SEC // 60)
+    os._exit(3)
+
+
+def watchdog_sleep(seconds: float) -> None:
+    """``time.sleep`` có hẹn giờ chống treo (chỉ dùng khi chạy thật, không dùng trong test)."""
+    signal.alarm(int(seconds) + WATCHDOG_SEC)
+    time.sleep(seconds)
+    signal.alarm(WATCHDOG_SEC)
 
 
 _DEAD_BROWSER_HINTS = ("has been closed", "browser has disconnected", "target closed")
@@ -69,10 +93,18 @@ class CycleReport:
     quota_note: str = ""
     errors: List[str] = field(default_factory=list)
     posted_items: List[Dict] = field(default_factory=list)
+    own_posts: List[Dict] = field(default_factory=list)
+    followups: List[Dict] = field(default_factory=list)
+    rewritten: int = 0
     customers: Optional[Dict] = None
 
+    @property
+    def acted(self) -> bool:
+        return bool(self.posted or self.failed or self.own_posts or self.followups)
+
     def as_dict(self) -> Dict:
-        return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items)}
+        return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items),
+                "own_posts": list(self.own_posts), "followups": list(self.followups)}
 
 
 class GrowthWorker:
@@ -92,6 +124,9 @@ class GrowthWorker:
         self.sleep = sleep
         self.now = now
         self.last_scan: Optional[datetime] = None
+        self.last_followup: Optional[datetime] = None
+        self.last_rewrite: Optional[datetime] = None
+        self.own_retry_at: Optional[datetime] = None
 
     # ── tiện ích ───────────────────────────────────────────────
     def _profile_path(self) -> Optional[str]:
@@ -237,6 +272,128 @@ class GrowthWorker:
                 if i < len(queue) - 1:
                     self.sleep(self.runner.next_delay_sec())
 
+    # ── bài riêng (PLAN-159) ───────────────────────────────────
+    def _own_post_slot(self, cfg: WorkerConfig) -> Optional[str]:
+        """Khung giờ đang tới lượt mà chưa đăng: ``"2026-11-06 20:15"`` — lệch ngẫu nhiên cố định 0–25 phút / khung."""
+        now_vn = self.now().astimezone(content.ICT)
+        day = now_vn.date().isoformat()
+        for raw in str(cfg.own_post_times).replace(";", ",").split(","):
+            raw = raw.strip()
+            try:
+                hh, mm = (int(x) for x in raw.split(":"))
+                base = now_vn.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            except ValueError:
+                continue
+            slot = f"{day} {hh:02d}:{mm:02d}"
+            jitter = int(hashlib.md5(slot.encode()).hexdigest(), 16) % 26
+            if base + timedelta(minutes=jitter) <= now_vn < base + OWN_POST_WINDOW:
+                if not self.runner.storage.own_post_slot_done(slot):
+                    return slot
+        return None
+
+    def post_own(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> None:
+        if not cfg.own_posts_enabled or (self.own_retry_at and self.now() < self.own_retry_at):
+            return
+        slot = self._own_post_slot(cfg)
+        if not slot:
+            return
+        storage = self.runner.storage
+        draft = asyncio.run(content.write_own_post(self.now(), storage.own_post_refs(self.now() - timedelta(days=3))))
+        if draft is None:
+            self.own_retry_at = self.now() + OWN_POST_RETRY  # AI lỗi / hết deal mới → thử lại trong khung
+            logger.info("growth: bài riêng khung %s chưa viết được — thử lại sau", slot)
+            return
+        try:
+            with self.browser_factory(profile_path) as browser:
+                url = browser.create_post(draft.text)
+        except ThreadsSessionInvalidError:
+            raise
+        except Exception as exc:
+            if browser_dead(exc):
+                self.own_retry_at = self.now() + OWN_POST_RETRY
+                return
+            storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "failed", error=str(exc))
+            report.errors.append(f"bài riêng: {exc}")
+            logger.warning("growth: đăng bài riêng lỗi: %s", exc)
+            return
+        storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "posted", post_url=url)
+        report.own_posts.append({"kind": draft.kind, "url": url, "text": draft.text})
+        logger.info("growth: đã đăng bài riêng (%s) → %s", draft.kind, url)
+
+    # ── trả lời người hỏi lại (PLAN-159) ───────────────────────
+    def followups(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> None:
+        now = self.now()
+        if not cfg.followup_enabled or (self.last_followup and now - self.last_followup < FOLLOWUP_EVERY):
+            return
+        self.last_followup = now
+        storage = self.runner.storage
+        left = cfg.followup_max_per_day - storage.count_followups_since(now - timedelta(days=1))
+        if left <= 0:
+            return
+        targets = storage.followup_targets(now - timedelta(hours=cfg.followup_lookback_hours),
+                                           now - FOLLOWUP_RECHECK, FOLLOWUP_PAGES)
+        if not targets:
+            return
+        with self.browser_factory(profile_path) as browser:
+            for target in targets:
+                try:
+                    comments = browser.replies_to_me(target["reply_url"])
+                except ThreadsSessionInvalidError:
+                    raise
+                except Exception as exc:
+                    if browser_dead(exc):
+                        return
+                    logger.warning("growth: đọc trả lời dưới #%s lỗi: %s", target["id"], exc)
+                    continue
+                ai_down = False
+                for c in comments:
+                    if left <= 0:
+                        return  # hết suất hôm nay: KHÔNG đánh dấu đã kiểm — người còn lại trả lời ngày mai
+                    if storage.followup_seen(c.thread_id):
+                        continue
+                    our = target.get("actual_reply") or target["suggested_reply"]
+                    verdict, text = asyncio.run(content.write_followup(TargetBot(target["target_bot"]), our, c.content))
+                    if verdict == "error":
+                        ai_down = True  # AI lỗi: để lần sau (không đánh dấu đã kiểm reply này)
+                        break
+                    if verdict == "skip":
+                        storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url, "skipped")
+                        continue
+                    try:
+                        url = browser.reply(c.post_url, text)
+                    except ThreadsSessionInvalidError:
+                        raise
+                    except Exception as exc:
+                        if browser_dead(exc):
+                            return
+                        storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url, "failed",
+                                              reply_text=text, error=str(exc))
+                        continue
+                    storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url, "answered",
+                                          reply_text=text, reply_url=url)
+                    left -= 1
+                    report.followups.append({"author": c.author, "comment": c.content, "text": text,
+                                             "url": url or c.post_url, "bot": target["target_bot"]})
+                    logger.info("growth: đã trả lời lại @%s dưới #%s", c.author, target["id"])
+                    self.sleep(self.runner.next_delay_sec())
+                if ai_down:
+                    return
+                storage.mark_followup_checked(target["id"], now)
+
+    # ── AI viết lại bài đang dùng câu mẫu ──────────────────────
+    def rewrite_fallbacks(self, cfg: WorkerConfig, report: CycleReport) -> None:
+        now = self.now()
+        if self.last_rewrite and now - self.last_rewrite < REWRITE_EVERY:
+            return
+        self.last_rewrite = now
+        for row in self.runner.storage.fallback_pending(limit=5):
+            post = asyncio.run(self.runner.switch_variant(row["id"], ABVariant(row["variant"])))
+            if not post or str(post.get("ai_analysis") or "").startswith("Fallback"):
+                return  # AI vẫn lỗi — đợi lượt sau
+            report.rewritten += 1
+            if not cfg.telegram_review and row["relevance_score"] >= cfg.auto_post_min_relevance:
+                self.runner.approve_and_prepare(row["id"])
+
     # ── nhịp ───────────────────────────────────────────────────
     def tick(self, force_scan: bool = False) -> Optional[CycleReport]:
         cfg = load_worker_config()
@@ -253,14 +410,17 @@ class GrowthWorker:
             if due:
                 self.last_scan = self.now()
                 self.ingest(self.scan(profile, cfg, report), cfg, report)
+            self.rewrite_fallbacks(cfg, report)
             self.post_queue(profile, report)
+            self.post_own(profile, cfg, report)
+            self.followups(profile, cfg, report)
         except ThreadsSessionInvalidError as exc:
             self._disable(str(exc))
             report.errors.append(str(exc))
             return report
-        if due or report.posted or report.failed:
+        if due or report.acted:
             logger.info("growth: vòng xong %s", report.as_dict())
-            if report.posted or report.failed:
+            if report.acted:
                 try:
                     report.customers = conversions.report()
                 except Exception as exc:  # báo cáo khách không được làm hỏng vòng
@@ -286,12 +446,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Threads Growth worker")
     parser.add_argument("--once", action="store_true", help="Chạy đúng một vòng (quét + đăng) rồi thoát")
     args = parser.parse_args(argv)
-    worker = GrowthWorker()
     if args.once:
+        worker = GrowthWorker()
         report = worker.tick(force_scan=True)
         print(report.as_dict() if report else "Không chạy (chưa đăng nhập / profile đang mở)")
         return 0
-    worker.run_forever()
+    signal.signal(signal.SIGALRM, _hung)
+    signal.alarm(WATCHDOG_SEC)
+    GrowthWorker(sleep=watchdog_sleep).run_forever()
     return 0
 
 
