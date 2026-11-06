@@ -372,9 +372,18 @@ def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str
     )
 
 
-def too_many_topups(limit: int) -> str:
-    return (f"⏳ Bạn đang có {limit} mã thanh toán chưa trả. Dùng lại mã cũ (cùng số tiền bot gửi lại đúng mã đó), "
-            "hoặc đợi mã cũ tự huỷ sau 24 giờ. Đã chuyển khoản mà chưa thấy tiền thì bấm ☎️ Hỗ trợ.")
+def topup_pending_exists(topup: Topup, product_name: str | None) -> str:
+    what = f"📦 {esc(product_name)} × {topup.intent_quantity}\n" if product_name else ""
+    return (
+        "⏳ <b>Bạn đang có 1 mã thanh toán chờ xác nhận</b>\n\n"
+        f"{what}💰 {vnd(topup.amount)} · nội dung <code>{topup.code}</code>\n\n"
+        "Mỗi lần chỉ dùng 1 mã: thanh toán mã này và đợi xác nhận rồi mới tạo mã khác.\n"
+        "⚠️ Đã chuyển khoản rồi thì <b>đừng huỷ</b>, chỉ cần đợi shop xác nhận. "
+        "Chưa chuyển và muốn đổi món / số tiền thì bấm ❌ Huỷ mã này."
+    )
+
+
+TOPUP_CANCELLED_BY_USER = "✅ Đã huỷ mã thanh toán. Giờ bạn tạo mã mới được rồi."
 
 
 TOPUP_UNAVAILABLE = "💰 Shop chưa cài tài khoản nhận tiền. Nhắn admin để nạp."
@@ -737,6 +746,11 @@ def admin_sale(order: Order, user: User | None) -> str:
     via = " qua API" if order.source == "api" else ""
     code = f" · mã {esc(order.upstream_order_id)}" if order.upstream_order_id else ""
     return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
+
+
+def admin_topup_cancelled_by_user(topup: Topup, user: User) -> str:
+    return (f"❌ {esc(user.label)} tự huỷ mã nạp #{topup.id} {topup.code} ({vnd(topup.amount)}). "
+            "Lỡ tiền mã này vẫn về thì bot vẫn cộng vào ví khách (không tự mua).")
 
 
 def admin_after_credit_failed(topup: Topup) -> str:

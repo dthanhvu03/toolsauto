@@ -43,7 +43,6 @@ WAITING_FUNDS_CHECK_SEC = 30  # có đơn chờ ví: đọc số dư FatCat mỗ
 TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
 TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
 WAITING_REFUND_SEC = 6 * 3600  # đơn chờ ví quá 6 giờ (admin chưa nạp) → tự hoàn về ví khách
-MAX_PENDING_TOPUPS = 3  # chống spam: mỗi khách tối đa 3 mã nạp đang chờ (mỗi mã là 1 tin báo admin)
 MAX_TOPUP_VND = 50_000_000
 SEND_RETRY_SEC = 2
 
@@ -266,6 +265,19 @@ class StoreBot:
             self.pay_by_qr(chat_id, message_id, user, int(parts[1]), int(parts[2]))
         elif parts[0] == "ta":
             self.create_topup(chat_id, user, int(parts[1]))
+        elif parts[0] == "tv":
+            topup = self.repo.get_topup(int(parts[1]))
+            if topup is None or topup.user_id != user.user_id or topup.status != "pending":
+                return "Mã này đã được xử lý hoặc đã huỷ.", True
+            self.send_topup(chat_id, topup)
+        elif parts[0] == "tu":
+            topup = self.repo.get_topup(int(parts[1]))
+            if topup is None or topup.user_id != user.user_id or not self.repo.cancel_topup(topup.id, "user"):
+                return "Mã này đã được xử lý hoặc đã huỷ.", True
+            self._show(chat_id, message_id, msg.TOPUP_CANCELLED_BY_USER, keyboard([button("🛒 Mua hàng", "shop")],
+                                                                                    [button("🏠 Trang chủ", "home")]))
+            self.notify_admins(msg.admin_topup_cancelled_by_user(topup, user), quiet=True)
+            return "Đã huỷ mã.", False
         elif data == "tx":
             self._set_await(user.user_id, "topup")
             self._show(chat_id, message_id, msg.ask_topup_amount(self.settings.min_topup_vnd),
@@ -582,29 +594,50 @@ class StoreBot:
             return
         product_id = product.id if product else None
         reused = self.repo.find_pending_topup(user.user_id, amount, product_id, quantity, TOPUP_REUSE_SEC)
-        if reused is None and self.repo.count_pending_topups(user.user_id) >= MAX_PENDING_TOPUPS:
-            self.tg.send_message(chat_id, msg.too_many_topups(MAX_PENDING_TOPUPS))
+        if reused is not None:
+            self.send_topup(chat_id, reused)  # bấm lại đúng món / số tiền: gửi lại mã cũ, admin đã có tin
             return
-        topup = reused or self.repo.create_topup(user.user_id, amount, product_id, quantity,
-                                                  product.price if product else None)
+        # Mỗi khách 1 mã đang chờ: trả / được xác nhận / huỷ xong mới tạo mã khác — không lẫn mã, không spam admin.
+        waiting = self.repo.latest_pending_topup(user.user_id)
+        if waiting is not None:
+            self.show_pending_topup(chat_id, None, waiting)
+            return
+        topup = self.repo.create_topup(user.user_id, amount, product_id, quantity,
+                                       product.price if product else None)
+        self.send_topup(chat_id, topup)
         auto = self.settings.sepay_webhook_key is not None
         product_name = product.name if product else None
-        text = msg.topup_instructions(topup, bank.bank_name, bank.account_no, bank.owner, auto, product_name)
-        markup = keyboard([button("🏠 Trang chủ", "home")])
-        png = None
-        try:
-            png = vietqr.qr_png(vietqr.build_payload(bank.bin_code, bank.account_no, amount, topup.code))
-        except vietqr.VietQRError:
-            logger.exception("[Store] tạo VietQR lỗi")
-        if png is None or not self.tg.send_photo(chat_id, png, text, markup):
-            self.tg.send_message(chat_id, text, markup)
-        if reused:
-            return  # admin đã có tin + nút xác nhận cho mã này
         self.notify_admins(
             msg.admin_topup(topup, user, auto, product_name),
             keyboard([button("✅ Đã nhận tiền", f"a:tc:{topup.id}"), button("❌ Huỷ", f"a:tx:{topup.id}")]),
             quiet=auto,
         )
+
+    def send_topup(self, chat_id: int, topup: Topup) -> None:
+        """Gửi mã QR + hướng dẫn chuyển khoản của một mã nạp."""
+        bank = self.settings.bank
+        if bank is None:
+            self.tg.send_message(chat_id, msg.TOPUP_UNAVAILABLE)
+            return
+        auto = self.settings.sepay_webhook_key is not None
+        product = self.repo.get_product(topup.intent_product_id) if topup.intent_product_id else None
+        text = msg.topup_instructions(topup, bank.bank_name, bank.account_no, bank.owner, auto,
+                                      product.name if product else None)
+        markup = keyboard([button("🏠 Trang chủ", "home")])
+        png = None
+        try:
+            png = vietqr.qr_png(vietqr.build_payload(bank.bin_code, bank.account_no, topup.amount, topup.code))
+        except vietqr.VietQRError:
+            logger.exception("[Store] tạo VietQR lỗi")
+        if png is None or not self.tg.send_photo(chat_id, png, text, markup):
+            self.tg.send_message(chat_id, text, markup)
+
+    def show_pending_topup(self, chat_id: int, message_id: int | None, topup: Topup) -> None:
+        product = self.repo.get_product(topup.intent_product_id) if topup.intent_product_id else None
+        self._show(chat_id, message_id, msg.topup_pending_exists(topup, product.name if product else None),
+                   keyboard([button("📱 Xem lại mã", f"tv:{topup.id}")],
+                            [button("❌ Huỷ mã này (chưa chuyển khoản)", f"tu:{topup.id}")],
+                            [button("🏠 Trang chủ", "home")]))
 
     def show_account(self, chat_id: int, message_id: int | None, user: User) -> None:
         key = next((k for k in self.repo.list_keys() if k.user_id == user.user_id), None)

@@ -968,11 +968,9 @@ def test_pressing_qr_again_reuses_code_and_old_codes_expire(fatcat, repo):
     assert len(pending) == 1
     assert sum("Để mua" in h for h in telegram.texts_to(ADMIN)) == 1
     assert sum(pending[0].code in caption for _, caption in telegram.photos) == 2
-    store.handle_update(_click(BUYER, f"bq:{gem.id}:2"))  # khác số lượng → mã mới
-    assert len(repo.pending_topups()) == 2
 
     assert repo.expire_topups(3600) == 0
-    assert repo.expire_topups(-1) == 2
+    assert repo.expire_topups(-1) == 1
     assert repo.pending_topups() == []
     assert repo.get_topup(pending[0].id).status == "cancelled"
 
@@ -1029,20 +1027,59 @@ def test_delivery_shows_upstream_order_code_and_items_verbatim(fatcat, repo):
 
 # ---------- spam / lỗi giữa chừng (06/11) ----------
 
-def test_pending_topups_capped_per_customer_and_max_amount(fatcat, repo):
+def test_one_pending_qr_per_customer_until_confirmed_or_cancelled(fatcat, repo):
     store, telegram, fake, products = fatcat
-    for amount in (50_000, 100_000, 200_000):
-        store.handle_update(_click(BUYER, f"ta:{amount}"))
-    store.handle_update(_click(BUYER, "ta:500000"))  # mã thứ 4 khác số tiền → từ chối
-    assert len(repo.pending_topups()) == 3
-    assert any("3 mã thanh toán chưa trả" in h for h in telegram.texts_to(BUYER))
-    store.handle_update(_click(BUYER, "ta:100000"))  # cùng số tiền → gửi lại mã cũ, không tính là mã mới
-    assert len(repo.pending_topups()) == 3
-    assert sum("Yêu cầu nạp" in h for h in telegram.texts_to(ADMIN)) == 3
+    gem, gpt = products[49], products[34]
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    first = repo.pending_topups()[0]
+    for data in (f"bq:{gem.id}:2", f"bq:{gpt.id}:1", "ta:100000"):  # món / số lượng / nạp khác → không tạo mã
+        store.handle_update(_click(BUYER, data))
+    assert [t.id for t in repo.pending_topups()] == [first.id]
+    assert sum("Yêu cầu nạp" in h for h in telegram.texts_to(ADMIN)) == 1
+    screen = telegram.edits[-1] if telegram.edits else None
+    shown = [h for h in telegram.texts_to(BUYER) if "1 mã thanh toán chờ xác nhận" in h]
+    shown += [screen[2]] if screen and "1 mã thanh toán chờ xác nhận" in screen[2] else []
+    assert shown and first.code in shown[-1] and "đừng huỷ" in shown[-1]
+
+    store.handle_update(_click(BUYER, f"tv:{first.id}"))  # xem lại mã
+    assert first.code in telegram.photos[-1][1]
+    store.handle_update(_click(RESELLER, f"tu:{first.id}", "Zusem10"))  # người khác không huỷ được
+    assert repo.get_topup(first.id).status == "pending"
+    store.handle_update(_click(BUYER, f"tu:{first.id}"))
+    assert repo.get_topup(first.id).status == "cancelled"
+    assert any("tự huỷ mã nạp" in h for h in telegram.texts_to(ADMIN))
+    store.handle_update(_click(BUYER, f"bq:{gpt.id}:1"))  # huỷ xong tạo được mã mới
+    assert len(repo.pending_topups()) == 1 and repo.pending_topups()[0].intent_product_id == gpt.id
+
+    admin_ok = repo.pending_topups()[0]
+    store.handle_update(_click(ADMIN, f"a:tc:{admin_ok.id}", "boss"))  # được xác nhận → lại tạo được mã
+    store.handle_update(_click(BUYER, "ta:50000"))
+    assert len(repo.pending_topups()) == 1
 
     store.handle_update(_click(RESELLER, "tx"))
     store.handle_update(_private(RESELLER, "999tr", "Zusem10"))
     assert any("tối đa 50.000.000đ" in h for h in telegram.texts_to(RESELLER))
+
+
+def test_late_payment_to_cancelled_code_still_credited_without_buying(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller))
+    gem = products[49]
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    topup = repo.pending_topups()[0]
+    store.handle_update(_click(BUYER, f"tu:{topup.id}"))  # khách lỡ huỷ sau khi đã chuyển
+    hook = {"id": 9100, "transferType": "in", "transferAmount": topup.amount, "content": topup.code}
+    client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    assert repo.get_user(BUYER).balance == topup.amount  # vào ví
+    assert repo.list_orders(BUYER) == [] and fake.calls == []  # không tự mua món cũ
+    assert not any("không khớp" in h for h in telegram.texts_to(ADMIN))
+
+    admin_cancelled = repo.create_topup(BUYER, 30_000)
+    repo.cancel_topup(admin_cancelled.id, "admin:1")
+    hook = {"id": 9101, "transferType": "in", "transferAmount": 30_000, "content": admin_cancelled.code}
+    client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    assert repo.get_user(BUYER).balance == topup.amount  # mã admin huỷ → không tự cộng
+    assert any("không khớp" in h for h in telegram.texts_to(ADMIN))
 
 
 def test_sepay_error_after_credit_alerts_admin_and_returns_ok(fatcat, repo, monkeypatch):

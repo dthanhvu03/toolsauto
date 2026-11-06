@@ -181,10 +181,12 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         if amount <= 0 or repo.bank_ref_seen(bank_ref):
             return {"success": True}
         topup = repo.find_topup_in_text(content)
-        if topup is None or topup.status != "pending":
+        newly = False
+        if topup is not None:
+            topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
+        if not newly:  # không có mã / mã đã trả / admin đã huỷ → anh xử lý tay
             notifier.notify_admins(msg.admin_unmatched_transfer(amount, content))
             return {"success": True}
-        topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
         if newly:
             # Tiền đã cộng (ghi DB xong). Bước báo khách / tự mua lỗi thì không trả 500 — SePay gửi lại cũng
             # không cộng nữa (bank_ref) nên phải báo admin xử lý tay thay vì im lặng.

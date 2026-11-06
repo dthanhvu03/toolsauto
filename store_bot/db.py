@@ -790,10 +790,12 @@ class StoreRepository:
             ).fetchone()
         return _topup(row) if row else None
 
-    def count_pending_topups(self, user_id: int) -> int:
+    def latest_pending_topup(self, user_id: int) -> Topup | None:
         with self._read() as conn:
-            return conn.execute("SELECT COUNT(*) FROM topups WHERE user_id = ? AND status = 'pending'",
-                                (user_id,)).fetchone()[0]
+            row = conn.execute(
+                "SELECT * FROM topups WHERE user_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", (user_id,)
+            ).fetchone()
+        return _topup(row) if row else None
 
     def expire_topups(self, older_than_sec: int) -> int:
         """Huỷ mã nạp chờ quá lâu. Khách lỡ chuyển vào mã đã huỷ thì webhook báo admin «không khớp» như cũ."""
@@ -841,15 +843,19 @@ class StoreRepository:
             already_used = bank_ref and conn.execute(
                 "SELECT 1 FROM topups WHERE bank_ref = ?", (bank_ref,)
             ).fetchone()
-            if row["status"] != "pending" or already_used:
+            # Khách tự huỷ / mã quá 24 giờ mà tiền vẫn về: vẫn cộng vào ví, nhưng bỏ ý định mua (khách có thể đã
+            # chọn món khác). Mã admin huỷ thì không tự cộng.
+            revived = row["status"] == "cancelled" and row["resolved_by"] in ("user", "expired")
+            if (row["status"] != "pending" and not revived) or already_used:
                 return _topup(row), _balance(conn, row["user_id"]), False
             amount = row["amount"] if credited is None else credited
             if amount <= 0:
                 raise StoreError("bad_amount")
             conn.execute(
-                """UPDATE topups SET status = 'paid', credited = ?, bank_ref = ?, resolved_by = ?, resolved_at = ?
+                """UPDATE topups SET status = 'paid', credited = ?, bank_ref = ?, resolved_by = ?, resolved_at = ?,
+                          intent_product_id = CASE WHEN ? THEN NULL ELSE intent_product_id END
                    WHERE id = ?""",
-                (amount, bank_ref, by, utcnow(), topup_id),
+                (amount, bank_ref, by, utcnow(), revived, topup_id),
             )
             balance = _move_money(conn, row["user_id"], amount, "topup", f"topup:{row['code']}", by)
             return _topup(conn.execute("SELECT * FROM topups WHERE id = ?", (topup_id,)).fetchone()), balance, True
