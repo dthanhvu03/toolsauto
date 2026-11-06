@@ -851,3 +851,19 @@ def test_watchdog_sleep_rearms_alarm(monkeypatch):
     monkeypatch.setattr(worker.time, "sleep", slept.append)
     worker.watchdog_sleep(300)
     assert slept == [300] and alarms == [300 + worker.WATCHDOG_SEC, worker.WATCHDOG_SEC]
+
+
+def test_own_post_prompt_has_cashbot_buy_rules_and_cart_note(monkeypatch):
+    prompts = []
+
+    async def _gen(prompt, *, purpose="generic"):
+        prompts.append(prompt)
+        return "Deal nè mn\n- Lau nhà 110k", {"provider": "fake"}  # AI «quên» nhắc giỏ hàng
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: [content.Deal(7, "Lau nhà", 110000, 140000, 0, 1)])
+    draft = asyncio.run(content.write_own_post(datetime(2026, 11, 20, tzinfo=timezone.utc), set()))
+    assert "xoá đi rồi mở lại bằng link của bot" in prompts[0]  # nguyên văn quy tắc CART_RULE của Cashbot
+    lines = draft.text.split("\n")
+    assert lines[-2] == content.CART_NOTE and lines[-1].endswith("start=threads_cb_post")
+    assert content.with_buy_note("nhớ xoá giỏ hàng trước nha") == "nhớ xoá giỏ hàng trước nha"

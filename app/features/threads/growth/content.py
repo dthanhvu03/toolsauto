@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from cashback_bot import sale_calendar
+from cashback_bot.messages import BUY_RULE, CART_RULE, ITEM_RULE
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.features.threads.growth.config import TargetBot, channel_url, load_profiles
@@ -98,6 +99,26 @@ def _countdown(event: sale_calendar.SaleEvent, today: date) -> str:
     return f"còn {left} ngày nữa là {event.label}"
 
 
+def _plain(rule: str) -> str:
+    return re.sub(r"<[^>]+>", "", rule).lstrip("• ").strip()
+
+
+# Lưu ý để đơn được ghi nhận hoàn — lấy NGUYÊN từ Cashbot (trang 🛡️ Lưu ý trước khi mua), sửa ở bot là bài viết theo.
+# Chủ bot 06/11: bài đăng phải nhắc «xoá giỏ hàng → bấm link hoàn → thêm lại giỏ».
+BUY_NOTES = "\n".join(f"- {_plain(r)}" for r in (CART_RULE, BUY_RULE, ITEM_RULE))
+_NOTES_ASK = f"""BẮT BUỘC có đoạn «lưu ý trước khi mua» (2–3 dòng ngắn, giữ đúng ý, viết lại theo giọng bài):
+{BUY_NOTES}
+Ý quan trọng nhất phải nói rõ: món đang nằm sẵn trong giỏ thì XOÁ khỏi giỏ trước, rồi mở lại món đó bằng link bot gửi
+(bấm nút Mua của bot) rồi mới thêm vào giỏ / đặt — không thì đơn không được hoàn."""
+
+CART_NOTE = "📌 Lưu ý: món có sẵn trong giỏ thì xoá đi, mở lại bằng link bot gửi rồi mới thêm giỏ / đặt nha, không là ko được hoàn"
+
+
+def with_buy_note(text: str) -> str:
+    """AI quên nhắc chuyện giỏ hàng → chèn câu lưu ý chuẩn (đơn không ghi nhận là khách mất tiền hoàn)."""
+    return text if "giỏ" in text.lower() else f"{text.rstrip()}\n{CART_NOTE}"
+
+
 _STYLE = """Văn phong — viết y như người thật trên Threads, không như quảng cáo:
 - Giọng chia sẻ cá nhân, xưng t / mình, gọi mấy bà / mn. Teencode vừa phải (ko, đc, nha, á, nè). Tối đa 2 emoji.
 - KHÔNG «hời phết», «đỉnh chóp», «đừng bỏ lỡ», không dấu chấm than liên tục, không hashtag.
@@ -121,7 +142,8 @@ Món:
 Cuối bài nhắc: muốn mua thì tìm món trên Shopee, copy link dán vào bot Telegram {handle} để được hoàn tiền,
 và để nguyên link này: {link}
 
-Độ dài 3–6 dòng ngắn, mỗi món 1 dòng (tên rút gọn dễ hiểu + giá). Số hoàn là «dự kiến».
+Độ dài 6–9 dòng ngắn, mỗi món 1 dòng (tên rút gọn dễ hiểu + giá). Số hoàn là «dự kiến».
+{_NOTES_ASK}
 {_STYLE}"""
 
 
@@ -132,7 +154,8 @@ Nội dung: 2–3 mẹo ngắn thật sự hữu ích (gom giỏ trước, lưu 
 khi chốt) và nhắc: trước khi thanh toán thì copy link món dán qua bot Telegram {handle} để được hoàn thêm tiền
 về tài khoản ngân hàng. Để nguyên link: {link}
 
-Độ dài 3–6 dòng ngắn.
+Độ dài 6–9 dòng ngắn.
+{_NOTES_ASK}
 {_STYLE}"""
 
 
@@ -178,7 +201,7 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
     if event and sale_ref not in used_refs:
         text = await _ai(_sale_prompt(event, today, link, profile.handle))
         if text:
-            return OwnPostDraft("sale", clean_post(text, link), sale_ref)
+            return OwnPostDraft("sale", clean_post(with_buy_note(text), link), sale_ref)
     fresh = [d for d in load_deals(now, deal_path) if f"deal:{d.item_id}" not in used_refs][:3]
     if not fresh:
         return None
@@ -186,7 +209,7 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
     text = await _ai(_deal_prompt(fresh, link, profile.handle, sale_line))
     if not text:
         return None
-    return OwnPostDraft("deal", clean_post(text, link), ",".join(f"deal:{d.item_id}" for d in fresh))
+    return OwnPostDraft("deal", clean_post(with_buy_note(text), link), ",".join(f"deal:{d.item_id}" for d in fresh))
 
 
 _NOT_WORTH = re.compile(r"^\W*$")
@@ -207,7 +230,8 @@ Có người trả lời lại bạn:
 
 Nếu họ hỏi / tò mò / muốn thử về {profile.name} ({profile.handle}) — vd «bot gì», «có thật ko», «dùng sao», «uy tín ko»,
 «link đâu» — thì trả lời ngắn gọn, đúng câu hỏi, thật thà (bot đang chạy thật; tiền hoàn là ước tính, về ví trong bot rồi rút
-về tài khoản ngân hàng). Cần link thì đưa: {link}
+về tài khoản ngân hàng). Hỏi cách dùng thì nhắc: dán link món vào bot, bấm nút Mua của bot rồi đặt; món có sẵn
+trong giỏ thì xoá đi, mở lại bằng link bot rồi mới thêm giỏ. Cần link thì đưa: {link}
 Nếu họ chỉ cảm ơn / thả cảm xúc / chê / cãi / spam / bán hàng cạnh tranh / không liên quan thì chỉ xuất đúng chữ: SKIP
 
 Văn phong: 1–2 câu, tối đa 200 ký tự, như người thật nhắn qua lại, teencode vừa phải, không quảng cáo, không chữ «VietQR».
