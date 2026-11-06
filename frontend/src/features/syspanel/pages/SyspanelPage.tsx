@@ -1,3 +1,4 @@
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
@@ -14,6 +15,7 @@ export function SyspanelPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
+        actions={<ScreenSettingsButton screen="syspanel" />}
         title="Panel hệ thống"
         subtitle="Tiến trình đang chạy (bật / tắt), RAM / CPU / GPU, ổ đĩa — cookie Gemini vẫn ở Classic"
         classicHref="/syspanel"

@@ -1,3 +1,4 @@
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
@@ -47,7 +48,8 @@ export function AiStudioPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="AI Studio" subtitle="Sửa prompt ngay trên SPA" classicHref="/app/ai-studio" />
+      <PageHeader
+        actions={<ScreenSettingsButton screen="ai-studio" />} title="AI Studio" subtitle="Sửa prompt ngay trên SPA" classicHref="/app/ai-studio" />
       <ActionMsg text={msg} />
       <QueryBody
         isLoading={query.isLoading}

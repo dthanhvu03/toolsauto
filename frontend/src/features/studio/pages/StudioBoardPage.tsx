@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/shared/lib/cn";
 import { ghostBtnClass } from "@/shared/ui/controls";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { Toast } from "@/shared/ui/Toast";
@@ -38,6 +39,7 @@ export function StudioBoardPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
+        actions={<ScreenSettingsButton screen="studio" />}
         title="Studio"
         subtitle={d ? `${count(["REVIEW"])} video chờ duyệt${d.tasks_pending ? ` · ${d.tasks_pending} việc đang chạy` : ""}` : "—"}
       />

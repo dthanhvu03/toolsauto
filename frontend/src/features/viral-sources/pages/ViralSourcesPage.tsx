@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
@@ -14,7 +15,8 @@ export function ViralSourcesPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Nguồn video" subtitle={q.data ? `${q.data.total} kênh` : "—"} classicHref="/app/viral/sources" />
+      <PageHeader
+        actions={<ScreenSettingsButton screen="viral-sources" />} title="Nguồn video" subtitle={q.data ? `${q.data.total} kênh` : "—"} classicHref="/app/viral/sources" />
       <ActionMsg text={q.msg} />
       <form
         className="mt-4 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-4"

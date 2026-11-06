@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Film, Search, Settings, Upload } from "lucide-react";
+import { Film, Search, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ghostBtnClass, inputClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Toast } from "@/shared/ui/Toast";
 import * as api from "../api/studioApi";
@@ -212,21 +213,18 @@ export function StudioDocPage() {
     "Đã xếp dựng bản xem thử (bỏ qua quyền — không dùng để đăng)."
   );
 
-  const settingsUrl = cfg.data?.settings_url ?? "/app/settings";
   const withImage = detail?.doc.shots.filter((s) => s.selected).length ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
+        actions={<ScreenSettingsButton screen="studio-doc" />}
         title="Audio → Documentary"
         subtitle="Tải audio · chép lời · chia cảnh theo lời · gắn ảnh (tải lên hoặc tìm trên internet) · dựng video"
       />
       <Toast text={toast.text} seq={toast.seq} />
       <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
         <Link to="/app/go/studio" className="underline">← Studio</Link>
-        <a href={settingsUrl} className="inline-flex items-center gap-1 underline">
-          <Settings className="size-3.5" /> Cài đặt Audio→Doc
-        </a>
         {cfg.data ? (
           <span>
             Khung {cfg.data.canvas} · dựng {cfg.data.preview_sec ? `${cfg.data.preview_sec}s đầu` : "toàn bộ audio"} · nguồn ảnh:{" "}
