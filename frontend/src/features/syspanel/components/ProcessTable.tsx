@@ -10,6 +10,7 @@ import type { ProcessAction, ProcessApp } from "../types/syspanel.types";
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   online: { label: "Đang chạy", tone: "bg-emerald-100 text-emerald-800" },
+  // systemd trả "activating" khi đang khởi động lại sau lỗi (Restart=always)
   stopped: { label: "Đã tắt", tone: "bg-slate-200 text-slate-600" },
   stopping: { label: "Đang tắt…", tone: "bg-amber-100 text-amber-900" },
   launching: { label: "Đang bật…", tone: "bg-sky-100 text-sky-800" },
@@ -97,6 +98,44 @@ function AppRow({
         ) : null}
       </div>
     </li>
+  );
+}
+
+/** Bot chạy bằng systemd (cashback, AI Pass Store): chỉ xem — chủ bot tự restart bằng lệnh ghi bên dưới. */
+function ServicesPanel({ services, error, totalMb }: { services: ProcessApp[]; error: string | null; totalMb: number }) {
+  if (!services.length && !error) return null;
+  const groups = services.reduce<Record<string, ProcessApp[]>>((acc, s) => {
+    (acc[s.group || s.name] ??= []).push(s);
+    return acc;
+  }, {});
+  return (
+    <Panel className="mt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <span className="text-sm font-semibold">Bot bán hàng (systemd)</span>
+        <span className="text-xs text-slate-400">Chỉ xem — khởi động lại bằng lệnh ghi dưới mỗi bot · tự cập nhật 5 giây</span>
+      </div>
+      {error ? <p className="px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      {Object.entries(groups).map(([group, rows]) => {
+        const down = rows.filter((r) => r.status !== "online").length;
+        return (
+          <div key={group} className="border-b border-slate-100 last:border-b-0">
+            <div className="flex flex-wrap items-center gap-2 bg-slate-50 px-4 py-2">
+              <span className="text-sm font-semibold text-slate-700">{group}</span>
+              <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold",
+                down ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800")}>
+                {down ? `${down} tiến trình không chạy` : "Ổn định"}
+              </span>
+              <code className="ml-auto select-all rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-500">{rows[0].manage}</code>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {rows.map((a) => (
+                <AppRow key={a.name} a={a} totalMb={totalMb} pending={undefined} onAct={() => undefined} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </Panel>
   );
 }
 
@@ -226,6 +265,7 @@ export function ProcessTable() {
           ))}
         </ul>
       </Panel>
+      <ServicesPanel services={d.services ?? []} error={d.services_error ?? null} totalMb={m.mem_total_mb} />
       <Toast text={toast.text} seq={toast.seq} />
     </section>
   );

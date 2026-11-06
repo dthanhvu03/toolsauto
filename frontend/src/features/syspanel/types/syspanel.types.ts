@@ -25,6 +25,9 @@ export type ProcessApp = {
   can_start: boolean;
   can_stop: boolean;
   can_restart: boolean;
+  /** Chỉ có ở bot systemd: nhóm bot + lệnh restart chủ bot tự chạy. */
+  group?: string;
+  manage?: string;
 };
 
 export type ProcessesResponse = {
@@ -37,6 +40,9 @@ export type ProcessesResponse = {
   };
   apps: ProcessApp[];
   error: string | null;
+  /** Bot chạy bằng systemd (cashback, AI Pass Store) — chỉ xem. */
+  services?: ProcessApp[];
+  services_error?: string | null;
 };
 
 export type ProcessAction = "start" | "stop" | "restart";

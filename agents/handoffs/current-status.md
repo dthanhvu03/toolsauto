@@ -11,6 +11,9 @@
 - 06/11 ~08:00: `pm2 start Threads_Growth` + `growth.enabled`=bật. Vòng 1: 127 bài → tự reply #15 (@us28qt/post/DfYWokRnSVW).
   Chủ bot chốt TỰ ĐỘNG HOÀN TOÀN: `growth.auto_post_min_relevance` mặc định 40 (= điểm tối thiểu), `growth.telegram_review`
   mặc định tắt (Telegram chỉ nhận báo cáo vòng có link từng reply). 12 bài chờ cũ (AI viết) đã chuyển «Chờ đăng».
+- Panel hệ thống (/app/go/syspanel): thêm khung «Bot bán hàng (systemd)» CHỈ XEM — cashback-bot, cashback-zalo, store-bot,
+  store-api (trạng thái, RAM, CPU, thời gian chạy, số lần restart, lệnh restart để anh tự chạy); `Threads_Growth` vào danh sách
+  PM2 điều khiển được (sửa luôn test ecosystem khớp danh sách). Web_Dashboard đã restart.
 - Next Action: theo dõi Telegram báo cáo / checkpoint; CHƯA `pm2 save` (Threads_Growth chưa tự lên sau khi WSL khởi động lại —
   hỏi anh trước khi save vì list PM2 còn DB_Backup đang stopped).
   Commit khi anh bảo (gồm cả phần review growth phiên 05/11).

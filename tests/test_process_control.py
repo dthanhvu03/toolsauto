@@ -94,3 +94,43 @@ def test_api(pm2):
     assert r.json() == {"ok": True, "message": "Đang bật Sao lưu DB…"}
     r = api.post("/api/admin/processes/Web_Dashboard/stop")
     assert r.status_code == 400 and "chỉ khởi động lại" in r.json()["detail"]
+
+
+SYSTEMCTL_SHOW = """Id=cashback-bot.service
+ActiveState=active
+SubState=running
+MainPID=0
+NRestarts=2
+MemoryCurrent=110174208
+
+Id=store-bot.service
+ActiveState=failed
+SubState=failed
+MainPID=0
+NRestarts=5
+MemoryCurrent=[not set]
+"""
+
+
+def test_bot_systemd_chi_xem(monkeypatch):
+    monkeypatch.setattr(pc.shutil, "which", lambda name: f"/usr/bin/{name}")
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, SYSTEMCTL_SHOW, "")
+
+    monkeypatch.setattr(pc.subprocess, "run", fake_run)
+    rows, err = pc.services(now=1000.0)
+    assert err is None and calls[0][:2] == ["/usr/bin/systemctl", "show"]
+    cb, st = rows
+    assert (cb["name"], cb["status"], cb["mem_mb"], cb["restarts"]) == ("cashback-bot", "online", 105, 2)
+    assert cb["label"] == "Cashback · Telegram" and "cashback-zalo" in cb["manage"]
+    assert (st["status"], st["mem_mb"]) == ("errored", 0)
+    assert not any(r["can_start"] or r["can_stop"] or r["can_restart"] for r in rows)
+
+
+def test_bot_systemd_khong_co_systemctl(monkeypatch):
+    monkeypatch.setattr(pc.shutil, "which", lambda name: None)
+    rows, err = pc.services()
+    assert rows == [] and "systemd" in err

@@ -18,7 +18,7 @@ import time
 
 import psutil
 
-from app.core.pm2_apps import APP_INFO, PM2_SAFE_NAMES
+from app.core.pm2_apps import APP_INFO, PM2_SAFE_NAMES, SYSTEMD_SERVICES
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,65 @@ def _app(p: dict, now: float) -> dict:
     }
 
 
+_SYSTEMD_STATUS = {"active": "online", "inactive": "stopped", "failed": "errored",
+                   "activating": "launching", "deactivating": "stopping", "reloading": "online"}
+_SYSTEMD_PROPS = "Id,ActiveState,SubState,MainPID,NRestarts,MemoryCurrent"
+# Giữ psutil.Process giữa các lần hỏi để cpu_percent() đo được (lần đầu luôn 0).
+_proc_cache: dict[int, psutil.Process] = {}
+
+
+def _systemctl_show(units: list[str]) -> list[dict[str, str]]:
+    exe = shutil.which("systemctl")
+    if not exe:
+        raise ProcessError("không có systemctl trên máy này")
+    out = subprocess.run([exe, "show", "--no-pager", "-p", _SYSTEMD_PROPS, *units],
+                         capture_output=True, text=True, timeout=10).stdout
+    blocks: list[dict[str, str]] = []
+    for chunk in out.strip().split("\n\n"):
+        row = dict(line.split("=", 1) for line in chunk.splitlines() if "=" in line)
+        if row:
+            blocks.append(row)
+    return blocks
+
+
+def _service(row: dict[str, str], now: float) -> dict:
+    unit = row.get("Id", "").removesuffix(".service")
+    info = SYSTEMD_SERVICES.get(unit, {})
+    status = _SYSTEMD_STATUS.get(row.get("ActiveState", ""), row.get("ActiveState") or "unknown")
+    pid = int(row.get("MainPID") or 0) or None
+    cpu, mem_mb, uptime = 0.0, 0, None
+    mem_raw = row.get("MemoryCurrent", "")
+    if mem_raw.isdigit():
+        mem_mb = round(int(mem_raw) / 1048576)
+    if pid and status == "online":
+        try:
+            proc = _proc_cache.get(pid) or _proc_cache.setdefault(pid, psutil.Process(pid))
+            cpu = round(proc.cpu_percent(interval=None), 1)
+            uptime = int(now - proc.create_time())
+            if not mem_mb:
+                mem_mb = round(proc.memory_info().rss / 1048576)
+        except (psutil.Error, OSError):
+            _proc_cache.pop(pid, None)
+    return {
+        "name": unit, "label": info.get("label") or unit, "role": info.get("role") or "",
+        "group": info.get("group") or "", "manage": info.get("manage") or f"systemctl restart {unit}",
+        "if_stopped": "", "status": status, "cpu": cpu, "mem_mb": mem_mb, "uptime_s": uptime,
+        "restarts": int(row.get("NRestarts") or 0), "pid": pid,
+        "can_start": False, "can_stop": False, "can_restart": False,
+    }
+
+
+def services(now: float | None = None) -> tuple[list[dict], str | None]:
+    """Bot chạy bằng systemd (cashback, AI Pass Store) — chỉ đọc."""
+    now = time.time() if now is None else now
+    units = [f"{u}.service" for u in SYSTEMD_SERVICES]
+    try:
+        rows = _systemctl_show(units)
+    except (ProcessError, OSError, subprocess.SubprocessError) as exc:
+        return [], f"không đọc được systemd: {exc}"
+    return [_service(r, now) for r in rows], None
+
+
 def snapshot(now: float | None = None) -> dict:
     """Mọi app PM2 + RAM / CPU máy + GPU. pm2 hỏng thì ``apps=[]`` kèm ``error`` (trang vẫn hiện phần máy)."""
     now = time.time() if now is None else now
@@ -90,6 +149,7 @@ def snapshot(now: float | None = None) -> dict:
         },
         "apps": [], "error": None,
     }
+    out["services"], out["services_error"] = services(now)
     try:
         proc = _pm2("jlist")
         apps = json.loads(proc.stdout or "[]")
