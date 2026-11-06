@@ -7,6 +7,7 @@ import {
   Home,
   Layers,
   Link2,
+  MessageCircle,
   ListTodo,
   Orbit,
   ScrollText,
@@ -66,6 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/app/go/ai-studio", label: "AI", icon: Sparkles },
       { to: "/app/go/compliance", label: "Từ khoá cấm", icon: ShieldAlert },
+      { to: "/app/go/threads-growth", label: "Threads kéo khách", icon: MessageCircle },
     ],
   },
   {

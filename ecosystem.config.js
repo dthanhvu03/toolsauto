@@ -136,6 +136,20 @@ module.exports = {
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
+      // PLAN-158: quét Threads theo từ khóa + tự reply kéo khách về bot (bật/tắt trên web: growth.enabled)
+      name: "Threads_Growth",
+      script: "app/features/threads/growth/worker.py",
+      interpreter: VENV_PYTHON,
+      cwd: PROJECT_ROOT,
+      kill_timeout: 60000,
+      max_restarts: 10,
+      min_uptime: 30000,
+      restart_delay: 10000,
+      autorestart: true,
+      max_memory_restart: "1G",
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
+    },
+    {
       name: "Threads_NewsWorker",
       script: "app/features/threads/workers/news_worker.py",
       interpreter: VENV_PYTHON,

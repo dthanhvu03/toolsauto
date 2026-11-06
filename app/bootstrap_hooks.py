@@ -20,6 +20,7 @@ def register_feature_hooks() -> None:
     from app.features.viral_intake.service import ViralService
     from app.features.telegram_bot.poller import TelegramPoller
     from app.features.studio import entry as studio_entry
+    from app.features.threads.growth import actions as growth_actions
 
     def viral_process_all(db: Session):
         return ViralProcessorService().process_all(db)
@@ -282,3 +283,6 @@ def register_feature_hooks() -> None:
     feature_hooks.register("studio.approve", studio_approve)
     feature_hooks.register("studio.reject", studio_reject)
     feature_hooks.register("studio.accept_local_file", studio_entry.accept_local_file)
+    # PLAN-158: Threads Kéo khách — nút duyệt / bỏ / đổi A-B, lệnh /keokhach.
+    feature_hooks.register("growth.callback", growth_actions.telegram_callback)
+    feature_hooks.register("growth.summary", growth_actions.telegram_summary)

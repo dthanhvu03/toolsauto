@@ -53,6 +53,7 @@ class TelegramCommandHandler:
             "dadang": self._cmd_dadang,  # ADR-042
             "tai": self._cmd_tai,  # ADR-043
             "caidat": self._cmd_caidat,
+            "keokhach": self._cmd_keokhach,  # PLAN-158
         }
 
     # Menu "/" trong Telegram — MỘT nguồn sự thật với `handler_map` (test canh hai chiều).
@@ -67,6 +68,7 @@ class TelegramCommandHandler:
         ("so", "Chỉ số từng kênh. Bấm tên page để xem bài của page đó"),
         ("tai", "/tai <link> — chỉ tải bản gốc về máy, không xào chẻ"),
         ("caidat", "Xem / đổi cài đặt luồng video ngay tại đây"),
+        ("keokhach", "Threads kéo khách: A/B, hạn mức reply, bật / tắt"),
         ("help", "Danh sách lệnh và cách dùng"),
         ("status", "Worker đang chạy hay tạm dừng"),
         ("health", "Sức khoẻ hệ thống"),
@@ -101,6 +103,7 @@ class TelegramCommandHandler:
     # sẽ tự rơi vào "Khác" (test canh: không lệnh nào bị bỏ sót).
     HELP_GROUPS: list[tuple[str, tuple[str, ...]]] = [
         ("Luồng video (dùng hằng ngày)", ("sansang", "moi", "nguon", "dadang", "tai", "caidat")),
+        ("Threads kéo khách", ("keokhach",)),
         ("Hệ thống", ("status", "health", "tainguyen", "donrac", "pause", "resume", "help")),
         ("Luồng Job — cần tài khoản Facebook trong tool", ("jobs", "drafts", "retry", "viral", "discovery")),
     ]
@@ -340,6 +343,15 @@ class TelegramCommandHandler:
         "trung": "viral.phash_max_distance",
         "diachi": "PUBLIC_BASE_URL",  # ADR-044
     }
+
+    def _cmd_keokhach(self, args=None):
+        """PLAN-158: thống kê A/B + hạn mức + nút bật/tắt (qua hook, không import thẳng threads)."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            text, buttons = feature_hooks.call("growth.summary", db)
+        self.client.send_message(text, reply_markup={"inline_keyboard": buttons})
 
     def _cmd_caidat(self, args=None):
         """

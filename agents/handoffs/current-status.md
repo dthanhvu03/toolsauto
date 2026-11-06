@@ -1,3 +1,16 @@
+## Phiên 2026-11-06 (threads-growth) — PLAN-158: Threads kéo khách chạy thật + dọn profile (CHƯA commit)
+- System State: gói `app/features/threads/growth/` + trang web `/app/go/threads-growth` + Telegram `/keokhach` xong, Web_Dashboard
+  đã restart (06/11). Tài khoản Threads `@us28qt` (accounts id 52 `threads_growth`, profile `instagram_5`) ACTIVE.
+  Worker `Threads_Growth` khai trong `ecosystem.config.js` nhưng CHƯA start; `growth.enabled` = tắt. Playwright chromium-1208
+  vừa cài lại (trước đó thiếu → mọi tính năng Playwright không mở được trình duyệt).
+- Done (proof trong PLAN-158): xoá 4 bài mẫu + 16 profile cũ (1,57 GB, giữ `facebook_scanner` quét FB→TikTok); quét thử
+  14 từ khóa không đăng → 130 bài → 10 bài «Chờ duyệt» (#5–#14), AI viết reply, Telegram báo đủ; 26 test growth pass.
+- Reply thật đầu tiên: #13 → https://www.threads.com/@us28qt/post/DfYVsfpks3_ (06/11 07:39). Bỏ «VietQR», prompt giọng Threads,
+  poller Telegram nằm trong PM2 Maintenance (đã restart). Còn 9 bài «Chờ duyệt» (#5–#12, #14).
+- Unfinished: 1 test sẵn hỏng `test_telegram_schedule::test_edit_post_gui_kem_gio_va_chu` (buffer/client.py).
+- Next Action: anh xem reply #13 trên Threads → đồng ý thì `pm2 start ecosystem.config.js --only Threads_Growth` + bật trên web.
+  Commit khi anh bảo (gồm cả phần review growth phiên 05/11).
+
 ## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet
 
 - **System State:** commit `b6e48c4` (code) + `5223c01` (bản build SPA, lần build trước là 03/11) đã push `feat/xe-tet`. 10:4xZ: `pm2 restart Web_Dashboard`, bật lại `Studio_Heavy` / `Studio_Light` (tắt từ ~31/10); worker nhận ngay việc tồn #81 (link → render → chờ duyệt, không tự đăng).

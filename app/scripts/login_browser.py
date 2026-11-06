@@ -36,11 +36,19 @@ def has_instagram_session(page) -> bool:
     cookie_names = {cookie.get("name") for cookie in cookies}
     return "sessionid" in cookie_names and "ds_user_id" in cookie_names
 
+THREADS_HOST = (os.getenv("THREADS_HOST") or "https://www.threads.com").strip().rstrip("/")
+
+
+def has_threads_session(page) -> bool:
+    cookies = page.context.cookies([f"{THREADS_HOST}/"])
+    return any(c.get("name") == "sessionid" and c.get("value") for c in cookies)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-account Login Bootstrapper")
     parser.add_argument("--profile-dir", required=True, help="Absolute path to the isolated profile directory")
     parser.add_argument("--account-id", type=int, required=True, help="Database ID of the account")
-    parser.add_argument("--platform", default="facebook", help="Platform name: facebook or instagram")
+    parser.add_argument("--platform", default="facebook", help="Platform name: facebook, instagram or threads")
     args = parser.parse_args()
 
     max_wait_seconds = 15 * 60 # 15 minutes failsafe
@@ -49,7 +57,10 @@ def main():
 
     print(f"Launching headed browser for profile: {args.profile_dir}")
 
-    login_url = f"{INSTAGRAM_HOST}/" if args.platform == "instagram" else f"{FACEBOOK_HOST}/"
+    login_url = {
+        "instagram": f"{INSTAGRAM_HOST}/",
+        "threads": f"{THREADS_HOST}/login",
+    }.get(args.platform, f"{FACEBOOK_HOST}/")
     
     with sync_playwright() as p:
         try:
@@ -83,7 +94,11 @@ def main():
 
         while elapsed < max_wait_seconds:
             try:
-                if args.platform == "instagram":
+                if args.platform == "threads":
+                    current_url = (page.url or "").lower()
+                    # Trang chủ Threads có sẵn ô mật khẩu ẩn → chỉ dựa vào URL + cookie sessionid.
+                    login_ok = "/login" not in current_url and has_threads_session(page)
+                elif args.platform == "instagram":
                     username_input = page.query_selector('input[name="username"]')
                     password_input = page.query_selector('input[name="password"]')
                     current_url = (page.url or "").lower()

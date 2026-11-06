@@ -141,6 +141,21 @@ class TelegramEventRouter:
             self.client.edit_message_reply_markup(message_id)
             self.client.send_message(f"{'✅' if action == 'sok' else '🗑'} Studio #{project_id}: {msg}")
 
+    def _handle_growth(self, callback_id: str, target: str, message_id):
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            ok, msg, follow_up = feature_hooks.call("growth.callback", db, target)
+        self.client.answer_callback_query(callback_id, msg[:180], show_alert=not ok)
+        if ok and message_id and not target.startswith(("on", "off")):
+            self.client.edit_message_reply_markup(message_id)
+        if follow_up:
+            self.client.send_message(follow_up, reply_markup={"inline_keyboard": [[
+                {"text": "✅ Đăng", "callback_data": f"gr:ok:{target.split(':')[-1]}"},
+                {"text": "🚫 Bỏ", "callback_data": f"gr:no:{target.split(':')[-1]}"},
+            ]]})
+
     def _handle_callback_query(self, query: dict):
         callback_id = query.get("id")
         data = query.get("data", "")
@@ -210,6 +225,8 @@ class TelegramEventRouter:
                 self._handle_donrac_callback(callback_id, target_id)
             elif action in ("sok", "sno"):
                 self._handle_studio_review(callback_id, action, int(target_id), message_id)
+            elif action == "gr":  # PLAN-158: Threads Kéo khách
+                self._handle_growth(callback_id, target_id, message_id)
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
