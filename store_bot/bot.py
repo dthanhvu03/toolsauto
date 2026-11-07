@@ -243,7 +243,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic", "amk", "amp",
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "al", "async", "abt", "aic", "amk", "amp",
                                                "ahr", "ahc", "aho", "ahs", "ahx"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
@@ -815,7 +815,12 @@ class StoreBot:
             self._show(chat_id, message_id, msg.admin_sync_result(count, balance), keyboard([button("⬅️ Quay lại", "adm")]))
         elif data == "as":
             self._show(chat_id, message_id, msg.admin_stats(self.repo.stats(), self._upstream_balance(), self.repo.source_counts()),
-                       keyboard([button("💸 Giao dịch gần đây", "al")], [button("⬅️ Quay lại", "adm")]))
+                       keyboard([button("💵 Dòng tiền & biên lãi", "acf"), button("💸 Giao dịch gần đây", "al")],
+                                [button("⬅️ Quay lại", "adm")]))
+        elif data == "acf":
+            self._show(chat_id, message_id, msg.admin_cashflow(self.repo.cashflow(), self._upstream_balance()),
+                       keyboard([button("🔄 Làm mới", "acf"), button("📊 Thống kê", "as")],
+                                [button("⬅️ Quản lý", "adm")]))
         elif data == "al":
             self._show(chat_id, message_id, msg.admin_ledger(self.repo.recent_ledger()),
                        keyboard([button("📊 Thống kê", "as"), button("⬅️ Quản lý", "adm")]))
@@ -943,7 +948,8 @@ class StoreBot:
             [button("🔑 Khóa API đại lý", "ak"), button("🎨 Logo hãng", "aic")],
             [button(f"💳 Nạp chờ duyệt{pending}", "at"), button("💵 Cộng/trừ tiền", "aa")],
             [button(self._hours_button(), "ahr")],
-            [button("📊 Thống kê", "as"), button("🏠 Trang chủ", "home")],
+            [button("📊 Thống kê", "as"), button("💵 Dòng tiền", "acf")],
+            [button("🏠 Trang chủ", "home")],
         ))
 
     # ---------- tăng giá bán ----------

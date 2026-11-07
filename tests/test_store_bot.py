@@ -606,6 +606,30 @@ def test_stats_show_cash_flow_and_profit(fatcat, repo):
     assert "↩️ Hoàn" in ledger and "🛒 Mua" in ledger and "💰 Nạp" in ledger
 
 
+def test_cashflow_screen_shows_margin_and_customer_money(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    topup = repo.create_topup(BUYER, 400_000)
+    repo.confirm_topup(topup.id, "admin:1")
+    good = repo.buy(BUYER, products[34].id, 1)
+    store._fulfill_now(good.id, BUYER, None)
+    repo.adjust_balance(BUYER, 5_000, "tặng", "admin:1")
+
+    cf = repo.cashflow()
+    today = cf["periods"]["today"]
+    assert (today["cash_in"], today["revenue"], today["cost"], today["profit"]) == (400_000, 155_000, 151_900, 3_100)
+    assert today["adjust"] == 5_000 and cf["periods"]["all"]["profit"] == 3_100
+    assert len(cf["daily"]) == 7 and cf["daily"][0]["cash_in"] == 400_000 and cf["daily"][0]["orders"] == 1
+    assert cf["balances"] == 400_000 - 155_000 + 5_000
+    assert cf["top"][0]["profit"] == 3_100
+
+    store.handle_update(_click(ADMIN, "acf", "boss"))
+    text = telegram.edits[-1][2]
+    assert "Dòng tiền ròng: <b>+248.100đ</b>" in text and "(biên 2,0%)" in text
+    assert "chưa mua: <b>250.000đ</b>" in text and "Admin cộng/trừ tay" in text
+    store.handle_update(_click(BUYER, "acf"))  # khách bấm mã admin → không có quyền, không lộ số liệu
+    assert all("Dòng tiền" not in t for t in telegram.texts_to(BUYER))
+
+
 def test_start_sends_persistent_menu_and_menu_buttons_work(bot, repo, product):
     store, telegram = bot
     store.handle_update(_private(BUYER, "/start"))

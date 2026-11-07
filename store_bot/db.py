@@ -1039,6 +1039,67 @@ class StoreRepository:
                     "SELECT SUM(refunded) FROM orders WHERE refunded > 0 AND created_at >= ?", since)
             return result
 
+    def cashflow(self, days: int = 7, top: int = 5) -> dict:
+        """Màn «Dòng tiền & biên lãi»: tiền vào / ra theo kỳ (ngày theo giờ VN), từng ngày gần nhất,
+        món lãi nhất 30 ngày, tiền đang giữ hộ khách. Cùng cách tính với stats(): doanh thu = đơn đã giao trừ phần
+        hoàn, vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn)."""
+        today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        def since(n: int) -> str:
+            return (today - timedelta(days=n - 1)).astimezone(timezone.utc).isoformat(timespec="seconds")
+
+        sold = "(SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id)"
+        periods = {"today": since(1), "7d": since(7), "30d": since(30), "all": ""}
+        with self._read() as conn:
+            def one(sql: str, *args) -> int:
+                return int(conn.execute(sql, args).fetchone()[0] or 0)
+
+            result: dict = {"periods": {}}
+            for name, start in periods.items():
+                row = conn.execute(
+                    f"""SELECT COUNT(*), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * {sold})
+                        FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?""",
+                    (start,),
+                ).fetchone()
+                revenue, cost = int(row[1] or 0), int(row[2] or 0)
+                result["periods"][name] = {
+                    "orders": int(row[0] or 0),
+                    "revenue": revenue,
+                    "cost": cost,
+                    "profit": revenue - cost,
+                    "cash_in": one("SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ?", start),
+                    "adjust": one("SELECT SUM(delta) FROM ledger WHERE kind = 'adjust' AND created_at >= ?", start),
+                }
+            daily: dict[str, dict[str, int]] = {}
+            for day, orders, revenue, cost in conn.execute(
+                f"""SELECT date(o.created_at, '+7 hours'), COUNT(*), SUM(o.total - o.refunded),
+                           SUM(COALESCE(o.unit_cost, 0) * {sold})
+                    FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
+                    GROUP BY 1""",
+                (since(days),),
+            ):
+                daily[day] = {"orders": int(orders or 0), "revenue": int(revenue or 0), "cost": int(cost or 0)}
+            cash_by_day = dict(conn.execute(
+                """SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
+                   WHERE status = 'paid' AND resolved_at >= ? GROUP BY 1""",
+                (since(days),),
+            ).fetchall())
+            result["daily"] = []
+            for back in range(days):
+                day = (today - timedelta(days=back)).date().isoformat()
+                row = daily.get(day, {"orders": 0, "revenue": 0, "cost": 0})
+                result["daily"].append({"day": day, **row, "profit": row["revenue"] - row["cost"],
+                                        "cash_in": int(cash_by_day.get(day) or 0)})
+            result["balances"] = one("SELECT SUM(balance) FROM users")
+            names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM products")}
+        result["waiting_orders"], result["waiting_cost"] = self.waiting_summary()
+        products = [
+            {"name": names.get(pid, f"#{pid}"), "sold": n, "revenue": revenue, "profit": revenue - cost}
+            for pid, (n, revenue, cost) in self.sales_by_product(30).items()
+        ]
+        result["top"] = sorted(products, key=lambda p: p["profit"], reverse=True)[:top]
+        return result
+
     def recent_ledger(self, limit: int = 15) -> list[dict]:
         """Các lần tiền vào / ra ví khách, mới nhất trước (nạp, mua, hoàn, admin cộng/trừ)."""
         with self._read() as conn:

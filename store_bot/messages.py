@@ -453,7 +453,7 @@ def admin_home(stats: dict[str, int], upstream_balance: int | None = None) -> st
     return (
         "⚙️ <b>Quản lý shop</b>\n\n"
         f"Hôm nay: {stats['orders_today']} đơn · doanh thu {vnd(stats['revenue_today'])} · "
-        f"lãi {vnd(stats['profit_today'])}\n"
+        f"lãi {vnd(stats['profit_today'])}{profit_margin(stats['profit_today'], stats['revenue_today'])}\n"
         f"Hàng tự nhập trong kho: {stats['stock']}"
         f"{upstream}{pending}"
     )
@@ -470,6 +470,7 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
             f"🛒 Bán: {stats[f'orders_{key}']} đơn · doanh thu {vnd(stats[f'revenue_{key}'])}\n"
             f"🐱 Giá vốn FatCat: {vnd(stats[f'cost_{key}'])}\n"
             f"📈 Lãi: <b>{vnd(stats[f'profit_{key}'])}</b>"
+            f"{profit_margin(stats[f'profit_{key}'], stats[f'revenue_{key}'])}"
             + (f"\n↩️ Đã hoàn khách: {vnd(refunded)}" if refunded else "")
         )
     wallet = f"\n🐱 Ví FatCat còn: {vnd(upstream_balance)}" if upstream_balance is not None else ""
@@ -482,6 +483,56 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
         f"💼 Số dư khách đang giữ: {vnd(stats['balances'])}"
         + (f"\n📍 Khách mới 7 ngày theo nguồn: {' · '.join(f'{c} {n}' for c, n in sources)}" if sources else "")
         + f"{wallet}{waiting}"
+    )
+
+
+def profit_margin(profit: int, revenue: int) -> str:
+    """« (biên 12,5%)» — lãi chia doanh thu; chưa bán gì thì bỏ trống."""
+    if revenue <= 0:
+        return ""
+    return f" (biên {profit * 100 / revenue:.1f}%)".replace(".", ",")
+
+
+def _signed(amount: int) -> str:
+    return ("+" if amount >= 0 else "−") + vnd(abs(amount))
+
+
+def admin_cashflow(cf: dict, upstream_balance: int | None = None) -> str:
+    """Màn 💵 Dòng tiền & biên lãi: tiền vào (khách chuyển khoản) / ra (vốn FatCat), lãi, biên, tiền giữ hộ khách."""
+    blocks = []
+    for key, title in (("today", "Hôm nay"), ("7d", "7 ngày"), ("30d", "30 ngày"), ("all", "Từ đầu")):
+        p = cf["periods"][key]
+        blocks.append(
+            f"<b>{title}</b>\n"
+            f"⬇️ Tiền vào (khách chuyển khoản): {vnd(p['cash_in'])}\n"
+            f"⬆️ Tiền vốn trả FatCat: {vnd(p['cost'])}\n"
+            f"💧 Dòng tiền ròng: <b>{_signed(p['cash_in'] - p['cost'])}</b>\n"
+            f"🛒 {p['orders']} đơn · doanh thu {vnd(p['revenue'])} · lãi <b>{vnd(p['profit'])}</b>"
+            f"{profit_margin(p['profit'], p['revenue'])}"
+            + (f"\n💵 Admin cộng/trừ tay (không phải tiền thật vào): {_signed(p['adjust'])}" if p["adjust"] else "")
+        )
+    days = []
+    for d in cf["daily"]:
+        label = f"{d['day'][8:10]}/{d['day'][5:7]}"
+        if not (d["orders"] or d["cash_in"]):
+            days.append(f"{label}: —")
+            continue
+        days.append(f"{label}: vào {vnd(d['cash_in'])} · {d['orders']} đơn · lãi {vnd(d['profit'])}"
+                    f"{profit_margin(d['profit'], d['revenue'])}")
+    top = [f"{i}. {esc(t['name'])}: {t['sold']} món · lãi {vnd(t['profit'])}{profit_margin(t['profit'], t['revenue'])}"
+           for i, t in enumerate(cf["top"], 1)]
+    wallet = f"\n🐱 Ví FatCat còn: {vnd(upstream_balance)}" if upstream_balance is not None else ""
+    waiting = (f"\n⏳ Cần nạp FatCat cho {cf['waiting_orders']} đơn chờ ví: <b>{vnd(cf['waiting_cost'])}</b>"
+               if cf["waiting_orders"] else "")
+    return (
+        "💵 <b>Dòng tiền & biên lãi</b>\n\n"
+        + "\n\n".join(blocks)
+        + "\n\n<b>Từng ngày</b>\n" + "\n".join(days)
+        + ("\n\n<b>Món lãi nhất 30 ngày</b>\n" + "\n".join(top) if top else "")
+        + "\n\n<b>Tiền đang giữ</b>\n"
+        f"💼 Khách gửi trong ví, chưa mua: <b>{vnd(cf['balances'])}</b> — tiền của khách, giữ lại đừng tiêu"
+        f"{wallet}{waiting}\n\n"
+        "<i>Biên = lãi ÷ doanh thu. Lãi chỉ tính đơn đã giao, đã trừ phần hoàn; hàng tự nhập không có giá vốn.</i>"
     )
 
 
