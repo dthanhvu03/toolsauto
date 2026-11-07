@@ -11,6 +11,7 @@ Một đơn FatCat: bot trừ tiền khách và ghi đơn 'pending' trước (db
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from store_bot import pricing
 from store_bot.db import Order, Product, StoreRepository
@@ -56,6 +57,10 @@ class Fulfiller:
             logger.warning("[Store] không đọc được số dư FatCat")
             return None
         self.repo.set_state("upstream_balance", str(balance))
+        try:
+            self.repo.reconcile_funds(balance, datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("[Store] tự đối chiếu ví FatCat lỗi")
         return balance
 
     def sync(self) -> tuple[list[tuple[Product, int]], int | None]:

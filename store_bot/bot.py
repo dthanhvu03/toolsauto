@@ -556,6 +556,7 @@ class StoreBot:
         if self.repo.waiting_summary()[0] and time.monotonic() - self._funds_checked >= WAITING_FUNDS_CHECK_SEC:
             self._funds_checked = time.monotonic()
             self.fulfiller.refresh_funds()  # có khách đang chờ: hỏi ví FatCat dày hơn để anh nạp xong là giao
+            self.notify_auto_capital()
         for order in self.repo.expire_waiting(WAITING_REFUND_SEC):
             if order.source == "bot":
                 self.tg.send_message(order.user_id, msg.order_failed(order), keyboard([button("🛒 Sản phẩm", "shop")]))
@@ -585,9 +586,21 @@ class StoreBot:
                     self.repo.set_state(f"stuck_alerted:{order_id}", "1")
                     self.notify_admins(msg.admin_upstream_stuck(order))
 
+    def notify_auto_capital(self) -> None:
+        """Báo admin các dòng sổ vốn bot vừa tự ghi (kể cả do tiến trình API ghi). Mỗi dòng báo một lần."""
+        last = int(self.repo.get_state("auto_capital_notified") or 0)
+        for row in self.repo.auto_capital_after(last):
+            buttons = [button("🗑 Xoá dòng này", f"a:vd:{row['id']}")]
+            if row["amount"] < 0:
+                buttons.insert(0, button("➖ Là bù khách", f"a:vx:{row['id']}"))
+            self.notify_admins(msg.admin_auto_capital(row, self._upstream_balance()), keyboard(buttons),
+                               quiet=row["amount"] > 0)
+            self.repo.set_state("auto_capital_notified", str(row["id"]))
+
     def sync_upstream(self) -> tuple[int, int | None]:
         """Đồng bộ FatCat và đăng kênh món vừa có thêm hàng. Trả (số món FatCat, số dư ví FatCat)."""
         restocked, balance = self.fulfiller.sync()
+        self.notify_auto_capital()
         now = time.time()
         if self.shop_status().closed:
             restocked = []  # đang nghỉ: không báo «hàng mới về» (khách bấm vào cũng không mua được)
@@ -847,6 +860,16 @@ class StoreBot:
         by = f"admin:{user.user_id}"
         if action == "p":
             self.show_admin_product(chat_id, message_id, ident)
+        elif action == "vx":
+            row = self.repo.get_capital(ident)
+            if row is None or row["amount"] >= 0:
+                return "Dòng này không còn / không phải khoản FatCat trừ."
+            if self.repo.get_state(f"vx:{ident}"):
+                return "Đã ghi khoản chi cho dòng này rồi."
+            expense_id = self.repo.add_expense(-row["amount"], f"bù khách — FatCat trừ ngoài bot (sổ vốn #{ident})", by)
+            self.repo.set_state(f"vx:{ident}", str(expense_id))
+            self.show_expenses(chat_id, message_id)
+            return f"Đã ghi khoản chi #{expense_id}: {msg.vnd(-row['amount'])}."
         elif action == "vd":
             deleted = self.repo.delete_capital(ident)
             self.show_capital(chat_id, message_id)

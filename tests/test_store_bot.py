@@ -724,6 +724,45 @@ def test_admin_home_groups_and_every_hub_button_works(fatcat, repo):
     assert telegram.answers[-1][0] == "Không có quyền."
 
 
+def test_fatcat_wallet_reconciles_itself(fatcat, repo):
+    from datetime import datetime, timedelta, timezone
+    store, telegram, fake, products = fatcat  # fixture đã đồng bộ → mốc = 500.000đ
+    later = lambda sec: datetime.now(timezone.utc) + timedelta(seconds=sec)  # noqa: E731
+
+    topup = repo.create_topup(BUYER, 155_000)
+    repo.confirm_topup(topup.id, "admin:1")
+    order = repo.buy(BUYER, products[34].id, 1)
+    store._fulfill_now(order.id, BUYER, None)  # bot mua 151.900đ — ngay sau đó chưa «yên» nên chưa đối chiếu
+    assert repo.recent_capital() == []
+    assert repo.reconcile_funds(500_000 - 151_900, later(300)) is None  # khớp đơn bot → không ghi gì
+
+    nap = repo.reconcile_funds(500_000 - 151_900 + 200_000, later(600))  # anh nạp 200k
+    assert repo.get_capital(nap)["amount"] == 200_000
+    mua = repo.reconcile_funds(500_000 - 151_900 + 200_000 - 49_000, later(900))  # anh mua thẳng 49k
+    assert repo.get_capital(mua)["amount"] == -49_000
+    base = 500_000 - 151_900 + 200_000 - 49_000
+    assert repo.reconcile_funds(base - 600, later(1200)) is None  # lệch nhỏ: cộng dồn
+    small = repo.reconcile_funds(base - 1_200, later(1500))
+    assert repo.get_capital(small)["amount"] == -1_200
+    assert repo.reconcile_funds(base + 999_999, later(1400)) is None  # số đọc cũ hơn mốc → bỏ qua
+
+    fake.results = [BuyResult(PENDING, status_code=202)]
+    repo.adjust_balance(BUYER, 155_000, "test", "admin")
+    pending = repo.buy(BUYER, products[34].id, 1)
+    store._fulfill_now(pending.id, BUYER, None)  # đơn đang gọi FatCat (202) → không đối chiếu
+    assert repo.reconcile_funds(1, later(3600)) is None
+
+    store.notify_auto_capital()
+    notices = telegram.texts_to(ADMIN)
+    assert any("Ví FatCat tăng +200.000đ" in t for t in notices) and any("FatCat trừ 49.000đ" in t for t in notices)
+    store.notify_auto_capital()  # báo một lần
+    assert len(telegram.texts_to(ADMIN)) == len(notices)
+    store.handle_update(_click(ADMIN, f"a:vx:{mua}", "boss"))
+    store.handle_update(_click(ADMIN, f"a:vx:{mua}", "boss"))  # bấm lại không ghi 2 lần
+    assert [e["amount"] for e in repo.recent_expenses()] == [49_000]
+    assert repo.capital_total() == 200_000 - 49_000 - 1_200
+
+
 def test_start_sends_persistent_menu_and_menu_buttons_work(bot, repo, product):
     store, telegram = bot
     store.handle_update(_private(BUYER, "/start"))

@@ -7,6 +7,7 @@ Bot Telegram và API đại lý là hai tiến trình dùng chung file này, nê
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import secrets
 import sqlite3
@@ -189,6 +190,10 @@ STOCK_SQL = """CASE WHEN p.upstream_id IS NULL
         ELSE COALESCE(p.upstream_stock, 0) END AS stock"""
 
 ICT = timezone(timedelta(hours=7))
+FUNDS_BASE_KEY = "funds_base"  # mốc đối chiếu ví FatCat: {"balance": số dư lẽ ra còn, "at": giờ đọc}
+FUNDS_MIN_DELTA = 1_000  # lệch dưới mức này cộng dồn, chưa ghi sổ
+FUNDS_QUIET_SEC = 120
+AUTO_CAPITAL_BY = "auto"
 TOPUP_CODE_RE = re.compile(r"NAP[A-Z0-9]{6}")
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # bỏ 0/O, 1/I dễ gõ nhầm
 KEY_PREFIX = "sk_"
@@ -1176,6 +1181,62 @@ class StoreRepository:
             cur = conn.execute("INSERT INTO capital(amount, note, created_by, created_at) VALUES (?, ?, ?, ?)",
                                (amount, note.strip()[:200], by, utcnow()))
             return int(cur.lastrowid)
+
+    def reconcile_funds(self, balance: int, read_at: datetime) -> int | None:
+        """Tự đối chiếu ví FatCat sau mỗi lần đọc số dư. Lẽ ra còn = mốc trước − giá vốn đơn bot giao từ mốc đó;
+        số dư thực lệch ≥ FUNDS_MIN_DELTA → tự ghi một dòng sổ vốn (dương: anh nạp / FatCat hoàn; âm: FatCat trừ
+        ngoài bot, vd anh mua thẳng). Chỉ đối chiếu lúc yên: không có đơn đang gọi FatCat và không đơn nào vừa đổi
+        trạng thái trong FUNDS_QUIET_SEC giây (tránh tính đơn FatCat đã trừ mà bot chưa ghi). Lệch nhỏ cộng dồn.
+        Lần đầu chỉ đặt mốc. Trả id dòng sổ vốn vừa ghi, hoặc None."""
+        read_iso = read_at.astimezone(timezone.utc).isoformat(timespec="seconds")
+        with self._tx() as conn:
+            row = conn.execute("SELECT value FROM state WHERE key = ?", (FUNDS_BASE_KEY,)).fetchone()
+            base = json.loads(row["value"]) if row else None
+
+            def save(expected: int) -> None:
+                conn.execute(
+                    "INSERT INTO state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (FUNDS_BASE_KEY, json.dumps({"balance": expected, "at": read_iso})))
+
+            if base is None:
+                save(balance)
+                return None
+            if read_iso < base["at"]:
+                return None  # số đọc cũ hơn mốc (tiến trình kia vừa đối chiếu)
+            quiet_from = (read_at - timedelta(seconds=FUNDS_QUIET_SEC)).astimezone(timezone.utc).isoformat(
+                timespec="seconds")
+            busy = conn.execute(
+                """SELECT 1 FROM orders WHERE (status = 'pending' AND waiting_funds = 0)
+                   OR (unit_cost IS NOT NULL AND updated_at >= ?) LIMIT 1""", (quiet_from,)).fetchone()
+            if busy:
+                return None
+            bot_cost = int(conn.execute(
+                f"""SELECT SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL}) FROM orders o
+                    WHERE o.status IN ('done', 'partial') AND o.updated_at >= ? AND o.updated_at <= ?""",
+                (base["at"], read_iso)).fetchone()[0] or 0)
+            expected = int(base["balance"]) - bot_cost
+            delta = balance - expected
+            capital_id = None
+            if abs(delta) >= FUNDS_MIN_DELTA:
+                note = ("tự ghi: ví FatCat tăng ngoài đơn bot (anh nạp?)" if delta > 0
+                        else "tự ghi: FatCat trừ ngoài đơn bot (anh mua thẳng trên FatCat?)")
+                capital_id = int(conn.execute(
+                    "INSERT INTO capital(amount, note, created_by, created_at) VALUES (?, ?, ?, ?)",
+                    (delta, note, AUTO_CAPITAL_BY, read_iso)).lastrowid)
+                expected = balance
+            save(expected)
+            return capital_id
+
+    def auto_capital_after(self, last_id: int) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM capital WHERE created_by = ? AND id > ? ORDER BY id",
+                                (AUTO_CAPITAL_BY, last_id)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_capital(self, capital_id: int) -> dict | None:
+        with self._read() as conn:
+            row = conn.execute("SELECT * FROM capital WHERE id = ?", (capital_id,)).fetchone()
+        return dict(row) if row else None
 
     def last_synced(self) -> str | None:
         """Lần đồng bộ FatCat gần nhất (synced_at mới nhất của sản phẩm FatCat)."""

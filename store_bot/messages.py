@@ -761,7 +761,8 @@ ASK_CAPITAL = (
     "🏦 <b>Ghi tiền nạp ví FatCat</b>\n\n"
     "Gõ: <code>số tiền  ghi chú</code> — ví dụ <code>200k nạp qua MB</code>.\n"
     "Rút tiền từ FatCat về thì thêm dấu trừ: <code>-50k rút về</code>.\n"
-    "Chỉ là sổ ghi chép để đối chiếu — bot không gọi FatCat. Gõ /huy để thôi."
+    "Từ nay bot <b>tự ghi</b> khi thấy số dư FatCat tăng / bị trừ ngoài đơn bot — chỉ cần ghi tay các lần "
+    "trước đó. Gõ /huy để thôi."
 )
 
 
@@ -775,13 +776,25 @@ def parse_capital(text: str) -> tuple[int, str] | None:
     return sign * amount, note.strip()
 
 
+def admin_auto_capital(row: dict, balance: int | None) -> str:
+    """Tin báo admin: bot vừa tự ghi một dòng sổ vốn khi số dư FatCat lệch với đơn bot."""
+    wallet = f"\nVí FatCat giờ: <b>{vnd(balance)}</b>" if balance is not None else ""
+    if row["amount"] > 0:
+        return (f"🏦 <b>Ví FatCat tăng +{vnd(row['amount'])}</b> ngoài đơn bot → đã tự ghi sổ vốn là <b>nạp vốn</b> "
+                f"(#{row['id']}).{wallet}\n<i>Không phải anh nạp (vd FatCat hoàn tiền)? Bấm 🗑 để xoá.</i>")
+    return (f"🐱 <b>FatCat trừ {vnd(-row['amount'])}</b> ngoài đơn bot (anh mua thẳng trên FatCat?) → đã tự ghi "
+            f"sổ vốn (#{row['id']}).{wallet}\n"
+            "<i>Nếu là hàng bù / thay cho khách → bấm «Là bù khách» để trừ vào lãi.</i>")
+
+
 def admin_capital(rows: list[dict], total: int) -> str:
     if not rows:
         return "🏦 <b>Vốn nạp ví FatCat</b>\n\nChưa ghi lần nạp nào."
-    lines = [f"#{r['id']} · {local_time(r['created_at'])} · <b>{_signed(r['amount'])}đ</b>"
+    lines = [f"{'🤖 ' if r['created_by'] == 'auto' else ''}#{r['id']} · {local_time(r['created_at'])} · "
+             f"<b>{_signed(r['amount'])}đ</b>"
              + (f"\n   {esc(r['note'])}" if r["note"] else "") for r in rows]
     return (f"🏦 <b>Vốn nạp ví FatCat</b> — tổng đã ghi <b>{vnd(total)}</b>\n\n" + "\n".join(lines)
-            + "\n\n<i>Ghi nhầm thì bấm 🗑 để xoá — chỉ xoá dòng ghi chép.</i>")
+            + "\n\n<i>🤖 = bot tự ghi khi số dư FatCat lệch với đơn bot. Ghi nhầm thì bấm 🗑 — chỉ xoá dòng ghi chép.</i>")
 
 
 _LEDGER_KIND = {"topup": "💰 Nạp", "order": "🛒 Mua", "refund": "↩️ Hoàn", "adjust": "💵 Admin"}
