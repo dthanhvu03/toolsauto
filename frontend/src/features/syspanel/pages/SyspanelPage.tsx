@@ -1,91 +1,93 @@
+import { useState, type KeyboardEvent } from "react";
 import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
+import { cn } from "@/shared/lib/cn";
 import { PageHeader } from "@/shared/ui/PageHeader";
-import { Panel } from "@/shared/ui/Panel";
-import { QueryBody } from "@/shared/ui/QueryBody";
-import { StatCard } from "@/features/overview/components/StatCard";
+import { HealthOverview } from "../components/HealthOverview";
+import { LegacyJobsPanel } from "../components/LegacyJobsPanel";
 import { ProcessTable } from "../components/ProcessTable";
 import { WindowsHostPanel } from "../components/WindowsHostPanel";
-import { useSyspanelController } from "../hooks/useSyspanelController";
 
-import { ActionMsg } from "@/shared/ui/ActionMsg";
-import { primaryBtnClass } from "@/shared/ui/controls";
+const TABS = [
+  { id: "processes", label: "Tiến trình" },
+  { id: "windows", label: "Máy Windows" },
+  { id: "jobs", label: "Hàng đợi (hệ cũ)" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+const TAB_KEY = "syspanel.tab";
 
+function savedTab(): Tab {
+  try {
+    const v = window.localStorage.getItem(TAB_KEY);
+    return TABS.some((t) => t.id === v) ? (v as Tab) : "processes";
+  } catch {
+    return "processes";
+  }
+}
+
+/**
+ * Panel hệ thống: đầu trang luôn có ô tóm tắt (Windows + WSL + GPU) và «Cần chú ý»;
+ * chi tiết chia tab — Tiến trình (PM2 + bot systemd) · Máy Windows · Hàng đợi job (hệ cũ). Nhớ tab đang xem.
+ * Thanh tab tự làm (Tabs dùng chung xếp ngang list + nội dung vì `data-horizontal:` không khớp `data-orientation`).
+ */
 export function SyspanelPage() {
-  const { query, data, msg, busy, retryFailed, cancelStuck, worker } = useSyspanelController();
+  const [tab, setTab] = useState<Tab>(savedTab);
+  const pick = (v: Tab) => {
+    setTab(v);
+    try {
+      window.localStorage.setItem(TAB_KEY, v);
+    } catch {
+      /* trình duyệt chặn lưu — chỉ không nhớ tab */
+    }
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const i = TABS.findIndex((t) => t.id === tab);
+    const next = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length].id;
+    pick(next);
+    document.getElementById(`syspanel-tab-${next}`)?.focus();
+  };
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
         actions={<ScreenSettingsButton screen="syspanel" />}
         title="Panel hệ thống"
-        subtitle="Máy Windows (RAM / CPU / ổ đĩa), tiến trình WSL (bật / tắt), GPU — cookie Gemini vẫn ở Classic"
+        subtitle="Sức khoẻ máy Windows + WSL, tiến trình (bật / tắt), hàng đợi job — cookie Gemini vẫn ở Classic"
         classicHref="/syspanel"
       />
-      <WindowsHostPanel />
-      <ProcessTable />
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-400">Ổ đĩa & hàng đợi job đăng bài (hệ cũ)</h2>
-      <ActionMsg text={msg} />
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={primaryBtnClass} disabled={busy} onClick={retryFailed}>
-          Retry FAILED
-        </button>
-        <button type="button" className={primaryBtnClass} disabled={busy} onClick={cancelStuck}>
-          Hủy job kẹt
-        </button>
-        <button type="button" className={primaryBtnClass} disabled={busy} onClick={() => worker("pause")}>
-          Pause worker
-        </button>
-        <button type="button" className={primaryBtnClass} disabled={busy} onClick={() => worker("resume")}>
-          Resume
-        </button>
-        <button type="button" className={primaryBtnClass} disabled={busy} onClick={() => worker("safe-mode")}>
-          Safe mode
-        </button>
-      </div>
-      <QueryBody
-        isLoading={query.isLoading}
-        isError={query.isError}
-        loadingText="Đang tải…"
-        errorText="Lỗi tải syspanel"
+      <HealthOverview />
+
+      <div
+        role="tablist"
+        aria-label="Chi tiết"
+        onKeyDown={onKey}
+        className="mt-6 flex gap-1 overflow-x-auto border-b border-slate-200"
       >
-        {data ? (
-          <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatCard
-                label="Disk"
-                value={`${Math.round(data.disk_pct)}%`}
-                hint={`${data.disk_used_gb} / ${data.disk_total_gb} GB · ${data.disk_label}`}
-              />
-              <StatCard
-                label="Jobs"
-                value={String(Object.values(data.jobs).reduce((s, n) => s + n, 0))}
-                hint={`${Object.keys(data.jobs).length} status`}
-              />
-            </div>
-            <Panel className="mt-6">
-              <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">
-                Hàng đợi theo status
-              </div>
-              <div className="flex flex-wrap gap-2 p-4">
-                {Object.keys(data.jobs).length === 0 ? (
-                  <span className="text-sm text-slate-400">Không có job</span>
-                ) : (
-                  Object.entries(data.jobs)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([st, n]) => (
-                      <span
-                        key={st}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
-                      >
-                        {st}: {n}
-                      </span>
-                    ))
-                )}
-              </div>
-            </Panel>
-          </>
-        ) : null}
-      </QueryBody>
+        {TABS.map((t) => {
+          const on = t.id === tab;
+          return (
+            <button
+              key={t.id}
+              id={`syspanel-tab-${t.id}`}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-controls={`syspanel-panel-${t.id}`}
+              tabIndex={on ? 0 : -1}
+              onClick={() => pick(t.id)}
+              className={cn(
+                "-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                on ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div id={`syspanel-panel-${tab}`} role="tabpanel" aria-labelledby={`syspanel-tab-${tab}`} className="mt-4">
+        {tab === "processes" ? <ProcessTable /> : tab === "windows" ? <WindowsHostPanel /> : <LegacyJobsPanel />}
+      </div>
     </div>
   );
 }

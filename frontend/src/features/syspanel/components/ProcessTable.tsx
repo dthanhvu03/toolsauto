@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cpu, MemoryStick, Power, RotateCw } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Power, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { ghostBtnClass } from "@/shared/ui/controls";
@@ -7,7 +7,8 @@ import { Panel } from "@/shared/ui/Panel";
 import { Toast } from "@/shared/ui/Toast";
 import { fetchProcesses, processAction } from "../api/syspanelApi";
 import type { ProcessAction, ProcessApp } from "../types/syspanel.types";
-import { Bar, gb, loadTone, ram, uptime } from "./meters";
+import { PROCESSES_KEY, useProcesses } from "../hooks/useMachine";
+import { Bar, ram, uptime } from "./meters";
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   online: { label: "Đang chạy", tone: "bg-emerald-100 text-emerald-800" },
@@ -122,7 +123,7 @@ function ServicesPanel({ services, error, totalMb }: { services: ProcessApp[]; e
 }
 
 /**
- * PLAN-115 — bảng tiến trình PM2: RAM / CPU từng app + bật / tắt / khởi động lại. Lệnh chạy tách khỏi web rồi `pm2 save`
+ * PLAN-115 — bảng tiến trình PM2 (tab «Tiến trình»): RAM / CPU từng app + bật / tắt / khởi động lại. Lệnh chạy tách khỏi web rồi `pm2 save`
  * (máy khởi động lại vẫn giữ lựa chọn). Hỏi lại trước khi tắt (kèm «tắt thì sao»). Tự hỏi lại 5 giây, 2 giây khi đang chờ lệnh.
  */
 export function ProcessTable() {
@@ -131,17 +132,13 @@ export function ProcessTable() {
   const [toast, setToast] = useState({ text: "", seq: 0 });
   const say = (text: string) => setToast((t) => ({ text, seq: t.seq + 1 }));
   const waiting = Object.keys(pending).length > 0;
-  const q = useQuery({
-    queryKey: ["admin-processes"],
-    queryFn: fetchProcesses,
-    refetchInterval: waiting ? 2_000 : 5_000,
-  });
+  const q = useProcesses(waiting);
   const d = q.data;
   // lệnh đã có kết quả (trạng thái đổi) → bỏ «đang…»; chờ quá 60 giây cũng bỏ để nút bấm lại được
   const settle = (name: string, action: ProcessAction, startedAt: number) => {
     const check = (n: number) =>
       window.setTimeout(async () => {
-        const fresh = await qc.fetchQuery({ queryKey: ["admin-processes"], queryFn: fetchProcesses }).catch(() => null);
+        const fresh = await qc.fetchQuery({ queryKey: PROCESSES_KEY, queryFn: fetchProcesses }).catch(() => null);
         const app = fresh?.apps.find((x) => x.name === name);
         const done =
           !app ||
@@ -175,59 +172,10 @@ export function ProcessTable() {
   };
 
   if (!d) return q.isError ? <p className="mt-4 text-sm text-red-700">Không tải được bảng tiến trình.</p> : null;
-  const m = d.machine;
-  const online = d.apps.filter((a) => a.status === "online");
-  const appsMb = online.reduce((s, a) => s + a.mem_mb, 0);
-  const top = [...online].sort((x, y) => y.mem_mb - x.mem_mb)[0];
-  const memPct = (m.mem_used_mb / m.mem_total_mb) * 100;
+  const totalMb = d.machine.mem_total_mb;
   return (
-    <section className="mt-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Panel className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <MemoryStick className="size-4" /> RAM (WSL)
-          </div>
-          <div className="mt-1 text-xl font-semibold tabular-nums">
-            {gb(m.mem_used_mb)} <span className="text-sm font-normal text-slate-400">/ {gb(m.mem_total_mb)}</span>
-          </div>
-          <Bar pct={memPct} tone={loadTone(memPct)} />
-          <p className="mt-1.5 text-xs text-slate-500">
-            Các app dưới đây giữ {gb(appsMb)}
-            {top ? (
-              <>
-                {" "}
-                · nhiều nhất: <b>{top.label}</b> {ram(top.mem_mb)}
-              </>
-            ) : null}
-          </p>
-        </Panel>
-        <Panel className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <Cpu className="size-4" /> CPU (WSL)
-          </div>
-          <div className="mt-1 text-xl font-semibold tabular-nums">{Math.round(m.cpu_pct)}%</div>
-          <Bar pct={m.cpu_pct} tone={m.cpu_pct > 85 ? "bg-red-500" : "bg-indigo-500"} />
-          <p className="mt-1.5 text-xs text-slate-500">{m.cpus} nhân · render / Whisper chạy thì tăng vọt là bình thường</p>
-        </Panel>
-        <Panel className="p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">GPU</div>
-          {m.gpu ? (
-            <>
-              <div className="mt-1 text-xl font-semibold tabular-nums">
-                {gb(m.gpu.mem_used_mb)} <span className="text-sm font-normal text-slate-400">/ {gb(m.gpu.mem_total_mb)}</span>
-              </div>
-              <Bar pct={(m.gpu.mem_used_mb / m.gpu.mem_total_mb) * 100} tone="bg-violet-500" />
-              <p className="mt-1.5 text-xs text-slate-500">
-                {m.gpu.name} · đang dùng {m.gpu.util_pct}%
-              </p>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-slate-400">Không thấy GPU</p>
-          )}
-        </Panel>
-      </div>
-
-      <Panel className="mt-4">
+    <section>
+      <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <span className="text-sm font-semibold">Tiến trình (PM2)</span>
           <span className="text-xs text-slate-400">Bật / tắt được giữ lại khi khởi động lại máy · tự cập nhật 5 giây</span>
@@ -243,11 +191,11 @@ export function ProcessTable() {
         </div>
         <ul className="divide-y divide-slate-100">
           {d.apps.map((a) => (
-            <AppRow key={a.name} a={a} totalMb={m.mem_total_mb} pending={pending[a.name]} onAct={onAct} />
+            <AppRow key={a.name} a={a} totalMb={totalMb} pending={pending[a.name]} onAct={onAct} />
           ))}
         </ul>
       </Panel>
-      <ServicesPanel services={d.services ?? []} error={d.services_error ?? null} totalMb={m.mem_total_mb} />
+      <ServicesPanel services={d.services ?? []} error={d.services_error ?? null} totalMb={totalMb} />
       <Toast text={toast.text} seq={toast.seq} />
     </section>
   );

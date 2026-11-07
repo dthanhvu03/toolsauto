@@ -1,10 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { Cpu, HardDrive, MemoryStick, Monitor } from "lucide-react";
+import { HardDrive } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { Panel } from "@/shared/ui/Panel";
-import { fetchWindowsHost } from "../api/syspanelApi";
+import { useWindowsHost } from "../hooks/useMachine";
 import type { WindowsDisk } from "../types/syspanel.types";
-import { Bar, gb, loadTone, ram, uptime } from "./meters";
+import { Bar, ram, uptime } from "./meters";
 
 const WSL_NAMES = new Set(["vmmemwsl", "vmmem"]);
 
@@ -27,11 +26,11 @@ function DiskRow({ d }: { d: WindowsDisk }) {
 }
 
 /**
- * Máy Windows chứa WSL: RAM / CPU / ổ đĩa + chương trình tốn RAM nhất (gộp theo tên). Chỉ xem.
- * Server đọc qua powershell.exe (~2,5 giây) và giữ 8 giây → trang hỏi lại mỗi 10 giây.
+ * Tab «Máy Windows»: chương trình tốn RAM nhất (gộp theo tên) + từng ổ đĩa. Chỉ xem.
+ * RAM / CPU tổng nằm ở ô tóm tắt đầu trang (cùng query, không hỏi server 2 lần).
  */
 export function WindowsHostPanel() {
-  const q = useQuery({ queryKey: ["admin-windows-host"], queryFn: fetchWindowsHost, refetchInterval: 10_000 });
+  const q = useWindowsHost();
   const w = q.data;
   if (!w) {
     return q.isError ? (
@@ -42,61 +41,11 @@ export function WindowsHostPanel() {
   }
   if (!w.available) return <p className="mt-4 text-sm text-slate-500">Máy Windows: {w.error}</p>;
 
-  const total = w.mem_total_mb ?? 0;
-  const used = w.mem_used_mb ?? 0;
-  const memPct = total ? (used / total) * 100 : 0;
-  const cpu = w.cpu_pct ?? 0;
   const top = w.top ?? [];
   const maxMb = Math.max(1, ...top.map((p) => p.mem_mb));
   return (
-    <section className="mt-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          <Monitor className="size-4" /> Máy Windows
-        </h2>
-        <span className="text-xs text-slate-400">
-          {w.cpu_name} · bật {uptime(w.uptime_s)} · {w.process_count} tiến trình · cập nhật {w.age_s} giây trước
-        </span>
-      </div>
-
-      <div className="mt-2 grid gap-3 sm:grid-cols-3">
-        <Panel className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <MemoryStick className="size-4" /> RAM (Windows)
-          </div>
-          <div className="mt-1 text-xl font-semibold tabular-nums">
-            {gb(used)} <span className="text-sm font-normal text-slate-400">/ {gb(total)}</span>
-          </div>
-          <Bar pct={memPct} tone={loadTone(memPct)} />
-          <p className="mt-1.5 text-xs text-slate-500">
-            còn {gb(Math.max(0, total - used))}
-            {w.wsl_mem_mb != null ? <> · WSL đang giữ {ram(w.wsl_mem_mb)}</> : null}
-          </p>
-          {memPct > 85 ? (
-            <p className="mt-1 text-xs font-medium text-red-700">Windows sắp hết RAM — đóng bớt Chrome / Cursor nếu máy chậm.</p>
-          ) : null}
-        </Panel>
-        <Panel className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <Cpu className="size-4" /> CPU (Windows)
-          </div>
-          <div className="mt-1 text-xl font-semibold tabular-nums">{Math.round(cpu)}%</div>
-          <Bar pct={cpu} tone={cpu > 85 ? "bg-red-500" : "bg-indigo-500"} />
-          <p className="mt-1.5 text-xs text-slate-500">{w.cpus} luồng · cả máy, gồm WSL</p>
-        </Panel>
-        <Panel className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <HardDrive className="size-4" /> Ổ đĩa (Windows)
-          </div>
-          <ul className="mt-1">
-            {(w.disks ?? []).map((d) => (
-              <DiskRow key={d.drive} d={d} />
-            ))}
-          </ul>
-        </Panel>
-      </div>
-
-      <Panel className="mt-4">
+    <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <span className="text-sm font-semibold">Chương trình tốn RAM nhất (Windows)</span>
           <span className="text-xs text-slate-400">Chỉ xem · gộp theo tên · CPU tính trên cả máy · tự cập nhật 10 giây</span>
@@ -126,7 +75,7 @@ export function WindowsHostPanel() {
                 </div>
                 <div
                   className="text-sm tabular-nums text-slate-700"
-                  title={isWsl ? "CPU của WSL xem ở thẻ CPU (WSL) bên dưới — Windows không tính vào tiến trình này" : undefined}
+                  title={isWsl ? "CPU của WSL xem ở ô «CPU WSL» đầu trang — Windows không tính vào tiến trình này" : undefined}
                 >
                   <span className="text-xs text-slate-400 md:hidden">CPU </span>
                   {isWsl || p.cpu_pct == null ? "—" : `${p.cpu_pct}%`}
@@ -144,7 +93,21 @@ export function WindowsHostPanel() {
         </ul>
       </Panel>
 
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-500">WSL — ToolsAuto & bot</h2>
+      <div className="space-y-4">
+        <Panel className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <HardDrive className="size-4" /> Ổ đĩa Windows
+          </div>
+          <ul className="mt-1">
+            {(w.disks ?? []).map((d) => (
+              <DiskRow key={d.drive} d={d} />
+            ))}
+          </ul>
+        </Panel>
+        <p className="px-1 text-xs text-slate-500">
+          {w.cpu_name} · bật {uptime(w.uptime_s)} · {w.process_count} tiến trình · cập nhật {w.age_s} giây trước
+        </p>
+      </div>
     </section>
   );
 }
