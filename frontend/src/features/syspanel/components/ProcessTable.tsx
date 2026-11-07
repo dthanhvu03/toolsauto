@@ -7,6 +7,7 @@ import { Panel } from "@/shared/ui/Panel";
 import { Toast } from "@/shared/ui/Toast";
 import { fetchProcesses, processAction } from "../api/syspanelApi";
 import type { ProcessAction, ProcessApp } from "../types/syspanel.types";
+import { Bar, gb, loadTone, ram, uptime } from "./meters";
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   online: { label: "Đang chạy", tone: "bg-emerald-100 text-emerald-800" },
@@ -16,25 +17,6 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   launching: { label: "Đang bật…", tone: "bg-sky-100 text-sky-800" },
   errored: { label: "Lỗi", tone: "bg-red-100 text-red-800" },
 };
-
-const gb = (mb: number) => `${(mb / 1024).toFixed(1).replace(".", ",")} GB`;
-const ram = (mb: number) => (mb >= 1024 ? gb(mb) : `${mb} MB`);
-
-function uptime(s: number | null): string {
-  if (s == null) return "—";
-  if (s < 60) return `${s} giây`;
-  if (s < 3600) return `${Math.floor(s / 60)} phút`;
-  if (s < 86400) return `${Math.floor(s / 3600)} giờ ${Math.floor((s % 3600) / 60)} phút`;
-  return `${Math.floor(s / 86400)} ngày`;
-}
-
-function Bar({ pct, tone = "bg-indigo-500" }: { pct: number; tone?: string }) {
-  return (
-    <span className="block h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-      <span className={cn("block h-full rounded-full", tone)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-    </span>
-  );
-}
 
 function AppRow({
   a,
@@ -208,7 +190,7 @@ export function ProcessTable() {
           <div className="mt-1 text-xl font-semibold tabular-nums">
             {gb(m.mem_used_mb)} <span className="text-sm font-normal text-slate-400">/ {gb(m.mem_total_mb)}</span>
           </div>
-          <Bar pct={memPct} tone={memPct > 85 ? "bg-red-500" : memPct > 70 ? "bg-amber-500" : "bg-emerald-500"} />
+          <Bar pct={memPct} tone={loadTone(memPct)} />
           <p className="mt-1.5 text-xs text-slate-500">
             Các app dưới đây giữ {gb(appsMb)}
             {top ? (
@@ -221,7 +203,7 @@ export function ProcessTable() {
         </Panel>
         <Panel className="p-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <Cpu className="size-4" /> CPU
+            <Cpu className="size-4" /> CPU (WSL)
           </div>
           <div className="mt-1 text-xl font-semibold tabular-nums">{Math.round(m.cpu_pct)}%</div>
           <Bar pct={m.cpu_pct} tone={m.cpu_pct > 85 ? "bg-red-500" : "bg-indigo-500"} />

@@ -4,6 +4,7 @@ import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { StatCard } from "@/features/overview/components/StatCard";
 import { ProcessTable } from "../components/ProcessTable";
+import { WindowsHostPanel } from "../components/WindowsHostPanel";
 import { useSyspanelController } from "../hooks/useSyspanelController";
 
 import { ActionMsg } from "@/shared/ui/ActionMsg";
@@ -17,9 +18,10 @@ export function SyspanelPage() {
       <PageHeader
         actions={<ScreenSettingsButton screen="syspanel" />}
         title="Panel hệ thống"
-        subtitle="Tiến trình đang chạy (bật / tắt), RAM / CPU / GPU, ổ đĩa — cookie Gemini vẫn ở Classic"
+        subtitle="Máy Windows (RAM / CPU / ổ đĩa), tiến trình WSL (bật / tắt), GPU — cookie Gemini vẫn ở Classic"
         classicHref="/syspanel"
       />
+      <WindowsHostPanel />
       <ProcessTable />
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-400">Ổ đĩa & hàng đợi job đăng bài (hệ cũ)</h2>
       <ActionMsg text={msg} />

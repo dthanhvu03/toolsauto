@@ -1,5 +1,5 @@
 import { getJson, sendJson, type OkMessage } from "@/shared/api/http";
-import type { ProcessAction, ProcessesResponse, SyspanelResponse } from "../types/syspanel.types";
+import type { ProcessAction, ProcessesResponse, SyspanelResponse, WindowsHostResponse } from "../types/syspanel.types";
 
 export function fetchSyspanel() {
   return getJson<SyspanelResponse>("/api/admin/syspanel");
@@ -19,6 +19,10 @@ export function syspanelWorker(action: "pause" | "resume" | "safe-mode") {
 
 export function fetchProcesses() {
   return getJson<ProcessesResponse>("/api/admin/processes");
+}
+
+export function fetchWindowsHost() {
+  return getJson<WindowsHostResponse>("/api/admin/processes/windows");
 }
 
 export function processAction(name: string, action: ProcessAction) {
