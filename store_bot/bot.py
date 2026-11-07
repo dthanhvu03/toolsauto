@@ -23,7 +23,7 @@ from store_bot import hours
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.config import ConfigError, Settings, default_dotenv, load_settings
-from store_bot.db import Order, Product, StoreError, StoreRepository, Topup, User
+from store_bot.db import ICT, Order, Product, StoreError, StoreRepository, Topup, User
 from store_bot.pricing import Markup
 from store_bot.fulfill import Fulfiller
 from store_bot.telegram_api import TelegramApi
@@ -243,7 +243,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "al", "async", "abt", "aic", "amk", "amp",
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "acf1", "acf7", "acf30", "acf0", "al", "async", "abt", "aic", "amk", "amp",
                                                "ahr", "ahc", "aho", "ahs", "ahx"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
@@ -817,10 +817,8 @@ class StoreBot:
             self._show(chat_id, message_id, msg.admin_stats(self.repo.stats(), self._upstream_balance(), self.repo.source_counts()),
                        keyboard([button("💵 Dòng tiền & biên lãi", "acf"), button("💸 Giao dịch gần đây", "al")],
                                 [button("⬅️ Quay lại", "adm")]))
-        elif data == "acf":
-            self._show(chat_id, message_id, msg.admin_cashflow(self.repo.cashflow(), self._upstream_balance()),
-                       keyboard([button("🔄 Làm mới", "acf"), button("📊 Thống kê", "as")],
-                                [button("⬅️ Quản lý", "adm")]))
+        elif data.startswith("acf"):
+            self.show_cashflow(chat_id, message_id, data.removeprefix("acf"))
         elif data == "al":
             self._show(chat_id, message_id, msg.admin_ledger(self.repo.recent_ledger()),
                        keyboard([button("📊 Thống kê", "as"), button("⬅️ Quản lý", "adm")]))
@@ -1039,6 +1037,15 @@ class StoreBot:
         self.tg.send_message(chat_id, msg.icon_saved(brand), keyboard(
             [button(brand.label, "aic", msg.CUSTOM_ICONS.get(brand.key))],
             [button("🗑 Bỏ logo", f"a:icx:{index}"), button("🎨 Hãng khác", "aic")]))
+
+    def show_cashflow(self, chat_id: int, message_id: int | None, code: str = "") -> None:
+        """💵 Dòng tiền & biên lãi. Callback acf<kỳ>: 1 · 7 · 30 ngày, 0 = từ đầu; trống = 7 ngày."""
+        days = {"1": 1, "7": 7, "30": 30, "0": None}.get(code, 7)
+        tabs = [button(("• " + title + " •") if d == days else title, f"acf{d or 0}") for d, title in msg.CASHFLOW_PERIODS]
+        now = datetime.now(ICT).strftime("%H:%M")
+        self._show(chat_id, message_id, msg.admin_cashflow(self.repo.cashflow(days), self._upstream_balance(), now),
+                   keyboard(tabs[:2], tabs[2:], [button("🔄 Làm mới", f"acf{days or 0}"), button("📊 Thống kê", "as")],
+                            [button("⬅️ Quản lý", "adm")]))
 
     def _upstream_balance(self) -> int | None:
         raw = self.repo.get_state("upstream_balance")

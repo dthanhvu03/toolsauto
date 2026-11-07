@@ -782,9 +782,10 @@ class StoreRepository:
                     changed += 1
         return changed
 
-    def sales_by_product(self, days: int = 30) -> dict[int, tuple[int, int, int]]:
-        """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất."""
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    def sales_by_product(self, days: int = 30, since: str | None = None) -> dict[int, tuple[int, int, int]]:
+        """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất (hoặc từ mốc `since`)."""
+        if since is None:
+            since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
         with self._read() as conn:
             rows = conn.execute(
                 """SELECT product_id, SUM(items), SUM(total - refunded), SUM(COALESCE(unit_cost, 0) * items)
@@ -1039,66 +1040,62 @@ class StoreRepository:
                     "SELECT SUM(refunded) FROM orders WHERE refunded > 0 AND created_at >= ?", since)
             return result
 
-    def cashflow(self, days: int = 7, top: int = 5) -> dict:
-        """Màn «Dòng tiền & biên lãi»: tiền vào / ra theo kỳ (ngày theo giờ VN), từng ngày gần nhất,
-        món lãi nhất 30 ngày, tiền đang giữ hộ khách. Cùng cách tính với stats(): doanh thu = đơn đã giao trừ phần
-        hoàn, vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn)."""
+    def cashflow(self, days: int | None = 7, top: int = 5) -> dict:
+        """Báo cáo «Dòng tiền & biên lãi» cho một kỳ: `days` ngày tính theo lịch VN (1 = hôm nay), None = từ đầu.
+        Trả tổng kỳ, kỳ liền trước (để so sánh), diễn biến (ngày ≤ 7 ngày · tuần với 30 ngày · tháng với từ đầu),
+        món lãi nhất trong kỳ, tiền đang giữ hộ khách. Cách tính như stats(): doanh thu = đơn đã giao trừ phần hoàn,
+        vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn)."""
         today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        def since(n: int) -> str:
-            return (today - timedelta(days=n - 1)).astimezone(timezone.utc).isoformat(timespec="seconds")
-
-        sold = "(SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id)"
-        periods = {"today": since(1), "7d": since(7), "30d": since(30), "all": ""}
         with self._read() as conn:
-            def one(sql: str, *args) -> int:
-                return int(conn.execute(sql, args).fetchone()[0] or 0)
-
-            result: dict = {"periods": {}}
-            for name, start in periods.items():
-                row = conn.execute(
-                    f"""SELECT COUNT(*), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * {sold})
-                        FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?""",
-                    (start,),
-                ).fetchone()
-                revenue, cost = int(row[1] or 0), int(row[2] or 0)
-                result["periods"][name] = {
-                    "orders": int(row[0] or 0),
-                    "revenue": revenue,
-                    "cost": cost,
-                    "profit": revenue - cost,
-                    "cash_in": one("SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ?", start),
-                    "adjust": one("SELECT SUM(delta) FROM ledger WHERE kind = 'adjust' AND created_at >= ?", start),
-                }
-            daily: dict[str, dict[str, int]] = {}
-            for day, orders, revenue, cost in conn.execute(
-                f"""SELECT date(o.created_at, '+7 hours'), COUNT(*), SUM(o.total - o.refunded),
-                           SUM(COALESCE(o.unit_cost, 0) * {sold})
-                    FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
-                    GROUP BY 1""",
-                (since(days),),
-            ):
-                daily[day] = {"orders": int(orders or 0), "revenue": int(revenue or 0), "cost": int(cost or 0)}
-            cash_by_day = dict(conn.execute(
-                """SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
-                   WHERE status = 'paid' AND resolved_at >= ? GROUP BY 1""",
-                (since(days),),
-            ).fetchall())
-            result["daily"] = []
-            for back in range(days):
-                day = (today - timedelta(days=back)).date().isoformat()
-                row = daily.get(day, {"orders": 0, "revenue": 0, "cost": 0})
-                result["daily"].append({"day": day, **row, "profit": row["revenue"] - row["cost"],
-                                        "cash_in": int(cash_by_day.get(day) or 0)})
-            result["balances"] = one("SELECT SUM(balance) FROM users")
+            if days is None:
+                first = conn.execute(
+                    "SELECT MIN(t) FROM (SELECT MIN(created_at) AS t FROM orders "
+                    "UNION ALL SELECT MIN(resolved_at) FROM topups WHERE status = 'paid')").fetchone()[0]
+                first_day = (datetime.fromisoformat(first).astimezone(ICT).replace(hour=0, minute=0, second=0,
+                                                                                  microsecond=0)
+                             if first else today)
+            else:
+                first_day = today - timedelta(days=days - 1)
+            start = _utc_iso(first_day)
+            daily = _daily_totals(conn, start, None)
+            previous = (_sum_totals(_daily_totals(conn, _utc_iso(first_day - timedelta(days=days)), start).values())
+                        if days else None)
+            balances = int(conn.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0)
             names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM products")}
-        result["waiting_orders"], result["waiting_cost"] = self.waiting_summary()
+
+        span = (today - first_day).days + 1
+        day_keys = [(today - timedelta(days=back)).date().isoformat() for back in range(span)]  # mới nhất trước
+        if days is None:
+            unit, groups = "month", {}
+            for key in day_keys:
+                groups.setdefault(key[:7], []).append(key)
+        elif days > 7:
+            unit, groups = "week", {}
+            for i in range(0, len(day_keys), 7):
+                chunk = day_keys[i:i + 7]
+                groups[f"{chunk[-1]}|{chunk[0]}"] = chunk
+        else:
+            unit, groups = "day", {key: [key] for key in day_keys} if days > 1 else {}
+        buckets = [{"key": key, **_sum_totals(daily.get(k, {}) for k in keys)} for key, keys in groups.items()]
+
         products = [
             {"name": names.get(pid, f"#{pid}"), "sold": n, "revenue": revenue, "profit": revenue - cost}
-            for pid, (n, revenue, cost) in self.sales_by_product(30).items()
+            for pid, (n, revenue, cost) in self.sales_by_product(since=start).items()
         ]
-        result["top"] = sorted(products, key=lambda p: p["profit"], reverse=True)[:top]
-        return result
+        waiting_orders, waiting_cost = self.waiting_summary()
+        return {
+            "days": days,
+            "from": first_day.date().isoformat(),
+            "to": today.date().isoformat(),
+            "total": _sum_totals(daily.values()),
+            "previous": previous,
+            "unit": unit,
+            "buckets": buckets,
+            "top": sorted(products, key=lambda p: p["profit"], reverse=True)[:top],
+            "balances": balances,
+            "waiting_orders": waiting_orders,
+            "waiting_cost": waiting_cost,
+        }
 
     def recent_ledger(self, limit: int = 15) -> list[dict]:
         """Các lần tiền vào / ra ví khách, mới nhất trước (nạp, mua, hoàn, admin cộng/trừ)."""
@@ -1110,6 +1107,50 @@ class StoreRepository:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+_SOLD_SQL = "(SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id)"
+_ZERO_TOTALS = {"orders": 0, "revenue": 0, "cost": 0, "cash_in": 0, "adjust": 0}
+
+
+def _utc_iso(local: datetime) -> str:
+    return local.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None) -> dict[str, dict[str, int]]:
+    """{ngày VN "YYYY-MM-DD": đơn, doanh thu, vốn, tiền khách chuyển vào, admin cộng/trừ tay} trong [start, end)."""
+    end = end or "9999"
+    out: dict[str, dict[str, int]] = {}
+
+    def add(day: str, **values: int) -> None:
+        row = out.setdefault(day, dict(_ZERO_TOTALS))
+        for name, value in values.items():
+            row[name] += int(value or 0)
+
+    for day, orders, revenue, cost in conn.execute(
+        f"""SELECT date(o.created_at, '+7 hours'), COUNT(*), SUM(o.total - o.refunded),
+                   SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL})
+            FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ? AND o.created_at < ?
+            GROUP BY 1""", (start, end)):
+        add(day, orders=orders, revenue=revenue, cost=cost)
+    for day, amount in conn.execute(
+        """SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
+           WHERE status = 'paid' AND resolved_at >= ? AND resolved_at < ? GROUP BY 1""", (start, end)):
+        add(day, cash_in=amount)
+    for day, amount in conn.execute(
+        """SELECT date(created_at, '+7 hours'), SUM(delta) FROM ledger
+           WHERE kind = 'adjust' AND created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):
+        add(day, adjust=amount)
+    return out
+
+
+def _sum_totals(rows: Iterable[dict[str, int]]) -> dict[str, int]:
+    total = dict(_ZERO_TOTALS)
+    for row in rows:
+        for name in total:
+            total[name] += row.get(name, 0)
+    total["profit"] = total["revenue"] - total["cost"]
+    return total
 
 
 def _upstream_funds(conn: sqlite3.Connection) -> int | None:

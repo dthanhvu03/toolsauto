@@ -493,47 +493,134 @@ def profit_margin(profit: int, revenue: int) -> str:
     return f" (biên {profit * 100 / revenue:.1f}%)".replace(".", ",")
 
 
+CASHFLOW_PERIODS = ((1, "Hôm nay"), (7, "7 ngày"), (30, "30 ngày"), (None, "Từ đầu"))
+_UNIT_TITLE = {"day": "ngày", "week": "tuần", "month": "tháng"}
+_RULE = "─" * 30
+_NAME_WIDTH = 15
+
+
+def _num(amount: int) -> str:
+    return f"{amount:,}".replace(",", ".")
+
+
 def _signed(amount: int) -> str:
-    return ("+" if amount >= 0 else "−") + vnd(abs(amount))
+    return ("+" if amount >= 0 else "−") + _num(abs(amount))
 
 
-def admin_cashflow(cf: dict, upstream_balance: int | None = None) -> str:
-    """Màn 💵 Dòng tiền & biên lãi: tiền vào (khách chuyển khoản) / ra (vốn FatCat), lãi, biên, tiền giữ hộ khách."""
-    blocks = []
-    for key, title in (("today", "Hôm nay"), ("7d", "7 ngày"), ("30d", "30 ngày"), ("all", "Từ đầu")):
-        p = cf["periods"][key]
-        blocks.append(
-            f"<b>{title}</b>\n"
-            f"⬇️ Tiền vào (khách chuyển khoản): {vnd(p['cash_in'])}\n"
-            f"⬆️ Tiền vốn trả FatCat: {vnd(p['cost'])}\n"
-            f"💧 Dòng tiền ròng: <b>{_signed(p['cash_in'] - p['cost'])}</b>\n"
-            f"🛒 {p['orders']} đơn · doanh thu {vnd(p['revenue'])} · lãi <b>{vnd(p['profit'])}</b>"
-            f"{profit_margin(p['profit'], p['revenue'])}"
-            + (f"\n💵 Admin cộng/trừ tay (không phải tiền thật vào): {_signed(p['adjust'])}" if p["adjust"] else "")
-        )
-    days = []
-    for d in cf["daily"]:
-        label = f"{d['day'][8:10]}/{d['day'][5:7]}"
-        if not (d["orders"] or d["cash_in"]):
-            days.append(f"{label}: —")
-            continue
-        days.append(f"{label}: vào {vnd(d['cash_in'])} · {d['orders']} đơn · lãi {vnd(d['profit'])}"
-                    f"{profit_margin(d['profit'], d['revenue'])}")
-    top = [f"{i}. {esc(t['name'])}: {t['sold']} món · lãi {vnd(t['profit'])}{profit_margin(t['profit'], t['revenue'])}"
-           for i, t in enumerate(cf["top"], 1)]
-    wallet = f"\n🐱 Ví FatCat còn: {vnd(upstream_balance)}" if upstream_balance is not None else ""
-    waiting = (f"\n⏳ Cần nạp FatCat cho {cf['waiting_orders']} đơn chờ ví: <b>{vnd(cf['waiting_cost'])}</b>"
-               if cf["waiting_orders"] else "")
-    return (
-        "💵 <b>Dòng tiền & biên lãi</b>\n\n"
-        + "\n\n".join(blocks)
-        + "\n\n<b>Từng ngày</b>\n" + "\n".join(days)
-        + ("\n\n<b>Món lãi nhất 30 ngày</b>\n" + "\n".join(top) if top else "")
-        + "\n\n<b>Tiền đang giữ</b>\n"
-        f"💼 Khách gửi trong ví, chưa mua: <b>{vnd(cf['balances'])}</b> — tiền của khách, giữ lại đừng tiêu"
-        f"{wallet}{waiting}\n\n"
-        "<i>Biên = lãi ÷ doanh thu. Lãi chỉ tính đơn đã giao, đã trừ phần hoàn; hàng tự nhập không có giá vốn.</i>"
+def _pct(profit: int, revenue: int) -> str:
+    return f"{profit * 100 / revenue:.1f}%".replace(".", ",") if revenue > 0 else "–"
+
+
+def _line(label: str, value: str, width: int = 30) -> str:
+    return label + value.rjust(max(width - len(label), len(value) + 1))
+
+
+def _table(rows: list[list[str]]) -> str:
+    """Bảng chữ đơn cách: cột đầu căn trái, còn lại căn phải."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join(
+        "  ".join(cell.ljust(widths[i]) if i == 0 else cell.rjust(widths[i]) for i, cell in enumerate(r))
+        for r in rows
     )
+
+
+def _change(current: int, previous: int) -> str:
+    if previous <= 0:
+        return "mới" if current > 0 else "="
+    ratio = current / previous
+    if ratio >= 2:  # tăng mạnh đọc theo lần: «▲ gấp 11», «▲ gấp 2,5» thay cho «▲ 1050%»
+        return f"▲ gấp {ratio:.0f}" if ratio >= 10 else f"▲ gấp {ratio:.1f}".replace(".", ",")
+    delta = (ratio - 1) * 100
+    if abs(delta) < 0.5:
+        return "="
+    return f"{'▲' if delta > 0 else '▼'} {abs(delta):.0f}%"
+
+
+def _dm(iso: str) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}"
+
+
+def _bucket_label(unit: str, key: str) -> str:
+    if unit == "month":
+        return f"{key[5:7]}/{key[:4]}"
+    if unit == "week":
+        first, last = key.split("|")
+        return f"{_dm(first)}–{_dm(last)}"
+    return _dm(key)
+
+
+def cashflow_period_title(days: int | None) -> str:
+    return dict(CASHFLOW_PERIODS)[days]
+
+
+def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "") -> str:
+    """Báo cáo 💵 Dòng tiền & biên lãi một kỳ, trình bày kiểu báo cáo tài chính: kết quả kinh doanh, dòng tiền,
+    diễn biến, sản phẩm, số dư & nghĩa vụ. Số trong bảng tính bằng đồng."""
+    t, prev, title = cf["total"], cf["previous"], cashflow_period_title(cf["days"])
+    span = _dm(cf["to"]) + "/" + cf["to"][:4] if cf["from"] == cf["to"] else \
+        f"{_dm(cf['from'])}/{cf['from'][:4]} – {_dm(cf['to'])}/{cf['to'][:4]}"
+    parts = [f"💵 <b>DÒNG TIỀN & BIÊN LÃI · {title.upper()}</b>\n<i>{span}{' · lúc ' + now if now else ''}</i>"]
+
+    avg = t["revenue"] // t["orders"] if t["orders"] else 0
+    pnl = [
+        _line("Doanh thu", _num(t["revenue"])),
+        _line("Giá vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
+        _RULE,
+        _line("Lãi gộp", _num(t["profit"])),
+        _line("Biên lãi gộp", _pct(t["profit"], t["revenue"])),
+        _line("Số đơn", str(t["orders"])),
+        _line("Trung bình / đơn", _num(avg)),
+    ]
+    compare = ""
+    if prev is not None:
+        label = "hôm qua" if cf["days"] == 1 else f"{title} trước"
+        if prev["revenue"] or prev["cash_in"]:
+            compare = (f"\nSo với {label}: doanh thu <b>{_change(t['revenue'], prev['revenue'])}</b> · "
+                       f"lãi <b>{_change(t['profit'], prev['profit'])}</b> · "
+                       f"tiền vào <b>{_change(t['cash_in'], prev['cash_in'])}</b>")
+        else:
+            compare = f"\n<i>{label.capitalize()} chưa phát sinh — chưa có số để so sánh.</i>"
+    parts.append("<b>Kết quả kinh doanh</b> <i>(đồng)</i>\n<pre>" + "\n".join(pnl) + "</pre>" + compare)
+
+    flow = [
+        _line("Khách chuyển khoản", _num(t["cash_in"])),
+        _line("Chi vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
+        _RULE,
+        _line("Dòng tiền ròng", _signed(t["cash_in"] - t["cost"])),
+    ]
+    adjust = (f"\n<i>Ngoài ra admin cộng/trừ tay {_signed(t['adjust'])}đ vào ví khách — không phải tiền thật.</i>"
+              if t["adjust"] else "")
+    parts.append("<b>Dòng tiền</b>\n<pre>" + "\n".join(flow) + "</pre>" + adjust)
+
+    if cf["buckets"]:
+        head = {"day": "Ngày", "week": "Tuần", "month": "Tháng"}[cf["unit"]]
+        rows = [[head, "Tiền vào", "Lãi", "Biên"]] + [
+            [_bucket_label(cf["unit"], b["key"]), _num(b["cash_in"]), _num(b["profit"]), _pct(b["profit"], b["revenue"])]
+            for b in cf["buckets"][:12]
+        ]
+        parts.append(f"<b>Diễn biến theo {_UNIT_TITLE[cf['unit']]}</b>\n<pre>{esc(_table(rows))}</pre>")
+
+    if cf["top"]:
+        rows = [["Sản phẩm", "SL", "Lãi", "Biên"]] + [
+            [(p["name"][:_NAME_WIDTH - 1] + "…") if len(p["name"]) > _NAME_WIDTH else p["name"],
+             str(p["sold"]), _num(p["profit"]), _pct(p["profit"], p["revenue"])]
+            for p in cf["top"]
+        ]
+        parts.append(f"<b>Sản phẩm lãi nhất</b>\n<pre>{esc(_table(rows))}</pre>")
+
+    holdings = [_line("Ví khách (phải trả)", _num(cf["balances"]))]
+    if upstream_balance is not None:
+        holdings.append(_line("Ví FatCat", _num(upstream_balance)))
+    if cf["waiting_orders"]:
+        holdings.append(_line(f"Cần nạp ({cf['waiting_orders']} đơn chờ)", _num(cf["waiting_cost"])))
+    warn = ("\n⚠️ <b>Ví FatCat không đủ vốn cho đơn đang chờ</b> — nạp thêm để bot tự giao."
+            if cf["waiting_orders"] and upstream_balance is not None and upstream_balance < cf["waiting_cost"] else "")
+    parts.append("<b>Số dư & nghĩa vụ</b> <i>(hiện tại)</i>\n<pre>" + "\n".join(holdings) + "</pre>\n"
+                 "<i>Ví khách là tiền khách gửi trước — giữ lại, không tính là lãi.</i>" + warn)
+
+    parts.append("<i>Biên lãi gộp = lãi ÷ doanh thu. Chỉ tính đơn đã giao, đã trừ phần hoàn; "
+                 "hàng tự nhập không có giá vốn.</i>")
+    return "\n\n".join(parts)
 
 
 _LEDGER_KIND = {"topup": "💰 Nạp", "order": "🛒 Mua", "refund": "↩️ Hoàn", "adjust": "💵 Admin"}

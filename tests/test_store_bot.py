@@ -614,18 +614,22 @@ def test_cashflow_screen_shows_margin_and_customer_money(fatcat, repo):
     store._fulfill_now(good.id, BUYER, None)
     repo.adjust_balance(BUYER, 5_000, "tặng", "admin:1")
 
-    cf = repo.cashflow()
-    today = cf["periods"]["today"]
-    assert (today["cash_in"], today["revenue"], today["cost"], today["profit"]) == (400_000, 155_000, 151_900, 3_100)
-    assert today["adjust"] == 5_000 and cf["periods"]["all"]["profit"] == 3_100
-    assert len(cf["daily"]) == 7 and cf["daily"][0]["cash_in"] == 400_000 and cf["daily"][0]["orders"] == 1
-    assert cf["balances"] == 400_000 - 155_000 + 5_000
-    assert cf["top"][0]["profit"] == 3_100
+    cf = repo.cashflow(1)
+    total = cf["total"]
+    assert (total["cash_in"], total["revenue"], total["cost"], total["profit"]) == (400_000, 155_000, 151_900, 3_100)
+    assert total["adjust"] == 5_000 and cf["previous"]["revenue"] == 0 and cf["buckets"] == []
+    week = repo.cashflow(7)
+    assert week["unit"] == "day" and len(week["buckets"]) == 7 and week["buckets"][0]["cash_in"] == 400_000
+    month = repo.cashflow(30)
+    assert month["unit"] == "week" and len(month["buckets"]) == 5 and month["buckets"][0]["profit"] == 3_100
+    assert repo.cashflow(None)["unit"] == "month" and repo.cashflow(None)["total"]["profit"] == 3_100
+    assert cf["balances"] == 400_000 - 155_000 + 5_000 and cf["top"][0]["profit"] == 3_100
 
-    store.handle_update(_click(ADMIN, "acf", "boss"))
-    text = telegram.edits[-1][2]
-    assert "Dòng tiền ròng: <b>+248.100đ</b>" in text and "(biên 2,0%)" in text
-    assert "chưa mua: <b>250.000đ</b>" in text and "Admin cộng/trừ tay" in text
+    store.handle_update(_click(ADMIN, "acf30", "boss"))
+    text, markup = telegram.edits[-1][2], telegram.edits[-1][3]
+    assert "DÒNG TIỀN & BIÊN LÃI · 30 NGÀY" in text and "Biên lãi gộp" in text and "2,0%" in text
+    assert "+248.100" in text and "250.000" in text and "admin cộng/trừ tay +5.000đ" in text
+    assert "• 30 ngày •" in str(markup)
     store.handle_update(_click(BUYER, "acf"))  # khách bấm mã admin → không có quyền, không lộ số liệu
     assert all("Dòng tiền" not in t for t in telegram.texts_to(BUYER))
 
