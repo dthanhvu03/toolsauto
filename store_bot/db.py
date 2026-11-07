@@ -1238,6 +1238,12 @@ class StoreRepository:
             row = conn.execute("SELECT * FROM capital WHERE id = ?", (capital_id,)).fetchone()
         return dict(row) if row else None
 
+    def order_cost(self, order_id: int) -> int | None:
+        """Vốn FatCat của một đơn = giá vốn × số món thực giao; hàng tự nhập (không giá vốn) → None."""
+        with self._read() as conn:
+            row = conn.execute(f"SELECT o.unit_cost, {_SOLD_SQL} FROM orders o WHERE o.id = ?", (order_id,)).fetchone()
+        return None if row is None or row[0] is None else int(row[0]) * int(row[1] or 0)
+
     def last_synced(self) -> str | None:
         """Lần đồng bộ FatCat gần nhất (synced_at mới nhất của sản phẩm FatCat)."""
         with self._read() as conn:

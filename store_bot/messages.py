@@ -1091,11 +1091,26 @@ def admin_topup_button(topup: Topup) -> str:
     return f"#{topup.id} · {vnd(topup.amount)} · {topup.code}"
 
 
-def admin_sale(order: Order, user: User | None) -> str:
+def admin_sale(order: Order, user: User | None, cost: int | None = None, balance: int | None = None,
+               waiting: tuple[int, int] = (0, 0)) -> str:
+    """Tin báo admin mỗi đơn đã giao. Hàng FatCat: kèm vốn đã trừ ví FatCat, lãi, và số cần nạp —
+    nạp lại đúng vốn đơn này (lãi nằm ở tài khoản ngân hàng, không qua FatCat); có đơn chờ ví thì nạp phần thiếu."""
     who = esc(user.label) if user else str(order.user_id)
     via = " qua API" if order.source == "api" else ""
     code = f" · mã {esc(order.upstream_order_id)}" if order.upstream_order_id else ""
-    return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
+    head = f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
+    if not cost:
+        return head
+    paid = order.total - order.refunded
+    lines = [f"🐱 Vốn FatCat đã trừ: {vnd(cost)} · lãi <b>{vnd(paid - cost)}</b> (về tài khoản ngân hàng)"]
+    count, need = waiting
+    if count and balance is not None and need > balance:
+        lines.append(f"💳 <b>Cần nạp FatCat: {vnd(need - balance)}</b> — {count} đơn đang chờ ví")
+    else:
+        lines.append(f"💳 Nạp lại FatCat: <b>{vnd(cost)}</b> (đúng vốn đơn này)")
+    if balance is not None:
+        lines[-1] += f" · ví còn {vnd(balance)}"
+    return head + "\n" + "\n".join(lines)
 
 
 def topup_outcome(topup: Topup) -> str:
@@ -1161,7 +1176,7 @@ def admin_waiting_funds(order: Order, user: User | None, balance: int | None, co
         f"🔔 <b>Khách đã trả, chờ anh nạp ví FatCat</b>\n\n"
         f"🧾 Đơn #{order.id} · {who}\n📦 {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}\n\n"
         f"🐱 Ví FatCat: {funds} · {count} đơn đang chờ cần {vnd(need)}"
-        + (f" → <b>nạp thêm ít nhất {vnd(short)}</b>" if short else "")
+        + (f" → <b>cần nạp {vnd(short)}</b>" if short else "")
         + "\n👉 Nạp ở bot FatCat; nạp xong khoảng 30 giây là bot tự lấy hàng và gửi khách."
     )
 

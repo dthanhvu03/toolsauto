@@ -631,7 +631,8 @@ class StoreBot:
 
     def after_sale(self, order: Order, user: User | None) -> None:
         """Báo admin (im lặng) mỗi đơn và báo (có chuông) khi vừa hết hàng. Bot và API cùng dùng."""
-        self.notify_admins(msg.admin_sale(order, user), quiet=True)
+        self.notify_admins(msg.admin_sale(order, user, self.repo.order_cost(order.id), self.repo.upstream_funds(),
+                                          self.repo.waiting_summary()), quiet=True)
         product = self.repo.get_product(order.product_id)
         if product and product.upstream_id is None and product.stock == 0:
             self.notify_admins(msg.admin_sold_out(product),

@@ -501,7 +501,7 @@ def test_fatcat_402_keeps_order_waiting_then_delivers_after_admin_tops_up(fatcat
     assert (waiting.status, waiting.waiting_funds, waiting.refunded) == ("pending", True, 0)
     assert repo.get_user(BUYER).balance == 200_000 - 155_000  # không hoàn, giữ đơn
     assert any("shop đang nhập hàng" in h for h in telegram.texts_to(BUYER))
-    assert any("chờ anh nạp ví FatCat" in h and "nạp thêm ít nhất" in h for h in telegram.texts_to(ADMIN))
+    assert any("chờ anh nạp ví FatCat" in h and "cần nạp 150.900đ" in h for h in telegram.texts_to(ADMIN))
 
     store.retry_pending()  # ví vẫn thiếu → không gọi FatCat lần nữa
     assert len(fake.calls) == 1
@@ -510,6 +510,9 @@ def test_fatcat_402_keeps_order_waiting_then_delivers_after_admin_tops_up(fatcat
     assert len(fake.calls) == 2 and fake.calls[1][2] != fake.calls[0][2]  # request_id mới
     assert repo.get_order(order.id).status == "done"
     assert any("fc-34-0" in h for h in telegram.texts_to(BUYER))
+    sale = [h for h in telegram.texts_to(ADMIN) if h.startswith("🛒")][-1]
+    assert "Vốn FatCat đã trừ: 151.900đ" in sale and "lãi <b>3.100đ</b>" in sale
+    assert "Nạp lại FatCat: <b>151.900đ</b>" in sale and "ví còn" in sale
 
 
 def test_slow_source_retried_with_same_request_id(fatcat, repo, monkeypatch):
