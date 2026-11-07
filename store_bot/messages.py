@@ -462,7 +462,9 @@ def admin_home(stats: dict[str, int], upstream_balance: int | None = None, *, sh
         todo.append(f"💳 <b>{stats['pending_topups']}</b> yêu cầu nạp chờ duyệt → Khách & đại lý")
     count, need = waiting
     if count:
-        todo.append(f"⏳ <b>{count}</b> đơn chờ ví FatCat — cần nạp <b>{vnd(need)}</b>")
+        short = max(need - (upstream_balance or 0), 0)
+        todo.append(f"⏳ <b>{count}</b> đơn chờ ví FatCat (vốn {vnd(need)}) — "
+                    + (f"<b>nạp thêm đúng {vnd(short)}</b> là đủ giao" if short else "ví đã đủ, bot đang lấy hàng"))
     if low_funds:
         todo.append(f"🐱 Ví FatCat không đủ nhập <b>{low_funds}</b> món — khách mua sẽ phải chờ")
     if stats["pending_orders"] > count:
@@ -718,7 +720,9 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
     if upstream_balance is not None:
         holdings.append(_line("Ví FatCat", _num(upstream_balance)))
     if cf["waiting_orders"]:
-        holdings.append(_line(f"Cần nạp ({cf['waiting_orders']} đơn chờ)", _num(cf["waiting_cost"])))
+        holdings.append(_line(f"Vốn {cf['waiting_orders']} đơn chờ", _num(cf["waiting_cost"])))
+        if upstream_balance is not None:
+            holdings.append(_line("→ Nạp thêm đúng", _num(max(cf["waiting_cost"] - upstream_balance, 0))))
     warn = ("\n⚠️ <b>Ví FatCat không đủ vốn cho đơn đang chờ</b> — nạp thêm để bot tự giao."
             if cf["waiting_orders"] and upstream_balance is not None and upstream_balance < cf["waiting_cost"] else "")
     parts.append("<b>Số dư & nghĩa vụ</b> <i>(hiện tại)</i>\n<pre>" + "\n".join(holdings) + "</pre>\n"
