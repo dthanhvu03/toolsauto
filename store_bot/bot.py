@@ -63,7 +63,8 @@ def keyboard(*rows: list[dict]) -> dict:
 
 
 def main_menu(is_admin: bool) -> dict:
-    """Bàn phím cố định dưới ô chat (reply keyboard), luôn hiện kể cả khi khách cuộn mất tin cũ."""
+    """Bàn phím menu dưới ô chat (reply keyboard), không mất khi cuộn tin cũ. Không bật `is_persistent`: ẩn rồi thì
+    giữ ẩn (bấm biểu tượng ⌨️ cạnh ô nhập để mở lại) — chủ bot không muốn menu tự bật lên mỗi lần đóng bàn phím."""
     rows = [
         [{"text": msg.MENU_SHOP}],
         [{"text": msg.MENU_PROFILE}, {"text": msg.MENU_ORDERS}],
@@ -71,8 +72,7 @@ def main_menu(is_admin: bool) -> dict:
     ]
     if is_admin:
         rows.append([{"text": msg.MENU_ADMIN}])
-    return {"keyboard": rows, "resize_keyboard": True, "is_persistent": True,
-            "input_field_placeholder": msg.MENU_PLACEHOLDER}
+    return {"keyboard": rows, "resize_keyboard": True, "input_field_placeholder": msg.MENU_PLACEHOLDER}
 
 
 class StoreBot:
