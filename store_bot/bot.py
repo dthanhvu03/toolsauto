@@ -243,7 +243,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "acf1", "acf7", "acf30", "acf0", "axn", "axl", "avn", "avl", "al", "async", "abt", "aic", "amk", "amp",
+            if parts[0] == "a" or data in {"adm", "agf", "agp", "agc", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "acf1", "acf7", "acf30", "acf0", "axn", "axl", "avn", "avl", "al", "async", "abt", "aic", "amk", "amp",
                                                "ahr", "ahc", "aho", "ahs", "ahx"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
@@ -768,6 +768,12 @@ class StoreBot:
             self._clear_await(user.user_id)
         if data == "adm":
             self.show_admin(chat_id, message_id)
+        elif data == "agf":
+            self.show_finance_hub(chat_id, message_id)
+        elif data == "agp":
+            self.show_goods_hub(chat_id, message_id)
+        elif data == "agc":
+            self.show_customers_hub(chat_id, message_id)
         elif data == "ap":
             self.show_admin_products(chat_id, message_id)
         elif data == "apn":
@@ -782,10 +788,10 @@ class StoreBot:
             self.show_admin_topups(chat_id, message_id)
         elif data == "aa":
             self._set_await(user.user_id, "adjust")
-            self._show(chat_id, message_id, msg.ASK_ADJUST, keyboard([button("⬅️ Quay lại", "adm")]))
+            self._show(chat_id, message_id, msg.ASK_ADJUST, keyboard([button("⬅️ Quay lại", "agc")]))
         elif data == "abt":
             self.repo.set_state("restock_dm", "0" if self.restock_dm_enabled() else "1")
-            self.show_admin(chat_id, message_id)
+            self.show_customers_hub(chat_id, message_id)
         elif data == "amk":
             self.show_markup(chat_id, message_id)
         elif data == "amp":
@@ -812,11 +818,11 @@ class StoreBot:
                 count, balance = self.sync_upstream()
             except UpstreamError as exc:
                 return f"Không đồng bộ được FatCat: {exc}"
-            self._show(chat_id, message_id, msg.admin_sync_result(count, balance), keyboard([button("⬅️ Quay lại", "adm")]))
+            self._show(chat_id, message_id, msg.admin_sync_result(count, balance), keyboard([button("⬅️ Hàng hoá", "agp")]))
         elif data == "as":
             self._show(chat_id, message_id, msg.admin_stats(self.repo.stats(self.settings.admin_ids), self._upstream_balance(), self.repo.source_counts()),
                        keyboard([button("💵 Dòng tiền & biên lãi", "acf"), button("💸 Giao dịch gần đây", "al")],
-                                [button("⬅️ Quay lại", "adm")]))
+                                [button("⬅️ Tài chính", "agf")]))
         elif data.startswith("acf"):
             self.show_cashflow(chat_id, message_id, data.removeprefix("acf"))
         elif data == "axn":
@@ -831,7 +837,7 @@ class StoreBot:
             self.show_capital(chat_id, message_id)
         elif data == "al":
             self._show(chat_id, message_id, msg.admin_ledger(self.repo.recent_ledger()),
-                       keyboard([button("📊 Thống kê", "as"), button("⬅️ Quản lý", "adm")]))
+                       keyboard([button("📊 Thống kê", "as"), button("⬅️ Tài chính", "agf")]))
         else:
             return self._on_admin_item(chat_id, message_id, user, parts)
         return None
@@ -950,22 +956,68 @@ class StoreBot:
             return f"🌙 Đang nghỉ tới {status.reopen}"
         return f"🌙 Giờ nghỉ: {window.label}" if window else "🌙 Đặt giờ nghỉ / đóng shop"
 
+    def _shop_line(self) -> str:
+        status = self.shop_status()
+        window = hours.parse_window(self.repo.get_state("closed_hours"))
+        if status.manual:
+            return "⏸ <b>Đang ĐÓNG tay</b> — khách không đặt mua được"
+        if status.closed:
+            return f"🌙 <b>Đang nghỉ</b> tới {status.reopen}"
+        return "🟢 <b>Đang mở cửa</b>" + (f" · nghỉ hằng ngày {window.label}" if window else "")
+
     def show_admin(self, chat_id: int, message_id: int | None) -> None:
+        """Trang đầu Quản lý shop: số hôm nay + việc cần xử lý; chức năng chia 3 nhóm (Tài chính · Hàng hoá ·
+        Khách & đại lý). Việc đang chờ (duyệt nạp) có nút tắt ngay đầu."""
+        stats = self.repo.stats(self.settings.admin_ids)
+        upstream_balance = self._upstream_balance()
+        waiting = self.repo.waiting_summary()
+        funds = self.repo.upstream_funds()
+        low = sum(1 for p in self.repo.list_products() if self.restocking(p, funds)) if self.fulfiller.client else 0
+        shortcuts = []
+        if stats["pending_topups"]:
+            shortcuts.append(button(f"💳 Duyệt nạp ({stats['pending_topups']})", "at"))
+        if waiting[0] or low:
+            shortcuts.append(button("🏦 Ghi nạp vốn FatCat", "avn"))
+        self._show(chat_id, message_id, msg.admin_home(stats, upstream_balance, shop_line=self._shop_line(),
+                                                       waiting=waiting, low_funds=low), keyboard(
+            shortcuts,
+            [button("💰 Tài chính", "agf"), button("📦 Hàng hoá", "agp")],
+            [button("👥 Khách & đại lý", "agc")],
+            [button(self._hours_button(), "ahr")],
+            [button("🔄 Làm mới", "adm"), button("🏠 Trang chủ", "home")],
+        ))
+
+    def show_finance_hub(self, chat_id: int, message_id: int | None) -> None:
+        stats = self.repo.stats(self.settings.admin_ids)
+        self._show(chat_id, message_id, msg.admin_finance_hub(stats, self.repo.capital_total()), keyboard(
+            [button("💵 Dòng tiền & biên lãi", "acf")],
+            [button("📊 Thống kê", "as"), button("💸 Giao dịch", "al")],
+            [button("➖ Ghi khoản chi", "axn"), button("🧾 Khoản chi", "axl")],
+            [button("🏦 Nạp vốn FatCat", "avn"), button("📒 Sổ vốn", "avl")],
+            [button("⬅️ Quản lý", "adm")],
+        ))
+
+    def show_goods_hub(self, chat_id: int, message_id: int | None) -> None:
+        products = self.repo.list_products(include_inactive=True)
+        upstream = bool(self.fulfiller.client)
+        self._show(chat_id, message_id, msg.admin_goods_hub(products, self._upstream_balance(),
+                                                            self.repo.last_synced() if upstream else None), keyboard(
+            [button("📦 Sản phẩm & kho", "ap")],
+            [button("🔄 Đồng bộ FatCat", "async"), button("💲 Tăng giá bán", "amk")] if upstream else [],
+            [button("🎨 Logo hãng", "aic")],
+            [button("⬅️ Quản lý", "adm")],
+        ))
+
+    def show_customers_hub(self, chat_id: int, message_id: int | None) -> None:
         stats = self.repo.stats(self.settings.admin_ids)
         pending = f" ({stats['pending_topups']})" if stats["pending_topups"] else ""
-        upstream_balance = self._upstream_balance()
-        sync_row = [button("🔄 Đồng bộ FatCat", "async")] if self.fulfiller.client else []
-        self._show(chat_id, message_id, msg.admin_home(stats, upstream_balance), keyboard(
-            [button("📦 Sản phẩm & kho", "ap")],
-            sync_row,
-            [button(("🔔 Nhắn khách hàng mới: Bật" if self.restock_dm_enabled() else "🔕 Nhắn khách hàng mới: Tắt"),
-                    "abt")],
-            [button("💲 Tăng giá bán", "amk")] if self.fulfiller.client else [],
-            [button("🔑 Khóa API đại lý", "ak"), button("🎨 Logo hãng", "aic")],
+        keys = sum(1 for k in self.repo.list_keys() if k.active)
+        self._show(chat_id, message_id, msg.admin_customers_hub(stats, self.repo.source_counts(), keys), keyboard(
             [button(f"💳 Nạp chờ duyệt{pending}", "at"), button("💵 Cộng/trừ tiền", "aa")],
-            [button(self._hours_button(), "ahr")],
-            [button("📊 Thống kê", "as"), button("💵 Dòng tiền", "acf")],
-            [button("🏠 Trang chủ", "home")],
+            [button("🔑 Khóa API đại lý", "ak")],
+            [button(("🔔 Báo hàng mới cho khách: Bật" if self.restock_dm_enabled() else "🔕 Báo hàng mới cho khách: Tắt"),
+                    "abt")],
+            [button("⬅️ Quản lý", "adm")],
         ))
 
     # ---------- tăng giá bán ----------
@@ -981,7 +1033,7 @@ class StoreBot:
         self._show(chat_id, message_id, msg.admin_markup(self.fulfiller.global_markup(), rows), keyboard(
             *self._markup_rows(0),
             [button("📦 Giá riêng từng món", "amp")],
-            [button("⬅️ Quay lại", "adm")],
+            [button("⬅️ Hàng hoá", "agp")],
         ))
 
     def show_markup_products(self, chat_id: int, message_id: int | None) -> None:
@@ -1029,7 +1081,7 @@ class StoreBot:
         name = self.repo.get_product(target).name if target else None
         self._show(chat_id, message_id, msg.markup_applied(markup, changed, name), keyboard(
             [button("💲 Tăng giá bán", "amk"), button("🛒 Xem shop", "shop")],
-            [button("⬅️ Quản lý", "adm")],
+            [button("⬅️ Hàng hoá", "agp")],
         ))
         logger.info("[Store] admin %s đổi tăng giá %s → %s (%s món)", user.user_id, target or "chung", code, changed)
         return "Đã đổi giá."
@@ -1037,7 +1089,7 @@ class StoreBot:
     def show_admin_icons(self, chat_id: int, message_id: int | None) -> None:
         rows = [[button(msg.admin_icon_button(b), f"a:ic:{i}", msg.CUSTOM_ICONS.get(b.key))]
                 for i, b in enumerate(msg.BRANDS)]
-        rows.append([button("⬅️ Quay lại", "adm")])
+        rows.append([button("⬅️ Hàng hoá", "agp")])
         self._show(chat_id, message_id, msg.ADMIN_ICONS, keyboard(*rows))
 
     def _set_icon(self, chat_id: int, user: User, pending: dict, message: dict) -> None:
@@ -1066,7 +1118,7 @@ class StoreBot:
                    keyboard(tabs[:2], tabs[2:], [button("➖ Ghi khoản chi", "axn"), button("🧾 Khoản chi", "axl")],
                             [button("🏦 Nạp vốn FatCat", "avn"), button("📒 Sổ vốn", "avl")],
                             [button("🔄 Làm mới", f"acf{days or 0}"), button("📊 Thống kê", "as")],
-                            [button("⬅️ Quản lý", "adm")]))
+                            [button("⬅️ Tài chính", "agf")]))
 
     def show_capital(self, chat_id: int, message_id: int | None) -> None:
         rows = self.repo.recent_capital()
@@ -1092,7 +1144,7 @@ class StoreBot:
     def show_admin_products(self, chat_id: int, message_id: int | None) -> None:
         products = self.repo.list_products(include_inactive=True)
         rows = [[button(msg.admin_product_button(p), f"a:p:{p.id}", msg.icon_id(p.name))] for p in products]
-        rows += [[button("➕ Thêm sản phẩm", "apn")], [button("⬅️ Quay lại", "adm")]]
+        rows += [[button("➕ Thêm sản phẩm", "apn")], [button("⬅️ Hàng hoá", "agp")]]
         self._show(chat_id, message_id, f"📦 <b>Sản phẩm</b> ({len(products)})", keyboard(*rows))
 
     def show_admin_product(self, chat_id: int, message_id: int | None, product_id: int) -> None:
@@ -1121,7 +1173,7 @@ class StoreBot:
     def show_admin_keys(self, chat_id: int, message_id: int | None) -> None:
         keys = self.repo.list_keys()
         rows = [[button(msg.admin_key_button(k, len(self.repo.blocked_products(k.id))), f"a:k:{k.id}")] for k in keys]
-        rows += [[button("➕ Cấp khóa mới", "akn")], [button("⬅️ Quay lại", "adm")]]
+        rows += [[button("➕ Cấp khóa mới", "akn")], [button("⬅️ Khách & đại lý", "agc")]]
         url = msg.esc(self.settings.api_public_url) or "(chưa cài STORE_API_PUBLIC_URL)"
         self._show(chat_id, message_id, f"🔑 <b>Khóa API đại lý</b> ({len(keys)})\nĐịa chỉ API: {url}", keyboard(*rows))
 
@@ -1151,7 +1203,7 @@ class StoreBot:
     def show_admin_topups(self, chat_id: int, message_id: int | None) -> None:
         topups = self.repo.pending_topups()
         if not topups:
-            self._show(chat_id, message_id, "💳 Không có yêu cầu nạp nào đang chờ.", keyboard([button("⬅️ Quay lại", "adm")]))
+            self._show(chat_id, message_id, "💳 Không có yêu cầu nạp nào đang chờ.", keyboard([button("⬅️ Khách & đại lý", "agc")]))
             return
         rows = [[button("✅ " + msg.admin_topup_button(t), f"a:tc:{t.id}"), button("❌", f"a:tx:{t.id}")] for t in topups]
         rows.append([button("⬅️ Quay lại", "adm")])
@@ -1327,7 +1379,7 @@ class StoreBot:
                 self._clear_await(user.user_id)
                 self.tg.send_message(target.user_id, msg.balance_adjusted(sign * amount, balance, note))
                 self.tg.send_message(chat_id, f"✅ {msg.esc(target.label)}: {'+' if sign > 0 else '-'}{msg.vnd(amount)}. "
-                                              f"Số dư: {msg.vnd(balance)}", keyboard([button("⬅️ Quản lý", "adm")]))
+                                              f"Số dư: {msg.vnd(balance)}", keyboard([button("⬅️ Khách & đại lý", "agc")]))
         except StoreError as exc:
             self.tg.send_message(chat_id, "❌ " + msg.error_text(exc))
 

@@ -447,16 +447,72 @@ ASK_HOURS = ("✍️ Gõ khung giờ nghỉ hằng ngày (giờ VN), ví dụ <c
              "Gõ /huy để thôi.")
 
 
-def admin_home(stats: dict[str, int], upstream_balance: int | None = None) -> str:
-    pending = f"\n💳 Nạp chờ duyệt: <b>{stats['pending_topups']}</b>" if stats["pending_topups"] else ""
-    upstream = f"\n🐱 Ví FatCat: <b>{vnd(upstream_balance)}</b>" if upstream_balance is not None else ""
+def admin_home(stats: dict[str, int], upstream_balance: int | None = None, *, shop_line: str = "",
+               waiting: tuple[int, int] = (0, 0), low_funds: int = 0) -> str:
+    """Trang đầu Quản lý shop: trạng thái mở cửa, số hôm nay (của khách, đã trừ khoản chi) và việc cần xử lý."""
+    revenue, profit = stats["revenue_today"], stats["profit_today"]
+    today = "\n".join([
+        _line("Đơn", str(stats["orders_today"])),
+        _line("Doanh thu", _num(revenue)),
+        _line("Lãi ròng", _signed(profit) if profit < 0 else _num(profit)),
+        _line("Biên", _pct(profit, revenue)),
+    ])
+    todo = []
+    if stats["pending_topups"]:
+        todo.append(f"💳 <b>{stats['pending_topups']}</b> yêu cầu nạp chờ duyệt → Khách & đại lý")
+    count, need = waiting
+    if count:
+        todo.append(f"⏳ <b>{count}</b> đơn chờ ví FatCat — cần nạp <b>{vnd(need)}</b>")
+    if low_funds:
+        todo.append(f"🐱 Ví FatCat không đủ nhập <b>{low_funds}</b> món — khách mua sẽ phải chờ")
+    if stats["pending_orders"] > count:
+        todo.append(f"🔄 {stats['pending_orders'] - count} đơn đang chờ FatCat giao")
+    wallet = f"\n🐱 Ví FatCat: <b>{vnd(upstream_balance)}</b>" if upstream_balance is not None else ""
     return (
-        "⚙️ <b>Quản lý shop</b>\n\n"
-        f"Hôm nay: {stats['orders_today']} đơn · doanh thu {vnd(stats['revenue_today'])} · "
-        f"lãi {vnd(stats['profit_today'])}{profit_margin(stats['profit_today'], stats['revenue_today'])}\n"
-        f"Hàng tự nhập trong kho: {stats['stock']}"
-        f"{upstream}{pending}"
+        "⚙️ <b>QUẢN LÝ SHOP</b>\n"
+        + (f"{shop_line}\n" if shop_line else "")
+        + f"\n<b>Hôm nay</b> <i>(đồng)</i>\n<pre>{today}</pre>{wallet}\n\n"
+        + "<b>Cần xử lý</b>\n"
+        + ("\n".join(todo) if todo else "✅ Không có việc gì đang chờ.")
     )
+
+
+def admin_finance_hub(stats: dict[str, int], capital: int) -> str:
+    rows = "\n".join([
+        _line("Lãi ròng 7 ngày", _signed(stats["profit_7d"]) if stats["profit_7d"] < 0 else _num(stats["profit_7d"])),
+        _line("Lãi ròng từ đầu", _signed(stats["profit_all"]) if stats["profit_all"] < 0 else _num(stats["profit_all"])),
+        _line("Ví khách (phải trả)", _num(stats["balances"])),
+        _line("Vốn FatCat đã ghi", _num(capital)),
+    ])
+    return ("💰 <b>TÀI CHÍNH</b>\n\n<pre>" + rows + "</pre>\n"
+            "💵 <b>Dòng tiền</b>: báo cáo theo kỳ · 📊 <b>Thống kê</b>: tóm tắt nhanh · 💸 giao dịch ví khách\n"
+            "➖ / 🧾 khoản chi ngoài bot (bù khách…) · 🏦 / 📒 tiền nạp ví FatCat")
+
+
+def admin_goods_hub(products: list[Product], upstream_balance: int | None, synced: str | None) -> str:
+    selling = [p for p in products if p.on_sale]
+    out = [p for p in selling if p.stock <= 0]
+    lines = [
+        _line("Đang bán", f"{len(selling)} món"),
+        _line("Hết hàng", f"{len(out)} món"),
+        _line("Ẩn / FatCat khoá", f"{len(products) - len(selling)} món"),
+    ]
+    if upstream_balance is not None:
+        lines.append(_line("Ví FatCat", _num(upstream_balance)))
+    return ("📦 <b>HÀNG HOÁ</b>\n\n<pre>" + "\n".join(lines) + "</pre>"
+            + (f"\n<i>Đồng bộ FatCat lần cuối: {local_time(synced)}</i>" if synced else ""))
+
+
+def admin_customers_hub(stats: dict[str, int], sources: list[tuple[str, int]], keys: int) -> str:
+    lines = [
+        _line("Khách", str(stats["users"])),
+        _line("Đã mua", str(stats["buyers"])),
+        _line("Ví khách (phải trả)", _num(stats["balances"])),
+        _line("Nạp chờ duyệt", str(stats["pending_topups"])),
+        _line("Khóa API đại lý", str(keys)),
+    ]
+    src = f"\n📍 Khách mới 7 ngày: {' · '.join(f'{c} {n}' for c, n in sources)}" if sources else ""
+    return "👥 <b>KHÁCH & ĐẠI LÝ</b>\n\n<pre>" + "\n".join(lines) + "</pre>" + src
 
 
 def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,

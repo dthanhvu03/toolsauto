@@ -694,6 +694,36 @@ def test_admin_wallet_separated_and_fatcat_capital_reconciled(fatcat, repo):
     assert repo.get_state(f"await:{BUYER}") is None
 
 
+def test_admin_home_groups_and_every_hub_button_works(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    repo.create_topup(BUYER, 50_000)  # 1 yêu cầu nạp chờ duyệt → hiện ở «Cần xử lý» + nút tắt
+    store.handle_update(_click(ADMIN, "adm", "boss"))
+    text, markup = telegram.edits[-1][2], telegram.edits[-1][3]
+    labels = [b["text"] for row in markup["inline_keyboard"] for b in row]
+    assert "QUẢN LÝ SHOP" in text and "Đang mở cửa" in text and "1</b> yêu cầu nạp chờ duyệt" in text
+    assert labels[:1] == ["💳 Duyệt nạp (1)"] and {"💰 Tài chính", "📦 Hàng hoá", "👥 Khách & đại lý"} <= set(labels)
+
+    titles = {"agf": "TÀI CHÍNH", "agp": "HÀNG HOÁ", "agc": "KHÁCH & ĐẠI LÝ"}
+    for hub, title in titles.items():
+        store.handle_update(_click(ADMIN, hub, "boss"))
+        assert title in telegram.edits[-1][2]
+        hub_buttons = [b["callback_data"] for row in telegram.edits[-1][3]["inline_keyboard"] for b in row]
+        assert hub_buttons[-1] == "adm"
+        for data in hub_buttons:
+            if data == "abt":
+                continue  # bật/tắt — thử riêng bên dưới
+            before = len(telegram.edits)
+            store.handle_update(_click(ADMIN, data, "boss"))
+            assert len(telegram.edits) > before, data  # nút nào cũng mở được màn
+            assert "Không có quyền" not in str(telegram.answers[-1:]), data
+            store._clear_await(ADMIN)
+    on = store.restock_dm_enabled()
+    store.handle_update(_click(ADMIN, "abt", "boss"))
+    assert store.restock_dm_enabled() != on and "KHÁCH & ĐẠI LÝ" in telegram.edits[-1][2]
+    store.handle_update(_click(BUYER, "agf"))
+    assert telegram.answers[-1][0] == "Không có quyền."
+
+
 def test_start_sends_persistent_menu_and_menu_buttons_work(bot, repo, product):
     store, telegram = bot
     store.handle_update(_private(BUYER, "/start"))

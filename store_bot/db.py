@@ -1177,6 +1177,11 @@ class StoreRepository:
                                (amount, note.strip()[:200], by, utcnow()))
             return int(cur.lastrowid)
 
+    def last_synced(self) -> str | None:
+        """Lần đồng bộ FatCat gần nhất (synced_at mới nhất của sản phẩm FatCat)."""
+        with self._read() as conn:
+            return conn.execute("SELECT MAX(synced_at) FROM products WHERE upstream_id IS NOT NULL").fetchone()[0]
+
     def capital_total(self) -> int:
         with self._read() as conn:
             return int(conn.execute("SELECT SUM(amount) FROM capital").fetchone()[0] or 0)
