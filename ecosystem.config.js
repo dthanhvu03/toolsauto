@@ -17,7 +17,12 @@ try {
 
 // 9Router v0.5: chạy thẳng server Next.js (bộ khởi động `9router` có menu + system tray, dưới PM2/WSL
 // server con tự chết). Cần Node ≥ 20 (global File) → Node riêng /opt/node22, Node hệ thống (18) giữ nguyên.
-const ROUTER_PKG = fs.existsSync(routerPath) ? path.dirname(fs.realpathSync(routerPath)) : "";
+// Cài riêng ở /opt/9router (npm của Node 22): bản global /usr/local/lib/node_modules kéo theo better-sqlite3
+// build cho Node 18 hệ thống (libnode.so.109) → mở /dashboard là SIGSEGV.
+const ROUTER_OPT = "/opt/9router/node_modules/9router";
+const ROUTER_PKG = fs.existsSync(ROUTER_OPT)
+  ? ROUTER_OPT
+  : fs.existsSync(routerPath) ? path.dirname(fs.realpathSync(routerPath)) : "";
 const ROUTER_APP = path.join(ROUTER_PKG, "app");
 // server.js (không dùng custom-server.js: bản 0.5.112 trên Node 22/WSL bị SIGSEGV vài giây sau khi chạy)
 const ROUTER_SERVER = path.join(ROUTER_APP, "server.js");
