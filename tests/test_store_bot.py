@@ -634,6 +634,32 @@ def test_cashflow_screen_shows_margin_and_customer_money(fatcat, repo):
     assert all("Dòng tiền" not in t for t in telegram.texts_to(BUYER))
 
 
+def test_admin_records_outside_expense_and_profit_drops(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    topup = repo.create_topup(BUYER, 155_000)
+    repo.confirm_topup(topup.id, "admin:1")
+    good = repo.buy(BUYER, products[34].id, 1)
+    store._fulfill_now(good.id, BUYER, None)
+
+    store.handle_update(_click(ADMIN, "axn", "boss"))
+    store.handle_update(_private(ADMIN, "chào", "boss"))  # sai mẫu → hỏi lại, không ghi
+    assert repo.recent_expenses() == []
+    store.handle_update(_private(ADMIN, f"52k bù khách đơn #{good.id} key lỗi", "boss"))
+    [row] = repo.recent_expenses()
+    assert (row["amount"], row["order_id"]) == (52_000, good.id)
+    total = repo.cashflow(None)["total"]
+    assert (total["profit"], total["expense"], total["net"]) == (3_100, 52_000, -48_900)
+    assert repo.stats()["profit_all"] == -48_900
+    report = telegram.texts_to(ADMIN)[-1]
+    assert "Lãi ròng" in report and "−48.900" in report and "Chi ngoài" in report
+    assert repo.get_user(BUYER).balance == 0  # không đụng ví khách
+
+    store.handle_update(_click(ADMIN, f"a:xd:{row['id']}", "boss"))
+    assert repo.recent_expenses() == [] and repo.stats()["profit_all"] == 3_100
+    store.handle_update(_click(BUYER, "axn"))
+    assert repo.get_state(f"await:{BUYER}") is None
+
+
 def test_start_sends_persistent_menu_and_menu_buttons_work(bot, repo, product):
     store, telegram = bot
     store.handle_update(_private(BUYER, "/start"))

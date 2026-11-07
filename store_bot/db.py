@@ -116,6 +116,17 @@ CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Khoản chi ngoài bot do admin tự ghi (bù khách, bảo hành, phí…): trừ vào lãi ròng và dòng tiền.
+CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER NOT NULL CHECK (amount > 0),
+    note TEXT NOT NULL,
+    order_id INTEGER REFERENCES orders(id),
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
 """
 
 # Cột thêm sau khi bot đã chạy thật (PLAN-097 bước 2: lấy hàng từ FatCat). migrate() tự ALTER khi thiếu.
@@ -1033,7 +1044,8 @@ class StoreRepository:
                 result[f"orders_{name}"] = int(row[0] or 0)
                 result[f"revenue_{name}"] = int(row[1] or 0)
                 result[f"cost_{name}"] = int(row[2] or 0)
-                result[f"profit_{name}"] = result[f"revenue_{name}"] - result[f"cost_{name}"]
+                result[f"expense_{name}"] = one("SELECT SUM(amount) FROM expenses WHERE created_at >= ?", since)
+                result[f"profit_{name}"] = result[f"revenue_{name}"] - result[f"cost_{name}"] - result[f"expense_{name}"]
                 result[f"topup_{name}"] = one(
                     "SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ?", since)
                 result[f"refunded_{name}"] = one(
@@ -1050,7 +1062,8 @@ class StoreRepository:
             if days is None:
                 first = conn.execute(
                     "SELECT MIN(t) FROM (SELECT MIN(created_at) AS t FROM orders "
-                    "UNION ALL SELECT MIN(resolved_at) FROM topups WHERE status = 'paid')").fetchone()[0]
+                    "UNION ALL SELECT MIN(resolved_at) FROM topups WHERE status = 'paid' "
+                    "UNION ALL SELECT MIN(created_at) FROM expenses)").fetchone()[0]
                 first_day = (datetime.fromisoformat(first).astimezone(ICT).replace(hour=0, minute=0, second=0,
                                                                                   microsecond=0)
                              if first else today)
@@ -1097,6 +1110,30 @@ class StoreRepository:
             "waiting_cost": waiting_cost,
         }
 
+    # ---------- khoản chi ngoài bot ----------
+
+    def add_expense(self, amount: int, note: str, by: str, order_id: int | None = None) -> int:
+        if amount <= 0 or not note.strip():
+            raise StoreError("bad_amount")
+        with self._tx() as conn:
+            if order_id is not None and conn.execute("SELECT 1 FROM orders WHERE id = ?", (order_id,)).fetchone() is None:
+                order_id = None
+            cur = conn.execute(
+                "INSERT INTO expenses(amount, note, order_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                (amount, note.strip()[:200], order_id, by, utcnow()),
+            )
+            return int(cur.lastrowid)
+
+    def recent_expenses(self, limit: int = 10) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM expenses ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_expense(self, expense_id: int) -> bool:
+        """Xoá khoản admin ghi nhầm (chỉ bảng expenses, không đụng ví khách / đơn)."""
+        with self._tx() as conn:
+            return conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,)).rowcount > 0
+
     def recent_ledger(self, limit: int = 15) -> list[dict]:
         """Các lần tiền vào / ra ví khách, mới nhất trước (nạp, mua, hoàn, admin cộng/trừ)."""
         with self._read() as conn:
@@ -1110,7 +1147,7 @@ class StoreRepository:
 
 
 _SOLD_SQL = "(SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id)"
-_ZERO_TOTALS = {"orders": 0, "revenue": 0, "cost": 0, "cash_in": 0, "adjust": 0}
+_ZERO_TOTALS = {"orders": 0, "revenue": 0, "cost": 0, "cash_in": 0, "adjust": 0, "expense": 0}
 
 
 def _utc_iso(local: datetime) -> str:
@@ -1141,6 +1178,10 @@ def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None) -> dict
         """SELECT date(created_at, '+7 hours'), SUM(delta) FROM ledger
            WHERE kind = 'adjust' AND created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):
         add(day, adjust=amount)
+    for day, amount in conn.execute(
+        """SELECT date(created_at, '+7 hours'), SUM(amount) FROM expenses
+           WHERE created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):
+        add(day, expense=amount)
     return out
 
 
@@ -1149,7 +1190,8 @@ def _sum_totals(rows: Iterable[dict[str, int]]) -> dict[str, int]:
     for row in rows:
         for name in total:
             total[name] += row.get(name, 0)
-    total["profit"] = total["revenue"] - total["cost"]
+    total["profit"] = total["revenue"] - total["cost"]  # lãi gộp
+    total["net"] = total["profit"] - total["expense"]  # lãi ròng sau khoản chi ngoài bot
     return total
 
 

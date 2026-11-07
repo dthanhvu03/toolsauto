@@ -469,7 +469,8 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
             f"💰 Khách nạp vào: {vnd(stats[f'topup_{key}'])}\n"
             f"🛒 Bán: {stats[f'orders_{key}']} đơn · doanh thu {vnd(stats[f'revenue_{key}'])}\n"
             f"🐱 Giá vốn FatCat: {vnd(stats[f'cost_{key}'])}\n"
-            f"📈 Lãi: <b>{vnd(stats[f'profit_{key}'])}</b>"
+            + (f"💸 Chi ngoài (bù khách…): {vnd(stats[f'expense_{key}'])}\n" if stats.get(f"expense_{key}") else "")
+            + f"📈 Lãi: <b>{vnd(stats[f'profit_{key}'])}</b>"
             f"{profit_margin(stats[f'profit_{key}'], stats[f'revenue_{key}'])}"
             + (f"\n↩️ Đã hoàn khách: {vnd(refunded)}" if refunded else "")
         )
@@ -508,7 +509,7 @@ def _signed(amount: int) -> str:
 
 
 def _pct(profit: int, revenue: int) -> str:
-    return f"{profit * 100 / revenue:.1f}%".replace(".", ",") if revenue > 0 else "–"
+    return f"{profit * 100 / revenue:.1f}%".replace(".", ",").replace("-", "−") if revenue > 0 else "–"
 
 
 def _line(label: str, value: str, width: int = 30) -> str:
@@ -566,8 +567,17 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
         _line("Doanh thu", _num(t["revenue"])),
         _line("Giá vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
         _RULE,
-        _line("Lãi gộp", _num(t["profit"])),
+        _line("Lãi gộp", _signed(t["profit"]) if t["profit"] < 0 else _num(t["profit"])),
         _line("Biên lãi gộp", _pct(t["profit"], t["revenue"])),
+    ]
+    if t["expense"]:
+        pnl += [
+            _line("Chi ngoài (bù khách…)", "−" + _num(t["expense"])),
+            _RULE,
+            _line("Lãi ròng", _signed(t["net"])),
+            _line("Biên lãi ròng", _pct(t["net"], t["revenue"])),
+        ]
+    pnl += [
         _line("Số đơn", str(t["orders"])),
         _line("Trung bình / đơn", _num(avg)),
     ]
@@ -576,7 +586,7 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
         label = "hôm qua" if cf["days"] == 1 else f"{title} trước"
         if prev["revenue"] or prev["cash_in"]:
             compare = (f"\nSo với {label}: doanh thu <b>{_change(t['revenue'], prev['revenue'])}</b> · "
-                       f"lãi <b>{_change(t['profit'], prev['profit'])}</b> · "
+                       f"lãi <b>{_change(t['net'], prev['net'])}</b> · "
                        f"tiền vào <b>{_change(t['cash_in'], prev['cash_in'])}</b>")
         else:
             compare = f"\n<i>{label.capitalize()} chưa phát sinh — chưa có số để so sánh.</i>"
@@ -585,8 +595,9 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
     flow = [
         _line("Khách chuyển khoản", _num(t["cash_in"])),
         _line("Chi vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
+    ] + ([_line("Chi ngoài (bù khách…)", "−" + _num(t["expense"]))] if t["expense"] else []) + [
         _RULE,
-        _line("Dòng tiền ròng", _signed(t["cash_in"] - t["cost"])),
+        _line("Dòng tiền ròng", _signed(t["cash_in"] - t["cost"] - t["expense"])),
     ]
     adjust = (f"\n<i>Ngoài ra admin cộng/trừ tay {_signed(t['adjust'])}đ vào ví khách — không phải tiền thật.</i>"
               if t["adjust"] else "")
@@ -595,7 +606,8 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
     if cf["buckets"]:
         head = {"day": "Ngày", "week": "Tuần", "month": "Tháng"}[cf["unit"]]
         rows = [[head, "Tiền vào", "Lãi", "Biên"]] + [
-            [_bucket_label(cf["unit"], b["key"]), _num(b["cash_in"]), _num(b["profit"]), _pct(b["profit"], b["revenue"])]
+            [_bucket_label(cf["unit"], b["key"]), _num(b["cash_in"]),
+             _signed(b["net"]) if b["net"] < 0 else _num(b["net"]), _pct(b["net"], b["revenue"])]
             for b in cf["buckets"][:12]
         ]
         parts.append(f"<b>Diễn biến theo {_UNIT_TITLE[cf['unit']]}</b>\n<pre>{esc(_table(rows))}</pre>")
@@ -618,9 +630,37 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
     parts.append("<b>Số dư & nghĩa vụ</b> <i>(hiện tại)</i>\n<pre>" + "\n".join(holdings) + "</pre>\n"
                  "<i>Ví khách là tiền khách gửi trước — giữ lại, không tính là lãi.</i>" + warn)
 
-    parts.append("<i>Biên lãi gộp = lãi ÷ doanh thu. Chỉ tính đơn đã giao, đã trừ phần hoàn; "
-                 "hàng tự nhập không có giá vốn.</i>")
+    parts.append("<i>Biên = lãi ÷ doanh thu. Chỉ tính đơn đã giao, đã trừ phần hoàn; hàng tự nhập không có giá vốn. "
+                 "Lãi trong «Diễn biến» là lãi ròng (đã trừ khoản chi ngoài). Tiền bù khách trả ngoài bot "
+                 "→ bấm «➖ Ghi khoản chi».</i>")
     return "\n\n".join(parts)
+
+
+ASK_EXPENSE = (
+    "➖ <b>Ghi khoản chi ngoài bot</b>\n\n"
+    "Gõ: <code>số tiền  lý do</code> — ví dụ <code>52k bù khách đơn #8 key lỗi</code>.\n"
+    "Có <code>#số</code> thì gắn với đơn đó. Khoản này trừ vào lãi ròng và dòng tiền; "
+    "không đụng ví khách. Gõ /huy để thôi."
+)
+
+
+def parse_expense(text: str) -> tuple[int, str, int | None] | None:
+    """"52k bù khách đơn #8" → (52000, "bù khách đơn #8", 8). Thiếu lý do / số tiền sai → None."""
+    amount_raw, _, note = (text or "").strip().partition(" ")
+    amount = parse_amount(amount_raw)
+    if not amount or amount <= 0 or not note.strip():
+        return None
+    order = re.search(r"#(\d+)", note)
+    return amount, note.strip(), int(order.group(1)) if order else None
+
+
+def admin_expenses(rows: list[dict]) -> str:
+    if not rows:
+        return "🧾 <b>Khoản chi ngoài bot</b>\n\nChưa ghi khoản nào."
+    lines = [f"#{r['id']} · {local_time(r['created_at'])} · <b>−{vnd(r['amount'])}</b>\n   {esc(r['note'])}"
+             for r in rows]
+    return ("🧾 <b>Khoản chi ngoài bot</b> (mới nhất trước)\n\n" + "\n".join(lines)
+            + "\n\n<i>Ghi nhầm thì bấm 🗑 để xoá — chỉ xoá dòng ghi chép, không đụng ví khách / đơn.</i>")
 
 
 _LEDGER_KIND = {"topup": "💰 Nạp", "order": "🛒 Mua", "refund": "↩️ Hoàn", "adjust": "💵 Admin"}

@@ -243,7 +243,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "acf1", "acf7", "acf30", "acf0", "al", "async", "abt", "aic", "amk", "amp",
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "acf", "acf1", "acf7", "acf30", "acf0", "axn", "axl", "al", "async", "abt", "aic", "amk", "amp",
                                                "ahr", "ahc", "aho", "ahs", "ahx"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
@@ -819,6 +819,11 @@ class StoreBot:
                                 [button("⬅️ Quay lại", "adm")]))
         elif data.startswith("acf"):
             self.show_cashflow(chat_id, message_id, data.removeprefix("acf"))
+        elif data == "axn":
+            self._set_await(user.user_id, "expense")
+            self._show(chat_id, message_id, msg.ASK_EXPENSE, keyboard([button("⬅️ Quay lại", "acf")]))
+        elif data == "axl":
+            self.show_expenses(chat_id, message_id)
         elif data == "al":
             self._show(chat_id, message_id, msg.admin_ledger(self.repo.recent_ledger()),
                        keyboard([button("📊 Thống kê", "as"), button("⬅️ Quản lý", "adm")]))
@@ -831,6 +836,10 @@ class StoreBot:
         by = f"admin:{user.user_id}"
         if action == "p":
             self.show_admin_product(chat_id, message_id, ident)
+        elif action == "xd":
+            deleted = self.repo.delete_expense(ident)
+            self.show_expenses(chat_id, message_id)
+            return f"Đã xoá khoản chi #{ident}." if deleted else "Khoản chi đã xoá trước đó."
         elif action == "tg":
             product = self.repo.get_product(ident)
             if product:
@@ -1044,8 +1053,17 @@ class StoreBot:
         tabs = [button(("• " + title + " •") if d == days else title, f"acf{d or 0}") for d, title in msg.CASHFLOW_PERIODS]
         now = datetime.now(ICT).strftime("%H:%M")
         self._show(chat_id, message_id, msg.admin_cashflow(self.repo.cashflow(days), self._upstream_balance(), now),
-                   keyboard(tabs[:2], tabs[2:], [button("🔄 Làm mới", f"acf{days or 0}"), button("📊 Thống kê", "as")],
+                   keyboard(tabs[:2], tabs[2:], [button("➖ Ghi khoản chi", "axn"), button("🧾 Khoản chi", "axl")],
+                            [button("🔄 Làm mới", f"acf{days or 0}"), button("📊 Thống kê", "as")],
                             [button("⬅️ Quản lý", "adm")]))
+
+    def show_expenses(self, chat_id: int, message_id: int | None) -> None:
+        rows = self.repo.recent_expenses()
+        delete = [button(f"🗑 #{r['id']} −{msg.vnd(r['amount'])}", f"a:xd:{r['id']}") for r in rows]
+        self._show(chat_id, message_id, msg.admin_expenses(rows), keyboard(
+            *[delete[i:i + 2] for i in range(0, len(delete), 2)],
+            [button("➖ Ghi khoản chi", "axn"), button("💵 Dòng tiền", "acf")],
+        ))
 
     def _upstream_balance(self) -> int | None:
         raw = self.repo.get_state("upstream_balance")
@@ -1256,6 +1274,16 @@ class StoreBot:
                 self.repo.set_discount(pending["kid"], bps)
                 self._clear_await(user.user_id)
                 self.show_admin_key(chat_id, None, pending["kid"])
+            elif kind == "expense":
+                parsed = msg.parse_expense(text)
+                if parsed is None:
+                    self.tg.send_message(chat_id, "Chưa đúng mẫu.\n\n" + msg.ASK_EXPENSE)
+                    return
+                amount, note, order_id = parsed
+                expense_id = self.repo.add_expense(amount, note, by, order_id)
+                self._clear_await(user.user_id)
+                self.tg.send_message(chat_id, f"✅ Đã ghi khoản chi #{expense_id}: −{msg.vnd(amount)} · {msg.esc(note)}")
+                self.show_cashflow(chat_id, None, "0")
             elif kind == "adjust":
                 ref, amount_raw, note = (text.split(maxsplit=2) + ["", ""])[:3]
                 sign = -1 if amount_raw.startswith("-") else 1
