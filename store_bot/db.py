@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS expenses (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+
+-- Tiền admin nạp vào ví FatCat (vốn; số âm = rút về): đối chiếu với vốn đã dùng mua hàng + số dư FatCat thực.
+CREATE TABLE IF NOT EXISTS capital (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER NOT NULL CHECK (amount <> 0),
+    note TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 # Cột thêm sau khi bot đã chạy thật (PLAN-097 bước 2: lấy hàng từ FatCat). migrate() tự ALTER khi thiếu.
@@ -793,18 +802,21 @@ class StoreRepository:
                     changed += 1
         return changed
 
-    def sales_by_product(self, days: int = 30, since: str | None = None) -> dict[int, tuple[int, int, int]]:
+    def sales_by_product(self, days: int = 30, since: str | None = None,
+                         exclude: Iterable[int] = ()) -> dict[int, tuple[int, int, int]]:
         """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất (hoặc từ mốc `since`)."""
         if since is None:
             since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        not_admin, args = _not_in(exclude)
         with self._read() as conn:
             rows = conn.execute(
-                """SELECT product_id, SUM(items), SUM(total - refunded), SUM(COALESCE(unit_cost, 0) * items)
+                f"""SELECT product_id, SUM(items), SUM(total - refunded), SUM(COALESCE(unit_cost, 0) * items)
                    FROM (SELECT o.product_id, o.total, o.refunded, o.unit_cost,
                                 (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id) AS items
-                         FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?)
+                         FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
+                         AND o.user_id {not_admin})
                    WHERE items > 0 GROUP BY product_id""",
-                (since,),
+                (since, *args),
             ).fetchall()
         return {row[0]: (int(row[1] or 0), int(row[2] or 0), int(row[3] or 0)) for row in rows}
 
@@ -1014,8 +1026,10 @@ class StoreRepository:
 
     # ---------- stats ----------
 
-    def stats(self) -> dict[str, int]:
-        """Số liệu admin. Doanh thu chỉ tính đơn đã giao (trừ phần hoàn); vốn = giá vốn × số món thực giao."""
+    def stats(self, admins: Iterable[int] = ()) -> dict[str, int]:
+        """Số liệu admin. Doanh thu chỉ tính đơn đã giao (trừ phần hoàn); vốn = giá vốn × số món thực giao.
+        `admins`: tài khoản admin — tiền tự nạp / tự mua của admin không tính là của khách."""
+        not_admin, args = _not_in(admins)
         today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
         periods = {
             "today": today.astimezone(timezone.utc).isoformat(timespec="seconds"),
@@ -1029,17 +1043,17 @@ class StoreRepository:
             result = {
                 "users": one("SELECT COUNT(*) FROM users"),
                 "buyers": one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE status IN ('done', 'partial')"),
-                "balances": one("SELECT SUM(balance) FROM users"),
+                "balances": one(f"SELECT SUM(balance) FROM users WHERE user_id {not_admin}", *args),
                 "pending_topups": one("SELECT COUNT(*) FROM topups WHERE status = 'pending'"),
                 "pending_orders": one("SELECT COUNT(*) FROM orders WHERE status = 'pending'"),
                 "stock": one("SELECT COUNT(*) FROM stock_items WHERE status = 'available'"),
             }
             for name, since in periods.items():
                 row = conn.execute(
-                    """SELECT COUNT(*), SUM(o.total - o.refunded),
-                              SUM(COALESCE(o.unit_cost, 0) * (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id))
-                       FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?""",
-                    (since,),
+                    f"""SELECT COUNT(*), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL})
+                        FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
+                        AND o.user_id {not_admin}""",
+                    (since, *args),
                 ).fetchone()
                 result[f"orders_{name}"] = int(row[0] or 0)
                 result[f"revenue_{name}"] = int(row[1] or 0)
@@ -1047,16 +1061,20 @@ class StoreRepository:
                 result[f"expense_{name}"] = one("SELECT SUM(amount) FROM expenses WHERE created_at >= ?", since)
                 result[f"profit_{name}"] = result[f"revenue_{name}"] - result[f"cost_{name}"] - result[f"expense_{name}"]
                 result[f"topup_{name}"] = one(
-                    "SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ?", since)
+                    f"SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ? AND user_id {not_admin}",
+                    since, *args)
                 result[f"refunded_{name}"] = one(
                     "SELECT SUM(refunded) FROM orders WHERE refunded > 0 AND created_at >= ?", since)
             return result
 
-    def cashflow(self, days: int | None = 7, top: int = 5) -> dict:
+    def cashflow(self, days: int | None = 7, top: int = 5, admins: Iterable[int] = ()) -> dict:
         """Báo cáo «Dòng tiền & biên lãi» cho một kỳ: `days` ngày tính theo lịch VN (1 = hôm nay), None = từ đầu.
         Trả tổng kỳ, kỳ liền trước (để so sánh), diễn biến (ngày ≤ 7 ngày · tuần với 30 ngày · tháng với từ đầu),
         món lãi nhất trong kỳ, tiền đang giữ hộ khách. Cách tính như stats(): doanh thu = đơn đã giao trừ phần hoàn,
-        vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn)."""
+        vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn).
+        `admins`: tiền admin tự nạp / tự mua tách riêng thành «admin», không tính vào khách."""
+        admins = tuple(admins)
+        not_admin, args = _not_in(admins)
         today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
         with self._read() as conn:
             if days is None:
@@ -1070,10 +1088,20 @@ class StoreRepository:
             else:
                 first_day = today - timedelta(days=days - 1)
             start = _utc_iso(first_day)
-            daily = _daily_totals(conn, start, None)
-            previous = (_sum_totals(_daily_totals(conn, _utc_iso(first_day - timedelta(days=days)), start).values())
-                        if days else None)
-            balances = int(conn.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0)
+            daily = _daily_totals(conn, start, None, admins)
+            previous = (_sum_totals(_daily_totals(conn, _utc_iso(first_day - timedelta(days=days)), start, admins)
+                                    .values()) if days else None)
+            admin_total = (_sum_totals(_daily_totals(conn, start, None, admins, admin_side=True).values())
+                           if admins else None)
+            balances = int(conn.execute(f"SELECT SUM(balance) FROM users WHERE user_id {not_admin}",
+                                        args).fetchone()[0] or 0)
+            admin_balance = (int(conn.execute(f"SELECT SUM(balance) FROM users WHERE NOT (user_id {not_admin})",
+                                              args).fetchone()[0] or 0) if admins else 0)
+            capital = int(conn.execute("SELECT SUM(amount) FROM capital").fetchone()[0] or 0)
+            capital_count = int(conn.execute("SELECT COUNT(*) FROM capital").fetchone()[0] or 0)
+            used_all = int(conn.execute(
+                f"""SELECT SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL}) FROM orders o
+                    WHERE o.status IN ('done', 'partial')""").fetchone()[0] or 0)
             names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM products")}
 
         span = (today - first_day).days + 1
@@ -1093,7 +1121,7 @@ class StoreRepository:
 
         products = [
             {"name": names.get(pid, f"#{pid}"), "sold": n, "revenue": revenue, "profit": revenue - cost}
-            for pid, (n, revenue, cost) in self.sales_by_product(since=start).items()
+            for pid, (n, revenue, cost) in self.sales_by_product(since=start, exclude=admins).items()
         ]
         waiting_orders, waiting_cost = self.waiting_summary()
         return {
@@ -1106,6 +1134,11 @@ class StoreRepository:
             "buckets": buckets,
             "top": sorted(products, key=lambda p: p["profit"], reverse=True)[:top],
             "balances": balances,
+            "admin": admin_total,  # None = không tách admin
+            "admin_balance": admin_balance,
+            "capital": capital,  # tổng admin đã ghi nạp ví FatCat (từ đầu)
+            "capital_count": capital_count,
+            "capital_used": used_all,  # vốn FatCat đã dùng cho mọi đơn đã giao (cả đơn admin tự mua), từ đầu
             "waiting_orders": waiting_orders,
             "waiting_cost": waiting_cost,
         }
@@ -1134,6 +1167,30 @@ class StoreRepository:
         with self._tx() as conn:
             return conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,)).rowcount > 0
 
+    # ---------- vốn nạp ví FatCat ----------
+
+    def add_capital(self, amount: int, note: str, by: str) -> int:
+        if amount == 0:
+            raise StoreError("bad_amount")
+        with self._tx() as conn:
+            cur = conn.execute("INSERT INTO capital(amount, note, created_by, created_at) VALUES (?, ?, ?, ?)",
+                               (amount, note.strip()[:200], by, utcnow()))
+            return int(cur.lastrowid)
+
+    def capital_total(self) -> int:
+        with self._read() as conn:
+            return int(conn.execute("SELECT SUM(amount) FROM capital").fetchone()[0] or 0)
+
+    def recent_capital(self, limit: int = 10) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM capital ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_capital(self, capital_id: int) -> bool:
+        """Xoá lần ghi nạp nhầm (chỉ dòng ghi chép, không đụng ví FatCat)."""
+        with self._tx() as conn:
+            return conn.execute("DELETE FROM capital WHERE id = ?", (capital_id,)).rowcount > 0
+
     def recent_ledger(self, limit: int = 15) -> list[dict]:
         """Các lần tiền vào / ra ví khách, mới nhất trước (nạp, mua, hoàn, admin cộng/trừ)."""
         with self._read() as conn:
@@ -1154,9 +1211,20 @@ def _utc_iso(local: datetime) -> str:
     return local.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None) -> dict[str, dict[str, int]]:
-    """{ngày VN "YYYY-MM-DD": đơn, doanh thu, vốn, tiền khách chuyển vào, admin cộng/trừ tay} trong [start, end)."""
+def _not_in(ids: Iterable[int]) -> tuple[str, tuple[int, ...]]:
+    """Mảnh SQL «NOT IN (?, ?)» cho cột user_id; danh sách rỗng → luôn đúng."""
+    ids = tuple(int(i) for i in ids)
+    return (f"NOT IN ({', '.join('?' * len(ids))})", ids) if ids else ("IS NOT NULL", ())
+
+
+def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None, admins: tuple[int, ...] = (),
+                  admin_side: bool = False) -> dict[str, dict[str, int]]:
+    """{ngày VN "YYYY-MM-DD": đơn, doanh thu, vốn, tiền chuyển vào, admin cộng/trừ tay, khoản chi} trong [start, end).
+    Mặc định chỉ tiền của khách (bỏ tài khoản `admins`) + khoản chi; admin_side=True: chỉ tiền tài khoản admin."""
     end = end or "9999"
+    not_admin, ids = _not_in(admins)
+    def who(column: str = "user_id") -> str:
+        return f"NOT ({column} {not_admin})" if admin_side else f"{column} {not_admin}"
     out: dict[str, dict[str, int]] = {}
 
     def add(day: str, **values: int) -> None:
@@ -1168,16 +1236,18 @@ def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None) -> dict
         f"""SELECT date(o.created_at, '+7 hours'), COUNT(*), SUM(o.total - o.refunded),
                    SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL})
             FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ? AND o.created_at < ?
-            GROUP BY 1""", (start, end)):
+            AND {who('o.user_id')} GROUP BY 1""", (start, end, *ids)):
         add(day, orders=orders, revenue=revenue, cost=cost)
     for day, amount in conn.execute(
-        """SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
-           WHERE status = 'paid' AND resolved_at >= ? AND resolved_at < ? GROUP BY 1""", (start, end)):
+        f"""SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
+            WHERE status = 'paid' AND resolved_at >= ? AND resolved_at < ? AND {who()} GROUP BY 1""", (start, end, *ids)):
         add(day, cash_in=amount)
     for day, amount in conn.execute(
-        """SELECT date(created_at, '+7 hours'), SUM(delta) FROM ledger
-           WHERE kind = 'adjust' AND created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):
+        f"""SELECT date(created_at, '+7 hours'), SUM(delta) FROM ledger
+            WHERE kind = 'adjust' AND created_at >= ? AND created_at < ? AND {who()} GROUP BY 1""", (start, end, *ids)):
         add(day, adjust=amount)
+    if admin_side:
+        return out
     for day, amount in conn.execute(
         """SELECT date(created_at, '+7 hours'), SUM(amount) FROM expenses
            WHERE created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):

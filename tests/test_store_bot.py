@@ -660,6 +660,40 @@ def test_admin_records_outside_expense_and_profit_drops(fatcat, repo):
     assert repo.get_state(f"await:{BUYER}") is None
 
 
+def test_admin_wallet_separated_and_fatcat_capital_reconciled(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    for who, amount in ((BUYER, 155_000), (ADMIN, 200_000)):
+        topup = repo.create_topup(who, amount)
+        repo.confirm_topup(topup.id, "admin:1")
+        order = repo.buy(who, products[34].id, 1)
+        store._fulfill_now(order.id, who, None)
+
+    cf = repo.cashflow(None, admins={ADMIN})
+    assert (cf["total"]["cash_in"], cf["total"]["revenue"], cf["total"]["orders"]) == (155_000, 155_000, 1)
+    assert (cf["admin"]["cash_in"], cf["admin"]["revenue"], cf["admin"]["cost"]) == (200_000, 155_000, 151_900)
+    assert (cf["balances"], cf["admin_balance"]) == (0, 45_000)
+    assert cf["capital_used"] == 2 * 151_900 and cf["capital"] == 0
+    assert repo.stats({ADMIN})["revenue_all"] == 155_000 and repo.stats()["revenue_all"] == 310_000
+
+    store.handle_update(_click(ADMIN, "avn", "boss"))
+    store.handle_update(_private(ADMIN, "abc", "boss"))
+    assert repo.capital_total() == 0
+    store.handle_update(_private(ADMIN, "400k nạp qua MB", "boss"))
+    store.handle_update(_click(ADMIN, "avn", "boss"))
+    store.handle_update(_private(ADMIN, "-50k rút về", "boss"))
+    assert repo.capital_total() == 350_000
+    report = telegram.texts_to(ADMIN)[-1]
+    assert "Ví admin" in report and "Anh tự nạp vào ví" in report and "Vốn FatCat" in report
+    assert "Anh đã ghi nạp" in report and "Lẽ ra còn" in report
+
+    store.handle_update(_click(ADMIN, "avl", "boss"))
+    rows = repo.recent_capital()
+    store.handle_update(_click(ADMIN, f"a:vd:{rows[0]['id']}", "boss"))
+    assert repo.capital_total() == 400_000
+    store.handle_update(_click(BUYER, "avn"))
+    assert repo.get_state(f"await:{BUYER}") is None
+
+
 def test_start_sends_persistent_menu_and_menu_buttons_work(bot, repo, product):
     store, telegram = bot
     store.handle_update(_private(BUYER, "/start"))

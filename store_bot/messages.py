@@ -620,7 +620,45 @@ def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "")
         ]
         parts.append(f"<b>Sản phẩm lãi nhất</b>\n<pre>{esc(_table(rows))}</pre>")
 
+    admin = cf.get("admin")
+    if admin and (admin["cash_in"] or admin["orders"] or admin["adjust"] or cf["admin_balance"]):
+        rows = [
+            _line("Anh tự nạp vào ví", _num(admin["cash_in"])),
+            _line(f"Anh tự mua ({admin['orders']} đơn)", _num(admin["revenue"])),
+            _line("  giá vốn FatCat", _num(admin["cost"])),
+        ]
+        if admin["adjust"]:
+            rows.append(_line("Cộng/trừ tay ví admin", _signed(admin["adjust"])))
+        parts.append("<b>Ví admin</b> <i>(tiền của anh — không tính vào khách)</i>\n<pre>" + "\n".join(rows) + "</pre>")
+
+    used, capital = cf.get("capital_used", 0), cf.get("capital", 0)
+    if upstream_balance is not None or capital:
+        if cf.get("capital_count"):
+            rows = [_line("Anh đã ghi nạp", _num(capital)), _line("Đã dùng mua hàng", "−" + _num(used)), _RULE,
+                    _line("Lẽ ra còn", _signed(capital - used))]
+            note = ""
+            if upstream_balance is not None:
+                diff = upstream_balance - (capital - used)
+                rows += [_line("Số dư FatCat thực", _num(upstream_balance)), _line("Chênh lệch", _signed(diff))]
+                if diff > 0:
+                    note = (f"\n⚠️ FatCat còn nhiều hơn sổ {_num(diff)}đ — có lần nạp chưa ghi, hoặc FatCat hoàn tiền.")
+                elif diff < 0:
+                    note = (f"\n⚠️ FatCat còn ít hơn sổ {_num(-diff)}đ — kiểm tra lịch sử ví FatCat (bị trừ ngoài bot?) "
+                            "hoặc ghi nạp thừa.")
+                else:
+                    note = "\n✅ Sổ vốn khớp số dư FatCat."
+            parts.append("<b>Vốn FatCat</b> <i>(từ đầu)</i>\n<pre>" + "\n".join(rows) + "</pre>" + note)
+        else:
+            rows = [_line("Đã dùng mua hàng", _num(used))]
+            if upstream_balance is not None:
+                rows += [_line("Đang còn trong ví", _num(upstream_balance)), _RULE,
+                         _line("Ước tính anh đã nạp", _num(used + upstream_balance))]
+            parts.append("<b>Vốn FatCat</b> <i>(từ đầu)</i>\n<pre>" + "\n".join(rows) + "</pre>\n"
+                         "<i>Chưa ghi lần nạp nào — bấm «🏦 Nạp vốn FatCat» ghi các lần anh đã nạp để bot đối chiếu.</i>")
+
     holdings = [_line("Ví khách (phải trả)", _num(cf["balances"]))]
+    if cf.get("admin") is not None:
+        holdings.append(_line("Ví admin (của anh)", _num(cf["admin_balance"])))
     if upstream_balance is not None:
         holdings.append(_line("Ví FatCat", _num(upstream_balance)))
     if cf["waiting_orders"]:
@@ -661,6 +699,33 @@ def admin_expenses(rows: list[dict]) -> str:
              for r in rows]
     return ("🧾 <b>Khoản chi ngoài bot</b> (mới nhất trước)\n\n" + "\n".join(lines)
             + "\n\n<i>Ghi nhầm thì bấm 🗑 để xoá — chỉ xoá dòng ghi chép, không đụng ví khách / đơn.</i>")
+
+
+ASK_CAPITAL = (
+    "🏦 <b>Ghi tiền nạp ví FatCat</b>\n\n"
+    "Gõ: <code>số tiền  ghi chú</code> — ví dụ <code>200k nạp qua MB</code>.\n"
+    "Rút tiền từ FatCat về thì thêm dấu trừ: <code>-50k rút về</code>.\n"
+    "Chỉ là sổ ghi chép để đối chiếu — bot không gọi FatCat. Gõ /huy để thôi."
+)
+
+
+def parse_capital(text: str) -> tuple[int, str] | None:
+    """"200k nạp MB" → (200000, "nạp MB"); "-50k rút về" → (-50000, "rút về"). Số sai → None."""
+    amount_raw, _, note = (text or "").strip().partition(" ")
+    sign = -1 if amount_raw[:1] in "-−" and amount_raw else 1
+    amount = parse_amount(amount_raw.lstrip("-−+"))
+    if not amount:
+        return None
+    return sign * amount, note.strip()
+
+
+def admin_capital(rows: list[dict], total: int) -> str:
+    if not rows:
+        return "🏦 <b>Vốn nạp ví FatCat</b>\n\nChưa ghi lần nạp nào."
+    lines = [f"#{r['id']} · {local_time(r['created_at'])} · <b>{_signed(r['amount'])}đ</b>"
+             + (f"\n   {esc(r['note'])}" if r["note"] else "") for r in rows]
+    return (f"🏦 <b>Vốn nạp ví FatCat</b> — tổng đã ghi <b>{vnd(total)}</b>\n\n" + "\n".join(lines)
+            + "\n\n<i>Ghi nhầm thì bấm 🗑 để xoá — chỉ xoá dòng ghi chép.</i>")
 
 
 _LEDGER_KIND = {"topup": "💰 Nạp", "order": "🛒 Mua", "refund": "↩️ Hoàn", "adjust": "💵 Admin"}
