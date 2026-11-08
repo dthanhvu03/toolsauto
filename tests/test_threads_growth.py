@@ -22,6 +22,13 @@ LIMITS = GrowthLimits(
 )
 
 
+READING_JSON = (
+    '{"is_seller": false, "intent": "hỏi xin tư vấn", "emotion": "tiếc tiền", "need": "muốn mua rẻ hơn", '
+    '"stage": "sắp mua", "objection": "sợ không áp được mã", "their_words": "cháy túi", '
+    '"angle": "chỉ cách được hoàn thêm", "buy_score": 80}'
+)
+
+
 @pytest.fixture(autouse=True)
 def fake_ai(monkeypatch):
     """AI giả: trả câu theo biến thể có trong prompt; ``calls`` ghi lại từng lần gọi."""
@@ -29,6 +36,10 @@ def fake_ai(monkeypatch):
 
     async def _gen(prompt, *, purpose="generic"):
         calls.append(purpose)
+        if prompt.startswith("PHÂN TÍCH BÀI"):  # PLAN-163: bước AI đọc bài trả JSON
+            # Bài nhiều từ khoá của bot → điểm cao hơn (giữ thứ tự các test cũ dựa trên điểm).
+            score = 99 if "voucher shopee, áp mã shopee" in prompt else 80
+            return READING_JSON.replace('"buy_score": 80', f'"buy_score": {score}'), {"provider": "fake", "model": "m"}
         tag = "A" if "Góc độ A" in prompt else "B"
         return f"Câu trả lời AI cho biến thể {tag} nè", {"provider": "fake", "model": "m"}
 
@@ -109,7 +120,7 @@ def test_reply_uses_ai_with_purpose(runner, fake_ai):
     post = runner.storage.get_post_by_id(pid)
     assert post["suggested_reply"].startswith("Câu trả lời AI")
     assert post["ai_analysis"].startswith("AI [")
-    assert fake_ai == ["threads_reply"]
+    assert fake_ai == ["threads_reply", "threads_reply"]  # đọc bài + viết reply (PLAN-163)
 
 
 def test_ai_failure_falls_back_with_reason(runner, monkeypatch):
@@ -872,3 +883,78 @@ def test_own_post_prompt_has_cashbot_buy_rules_and_cart_note(monkeypatch):
     lines = draft.text.split("\n")
     assert lines[-2] == content.CART_NOTE and lines[-1].endswith("start=threads_cb_post")
     assert content.with_buy_note("nhớ xoá giỏ hàng trước nha") == "nhớ xoá giỏ hàng trước nha"
+
+
+# --- PLAN-163: AI đọc tâm lý / nhu cầu ---------------------------------------------------------------
+def test_seller_post_skipped_without_calling_ai(runner, fake_ai):
+    text = "Săn sale Shopee giá chỉ 99k, ib mình chốt đơn liền nha"
+    assert asyncio.run(runner.ingest_scanned_post(ScannedPost("s1", "u", "a", text, "k"))) is None
+    assert fake_ai == []
+
+
+def test_ai_reading_seller_is_rejected_and_not_reread(runner, monkeypatch):
+    async def _gen(prompt, *, purpose="generic"):
+        return READING_JSON.replace('"is_seller": false', '"is_seller": true'), {}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
+    post = ScannedPost("s2", "u", "a", "Săn sale Shopee nhận mã giảm giá", "k")
+    assert asyncio.run(runner.ingest_scanned_post(post)) is None
+    row = runner.storage.list_posts(status="rejected")[0]
+    assert row["thread_id"] == "s2" and "Đọc:" in row["ai_analysis"]
+    assert runner.storage.is_thread_scanned("s2")
+
+
+def test_low_buy_score_rejected_below_floor(runner, monkeypatch):
+    async def _gen(prompt, *, purpose="generic"):
+        return READING_JSON.replace('"buy_score": 80', '"buy_score": 15'), {}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
+    assert asyncio.run(runner.ingest_scanned_post(ScannedPost("s3", "u", "a", "Săn sale Shopee nhận mã giảm giá", "k"))) is None
+    assert runner.storage.list_posts(status="rejected")[0]["relevance_score"] == 15
+
+
+def test_reply_prompt_carries_reading(runner, monkeypatch):
+    prompts = []
+
+    async def _gen(prompt, *, purpose="generic"):
+        prompts.append(prompt)
+        if prompt.startswith("PHÂN TÍCH BÀI"):
+            return "ok đây: " + READING_JSON + " hết", {}
+        return "Câu trả lời AI nè b", {"provider": "fake", "model": "m"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
+    pid = asyncio.run(runner.ingest_scanned_post(ScannedPost("s4", "u", "a", "Săn sale Shopee nhận mã giảm giá", "k")))
+    row = runner.storage.get_post_by_id(pid)
+    assert row["relevance_score"] == 80 and "tiếc tiền" in row["ai_analysis"]
+    assert "cháy túi" in prompts[1] and "sợ không áp được mã" in prompts[1]
+
+
+def test_parse_reading_rejects_garbage():
+    from app.features.threads.growth.evaluator import parse_reading
+
+    assert parse_reading("không phải json") is None
+    assert parse_reading('{"buy_score": "abc"}') is None
+    assert parse_reading('{"buy_score": 150}').buy_score == 100
+
+
+def test_approved_queue_orders_by_score_then_reach(storage):
+    ids = {}
+    for tid, score, reach in [("lo_bigreach", 62, 500), ("hi_small", 91, 3), ("hi_big", 95, 40)]:
+        ids[tid] = _save(storage, tid)
+        with storage._connection() as conn:
+            conn.execute("UPDATE growth_posts SET status='approved', relevance_score=?, reach=? WHERE id=?",
+                         (score, reach, ids[tid]))
+    order = [r["thread_id"] for r in storage.approved_queue()]
+    assert order == ["hi_big", "hi_small", "lo_bigreach"]
+
+
+def test_no_auto_post_when_ai_reading_fails(runner, monkeypatch):
+    async def _gen(prompt, *, purpose="generic"):
+        if prompt.startswith("PHÂN TÍCH BÀI"):
+            return None, {"fail_reason": "no_api_key"}
+        return "Câu trả lời AI nè b", {"provider": "fake", "model": "m"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
+    pid = asyncio.run(runner.ingest_scanned_post(ScannedPost("s5", "u", "a", VI_SHOPEE, "k"), auto_post_min=0))
+    row = runner.storage.get_post_by_id(pid)
+    assert row["status"] == "pending" and "no_api_key" in row["ai_analysis"]

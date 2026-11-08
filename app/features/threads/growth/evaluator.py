@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+import json
 import re
-
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
@@ -28,6 +29,63 @@ AI_SIGNALS = (
     "bản quyền", "mua acc", "tool ai", "gpt 4", "gpt-4", "tài khoản ai", "acc ai",
     "mua pro", "gói pro", "tài khoản pro", "acc pro", "pass store", "nâng cấp tài khoản",
 )
+
+
+# Bài chào hàng rõ ràng (người bán / chạy affiliate) — reply vào đó không ra khách. Lọc rẻ trước khi gọi AI (PLAN-163).
+SELLER_SIGNALS = (
+    "inbox", "ib mình", "ib em", "ib shop", "ib ngay", "link ở bio", "link trong bio", "link bio", "chốt đơn",
+    "nhận order", "nhận đơn", "giá sỉ", "giá chỉ", "nhanh tay", "mua ngay", "săn ngay", "freeship",
+    "zalo:", "liên hệ zalo", "sẵn hàng", "còn hàng", "lên đơn",
+)
+
+
+@dataclass(frozen=True)
+class PostReading:
+    """Bản đọc tâm lý / nhu cầu của một bài (AI)."""
+
+    is_seller: bool
+    intent: str
+    emotion: str
+    need: str
+    stage: str
+    objection: str
+    their_words: str
+    angle: str
+    buy_score: int
+
+    def summary(self) -> str:
+        return (
+            f"Đọc: {self.intent} · {self.emotion} · cần: {self.need} · {self.stage}"
+            + (f" · băn khoăn: {self.objection}" if self.objection else "")
+            + f" · điểm {self.buy_score}"
+        )
+
+
+def parse_reading(raw: str) -> Optional[PostReading]:
+    """JSON AI trả → PostReading; sai định dạng → None."""
+    match = re.search(r"\{.*\}", raw or "", re.S)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+        score = int(float(data.get("buy_score", 0)))
+    except (ValueError, TypeError):
+        return None
+
+    def txt(key: str) -> str:
+        return " ".join(str(data.get(key) or "").split())[:160]
+
+    return PostReading(
+        is_seller=bool(data.get("is_seller")),
+        intent=txt("intent"),
+        emotion=txt("emotion"),
+        need=txt("need"),
+        stage=txt("stage"),
+        objection=txt("objection"),
+        their_words=txt("their_words"),
+        angle=txt("angle"),
+        buy_score=min(max(score, 0), 100),
+    )
 
 
 # Mọi "link" t.me AI viết ra (kể cả dính chữ: "thếtps://t.me/…") → thay bằng đúng link tracking của biến thể.
@@ -72,6 +130,46 @@ class GrowthEvaluator:
         return min(max(score, 0), 99)
 
     @staticmethod
+    def looks_like_seller(content: str) -> bool:
+        text = (content or "").lower()
+        return any(s in text for s in SELLER_SIGNALS)
+
+    @staticmethod
+    async def read_post(content: str, bot_type: TargetBot) -> Tuple[Optional[PostReading], str]:
+        """AI đọc tâm lý, cảm xúc, nhu cầu, câu chữ của người viết → (bản đọc | None, lý do khi None)."""
+        profile: BotGrowthProfile = load_profiles()[bot_type]
+        prompt = f"""PHÂN TÍCH BÀI THREADS. Đọc thật kỹ từng câu chữ, cảm xúc và hành vi của người viết bài dưới đây.
+
+Bài đăng:
+\"\"\"{content}\"\"\"
+
+Sản phẩm mình có: {profile.name} (bot Telegram {profile.handle}).
+
+Trả về DUY NHẤT một JSON (tiếng Việt, ngắn gọn), không giải thích:
+{{"is_seller": true/false,      // người viết đang BÁN / chào hàng / chạy affiliate / quảng cáo
+ "intent": "...",               // một trong: hỏi xin tư vấn | than phiền / gặp khó | chia sẻ kinh nghiệm | khoe đơn | chào hàng | khác
+ "emotion": "...",              // cảm xúc thật: lo, tiếc tiền, bực, hào hứng, tò mò, mệt…
+ "need": "...",                 // họ thật sự cần gì (một câu)
+ "stage": "...",                // một trong: chưa có nhu cầu | đang tìm hiểu | sắp mua | vừa mua xong
+ "objection": "...",            // điều họ băn khoăn / sợ (rỗng nếu không có)
+ "their_words": "...",          // 2–5 chữ đắt nhất của chính họ, chép nguyên văn
+ "angle": "...",                // nên nói gì để giúp đúng nhu cầu đó (một câu)
+ "buy_score": 0-100}}           // khả năng người này bấm thử {profile.handle} vì nó giải quyết đúng nhu cầu của họ
+
+Chấm buy_score khắt khe: người bán / quảng cáo ≤ 10; khoe đơn hoặc chia sẻ chung chung 20–40; đang hỏi hoặc đang gặp đúng
+vấn đề mà {profile.name} giải quyết 70–100. Không đoán bừa: bài không liên quan → dưới 20.
+"""
+        try:
+            raw, meta = await AIUseCases.generate_text_async(prompt, purpose=AIPurpose.THREADS_REPLY)
+        except Exception as e:
+            return None, f"lỗi AI ({type(e).__name__})"
+        reading = parse_reading(raw or "")
+        if reading is None:
+            meta = meta or {}
+            return None, meta.get("fail_reason") or meta.get("primary_fail_reason") or "AI không trả JSON"
+        return reading, ""
+
+    @staticmethod
     def get_fallback_reply(bot_type: TargetBot, variant: ABVariant) -> str:
         """Sinh câu trả lời mẫu chất lượng cao khi không có kết nối AI."""
         profile = load_profiles()[bot_type]
@@ -84,6 +182,7 @@ class GrowthEvaluator:
         content: str,
         bot_type: TargetBot,
         variant: ABVariant,
+        reading: Optional[PostReading] = None,
     ) -> Tuple[str, str]:
         """Sinh câu trả lời thông minh dựa trên biến thể A hoặc B.
 
@@ -91,6 +190,19 @@ class GrowthEvaluator:
         """
         profile: BotGrowthProfile = load_profiles()[bot_type]
         cfg: VariantConfig = profile.variants[variant]
+        insight = ""
+        if reading is not None:
+            insight = f"""
+Người viết đang (đã đọc kỹ bài):
+- Ý định: {reading.intent} · giai đoạn: {reading.stage}
+- Cảm xúc: {reading.emotion}
+- Thật sự cần: {reading.need}
+- Băn khoăn: {reading.objection or "không rõ"}
+- Chữ của chính họ: {reading.their_words or "không có"}
+- Nên nói: {reading.angle}
+Cách viết: mở đầu bắt đúng cảm xúc đó (đồng cảm, không phán xét), dùng lại 1 chữ của chính họ cho tự nhiên, giải quyết đúng
+cái họ cần / gỡ đúng băn khoăn trước, rồi mới nhắc {profile.handle} như cách chính mình đã làm và thấy được việc.
+"""
 
         prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply.
 
@@ -101,7 +213,7 @@ Thứ bạn muốn giới thiệu khéo: {profile.name} — bot Telegram {profil
 Góc nói (biến thể {variant.value}): {cfg.name}
 Ý chính: {cfg.angle}
 Link (chỉ chèn nếu thấy tự nhiên): {cfg.tracking_url}
-
+{insight}
 Văn phong — viết y như người thật trên Threads:
 - 1–2 câu, tối đa khoảng 200 ký tự. Viết liền một mạch, không gạch đầu dòng, không xuống dòng.
 - Giọng nói chuyện, xưng t / mình, gọi b / bà / ông tuỳ bài. Viết thường cũng được, không cần chấm câu cuối.

@@ -216,10 +216,12 @@ class GrowthStorage:
         return [dict(r) for r in rows]
 
     def approved_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Bài đã duyệt chờ đăng — độ phủ cao trước (hạn mức/ngày có hạn, dành suất cho bài nhiều người xem), rồi cũ trước."""
+        """Bài đã duyệt chờ đăng — điểm thành khách cao trước (theo nấc 10, PLAN-163), cùng nấc thì độ phủ cao trước, rồi cũ trước."""
         with self._connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM growth_posts WHERE status = 'approved' ORDER BY reach DESC, id ASC LIMIT ?", (limit,)
+                "SELECT * FROM growth_posts WHERE status = 'approved' "
+                "ORDER BY COALESCE(relevance_score, 0) / 10 DESC, reach DESC, id ASC LIMIT ?",
+                (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
 

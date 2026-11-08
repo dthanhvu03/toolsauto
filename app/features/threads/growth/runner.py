@@ -81,19 +81,46 @@ class GrowthRunner:
             )
             return None
 
+        # 2b. Bài chào hàng rõ ràng → bỏ, không tốn lượt gọi AI (PLAN-163)
+        if GrowthEvaluator.looks_like_seller(post.content):
+            logger.debug("Thread %s looks like a seller post. Skipping.", post.thread_id)
+            return None
+
+        # 2c. AI đọc tâm lý / nhu cầu / câu chữ. Đọc được thì điểm = khả năng thành khách, thay điểm từ khoá.
+        reading, read_fail = await GrowthEvaluator.read_post(post.content, bot_type)
+        if reading is not None:
+            relevance = reading.buy_score
+
         # 3. Gán biến thể A/B
         variant = forced_variant or self._next_variant_for(bot_type)
 
-        # 4. Sinh phản hồi AI theo góc độ A hoặc B
+        if reading is not None and (reading.is_seller or relevance < min_relevance):
+            # Lưu «rejected» kèm lý do: không đọc lại bài này, không tốn suất reply, vẫn xem được trên web.
+            why = "người bán / chào hàng" if reading.is_seller else f"ít khả năng thành khách ({relevance})"
+            self.storage.save_post(
+                thread_id=post.thread_id, post_url=post.post_url, author=post.author, content=post.content,
+                target_bot=bot_type, variant=variant, relevance_score=relevance, ai_analysis=reading.summary(),
+                suggested_reply="", status="rejected", auto_approved=False,
+                post_created_at=post.created_at.isoformat() if post.created_at else None,
+                like_count=post.likes, reply_count=post.replies, author_followers=post.author_followers,
+                reach=post.reach,
+            )
+            logger.info("AI read thread %s: skip (%s)", post.thread_id, why)
+            return None
+
+        # 4. Sinh phản hồi AI theo góc độ A hoặc B, dựa trên bản đọc
         suggested_reply, analysis = await GrowthEvaluator.generate_reply(
             content=post.content,
             bot_type=bot_type,
             variant=variant,
+            reading=reading,
         )
+        analysis = f"{analysis} | {reading.summary()}" if reading else f"{analysis} | Đọc AI lỗi: {read_fail}"
 
         # 5. Lưu vào database
         auto = (
             auto_post_min is not None
+            and reading is not None  # AI chưa đọc được bài (lỗi / hết key) → không tự đăng theo điểm từ khoá (PLAN-163)
             and relevance >= auto_post_min
             and not analysis.startswith("Fallback")
         )
