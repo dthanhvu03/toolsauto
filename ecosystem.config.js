@@ -4,6 +4,20 @@ const path = require("path");
 const childProcess = require("child_process");
 const fs = require("fs");
 
+// Đọc một khoá trong .env (file không commit) — dùng cho mật khẩu 9Router, không để bí mật trong file này.
+function envFromDotenv(key) {
+  try {
+    const line = fs
+      .readFileSync(path.join(__dirname, ".env"), "utf8")
+      .split(/\r?\n/)
+      .find((l) => l.startsWith(`${key}=`));
+    return line ? line.slice(key.length + 1).trim().replace(/^["']|["']$/g, "") : "";
+  } catch (e) {
+    return "";
+  }
+}
+const ROUTER_INITIAL_PASSWORD = process.env.NINE_ROUTER_INITIAL_PASSWORD || envFromDotenv("NINE_ROUTER_INITIAL_PASSWORD");
+
 const PROJECT_ROOT = path.resolve(__dirname);
 const VENV_PYTHON = path.join(PROJECT_ROOT, "venv/bin/python");
 
@@ -123,7 +137,13 @@ module.exports = {
       interpreter: ROUTER_NODE,
       node_args: "--dns-result-order=ipv4first",
       cwd: ROUTER_APP,
-      env: { PORT: "20128", HOSTNAME: "0.0.0.0", NODE_PATH: ROUTER_NODE_PATH },
+      env: {
+        PORT: "20128",
+        HOSTNAME: "0.0.0.0",
+        NODE_PATH: ROUTER_NODE_PATH,
+        // Bản 0.5 chặn mật khẩu mặc định khi vào từ xa → đặt mật khẩu ban đầu qua .env (đổi lại được trong Settings).
+        ...(ROUTER_INITIAL_PASSWORD ? { INITIAL_PASSWORD: ROUTER_INITIAL_PASSWORD } : {}),
+      },
       max_restarts: 10,
       min_uptime: 5000,
       restart_delay: 3000,
