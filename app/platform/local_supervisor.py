@@ -5,8 +5,8 @@ Keeps exactly one of: web, maintenance, fb_publisher, ai_generator.
 Does not auto-approve DRAFT or start Threads workers.
 
 Process matching goes through app.core.process_scan so that a worker started by
-PM2 (`python app/features/facebook/workers/publisher.py`) and one started here
-(`python -m app.features.facebook.workers.publisher`) are recognised as the same
+PM2 (`python app/features/system_panel/workers/maintenance.py`) and one started here
+(`python -m app.features.system_panel.workers.maintenance`) are recognised as the same
 app — otherwise the supervisor would spawn a duplicate publisher.
 
 State/lock files are resolved from config.RUNTIME_CONFIG_DIR (absolute), so the

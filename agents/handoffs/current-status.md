@@ -1,3 +1,7 @@
+## Phiên 2026-11-08 (PLAN-166 đợt 4) — Gỡ Facebook + Story + publisher_runtime
+- 67 file, −15.248 dòng (gồm 32 file test FB/Story). Maintenance thôi gọi MetricsChecker. Đối chiếu toàn bộ test với bản cũ:
+  không lỗi mới. **Cần chủ bot:** `pm2 restart Maintenance`. Đợt tiếp: 5 (affiliates / jobs).
+
 ## Phiên 2026-11-08 (PLAN-166 đợt 3) — Gỡ Instagram + TikTok upload
 - 8 file, −1.119 dòng; Story dời sang đợt 4 cùng Facebook. 21 test hỏng trùng hệt trước đợt. Proof trong PLAN-166.
 

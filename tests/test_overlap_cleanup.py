@@ -39,9 +39,3 @@ def test_no_core_import_of_features_facebook_media():
     assert "app.core.media" in notifier
 
 
-def test_publishers_use_shared_claim_precheck():
-    fb = (ROOT / "app/features/facebook/workers/publisher.py").read_text(encoding="utf-8")
-    for src in (fb,):  # PLAN-166 đợt 2: Threads publisher cũ đã gỡ
-        assert "claim_precheck" in src
-        assert "postpone_if_sleeping" in src
-        assert "resource_blocks_claim(" not in src

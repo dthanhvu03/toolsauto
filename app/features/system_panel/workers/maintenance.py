@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
 from app.core.queue.worker import WorkerService
 from app.core.queue.cleanup import CleanupService
-from app.core.observability.metrics_checker import MetricsChecker
 from app.core.observability import heartbeat
 from app.core.notifier.service import NotifierService, TelegramNotifier
 from app.core.observability.system_monitor import SystemMonitorService
@@ -714,12 +713,8 @@ def run_loop():
                 time.sleep(config.MAINT_LOOP_SLEEP_SEC)
                 continue
 
-            # 2. Check 24h Metrics for published posts in isolated short transactions
-            # (Web scraping with Playwright performed WITHOUT holding open main DB transaction)
-            try:
-                MetricsChecker.check_pending()
-            except Exception as exc:
-                logger.error("[MetricsChecker] check_pending error: %s", exc)
+            # 2. Kiểm view 24h bài FB (MetricsChecker) — TẮT (PLAN-166 đợt 4): chỉ chọn job FB có tài khoản +
+            # post_url; job Buffer không có nên không bao giờ chạy. Đăng trực tiếp FB đã gỡ.
 
             # Heavy tasks executed in isolated short transactions
             if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:

@@ -64,3 +64,16 @@
 - Test: bộ dispatcher / adapter 17 file — 21 hỏng, so trên HEAD trước đợt **trùng 21/21** (hỏng sẵn); test_workflow_registry_cache
   hỏng thu thập sẵn (import module không tồn tại). 341 test Buffer / viral / growth / store / storage / process qua.
   `get_adapter('buffer')` → BufferAdapter; import app.main OK; lint-imports như cũ.
+
+### Đợt 4 (08/11) — xong
+- `git rm` app/features/facebook (~7.000 dòng), app/features/story, app/core/queue/publisher_runtime.py (chỉ worker FB dùng).
+- `dispatcher.py` 392 → 89 dòng: bỏ class Dispatcher + FB / MediaProcessor; còn normalize_platform, DummyAdapter, get_adapter
+  (threads, buffer). Maintenance thôi gọi MetricsChecker.check_pending (chỉ chọn job FB có account + post_url → job Buffer
+  không bao giờ vào). GIỮ metrics_checker (job.py dùng today_start_ts) — còn import lười FacebookReelsPage trong hàm không
+  ai gọi → dọn ở đợt 6. Docstring process_scan / local_supervisor đổi ví dụ sang maintenance; `.importlinter` bỏ facebook.
+- Test: xoá 32 file chỉ FB / Story / publisher; cắt FB khỏi 5 file dùng chung (AST, đúng ranh giới hàm) + thêm
+  test_dispatcher_buffer_and_removed_platforms; bỏ 3 test đọc source đã gỡ (claim_precheck FB, media gate Dispatcher,
+  maintenance gọi MetricsChecker); ruff --fix import thừa sau khi cắt.
+- Đối chiếu toàn bộ test (6 nhóm, cả bản trước đợt 4 trong worktree): sau 31 hỏng / trước 47 hỏng; 3 hỏng "mới" → 2 test đọc
+  source đã gỡ (đã bỏ) + test_material_caption::test_viet_caption_truyen_ten_page = phụ thuộc thứ tự (cùng nhóm file trên bản
+  cũ cũng hỏng; chạy riêng / cả file đều qua). Không lỗi thu thập mới. import app.main OK; get_adapter('buffer') → BufferAdapter.

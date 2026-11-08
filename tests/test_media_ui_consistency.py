@@ -55,10 +55,6 @@ def test_drag_and_drop_filters_to_video_extensions():
     assert "file.type.startsWith('image/')" not in src
 
 
-def test_dispatcher_marks_media_gate_as_validation():
-    src = _read(DISPATCHER)
-    assert "ERROR_TYPE_VALIDATION" in src
-    assert "require_media=True" in src
 
 
 def test_label_does_not_promise_formats_the_backend_rejects():

@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from app.core.queue.job import JobService
-from app.features.facebook.adapter import FacebookAdapter
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = "https://www.facebook.com/kids0810"
@@ -66,10 +65,6 @@ def test_khong_co_file_thi_tra_none():
 
 # ── nối dây ───────────────────────────────────────────────────────────────────
 
-def test_dispatcher_truyen_anh_xuong_adapter():
-    src = (ROOT / "app" / "adapters" / "dispatcher.py").read_text(encoding="utf-8")
-    assert 'getattr(job, "resolved_comment_image_path", None)' in src
-    assert "image_path=comment_image" in src
 
 
 def test_moi_adapter_deu_nhan_image_path():
@@ -78,26 +73,14 @@ def test_moi_adapter_deu_nhan_image_path():
 
     from app.adapters.generic.adapter import GenericAdapter
 
-    for cls in (FacebookAdapter, GenericAdapter):  # PLAN-166: Instagram / TikTok upload đã gỡ
+    for cls in (GenericAdapter,):  # PLAN-166: FB / Instagram / TikTok upload đã gỡ
         params = inspect.signature(cls.post_comment).parameters
         assert "image_path" in params, cls.__name__
         assert params["image_path"].default is None, cls.__name__
 
 
-def test_dinh_anh_that_bai_van_gui_comment_chu():
-    """Mất ảnh còn hơn mất cả bình luận — comment là bước phụ, không bao giờ fatal."""
-    src = (ROOT / "app" / "features" / "facebook" / "adapter.py").read_text(encoding="utf-8")
-    block = src.split("image_attached = self._attach_comment_image(image_path)", 1)[1]
-    submit_part = block.split("keyboard.press(\"Enter\")", 1)[0]
-    assert "return PublishResult" not in submit_part, "đính ảnh hỏng mà lại bỏ luôn comment"
 
 
-def test_anh_khong_ton_tai_thi_bao_va_di_tiep():
-    import logging
-
-    adapter = FacebookAdapter()
-    adapter.logger = logging.getLogger("test")
-    assert adapter._attach_comment_image("D:/khong/co/that.jpg") is False
 
 
 def test_bulk_form_co_o_upload_anh_comment():

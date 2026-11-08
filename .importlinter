@@ -15,14 +15,12 @@ ignore_imports =
     app.adapters.dispatcher -> app.features.**
     # NO KY THUAT THAT — can vá, dung them cai moi vao day:
     # core khong duoc biet mot nen tang cu the.
-    app.core.observability.metrics_checker -> app.features.facebook.pages.reels
 
 [importlinter:contract:features-independent]
 name = Features should be independent
 type = independence
 modules =
     app.features.threads
-    app.features.facebook
     app.features.viral_intake
     app.features.affiliates
     app.features.telegram_bot
@@ -34,7 +32,6 @@ ignore_imports =
     # cham toi nen tang khac.
     app.adapters.dispatcher -> app.features.**
     # NO KY THUAT THAT — can vá, dung them cai moi vao day:
-    app.core.observability.metrics_checker -> app.features.facebook.pages.reels
 
 # ADR-061: moi buoc Studio lam dung 1 viec — khong buoc nao import buoc khac.
 # Chi app.features.studio.pipeline biet thu tu cac buoc.

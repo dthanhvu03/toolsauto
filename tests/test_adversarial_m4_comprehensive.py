@@ -24,20 +24,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import tempfile
-import threading
 import time
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.constants import JobStatus, JobType
 from app.core.database.core import Base
 from app.core.database.models import Job
 from app.core.queue.cleanup import CleanupService
-from app.core.queue.publisher_runtime import postpone_if_weekly_story_limit
 from app.features.buffer.adapter import BufferAdapter
 from app.features.buffer.client import BufferClient, BufferError
 from app.features.buffer.first_comment import (
@@ -45,8 +41,6 @@ from app.features.buffer.first_comment import (
     get_or_create_first_comment,
     sanitize_comment,
 )
-from app.features.story.media_extractor import StoryMediaExtractor, classify_story_mode
-from app.features.story.scheduler import ICT, StoryPacingScheduler
 
 
 # =====================================================================
@@ -282,254 +276,6 @@ class TestR1FirstCommentAdversarial:
 # =====================================================================
 # 2. R2: Media Extraction & Story Pacing Scheduler Stress Tests
 # =====================================================================
-class TestR2StoryExtractionAndSchedulerAdversarial:
-    """Stress testing media extraction parameters, golden hours, weekly quota, and multi-page isolation."""
-
-    def test_classify_story_mode_boundaries(self):
-        """Verify duration boundary classification rules."""
-        # >30.0s -> video
-        assert classify_story_mode(30.1) == "video"
-        assert classify_story_mode(60.0) == "video"
-        # <=30.0s -> photo
-        assert classify_story_mode(30.0) == "photo"
-        assert classify_story_mode(29.9) == "photo"
-        assert classify_story_mode(5.0) == "photo"
-
-        # Preferred mode video with duration >= 10.0s -> video
-        assert classify_story_mode(12.0, preferred_mode="video") == "video"
-        assert classify_story_mode(10.0, preferred_mode="video") == "video"
-        # Preferred mode video with duration < 10.0s -> falls back to photo!
-        assert classify_story_mode(9.9, preferred_mode="video") == "photo"
-
-        # Preferred mode photo -> always photo
-        assert classify_story_mode(45.0, preferred_mode="photo") == "photo"
-
-    @patch("subprocess.run")
-    def test_extract_video_story_command_parameters(self, mock_subproc):
-        """Verify video story extraction enforces: 1080x1920 9:16, clamped duration, -threads 2, nice -n 19, -map 0:a?."""
-        mock_subproc.return_value = MagicMock(returncode=0, stderr="")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            input_file = Path(tmp_dir) / "input.mp4"
-            input_file.write_bytes(b"dummy_mp4_bytes")
-            output_file = Path(tmp_dir) / "output_story.mp4"
-
-            with patch("os.path.exists", return_value=True), patch("os.path.getsize", return_value=1024), patch("os.replace"):
-                StoryMediaExtractor.extract_video_story(
-                    str(input_file),
-                    output_path=str(output_file),
-                    duration=25.0,
-                )
-
-            assert mock_subproc.called
-            cmd = mock_subproc.call_args[0][0]
-
-            assert cmd[:3] == ["nice", "-n", "19"]
-            assert "-threads" in cmd
-            assert cmd[cmd.index("-threads") + 1] == "2"
-
-            assert "-t" in cmd
-            assert cmd[cmd.index("-t") + 1] == "15.000"
-
-            assert "-vf" in cmd
-            assert cmd[cmd.index("-vf") + 1] == (
-                "scale=1080:1920:force_original_aspect_ratio=decrease,"
-                "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
-            )
-
-            assert "-map" in cmd
-            assert "0:a?" in cmd
-            assert "-movflags" in cmd
-            assert "+faststart" in cmd
-
-    @patch("subprocess.run")
-    def test_extract_photo_story_command_parameters(self, mock_subproc):
-        """Verify photo story extraction enforces: sharp 9:16 JPEG (-q:v 2, 1080x1920)."""
-        mock_subproc.return_value = MagicMock(returncode=0, stderr="")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            input_file = Path(tmp_dir) / "input.mp4"
-            input_file.write_bytes(b"dummy_mp4_bytes")
-            output_file = Path(tmp_dir) / "output_story.jpg"
-
-            with patch("os.path.exists", return_value=True), patch("os.path.getsize", return_value=1024), patch("os.replace"):
-                StoryMediaExtractor.extract_photo_story(
-                    str(input_file),
-                    output_path=str(output_file),
-                    seek_sec=3.5,
-                )
-
-            assert mock_subproc.called
-            cmd = mock_subproc.call_args[0][0]
-
-            assert "-frames:v" in cmd
-            assert cmd[cmd.index("-frames:v") + 1] == "1"
-            assert "-q:v" in cmd
-            assert cmd[cmd.index("-q:v") + 1] == "2"
-            assert "-f" in cmd
-            assert cmd[cmd.index("-f") + 1] == "image2"
-            assert "-vf" in cmd
-            assert "scale=1080:1920" in cmd[cmd.index("-vf") + 1]
-
-    def test_pacing_scheduler_strict_golden_hours_and_weekly_quota(self, mem_db):
-        """
-        Verify:
-        - Exactly 11:30 or 20:00 ICT timestamps.
-        - Strict weekly quota: max 10 stories/week.
-        - Rollover: the 11th story leaps directly to next Monday 11:30 ICT.
-        - 50/50 alternating cadence between video and photo stories.
-        """
-        page = "pacing_test_page_1"
-
-        # Baseline start: Monday 2026-10-26 08:00 ICT
-        base_dt = datetime(2026, 10, 26, 8, 0, 0, tzinfo=ICT)
-        curr_after_ts = int(base_dt.timestamp())
-
-        scheduled_jobs: list[Job] = []
-
-        for i in range(12):
-            media_mode = StoryMediaExtractor.generate_story_filename(
-                mode="video" if i % 2 == 0 else "photo", material_id=i
-            )
-            # Find next golden slot explicitly advancing after_ts
-            slot = StoryPacingScheduler.get_next_golden_slot(mem_db, page, after_ts=curr_after_ts)
-            curr_after_ts = slot
-
-            job = StoryPacingScheduler.schedule_story(
-                mem_db,
-                account_id=1,
-                target_page=page,
-                media_path=f"/storage/media/stories/{media_mode}",
-                caption=f"Story number {i+1}",
-                schedule_ts=slot,
-            )
-            scheduled_jobs.append(job)
-
-        # 1. Verify first 10 stories are in Week 1 (Oct 26 - Nov 01)
-        w1_start, w1_end = StoryPacingScheduler.get_week_bounds(base_dt)
-        for i in range(10):
-            job = scheduled_jobs[i]
-            assert w1_start <= job.schedule_ts < w1_end, f"Job {i+1} not in week 1"
-            dt = datetime.fromtimestamp(job.schedule_ts, tz=ICT)
-            assert (dt.hour, dt.minute) in ((11, 30), (20, 0))
-            assert dt.second == 0
-
-        # Verify daily pacing (2 per day: Mon, Tue, Wed, Thu, Fri)
-        days = [datetime.fromtimestamp(j.schedule_ts, tz=ICT).date() for j in scheduled_jobs[:10]]
-        for d in set(days):
-            assert days.count(d) == 2
-
-        # 2. Verify 11th and 12th stories rolled over to Week 2 starting Monday 2026-11-02 11:30 ICT
-        w2_start = datetime(2026, 11, 2, 0, 0, 0, tzinfo=ICT)
-        w2_start_ts, w2_end_ts = StoryPacingScheduler.get_week_bounds(w2_start)
-
-        job_11 = scheduled_jobs[10]
-        dt_11 = datetime.fromtimestamp(job_11.schedule_ts, tz=ICT)
-        assert w2_start_ts <= job_11.schedule_ts < w2_end_ts
-        assert dt_11.weekday() == 0  # Monday
-        assert (dt_11.hour, dt_11.minute) == (11, 30)
-
-        job_12 = scheduled_jobs[11]
-        dt_12 = datetime.fromtimestamp(job_12.schedule_ts, tz=ICT)
-        assert dt_12.weekday() == 0  # Monday evening
-        assert (dt_12.hour, dt_12.minute) == (20, 0)
-
-        # 3. Verify alternating media mode helper
-        # Last job was photo (index 11 is photo) -> next mode is video
-        next_mode = StoryPacingScheduler.get_next_media_mode(mem_db, page)
-        expected_mode = "video" if scheduled_jobs[-1].media_path.endswith((".jpg", ".png")) else "photo"
-        assert next_mode == expected_mode
-
-    def test_multi_page_isolation_under_concurrency(self, file_db):
-        """Concurrently schedule stories across 3 different pages using file-backed DB. Quotas must not bleed."""
-        main_db, SessionFactory = file_db
-        pages = ["page_alpha", "page_beta", "page_gamma"]
-        errors = []
-
-        # Baseline start: Monday 2026-10-26 08:00 ICT
-        base_dt = datetime(2026, 10, 26, 8, 0, 0, tzinfo=ICT)
-        initial_ts = int(base_dt.timestamp())
-
-        def worker_task(target_page: str):
-            thread_db = SessionFactory()
-            try:
-                curr_ts = initial_ts
-                for i in range(10):
-                    slot = StoryPacingScheduler.get_next_golden_slot(thread_db, target_page, after_ts=curr_ts)
-                    curr_ts = slot
-                    StoryPacingScheduler.schedule_story(
-                        thread_db,
-                        account_id=1,
-                        target_page=target_page,
-                        media_path=f"/storage/{target_page}_{i}.mp4",
-                        schedule_ts=slot,
-                    )
-            except Exception as e:
-                errors.append(e)
-            finally:
-                thread_db.close()
-
-        threads = [threading.Thread(target=worker_task, args=(p,)) for p in pages]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        assert not errors, f"Threading errors encountered: {errors}"
-
-        # Verify each page has exactly 10 stories and no slot collisions within the same page
-        for p in pages:
-            jobs = (
-                main_db.query(Job)
-                .filter(Job.target_page == p, Job.job_type == JobType.STORY)
-                .all()
-            )
-            assert len(jobs) == 10
-            slots = [j.schedule_ts for j in jobs]
-            assert len(slots) == len(set(slots)), f"Duplicate slots detected for page {p}"
-
-    def test_postpone_if_weekly_story_limit_runtime_gate(self, mem_db):
-        """Runtime gate postpones 11th job if page has 10 completed/active stories in ISO week."""
-        page = "runtime_gate_page"
-        now_dt = datetime(2026, 10, 26, 12, 0, 0, tzinfo=ICT)
-        now_ts = int(now_dt.timestamp())
-
-        # Seed 10 DONE jobs in current week
-        for i in range(10):
-            job = Job(
-                platform="facebook",
-                target_page=page,
-                job_type=JobType.STORY,
-                status=JobStatus.DONE,
-                schedule_ts=now_ts - (i * 3600),
-                finished_at=now_ts - (i * 3600),
-            )
-            mem_db.add(job)
-        mem_db.commit()
-
-        # Create candidate 11th job that wants to run now
-        candidate_job = Job(
-            id=999,
-            platform="facebook",
-            target_page=page,
-            job_type=JobType.STORY,
-            status=JobStatus.RUNNING,
-            schedule_ts=now_ts,
-            started_at=now_ts,
-            locked_at=now_ts,
-        )
-        mem_db.add(candidate_job)
-        mem_db.commit()
-
-        postponed = postpone_if_weekly_story_limit(mem_db, candidate_job, now_ts=now_ts)
-        assert postponed is True
-        assert candidate_job.status == JobStatus.PENDING
-        assert candidate_job.locked_at is None
-        assert candidate_job.started_at is None
-
-        dt_postponed = datetime.fromtimestamp(candidate_job.schedule_ts, tz=ICT)
-        assert dt_postponed.weekday() == 0  # Monday
-        assert (dt_postponed.hour, dt_postponed.minute) == (11, 30)
 
 
 # =====================================================================
@@ -538,27 +284,6 @@ class TestR2StoryExtractionAndSchedulerAdversarial:
 class TestR3ReliabilityAndCleanupAdversarial:
     """Stress testing atomic writes, immediate failure unlinking, and CleanupService 24h retention."""
 
-    def test_atomic_tmp_unlinking_on_ffmpeg_exception(self):
-        """When ffmpeg fails or raises an error, .tmp file is guaranteed to be unlinked immediately."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            input_file = Path(tmp_dir) / "corrupt_input.mp4"
-            input_file.write_bytes(b"invalid_corrupt_data")
-            output_file = Path(tmp_dir) / "output.mp4"
-            tmp_file = Path(f"{output_file}.tmp")
-
-            def mock_failing_subprocess(*args, **kwargs):
-                tmp_file.write_bytes(b"partial_bytes_left_by_crash")
-                return MagicMock(returncode=1, stderr="Invalid data found when processing input")
-
-            with patch("subprocess.run", side_effect=mock_failing_subprocess):
-                with pytest.raises(RuntimeError, match="FFmpeg video story extraction failed"):
-                    StoryMediaExtractor.extract_video_story(
-                        str(input_file),
-                        output_path=str(output_file),
-                    )
-
-            assert not tmp_file.exists(), "Temporary .tmp file was NOT unlinked after ffmpeg error!"
-            assert not output_file.exists()
 
     def test_cleanup_service_24h_story_retention_sweep(self):
         """CleanupService._cleanup_stale_story_files deletes files >24h old, preserves files <=24h."""

@@ -22,7 +22,6 @@ from app.core.orchestrator import (
     release_whisper_model,
     WhisperContext,
 )
-from app.features.facebook.core.session import FacebookSessionManager
 from app.adapters.common.session import PlatformSessionManager, SessionManager
 from app.core.observability.metrics_checker import (
     MetricsChecker,
@@ -247,21 +246,6 @@ class TestSubprocessReapingAndZombiePrevention:
 class TestPlaywrightDriverCleanup:
     """Tests for closing pw and context on bootstrap failure to prevent orphaned Node.js drivers."""
 
-    def test_facebook_session_pw_stop_on_launch_failure(self):
-        """Verifies FacebookSessionManager calls pw.stop() when launch_persistent_context fails."""
-        mock_pw = MagicMock()
-        mock_pw.chromium.launch_persistent_context.side_effect = RuntimeError("Context launch failed")
-
-        with patch("app.features.facebook.core.session.sync_playwright") as mock_sync_pw, \
-             patch("app.features.facebook.core.session.FacebookSessionManager.log_profile_health"):
-            
-            mock_sync_pw.return_value.start.return_value = mock_pw
-
-            result = FacebookSessionManager.launch_persistent("/fake/profile/path")
-
-            assert result is None
-            mock_pw.chromium.launch_persistent_context.assert_called_once()
-            mock_pw.stop.assert_called_once()
 
     def test_common_session_pw_stop_on_launch_failure(self):
         """Verifies PlatformSessionManager calls pw.stop() when launch fails."""
@@ -387,27 +371,3 @@ class TestSQLiteTransactionDurationOptimization:
                 "session_close",
             ]
 
-    def test_maintenance_does_not_hold_db_session_during_metrics_check(self):
-        """Verifies maintenance.run_loop does NOT call MetricsChecker inside the main routine DB session."""
-        import inspect
-        source = inspect.getsource(maint.run_loop)
-
-        # In run_loop, the main maintenance block is `with SessionLocal() as db:`
-        main_with_idx = source.find("with SessionLocal() as db:")
-        assert main_with_idx != -1
-
-        # Locate the end of that with block (db.commit())
-        main_commit_idx = source.find("db.commit()", main_with_idx)
-        assert main_commit_idx != -1
-
-        # Check if MetricsChecker.check_pending is called within [main_with_idx, main_commit_idx]
-        inside_main_db = source[main_with_idx:main_commit_idx]
-        assert "MetricsChecker.check_pending" not in inside_main_db, (
-            "MetricsChecker.check_pending should NOT be inside main maintenance with SessionLocal() transaction"
-        )
-
-        # Check that MetricsChecker.check_pending IS called in run_loop after that block
-        after_main_db = source[main_commit_idx:]
-        assert "MetricsChecker.check_pending" in after_main_db, (
-            "MetricsChecker.check_pending should be called in an isolated short transaction outside the main DB session"
-        )

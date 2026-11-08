@@ -3,8 +3,8 @@ Process identification shared by the local supervisor and the system monitor (PL
 
 Why a shared module: a ToolsAuto worker can be launched two different ways —
 
-    PM2 / start.sh    → python app/features/facebook/workers/publisher.py
-    local supervisor  → python -m app.features.facebook.workers.publisher
+    PM2 / start.sh    → python app/features/system_panel/workers/maintenance.py
+    local supervisor  → python -m app.features.system_panel.workers.maintenance
 
 so every match must accept both the script-path and the dotted-module spelling.
 Matching only one of them made the supervisor spawn duplicates and made the
@@ -101,7 +101,7 @@ class Entrypoint:
     """
     What a command line actually *runs* — as opposed to what it merely mentions.
 
-    `git diff app/features/facebook/workers/publisher.py` and
+    `git diff app/features/system_panel/workers/maintenance.py` and
     `python -m compileall app/features/.../publisher.py` both contain the worker
     path; neither is the worker. Substring matching treated them as a running
     publisher, which made the supervisor skip spawning the real one.
