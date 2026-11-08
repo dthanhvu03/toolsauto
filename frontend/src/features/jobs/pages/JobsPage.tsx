@@ -1,3 +1,4 @@
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Pagination } from "@/shared/ui/Pagination";
 import { Panel } from "@/shared/ui/Panel";
@@ -11,7 +12,8 @@ export function JobsPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Lịch đăng" subtitle={ctl.subtitle || "—"} />
+      <PageHeader
+        actions={<ScreenSettingsButton screen="jobs" />} title="Lịch đăng" subtitle={ctl.subtitle || "—"} />
       <p className="mt-2 text-xs text-slate-500">
         Mỗi dòng là một lần đưa video lên Buffer. Xếp lại giờ / huỷ lịch: dùng Telegram (gọi Buffer tốn suất nên web chỉ xem).
       </p>

@@ -1,3 +1,4 @@
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Pagination } from "@/shared/ui/Pagination";
 import { Panel } from "@/shared/ui/Panel";
@@ -15,6 +16,7 @@ export function ViralPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
+        actions={<ScreenSettingsButton screen="viral" />}
         title="Nội dung viral"
         subtitle={
           d

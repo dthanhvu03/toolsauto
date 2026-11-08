@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/shared/lib/cn";
 import { ghostBtnClass } from "@/shared/ui/controls";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { Toast } from "@/shared/ui/Toast";
@@ -38,14 +39,20 @@ export function StudioBoardPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
+        actions={<ScreenSettingsButton screen="studio" />}
         title="Studio"
         subtitle={d ? `${count(["REVIEW"])} video chờ duyệt${d.tasks_pending ? ` · ${d.tasks_pending} việc đang chạy` : ""}` : "—"}
       />
       <div className="mt-4 flex flex-col gap-2">
         <UploadBox channels={setup.data?.channels ?? []} />
-        <Link to="/app/go/studio-tiktok" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
-          <Link2 className="size-4" /> Lấy video từ link TikTok…
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/app/go/studio-doc" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
+            Audio → Documentary (POC)
+          </Link>
+          <Link to="/app/go/studio-tiktok" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
+            <Link2 className="size-4" /> Lấy video từ link TikTok…
+          </Link>
+        </div>
       </div>
       <Toast text={toast.text} seq={toast.seq} />
       <JobsPanel hideDone />

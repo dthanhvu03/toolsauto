@@ -2,13 +2,16 @@
 
 Một đơn FatCat: bot trừ tiền khách và ghi đơn 'pending' trước (db.buy), rồi mới gọi FatCat.
 - FatCat giao đủ/thiếu → complete_upstream (thiếu thì hoàn phần thiếu).
-- FatCat từ chối chắc chắn → fail_upstream (hoàn đủ).
+- FatCat báo 402 (ví shop thiếu) → wait_for_funds: đơn chờ admin nạp ví rồi lấy lại (request_id mới).
+- FatCat từ chối chắc chắn khác → fail_upstream (hoàn đủ).
+- Biết trước ví thiếu (db.buy) → đơn tạo ở trạng thái chờ ví, không gọi FatCat; release_waiting mở lại khi ví đủ.
 - Chưa rõ (timeout, 202, 5xx…) → để nguyên 'pending'; luồng nền gọi lại cùng request_id tới khi rõ.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from store_bot import pricing
 from store_bot.db import Order, Product, StoreRepository
@@ -33,25 +36,39 @@ class Fulfiller:
         result = self.client.buy(upstream_id, quantity, request_id)
         if result.kind == DELIVERED:
             order, newly = self.repo.complete_upstream(order_id, result.items, result.upstream_order_id)
+        elif result.kind == REJECTED and result.status_code == 402:
+            # Ví shop thiếu (FatCat không trừ tiền): giữ đơn chờ admin nạp ví, không hoàn rồi bắt khách mua lại.
+            order, newly = self.repo.wait_for_funds(order_id)
         elif result.kind == REJECTED:
             order, newly = self.repo.fail_upstream(order_id, f"FatCat {result.status_code}: {result.message}")
         else:
             return self.repo.get_order(order_id), result, False
+        if newly and (result.kind == DELIVERED or result.status_code == 402):
+            self.refresh_funds()  # ví vừa bị trừ / vừa báo thiếu: đọc số thật để chặn bán món không nhập nổi
         return order, result, newly
+
+    def refresh_funds(self) -> int | None:
+        """Đọc lại số dư ví FatCat (GET, không trừ tiền). Lỗi mạng thì giữ số cũ."""
+        if self.client is None:
+            return None
+        try:
+            balance = self.client.balance()
+        except UpstreamError:
+            logger.warning("[Store] không đọc được số dư FatCat")
+            return None
+        self.repo.set_state("upstream_balance", str(balance))
+        try:
+            self.repo.reconcile_funds(balance, datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("[Store] tự đối chiếu ví FatCat lỗi")
+        return balance
 
     def sync(self) -> tuple[list[tuple[Product, int]], int | None]:
         """Đồng bộ sản phẩm + số dư ví FatCat. Trả (món vừa tăng hàng, số dư). Lỗi mạng ném UpstreamError."""
         if self.client is None:
             return [], None
-        restocked = self.repo.sync_upstream(self.client.products(), self.price_for)
-        try:
-            balance = self.client.balance()
-        except UpstreamError:
-            logger.warning("[Store] không đọc được số dư FatCat")
-            balance = None
-        if balance is not None:
-            self.repo.set_state("upstream_balance", str(balance))
-        return restocked, balance
+        restocked = self.repo.sync_upstream(self.client.products(), self._price_fn())
+        return restocked, self.refresh_funds()
 
     # ---------- tăng giá bán (state `markup`, `markup:<upstream_id>`) ----------
 
@@ -63,6 +80,16 @@ class Fulfiller:
 
     def price_for(self, cost: int, upstream_id: int) -> int:
         return pricing.sell_price(cost, self.discount_bps, self.own_markup(upstream_id) or self.global_markup())
+
+    def _price_fn(self):
+        """Như price_for nhưng đọc mọi mức tăng giá một lần (đồng bộ / đổi giá cả danh sách món)."""
+        states = self.repo.states_with_prefix("markup")
+        common = pricing.decode(states.get("markup")) or pricing.NO_MARKUP
+
+        def price(cost: int, upstream_id: int) -> int:
+            own = pricing.decode(states.get(f"markup:{upstream_id}"))
+            return pricing.sell_price(cost, self.discount_bps, own or common)
+        return price
 
     def preview(self, markup: Markup | None, product_id: int | None = None, days: int = 30) -> list[PriceRow]:
         """Giá từng món FatCat nếu áp dụng `markup`: chung (product_id None, món có mức riêng giữ mức riêng)
@@ -94,4 +121,4 @@ class Fulfiller:
                 self.repo.delete_state(f"markup:{product.upstream_id}")
             else:
                 self.repo.set_state(f"markup:{product.upstream_id}", markup.code)
-        return self.repo.reprice_upstream(self.price_for)
+        return self.repo.reprice_upstream(self._price_fn())

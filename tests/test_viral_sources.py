@@ -14,7 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.config as config
-from app.constants import ViralStatus
+from app.constants import JobStatus, ViralStatus
 from app.core.database.models import Account, Job, RuntimeSetting, ViralMaterial, ViralSource
 from app.features.viral_intake import processor, reup_processor, reup_variants, sources
 from app.features.viral_intake.reup_processor import ReupResult
@@ -261,7 +261,7 @@ def test_scan_all_only_due_skips_recently_scanned_and_disabled(session_factory, 
 
         # Vừa quét xong → only_due bỏ qua cả 2
         second = SourceService.scan_all(db, only_due=True)
-        assert second == {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0}
+        assert second == {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0, "resting": 0, "revived": 0}
         assert len(fake_yt_dlp["calls"]) == 2
 
         # only_due=False → quét lại, dedup → 0 mới
@@ -313,6 +313,187 @@ def test_scan_all_pauses_source_when_every_target_page_has_enough_ready(session_
         assert {"https://www.tiktok.com/@low", "https://www.tiktok.com/@mixed", "https://www.tiktok.com/@nopage"} <= scanned
         assert db.get(ViralSource, full).last_scanned_at is None
         assert all(db.get(ViralSource, s).last_scanned_at for s in (low, mixed, nopage))
+
+
+def test_ready_count_ignores_videos_already_scheduled_on_buffer(session_factory, fake_yt_dlp, monkeypatch):
+    """PLAN-160: video đã hẹn Buffer vẫn READY khi sync tắt — không được tính là «sẵn sàng» để chặn quét."""
+    monkeypatch.setattr(sources, "_setting_int",
+                        lambda db, key, fallback: 3 if key == "viral.source_skip_ready_per_page" else fallback)
+    with session_factory() as db:
+        sid = _source_to(db, "https://www.tiktok.com/@sched", ["page_sched"])
+        _ready(db, "page_sched", 5)
+        mats = db.query(ViralMaterial).filter(ViralMaterial.target_page == "page_sched").order_by(ViralMaterial.id).all()
+        for m in mats[:4]:
+            db.add(Job(platform="buffer", caption="x", target_page="page_sched", viral_material_id=m.id,
+                       status=JobStatus.DONE, schedule_ts=1))
+        # job FAILED / job sang kênh khác không làm video thành «đã hẹn»
+        db.add(Job(platform="buffer", caption="x", target_page="page_sched", viral_material_id=mats[4].id,
+                   status=JobStatus.FAILED, schedule_ts=2))
+        db.add(Job(platform="buffer", caption="x", target_page="page_other", viral_material_id=mats[4].id,
+                   status=JobStatus.DONE, schedule_ts=3))
+        db.commit()
+
+        assert SourceService._ready_by_page(db) == {"page_sched": 1}
+        out = SourceService.scan_all(db, only_due=True)
+        assert out["paused"] == 0 and out["scanned"] == 1
+        assert db.get(ViralSource, sid).last_scanned_at
+
+
+@pytest.fixture
+def sent(monkeypatch):
+    msgs: list[str] = []
+    monkeypatch.setattr(sources, "_notify", msgs.append)
+    return msgs
+
+
+def _due_again(db, sid):
+    db.get(ViralSource, sid).last_scanned_at = None
+    db.commit()
+
+
+def test_empty_source_rests_after_three_scans_then_retries(session_factory, fake_yt_dlp, sent, monkeypatch):
+    """PLAN-161: 3 lần quét liền không ra video mới → nghỉ 24 giờ, báo 1 lần; hết hạn tự quét lại."""
+    monkeypatch.setattr(sources, "_page_names", lambda: {"page_dry": "Kênh Khô"})
+    clock = {"t": 1_800_000_000}
+    monkeypatch.setattr(sources, "now_ts", lambda: clock["t"])
+    with session_factory() as db:
+        url = "https://www.tiktok.com/@dry"
+        sid = _source_to(db, url, ["page_dry"])
+        fake_yt_dlp["stdout_for"][url] = ""  # nguồn cạn: không có video nào
+
+        for _ in range(3):
+            _due_again(db, sid)
+            assert SourceService.scan_all(db, only_due=True)["scanned"] == 1
+        assert len(sent) == 1 and "@dry" in sent[0] and "Kênh Khô: còn 0 video chưa hẹn" in sent[0]
+
+        _due_again(db, sid)
+        out = SourceService.scan_all(db, only_due=True)
+        assert out["scanned"] == 0 and out["resting"] == 1
+
+        manual = SourceService.scan_all(db, only_due=False)  # quét tay vẫn chạy
+        assert manual["scanned"] == 1
+
+        clock["t"] += sources.REST_HOURS * 3600 + 1
+        _due_again(db, sid)
+        assert SourceService.scan_all(db, only_due=True)["scanned"] == 1
+        assert len(sent) == 1  # vẫn cạn: nghỉ tiếp, không báo lại
+
+        clock["t"] += sources.REST_HOURS * 3600 + 1
+        fake_yt_dlp["stdout_for"].pop(url)  # có lại video
+        _due_again(db, sid)
+        out = SourceService.scan_all(db, only_due=True)
+        assert out["found"] > 0
+        assert len(sent) == 2 and "có lại" in sent[1]
+        assert sources._load_rest_state() == {}
+
+
+def test_scan_errors_do_not_count_as_empty(session_factory, fake_yt_dlp, sent):
+    with session_factory() as db:
+        sid = _source_to(db, "https://www.tiktok.com/@err", ["p"])
+        fake_yt_dlp["fail"] = "ERROR: boom"
+        for _ in range(4):
+            _due_again(db, sid)
+            SourceService.scan_all(db, only_due=True)
+        assert sent == [] and sources._load_rest_state() == {}
+
+
+def test_found_resets_empty_streak(session_factory, fake_yt_dlp, sent):
+    with session_factory() as db:
+        url = "https://www.tiktok.com/@flip"
+        sid = _source_to(db, url, ["p"])
+        fake_yt_dlp["stdout_for"][url] = ""
+        for _ in range(2):
+            _due_again(db, sid)
+            SourceService.scan_all(db, only_due=True)
+        assert sources._load_rest_state()[str(sid)]["empty_streak"] == 2
+        fake_yt_dlp["stdout_for"].pop(url)
+        _due_again(db, sid)
+        SourceService.scan_all(db, only_due=True)
+        assert sources._load_rest_state() == {} and sent == []
+
+
+def test_rest_state_ignored_when_source_url_changed(session_factory, fake_yt_dlp, sent):
+    """Mục nghỉ cũ (id bị dùng lại / đổi URL) không được làm nguồn mới nghỉ oan."""
+    with session_factory() as db:
+        sid = _source_to(db, "https://www.tiktok.com/@new", ["p"])
+        sources._save_rest_state({str(sid): {"url": "https://www.tiktok.com/@old", "empty_streak": 3,
+                                             "rest_until": 9_999_999_999, "notified": True}})
+        out = SourceService.scan_all(db, only_due=True)
+        assert out["scanned"] == 1 and out["resting"] == 0
+
+
+def test_rest_bookkeeping_error_does_not_stop_other_sources(session_factory, fake_yt_dlp, sent, monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(sources, "_apply_scan_result", _boom)
+    with session_factory() as db:
+        _source_to(db, "https://www.tiktok.com/@a1", ["p"])
+        _source_to(db, "https://www.tiktok.com/@a2", ["p"])
+        assert SourceService.scan_all(db, only_due=True)["scanned"] == 2
+
+
+def _active(db, *pages):
+    for page in pages:
+        db.add(Job(platform="buffer", caption="x", target_page=page, status=JobStatus.DONE, schedule_ts=1,
+                   created_at=int(sources.now_ts())))
+    db.commit()
+
+
+def _off_since(db, sid, ts):
+    src = db.get(ViralSource, sid)
+    src.enabled = False
+    db.commit()
+    db.query(ViralSource).filter(ViralSource.id == sid).update({"updated_at": ts}, synchronize_session=False)
+    db.commit()
+
+
+def test_starving_page_revives_one_disabled_source(session_factory, fake_yt_dlp, sent, monkeypatch):
+    """PLAN-164: kênh thiếu bài + không còn nguồn đang quét → tự bật lại 1 nguồn tắt (tắt đủ 24 giờ), báo Telegram."""
+    monkeypatch.setattr(sources, "_page_names", lambda: {"page_s": "Sống Nhẹ"})
+    clock = {"t": 1_800_000_000}
+    monkeypatch.setattr(sources, "now_ts", lambda: clock["t"])
+    with session_factory() as db:
+        dry = _source_to(db, "https://www.tiktok.com/@dry", ["page_s"])
+        old_off = _source_to(db, "https://www.tiktok.com/@oldoff", ["page_s"])
+        fresh_off = _source_to(db, "https://www.tiktok.com/@freshoff", ["page_s"])
+        _off_since(db, old_off, clock["t"] - 10 * 86400)
+        _off_since(db, fresh_off, clock["t"] - 3600)  # chủ bot vừa tắt → để yên
+        sources._save_rest_state({str(dry): {"url": "https://www.tiktok.com/@dry", "rest_until": clock["t"] + 3600}})
+        _active(db, "page_s")
+
+        out = SourceService.scan_all(db, only_due=True)
+
+        assert out["revived"] == 1
+        assert db.get(ViralSource, old_off).enabled is True
+        assert db.get(ViralSource, fresh_off).enabled is False
+        assert len(sent) == 1 and "Sống Nhẹ" in sent[0] and "@oldoff" in sent[0]
+
+        # Chủ bot tắt lại → trong 7 ngày bot không bật lại
+        _off_since(db, old_off, clock["t"] - 2 * 86400)
+        clock["t"] += 86400
+        sources._save_rest_state({**sources._load_rest_state(),
+                                  str(dry): {"url": "https://www.tiktok.com/@dry", "rest_until": clock["t"] + 3600}})
+        # oldoff đang trong 7 ngày chờ → giữ tắt; freshoff nay đã tắt đủ 24 giờ → tới lượt nó
+        assert SourceService.scan_all(db, only_due=True)["revived"] == 1
+        assert db.get(ViralSource, old_off).enabled is False
+        assert db.get(ViralSource, fresh_off).enabled is True
+
+
+def test_no_revive_when_page_has_enough_or_active_source(session_factory, fake_yt_dlp, sent):
+    with session_factory() as db:
+        _source_to(db, "https://www.tiktok.com/@on", ["page_a"])  # còn nguồn đang quét
+        off_a = _source_to(db, "https://www.tiktok.com/@offa", ["page_a"])
+        _off_since(db, off_a, 1)
+        off_b = _source_to(db, "https://www.tiktok.com/@offb", ["page_b"])
+        _off_since(db, off_b, 1)
+        _ready(db, "page_b", sources.LOW_READY)  # đủ bài
+        off_c = _source_to(db, "https://www.tiktok.com/@offc", ["page_dead"])  # kênh đã bỏ: không có bài Buffer gần đây
+        _off_since(db, off_c, 1)
+        _active(db, "page_a", "page_b")
+        assert SourceService.scan_all(db, only_due=True)["revived"] == 0
+        assert not db.get(ViralSource, off_c).enabled
+        assert not db.get(ViralSource, off_a).enabled and not db.get(ViralSource, off_b).enabled
 
 
 def test_scan_all_manual_or_threshold_zero_always_scans(session_factory, fake_yt_dlp, monkeypatch):

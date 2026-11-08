@@ -40,6 +40,8 @@ class Clip(_Strict):
     # gốc). Dùng cho lồng tiếng: giọng đọc + nền đã tách, dài đúng bằng video gốc.
     audio: list[ClipAudio] = Field(default_factory=list)
     hflip: bool = False  # lật ngang đoạn này (A/B góc nhìn — chỉ nội dung của mình, ADR-061 mục 11)
+    # ADR-064: chuyển động Ken Burns trên ảnh tĩnh (video bỏ qua).
+    motion: Literal["static", "slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right"] = "static"
 
     @model_validator(mode="after")
     def _end_after_start(self) -> "Clip":
@@ -95,6 +97,15 @@ class Logo(_Strict):
     width: float = Field(0.16, gt=0, le=1)  # tỉ lệ theo chiều ngang khung
 
 
+class KenBurns(_Strict):
+    """ADR-064 / PLAN-157: tham số hiệu ứng ảnh tĩnh (Audio→Doc lấy từ Cài đặt vận hành). Mặc định = số cũ."""
+
+    zoom_max: float = Field(1.2, ge=1.0, le=2.0)
+    zoom_per_sec: float = Field(0.045, gt=0, le=1.0)  # mức phóng thêm mỗi giây (không phụ thuộc fps)
+    pan_zoom: float = Field(1.15, ge=1.0, le=2.0)
+    upscale: float = Field(2.0, ge=1.0, le=3.0)  # phóng ảnh trước khi zoom — RAM tăng theo bình phương
+
+
 class ProjectSpec(_Strict):
     v: Literal[1] = 1
     canvas: Canvas = Field(default_factory=Canvas)
@@ -104,6 +115,7 @@ class ProjectSpec(_Strict):
     audio: Audio = Field(default_factory=Audio)
     logo: Logo | None = None
     credit: str | None = None
+    motion: KenBurns = Field(default_factory=KenBurns)
 
     def asset_ids(self) -> set[int]:
         ids = {c.asset for c in self.clips} | {t.asset for t in self.audio.tracks}

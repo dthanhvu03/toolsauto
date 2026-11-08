@@ -173,15 +173,15 @@ export function useSettingsController(options?: { role?: UserRole }) {
   );
 
   const saveSection = useCallback(
-    async (section: SectionId) => {
+    async (section: SectionId): Promise<boolean> => {
       if (hasBlockingErrors(validateForSection(schema, draft, section))) {
         setToast("Fix validation errors in this section");
-        return;
+        return false;
       }
       const payload = buildSectionPayload(section);
       if (Object.keys(payload).length === 0) {
         setToast("No changes in this section");
-        return;
+        return true;
       }
       setSavingBySection((m) => ({ ...m, [section]: "saving" }));
       try {
@@ -205,9 +205,11 @@ export function useSettingsController(options?: { role?: UserRole }) {
           return next;
         });
         setSavingBySection((m) => ({ ...m, [section]: "idle" }));
+        return true;
       } catch {
         setSavingBySection((m) => ({ ...m, [section]: "error" }));
         setToast("Save failed");
+        return false;
       }
     },
     [buildSectionPayload, draft, schema]

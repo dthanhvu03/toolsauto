@@ -25,6 +25,9 @@ export type ProcessApp = {
   can_start: boolean;
   can_stop: boolean;
   can_restart: boolean;
+  /** Chỉ có ở bot systemd: nhóm bot + lệnh restart chủ bot tự chạy. */
+  group?: string;
+  manage?: string;
 };
 
 export type ProcessesResponse = {
@@ -37,6 +40,37 @@ export type ProcessesResponse = {
   };
   apps: ProcessApp[];
   error: string | null;
+  /** Bot chạy bằng systemd (cashback, AI Pass Store) — chỉ xem. */
+  services?: ProcessApp[];
+  services_error?: string | null;
 };
 
 export type ProcessAction = "start" | "stop" | "restart";
+
+/** Máy Windows chứa WSL — chỉ xem, server giữ số liệu 8 giây. */
+export type WindowsProcess = {
+  name: string;
+  label: string;
+  count: number;
+  mem_mb: number;
+  /** % trên cả máy (100% = mọi nhân); null ở lần đọc đầu. */
+  cpu_pct: number | null;
+};
+
+export type WindowsDisk = { drive: string; label: string; total_gb: number; used_gb: number; free_gb: number };
+
+export type WindowsHostResponse = {
+  available: boolean;
+  error: string | null;
+  age_s: number;
+  cpu_pct?: number;
+  cpu_name?: string;
+  cpus?: number;
+  mem_total_mb?: number;
+  mem_used_mb?: number;
+  uptime_s?: number | null;
+  disks?: WindowsDisk[];
+  wsl_mem_mb?: number | null;
+  top?: WindowsProcess[];
+  process_count?: number;
+};

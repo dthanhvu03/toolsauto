@@ -87,3 +87,26 @@ def test_job_local_khong_co_material_van_loi(monkeypatch):
     job = SimpleNamespace(media_path="/tmp/clip.mp4", processed_media_path=None, viral_material_id=None)
     with pytest.raises(BufferError, match="file local"):
         public_media_url(job)
+
+
+def test_bai_tu_video_ma_mat_file_thi_khong_goi_buffer(monkeypatch):
+    """PLAN-162: material có nhưng không ra link video → lỗi fatal, client.create_post không được gọi (không bài chỉ chữ)."""
+    from app.features.buffer.adapter import BufferAdapter
+
+    class Client:
+        calls = 0
+
+        def create_post(self, **kw):
+            Client.calls += 1
+            raise AssertionError("không được gửi bài chỉ có chữ")
+
+    monkeypatch.setattr("app.features.buffer.media.media_base", lambda: "https://media.example.com")
+    monkeypatch.setattr("app.features.viral_intake.service.ViralService.find_reup_path", staticmethod(lambda mid: None))
+    job = SimpleNamespace(
+        id=1, media_path=None, processed_media_path=None, viral_material_id=999_001,
+        target_page="6ab38f18ea19ca0bdec2d72d", caption="Câu", schedule_ts=0,
+        service="facebook", auto_comment_text="x", ai_style="",
+    )
+    result = BufferAdapter(client=Client()).publish(job)
+    assert result.ok is False and result.is_fatal is True
+    assert "999001" in result.error and Client.calls == 0

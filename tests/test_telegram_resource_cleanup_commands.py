@@ -10,6 +10,21 @@ from app.features.telegram_bot.command_handler import TelegramCommandHandler
 from app.features.telegram_bot.event_router import TelegramEventRouter
 
 
+@pytest.fixture(autouse=True)
+def _khong_don_storage_that(monkeypatch):
+    """PLAN-162: run_all thật dọn storage/ thật (video reup đang chờ đăng). Test chỉ kiểm luồng tin nhắn."""
+    from app.features.maintenance.storage_cleanup_service import StorageCleanupResult, StorageCleanupService
+
+    calls: list[dict] = []
+
+    def _fake_run_all(*_args, **kwargs):
+        calls.append(kwargs)
+        return StorageCleanupResult(reclaimed_bytes=1024 * 1024)
+
+    monkeypatch.setattr(StorageCleanupService, "run_all", _fake_run_all)
+    return calls
+
+
 class StubClient:
     def __init__(self):
         self.msgs: list[str] = []

@@ -138,6 +138,7 @@ def error_text(exc: StoreError) -> str:
         "product_inactive": "Sản phẩm đang tạm ngừng bán.",
         "product_blocked": "Sản phẩm này không mở cho khóa của bạn.",
         "out_of_stock": f"Không đủ hàng: chỉ còn {info.get('available', 0)}.",
+        "shop_closed": "Shop đang tạm nghỉ, chưa nhận đơn. Thử lại khi shop mở cửa.",
         "insufficient_balance": (
             f"Số dư không đủ: cần {vnd(info.get('need', 0))}, bạn có {vnd(info.get('balance', 0))}."
         ),
@@ -151,36 +152,71 @@ def error_text(exc: StoreError) -> str:
 
 # ---------- khách ----------
 
-def home(shop_name: str, user: User) -> str:
+def home(shop_name: str, user: User, closed: str | None = None) -> str:
+    banner = f"{closed}\n\n" if closed else ""
     return (
-        f"🏪 <b>{esc(shop_name)}</b>\n\n"
+        f"🏪 <b>{esc(shop_name)}</b>\n\n{banner}"
         f"Xin chào {esc(user.first_name or user.label)}!\n"
         f"💼 Số dư: <b>{vnd(user.balance)}</b>\n\n"
         "Chọn 🛒 Mua hàng để xem sản phẩm. Thanh toán trừ thẳng vào số dư, hàng giao ngay sau khi mua."
     )
 
 
-def shop_list(products: list[Product]) -> str:
+def shop_closed(status) -> str:
+    """Câu báo khách khi shop đang nghỉ (status: hours.Status đang đóng)."""
+    when = f"mở lại lúc <b>{status.reopen}</b>" if status.reopen else "sẽ mở lại sớm"
+    return (f"🌙 <b>Shop đang tạm nghỉ</b>, {when}. Bạn vẫn xem món và nạp ví được; "
+            "đặt mua khi shop mở lại nhé.")
+
+
+def shop_list(products: list[Product], closed: str | None = None) -> str:
     if not products:
         return "🛒 Shop chưa có sản phẩm nào đang bán."
-    return "🛒 <b>Sản phẩm</b>\n\nChọn một sản phẩm để xem và mua:"
+    banner = f"{closed}\n\n" if closed else ""
+    return f"🛒 <b>Sản phẩm</b>\n\n{banner}Chọn một sản phẩm để xem và mua:"
 
 
-def product_button(product: Product) -> str:
+# Ký hiệu bảo hành trong tên món FatCat → câu khách đọc hiểu. Không khớp ký hiệu nào thì không hiện dòng bảo hành.
+_WARRANTY_RULES = (
+    (re.compile(r"\bKBH\b|\(NW\)|không bảo hành", re.I), lambda m: "không có"),
+    (re.compile(r"\bBHF\b|\(FW\)", re.I), lambda m: "suốt thời hạn gói (điều kiện xem mô tả)"),
+    (re.compile(r"\bBH\s*(\d+)\s*D\b", re.I), lambda m: f"{m.group(1)} ngày"),
+    (re.compile(r"\bBH\s*(\d+)\s*p\b", re.I), lambda m: f"chỉ {m.group(1)} phút sau khi nhận"),
+    (re.compile(r"dùng trong\s*(\d+)\s*p", re.I),
+     lambda m: f"chỉ khi dùng ngay trong {m.group(1)} phút sau khi nhận"),
+)
+
+
+def warranty(name: str) -> str | None:
+    for pattern, text in _WARRANTY_RULES:
+        found = pattern.search(name or "")
+        if found:
+            return text(found)
+    return None
+
+
+def product_button(product: Product, restocking: bool = False) -> str:
     stock = f"còn {product.stock}" if product.stock else "hết hàng"
+    if restocking:
+        stock += " · ⏳ giao sau ít phút"
     return f"{button_icon(product.name)}{product.name} · {vnd(product.price)} · {stock}"
 
 
-def product_detail(product: Product, balance: int) -> str:
+def product_detail(product: Product, balance: int, restocking: bool = False, closed: str | None = None) -> str:
     lines = [f"{icon(product.name)} <b>{esc(product.name)}</b>"]
     if product.description:
         lines += ["", esc(product.description)]
-    lines += [
-        "",
-        f"💰 Giá: <b>{vnd(product.price)}</b>",
-        f"🗄️ Còn: <b>{product.stock}</b>",
-        f"💼 Số dư của bạn: {vnd(balance)}",
-    ]
+    lines += ["", f"💰 Giá: <b>{vnd(product.price)}</b>"]
+    guarantee = warranty(product.name)
+    if guarantee:
+        lines.append(f"🛡️ Bảo hành: <b>{guarantee}</b>")
+    lines.append(f"🗄️ Còn: <b>{product.stock}</b>")
+    lines.append(f"💼 Số dư của bạn: {vnd(balance)}")
+    if closed:
+        lines += ["", closed]
+        return "\n".join(lines)
+    if restocking:
+        lines += ["", RESTOCKING_NOTE]
     if not product.stock:
         lines += ["", "Hiện đã hết hàng. Theo dõi kênh để biết khi có hàng mới."]
     else:
@@ -188,7 +224,11 @@ def product_detail(product: Product, balance: int) -> str:
     return "\n".join(lines)
 
 
-def confirm_buy(product: Product, quantity: int, balance: int) -> str:
+RESTOCKING_NOTE = ("⏳ Shop đang nhập thêm hàng món này. Bạn vẫn đặt bình thường: bot giữ đơn và gửi hàng ngay khi "
+                   "shop nhập xong (thường ít phút). Không muốn chờ thì bấm huỷ đơn, tiền về lại ví.")
+
+
+def confirm_buy(product: Product, quantity: int, balance: int, restocking: bool = False) -> str:
     total = product.price * quantity
     after = balance - total
     if after >= 0:
@@ -197,11 +237,15 @@ def confirm_buy(product: Product, quantity: int, balance: int) -> str:
         tail = f"Ví có {vnd(balance)}, cần trả thêm <b>{vnd(-after)}</b>. Bấm 📱 Thanh toán QR bên dưới."
     else:
         tail = "Bấm 📱 Thanh toán QR bên dưới, quét mã bằng app ngân hàng là xong."
+    guarantee = warranty(product.name)
+    guarantee_line = f"🛡️ Bảo hành: {guarantee}\n" if guarantee else ""
     return (
         "🧾 <b>Xác nhận mua</b>\n\n"
         f"{icon(product.name)} {esc(product.name)}\n"
         f"Số lượng: <b>{quantity}</b> × {vnd(product.price)}\n"
-        f"Tổng: <b>{vnd(total)}</b>\n\n{tail}"
+        f"Tổng: <b>{vnd(total)}</b>\n"
+        f"{guarantee_line}\n{tail}"
+        + (f"\n\n{RESTOCKING_NOTE}" if restocking else "")
     )
 
 
@@ -219,6 +263,7 @@ def order_done(order: Order) -> str:
     return (
         f"{head}\n\n"
         f"🧾 Đơn #{order.id} · {local_time(order.created_at)}\n"
+        f"{code_line(order)}"
         f"{icon(order.product_name)} {esc(order.product_name)} × {len(order.items) if order.refunded else order.quantity}\n"
         f"💸 Đã trừ: {vnd(order.total - order.refunded)}\n"
         f"{partial}"
@@ -235,19 +280,45 @@ def order_waiting(order: Order) -> str:
     )
 
 
+def order_waiting_funds(order: Order) -> str:
+    return (
+        f"⏳ <b>Đã nhận đơn #{order.id}</b>, shop đang nhập hàng\n\n"
+        f"{icon(order.product_name)} {esc(order.product_name)} × {order.quantity} · đã trả {vnd(order.total)}\n\n"
+        "Bạn đợi shop một chút nhé: nhập hàng xong là bot gửi ngay vào đây, không cần bấm mua lại. "
+        "Không muốn chờ thì bấm ↩️ Huỷ đơn, tiền về lại ví."
+    )
+
+
 def order_failed(order: Order) -> str:
+    if order.note == "khách huỷ khi chờ nhập hàng":
+        why = "Đã huỷ đơn theo yêu cầu. Tiền dùng mua món khác được, hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng."
+    elif order.note == "tự hoàn sau 6 giờ chờ nhập hàng":
+        why = ("Xin lỗi bạn, shop chưa nhập kịp hàng nên bot tự huỷ đơn sau 6 giờ. Tiền dùng mua lại / món khác được, "
+               "hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng.")
+    elif (order.note or "").startswith("FatCat 402"):
+        # Ví nguồn của shop thiếu tiền — không phải hết hàng; thử lại ngay cũng hỏng tiếp.
+        why = ("Shop đang nhập thêm hàng cho món này nên chưa giao được. Tiền đã nằm trong ví của bạn: "
+               "dùng mua món khác, quay lại sau, hoặc bấm ☎️ Hỗ trợ nếu muốn hoàn về ngân hàng.")
+    else:
+        why = ("Món này đang tạm thiếu hàng, bạn thử lại sau ít phút hoặc chọn món khác. "
+               "Muốn hoàn về ngân hàng thì bấm ☎️ Hỗ trợ.")
     return (
         f"❌ <b>Đơn #{order.id} chưa lấy được hàng</b>\n\n"
         f"{icon(order.product_name)} {esc(order.product_name)} × {order.quantity}\n"
         f"↩️ Đã hoàn {vnd(order.refunded)} vào số dư.\n"
-        f"💼 Số dư: {vnd(order.balance_after or 0)}\n\n"
-        "Món này đang tạm thiếu hàng, bạn thử lại sau ít phút hoặc chọn món khác."
+        f"💼 Số dư: {vnd(order.balance_after or 0)}\n\n{why}"
     )
 
 
+def code_line(order: Order) -> str:
+    """Mã hàng = mã đơn nguồn trả về, nguyên văn; khách đưa mã này khi khiếu nại."""
+    return f"🔖 Mã hàng: <code>{esc(order.upstream_order_id)}</code>\n" if order.upstream_order_id else ""
+
+
 def order_items(order: Order) -> str:
+    # Hàng giữ đúng nguyên văn nguồn trả về, không thêm bớt.
     body = "\n".join(f"<code>{esc(item)}</code>" for item in order.items)
-    return f"{icon(order.product_name)} <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n\n{body}"
+    return f"{icon(order.product_name)} <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n{code_line(order)}\n{body}"
 
 
 def items_fit_inline(order: Order) -> bool:
@@ -261,7 +332,8 @@ def orders_list(orders: list[Order]) -> str:
 
 
 def order_button(order: Order) -> str:
-    return f"{button_icon(order.product_name)}#{order.id} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
+    code = f" · {order.upstream_order_id}" if order.upstream_order_id else ""
+    return f"{button_icon(order.product_name)}#{order.id}{code} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
 
 
 def account(user: User, key: ApiKey | None, api_url: str) -> str:
@@ -293,10 +365,12 @@ def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str
     if product_name:
         head = f"📱 <b>Thanh toán {vnd(topup.amount)}</b>\n📦 {esc(product_name)} × {topup.intent_quantity}"
         when = ("Tiền vào là bot tự gửi hàng trong khoảng 1 phút." if auto
-                else "Shop xác nhận tiền xong là bot tự gửi hàng cho bạn, không cần bấm gì thêm.")
+                else "Shop xác nhận tiền (thường vài phút, ban đêm có thể lâu hơn) xong là bot tự gửi hàng, "
+                     "không cần bấm gì thêm.")
     else:
         head = f"💳 <b>Nạp {vnd(topup.amount)}</b>"
-        when = "Tiền vào là bot tự cộng trong khoảng 1 phút." if auto else "Admin kiểm tra và cộng tiền sớm nhất có thể."
+        when = ("Tiền vào là bot tự cộng trong khoảng 1 phút." if auto
+                else "Shop kiểm tra và cộng tiền (thường vài phút, ban đêm có thể lâu hơn).")
     bank_line = f"🏦 {esc(bank_name)}\n" if bank_name else ""
     return (
         "Quét mã QR bằng app ngân hàng (app tự điền sẵn mọi thứ), hoặc chuyển khoản tay:\n\n"
@@ -309,6 +383,20 @@ def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str
         f"⚠️ Ghi đúng nội dung <b>{topup.code}</b>, sai nội dung bot không nhận ra được.\n"
         f"{when}"
     )
+
+
+def topup_pending_exists(topup: Topup, product_name: str | None) -> str:
+    what = f"📦 {esc(product_name)} × {topup.intent_quantity}\n" if product_name else ""
+    return (
+        "⏳ <b>Bạn đang có 1 mã thanh toán chờ xác nhận</b>\n\n"
+        f"{what}💰 {vnd(topup.amount)} · nội dung <code>{topup.code}</code>\n\n"
+        "Mỗi lần chỉ dùng 1 mã: thanh toán mã này và đợi xác nhận rồi mới tạo mã khác.\n"
+        "⚠️ Đã chuyển khoản rồi thì <b>đừng huỷ</b>, chỉ cần đợi shop xác nhận. "
+        "Chưa chuyển và muốn đổi món / số tiền thì bấm ❌ Huỷ mã này."
+    )
+
+
+TOPUP_CANCELLED_BY_USER = "✅ Đã huỷ mã thanh toán. Giờ bạn tạo mã mới được rồi."
 
 
 TOPUP_UNAVAILABLE = "💰 Shop chưa cài tài khoản nhận tiền. Nhắn admin để nạp."
@@ -338,16 +426,95 @@ def restock_announcement(product: Product, added: int) -> str:
 
 # ---------- admin ----------
 
-def admin_home(stats: dict[str, int], upstream_balance: int | None = None) -> str:
-    pending = f"\n💳 Nạp chờ duyệt: <b>{stats['pending_topups']}</b>" if stats["pending_topups"] else ""
-    upstream = f"\n🐱 Ví FatCat: <b>{vnd(upstream_balance)}</b>" if upstream_balance is not None else ""
+def admin_hours(window, status) -> str:
+    """Màn 🌙 Giờ nghỉ của admin. window: hours.Window | None · status: hours.Status."""
+    if status.manual:
+        now = "⏸ <b>Đang ĐÓNG tay</b> — khách không đặt mua được tới khi anh bấm Mở lại."
+    elif status.closed:
+        now = f"🌙 <b>Đang trong giờ nghỉ</b>, tự mở lại lúc {status.reopen}."
+    else:
+        now = "✅ <b>Đang mở bán</b>."
+    hours = (f"Giờ nghỉ hằng ngày: <b>{window.label}</b> (giờ VN)" if window
+             else "Chưa đặt giờ nghỉ hằng ngày.")
     return (
-        "⚙️ <b>Quản lý shop</b>\n\n"
-        f"Hôm nay: {stats['orders_today']} đơn · doanh thu {vnd(stats['revenue_today'])} · "
-        f"lãi {vnd(stats['profit_today'])}\n"
-        f"Hàng tự nhập trong kho: {stats['stock']}"
-        f"{upstream}{pending}"
+        f"🌙 <b>Giờ nghỉ của shop</b>\n\n{now}\n{hours}\n\n"
+        "Lúc nghỉ: khách vẫn xem món và nạp ví, nhưng <b>không đặt mua / tạo QR mua</b>; API đại lý trả lỗi "
+        "<code>shop_closed</code>; tạm không báo «hàng mới về». QR tạo trước giờ nghỉ mà tiền về thì bot vẫn tự mua."
     )
+
+
+ASK_HOURS = ("✍️ Gõ khung giờ nghỉ hằng ngày (giờ VN), ví dụ <code>23:30-07:30</code> hoặc <code>23h-7h</code>. "
+             "Gõ /huy để thôi.")
+
+
+def admin_home(stats: dict[str, int], upstream_balance: int | None = None, *, shop_line: str = "",
+               waiting: tuple[int, int] = (0, 0), low_funds: int = 0) -> str:
+    """Trang đầu Quản lý shop: trạng thái mở cửa, số hôm nay (của khách, đã trừ khoản chi) và việc cần xử lý."""
+    revenue, profit = stats["revenue_today"], stats["profit_today"]
+    today = "\n".join([
+        _line("Đơn", str(stats["orders_today"])),
+        _line("Doanh thu", _num(revenue)),
+        _line("Lãi ròng", _signed(profit) if profit < 0 else _num(profit)),
+        _line("Biên", _pct(profit, revenue)),
+    ])
+    todo = []
+    if stats["pending_topups"]:
+        todo.append(f"💳 <b>{stats['pending_topups']}</b> yêu cầu nạp chờ duyệt → Khách & đại lý")
+    count, need = waiting
+    if count:
+        short = max(need - (upstream_balance or 0), 0)
+        todo.append(f"⏳ <b>{count}</b> đơn chờ ví FatCat (vốn {vnd(need)}) — "
+                    + (f"<b>nạp thêm đúng {vnd(short)}</b> là đủ giao" if short else "ví đã đủ, bot đang lấy hàng"))
+    if low_funds:
+        todo.append(f"🐱 Ví FatCat không đủ nhập <b>{low_funds}</b> món — khách mua sẽ phải chờ")
+    if stats["pending_orders"] > count:
+        todo.append(f"🔄 {stats['pending_orders'] - count} đơn đang chờ FatCat giao")
+    wallet = f"\n🐱 Ví FatCat: <b>{vnd(upstream_balance)}</b>" if upstream_balance is not None else ""
+    return (
+        "⚙️ <b>QUẢN LÝ SHOP</b>\n"
+        + (f"{shop_line}\n" if shop_line else "")
+        + f"\n<b>Hôm nay</b> <i>(đồng)</i>\n<pre>{today}</pre>{wallet}\n\n"
+        + "<b>Cần xử lý</b>\n"
+        + ("\n".join(todo) if todo else "✅ Không có việc gì đang chờ.")
+    )
+
+
+def admin_finance_hub(stats: dict[str, int], capital: int) -> str:
+    rows = "\n".join([
+        _line("Lãi ròng 7 ngày", _signed(stats["profit_7d"]) if stats["profit_7d"] < 0 else _num(stats["profit_7d"])),
+        _line("Lãi ròng từ đầu", _signed(stats["profit_all"]) if stats["profit_all"] < 0 else _num(stats["profit_all"])),
+        _line("Ví khách (phải trả)", _num(stats["balances"])),
+        _line("Vốn FatCat đã ghi", _num(capital)),
+    ])
+    return ("💰 <b>TÀI CHÍNH</b>\n\n<pre>" + rows + "</pre>\n"
+            "💵 <b>Dòng tiền</b>: báo cáo theo kỳ · 📊 <b>Thống kê</b>: tóm tắt nhanh · 💸 giao dịch ví khách\n"
+            "➖ / 🧾 khoản chi ngoài bot (bù khách…) · 🏦 / 📒 tiền nạp ví FatCat")
+
+
+def admin_goods_hub(products: list[Product], upstream_balance: int | None, synced: str | None) -> str:
+    selling = [p for p in products if p.on_sale]
+    out = [p for p in selling if p.stock <= 0]
+    lines = [
+        _line("Đang bán", f"{len(selling)} món"),
+        _line("Hết hàng", f"{len(out)} món"),
+        _line("Ẩn / FatCat khoá", f"{len(products) - len(selling)} món"),
+    ]
+    if upstream_balance is not None:
+        lines.append(_line("Ví FatCat", _num(upstream_balance)))
+    return ("📦 <b>HÀNG HOÁ</b>\n\n<pre>" + "\n".join(lines) + "</pre>"
+            + (f"\n<i>Đồng bộ FatCat lần cuối: {local_time(synced)}</i>" if synced else ""))
+
+
+def admin_customers_hub(stats: dict[str, int], sources: list[tuple[str, int]], keys: int) -> str:
+    lines = [
+        _line("Khách", str(stats["users"])),
+        _line("Đã mua", str(stats["buyers"])),
+        _line("Ví khách (phải trả)", _num(stats["balances"])),
+        _line("Nạp chờ duyệt", str(stats["pending_topups"])),
+        _line("Khóa API đại lý", str(keys)),
+    ]
+    src = f"\n📍 Khách mới 7 ngày: {' · '.join(f'{c} {n}' for c, n in sources)}" if sources else ""
+    return "👥 <b>KHÁCH & ĐẠI LÝ</b>\n\n<pre>" + "\n".join(lines) + "</pre>" + src
 
 
 def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
@@ -360,7 +527,9 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
             f"💰 Khách nạp vào: {vnd(stats[f'topup_{key}'])}\n"
             f"🛒 Bán: {stats[f'orders_{key}']} đơn · doanh thu {vnd(stats[f'revenue_{key}'])}\n"
             f"🐱 Giá vốn FatCat: {vnd(stats[f'cost_{key}'])}\n"
-            f"📈 Lãi: <b>{vnd(stats[f'profit_{key}'])}</b>"
+            + (f"💸 Chi ngoài (bù khách…): {vnd(stats[f'expense_{key}'])}\n" if stats.get(f"expense_{key}") else "")
+            + f"📈 Lãi: <b>{vnd(stats[f'profit_{key}'])}</b>"
+            f"{profit_margin(stats[f'profit_{key}'], stats[f'revenue_{key}'])}"
             + (f"\n↩️ Đã hoàn khách: {vnd(refunded)}" if refunded else "")
         )
     wallet = f"\n🐱 Ví FatCat còn: {vnd(upstream_balance)}" if upstream_balance is not None else ""
@@ -374,6 +543,262 @@ def admin_stats(stats: dict[str, int], upstream_balance: int | None = None,
         + (f"\n📍 Khách mới 7 ngày theo nguồn: {' · '.join(f'{c} {n}' for c, n in sources)}" if sources else "")
         + f"{wallet}{waiting}"
     )
+
+
+def profit_margin(profit: int, revenue: int) -> str:
+    """« (biên 12,5%)» — lãi chia doanh thu; chưa bán gì thì bỏ trống."""
+    if revenue <= 0:
+        return ""
+    return f" (biên {profit * 100 / revenue:.1f}%)".replace(".", ",")
+
+
+CASHFLOW_PERIODS = ((1, "Hôm nay"), (7, "7 ngày"), (30, "30 ngày"), (None, "Từ đầu"))
+_UNIT_TITLE = {"day": "ngày", "week": "tuần", "month": "tháng"}
+_RULE = "─" * 30
+_NAME_WIDTH = 15
+
+
+def _num(amount: int) -> str:
+    return f"{amount:,}".replace(",", ".")
+
+
+def _signed(amount: int) -> str:
+    return ("+" if amount >= 0 else "−") + _num(abs(amount))
+
+
+def _pct(profit: int, revenue: int) -> str:
+    return f"{profit * 100 / revenue:.1f}%".replace(".", ",").replace("-", "−") if revenue > 0 else "–"
+
+
+def _line(label: str, value: str, width: int = 30) -> str:
+    return label + value.rjust(max(width - len(label), len(value) + 1))
+
+
+def _table(rows: list[list[str]]) -> str:
+    """Bảng chữ đơn cách: cột đầu căn trái, còn lại căn phải."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join(
+        "  ".join(cell.ljust(widths[i]) if i == 0 else cell.rjust(widths[i]) for i, cell in enumerate(r))
+        for r in rows
+    )
+
+
+def _change(current: int, previous: int) -> str:
+    if previous <= 0:
+        return "mới" if current > 0 else "="
+    ratio = current / previous
+    if ratio >= 2:  # tăng mạnh đọc theo lần: «▲ gấp 11», «▲ gấp 2,5» thay cho «▲ 1050%»
+        return f"▲ gấp {ratio:.0f}" if ratio >= 10 else f"▲ gấp {ratio:.1f}".replace(".", ",")
+    delta = (ratio - 1) * 100
+    if abs(delta) < 0.5:
+        return "="
+    return f"{'▲' if delta > 0 else '▼'} {abs(delta):.0f}%"
+
+
+def _dm(iso: str) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}"
+
+
+def _bucket_label(unit: str, key: str) -> str:
+    if unit == "month":
+        return f"{key[5:7]}/{key[:4]}"
+    if unit == "week":
+        first, last = key.split("|")
+        return f"{_dm(first)}–{_dm(last)}"
+    return _dm(key)
+
+
+def cashflow_period_title(days: int | None) -> str:
+    return dict(CASHFLOW_PERIODS)[days]
+
+
+def admin_cashflow(cf: dict, upstream_balance: int | None = None, now: str = "") -> str:
+    """Báo cáo 💵 Dòng tiền & biên lãi một kỳ, trình bày kiểu báo cáo tài chính: kết quả kinh doanh, dòng tiền,
+    diễn biến, sản phẩm, số dư & nghĩa vụ. Số trong bảng tính bằng đồng."""
+    t, prev, title = cf["total"], cf["previous"], cashflow_period_title(cf["days"])
+    span = _dm(cf["to"]) + "/" + cf["to"][:4] if cf["from"] == cf["to"] else \
+        f"{_dm(cf['from'])}/{cf['from'][:4]} – {_dm(cf['to'])}/{cf['to'][:4]}"
+    parts = [f"💵 <b>DÒNG TIỀN & BIÊN LÃI · {title.upper()}</b>\n<i>{span}{' · lúc ' + now if now else ''}</i>"]
+
+    avg = t["revenue"] // t["orders"] if t["orders"] else 0
+    pnl = [
+        _line("Doanh thu", _num(t["revenue"])),
+        _line("Giá vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
+        _RULE,
+        _line("Lãi gộp", _signed(t["profit"]) if t["profit"] < 0 else _num(t["profit"])),
+        _line("Biên lãi gộp", _pct(t["profit"], t["revenue"])),
+    ]
+    if t["expense"]:
+        pnl += [
+            _line("Chi ngoài (bù khách…)", "−" + _num(t["expense"])),
+            _RULE,
+            _line("Lãi ròng", _signed(t["net"])),
+            _line("Biên lãi ròng", _pct(t["net"], t["revenue"])),
+        ]
+    pnl += [
+        _line("Số đơn", str(t["orders"])),
+        _line("Trung bình / đơn", _num(avg)),
+    ]
+    compare = ""
+    if prev is not None:
+        label = "hôm qua" if cf["days"] == 1 else f"{title} trước"
+        if prev["revenue"] or prev["cash_in"]:
+            compare = (f"\nSo với {label}: doanh thu <b>{_change(t['revenue'], prev['revenue'])}</b> · "
+                       f"lãi <b>{_change(t['net'], prev['net'])}</b> · "
+                       f"tiền vào <b>{_change(t['cash_in'], prev['cash_in'])}</b>")
+        else:
+            compare = f"\n<i>{label.capitalize()} chưa phát sinh — chưa có số để so sánh.</i>"
+    parts.append("<b>Kết quả kinh doanh</b> <i>(đồng)</i>\n<pre>" + "\n".join(pnl) + "</pre>" + compare)
+
+    flow = [
+        _line("Khách chuyển khoản", _num(t["cash_in"])),
+        _line("Chi vốn FatCat", "−" + _num(t["cost"]) if t["cost"] else "0"),
+    ] + ([_line("Chi ngoài (bù khách…)", "−" + _num(t["expense"]))] if t["expense"] else []) + [
+        _RULE,
+        _line("Dòng tiền ròng", _signed(t["cash_in"] - t["cost"] - t["expense"])),
+    ]
+    adjust = (f"\n<i>Ngoài ra admin cộng/trừ tay {_signed(t['adjust'])}đ vào ví khách — không phải tiền thật.</i>"
+              if t["adjust"] else "")
+    parts.append("<b>Dòng tiền</b>\n<pre>" + "\n".join(flow) + "</pre>" + adjust)
+
+    if cf["buckets"]:
+        head = {"day": "Ngày", "week": "Tuần", "month": "Tháng"}[cf["unit"]]
+        rows = [[head, "Tiền vào", "Lãi", "Biên"]] + [
+            [_bucket_label(cf["unit"], b["key"]), _num(b["cash_in"]),
+             _signed(b["net"]) if b["net"] < 0 else _num(b["net"]), _pct(b["net"], b["revenue"])]
+            for b in cf["buckets"][:12]
+        ]
+        parts.append(f"<b>Diễn biến theo {_UNIT_TITLE[cf['unit']]}</b>\n<pre>{esc(_table(rows))}</pre>")
+
+    if cf["top"]:
+        rows = [["Sản phẩm", "SL", "Lãi", "Biên"]] + [
+            [(p["name"][:_NAME_WIDTH - 1] + "…") if len(p["name"]) > _NAME_WIDTH else p["name"],
+             str(p["sold"]), _num(p["profit"]), _pct(p["profit"], p["revenue"])]
+            for p in cf["top"]
+        ]
+        parts.append(f"<b>Sản phẩm lãi nhất</b>\n<pre>{esc(_table(rows))}</pre>")
+
+    admin = cf.get("admin")
+    if admin and (admin["cash_in"] or admin["orders"] or admin["adjust"] or cf["admin_balance"]):
+        rows = [
+            _line("Anh tự nạp vào ví", _num(admin["cash_in"])),
+            _line(f"Anh tự mua ({admin['orders']} đơn)", _num(admin["revenue"])),
+            _line("  giá vốn FatCat", _num(admin["cost"])),
+        ]
+        if admin["adjust"]:
+            rows.append(_line("Cộng/trừ tay ví admin", _signed(admin["adjust"])))
+        parts.append("<b>Ví admin</b> <i>(tiền của anh — không tính vào khách)</i>\n<pre>" + "\n".join(rows) + "</pre>")
+
+    used, capital = cf.get("capital_used", 0), cf.get("capital", 0)
+    if upstream_balance is not None or capital:
+        if cf.get("capital_count"):
+            rows = [_line("Anh đã ghi nạp", _num(capital)), _line("Đã dùng mua hàng", "−" + _num(used)), _RULE,
+                    _line("Lẽ ra còn", _signed(capital - used))]
+            note = ""
+            if upstream_balance is not None:
+                diff = upstream_balance - (capital - used)
+                rows += [_line("Số dư FatCat thực", _num(upstream_balance)), _line("Chênh lệch", _signed(diff))]
+                if diff > 0:
+                    note = (f"\n⚠️ FatCat còn nhiều hơn sổ {_num(diff)}đ — có lần nạp chưa ghi, hoặc FatCat hoàn tiền.")
+                elif diff < 0:
+                    note = (f"\n⚠️ FatCat còn ít hơn sổ {_num(-diff)}đ — kiểm tra lịch sử ví FatCat (bị trừ ngoài bot?) "
+                            "hoặc ghi nạp thừa.")
+                else:
+                    note = "\n✅ Sổ vốn khớp số dư FatCat."
+            parts.append("<b>Vốn FatCat</b> <i>(từ đầu)</i>\n<pre>" + "\n".join(rows) + "</pre>" + note)
+        else:
+            rows = [_line("Đã dùng mua hàng", _num(used))]
+            if upstream_balance is not None:
+                rows += [_line("Đang còn trong ví", _num(upstream_balance)), _RULE,
+                         _line("Ước tính anh đã nạp", _num(used + upstream_balance))]
+            parts.append("<b>Vốn FatCat</b> <i>(từ đầu)</i>\n<pre>" + "\n".join(rows) + "</pre>\n"
+                         "<i>Chưa ghi lần nạp nào — bấm «🏦 Nạp vốn FatCat» ghi các lần anh đã nạp để bot đối chiếu.</i>")
+
+    holdings = [_line("Ví khách (phải trả)", _num(cf["balances"]))]
+    if cf.get("admin") is not None:
+        holdings.append(_line("Ví admin (của anh)", _num(cf["admin_balance"])))
+    if upstream_balance is not None:
+        holdings.append(_line("Ví FatCat", _num(upstream_balance)))
+    if cf["waiting_orders"]:
+        holdings.append(_line(f"Vốn {cf['waiting_orders']} đơn chờ", _num(cf["waiting_cost"])))
+        if upstream_balance is not None:
+            holdings.append(_line("→ Nạp thêm đúng", _num(max(cf["waiting_cost"] - upstream_balance, 0))))
+    warn = ("\n⚠️ <b>Ví FatCat không đủ vốn cho đơn đang chờ</b> — nạp thêm để bot tự giao."
+            if cf["waiting_orders"] and upstream_balance is not None and upstream_balance < cf["waiting_cost"] else "")
+    parts.append("<b>Số dư & nghĩa vụ</b> <i>(hiện tại)</i>\n<pre>" + "\n".join(holdings) + "</pre>\n"
+                 "<i>Ví khách là tiền khách gửi trước — giữ lại, không tính là lãi.</i>" + warn)
+
+    parts.append("<i>Biên = lãi ÷ doanh thu. Chỉ tính đơn đã giao, đã trừ phần hoàn; hàng tự nhập không có giá vốn. "
+                 "Lãi trong «Diễn biến» là lãi ròng (đã trừ khoản chi ngoài). Tiền bù khách trả ngoài bot "
+                 "→ bấm «➖ Ghi khoản chi».</i>")
+    return "\n\n".join(parts)
+
+
+ASK_EXPENSE = (
+    "➖ <b>Ghi khoản chi ngoài bot</b>\n\n"
+    "Gõ: <code>số tiền  lý do</code> — ví dụ <code>52k bù khách đơn #8 key lỗi</code>.\n"
+    "Có <code>#số</code> thì gắn với đơn đó. Khoản này trừ vào lãi ròng và dòng tiền; "
+    "không đụng ví khách. Gõ /huy để thôi."
+)
+
+
+def parse_expense(text: str) -> tuple[int, str, int | None] | None:
+    """"52k bù khách đơn #8" → (52000, "bù khách đơn #8", 8). Thiếu lý do / số tiền sai → None."""
+    amount_raw, _, note = (text or "").strip().partition(" ")
+    amount = parse_amount(amount_raw)
+    if not amount or amount <= 0 or not note.strip():
+        return None
+    order = re.search(r"#(\d+)", note)
+    return amount, note.strip(), int(order.group(1)) if order else None
+
+
+def admin_expenses(rows: list[dict]) -> str:
+    if not rows:
+        return "🧾 <b>Khoản chi ngoài bot</b>\n\nChưa ghi khoản nào."
+    lines = [f"#{r['id']} · {local_time(r['created_at'])} · <b>−{vnd(r['amount'])}</b>\n   {esc(r['note'])}"
+             for r in rows]
+    return ("🧾 <b>Khoản chi ngoài bot</b> (mới nhất trước)\n\n" + "\n".join(lines)
+            + "\n\n<i>Ghi nhầm thì bấm 🗑 để xoá — chỉ xoá dòng ghi chép, không đụng ví khách / đơn.</i>")
+
+
+ASK_CAPITAL = (
+    "🏦 <b>Ghi tiền nạp ví FatCat</b>\n\n"
+    "Gõ: <code>số tiền  ghi chú</code> — ví dụ <code>200k nạp qua MB</code>.\n"
+    "Rút tiền từ FatCat về thì thêm dấu trừ: <code>-50k rút về</code>.\n"
+    "Từ nay bot <b>tự ghi</b> khi thấy số dư FatCat tăng / bị trừ ngoài đơn bot — chỉ cần ghi tay các lần "
+    "trước đó. Gõ /huy để thôi."
+)
+
+
+def parse_capital(text: str) -> tuple[int, str] | None:
+    """"200k nạp MB" → (200000, "nạp MB"); "-50k rút về" → (-50000, "rút về"). Số sai → None."""
+    amount_raw, _, note = (text or "").strip().partition(" ")
+    sign = -1 if amount_raw[:1] in "-−" and amount_raw else 1
+    amount = parse_amount(amount_raw.lstrip("-−+"))
+    if not amount:
+        return None
+    return sign * amount, note.strip()
+
+
+def admin_auto_capital(row: dict, balance: int | None) -> str:
+    """Tin báo admin: bot vừa tự ghi một dòng sổ vốn khi số dư FatCat lệch với đơn bot."""
+    wallet = f"\nVí FatCat giờ: <b>{vnd(balance)}</b>" if balance is not None else ""
+    if row["amount"] > 0:
+        return (f"🏦 <b>Ví FatCat tăng +{vnd(row['amount'])}</b> ngoài đơn bot → đã tự ghi sổ vốn là <b>nạp vốn</b> "
+                f"(#{row['id']}).{wallet}\n<i>Không phải anh nạp (vd FatCat hoàn tiền)? Bấm 🗑 để xoá.</i>")
+    return (f"🐱 <b>FatCat trừ {vnd(-row['amount'])}</b> ngoài đơn bot (anh mua thẳng trên FatCat?) → đã tự ghi "
+            f"sổ vốn (#{row['id']}).{wallet}\n"
+            "<i>Nếu là hàng bù / thay cho khách → bấm «Là bù khách» để trừ vào lãi.</i>")
+
+
+def admin_capital(rows: list[dict], total: int) -> str:
+    if not rows:
+        return "🏦 <b>Vốn nạp ví FatCat</b>\n\nChưa ghi lần nạp nào."
+    lines = [f"{'🤖 ' if r['created_by'] == 'auto' else ''}#{r['id']} · {local_time(r['created_at'])} · "
+             f"<b>{_signed(r['amount'])}đ</b>"
+             + (f"\n   {esc(r['note'])}" if r["note"] else "") for r in rows]
+    return (f"🏦 <b>Vốn nạp ví FatCat</b> — tổng đã ghi <b>{vnd(total)}</b>\n\n" + "\n".join(lines)
+            + "\n\n<i>🤖 = bot tự ghi khi số dư FatCat lệch với đơn bot. Ghi nhầm thì bấm 🗑 — chỉ xoá dòng ghi chép.</i>")
 
 
 _LEDGER_KIND = {"topup": "💰 Nạp", "order": "🛒 Mua", "refund": "↩️ Hoàn", "adjust": "💵 Admin"}
@@ -616,6 +1041,8 @@ def key_granted(key: ApiKey, raw: str, api_url: str) -> str:
         "⚠️ Gửi ngay cho họ và lưu lại: bot không lưu khóa thô nên sau này không xem lại được, "
         "mất thì phải cấp lại khóa mới.\n\n"
         f"Địa chỉ API: {url}\n\n"
+        "Mỗi lệnh mua (POST /api/v1/orders) phải kèm <code>request_id</code> riêng; gọi lại cùng request_id "
+        "thì nhận lại đơn cũ, không trừ tiền lần hai.\n\n"
         f"Khóa bán được ngay mọi sản phẩm đang bán, giảm {percent(key.discount_bps)}. "
         "Muốn chặn họ bán sản phẩm nào thì vào 📦 Sản phẩm được bán tích chặn."
     )
@@ -664,10 +1091,53 @@ def admin_topup_button(topup: Topup) -> str:
     return f"#{topup.id} · {vnd(topup.amount)} · {topup.code}"
 
 
-def admin_sale(order: Order, user: User | None) -> str:
+def admin_sale(order: Order, user: User | None, cost: int | None = None, balance: int | None = None,
+               waiting: tuple[int, int] = (0, 0)) -> str:
+    """Tin báo admin mỗi đơn đã giao. Hàng FatCat: kèm vốn đã trừ ví FatCat, lãi, và số cần nạp —
+    nạp lại đúng vốn đơn này (lãi nằm ở tài khoản ngân hàng, không qua FatCat); có đơn chờ ví thì nạp phần thiếu."""
     who = esc(user.label) if user else str(order.user_id)
     via = " qua API" if order.source == "api" else ""
-    return f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}"
+    code = f" · mã {esc(order.upstream_order_id)}" if order.upstream_order_id else ""
+    head = f"🛒 {who} mua {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}{via}{code}"
+    if not cost:
+        return head
+    paid = order.total - order.refunded
+    lines = [f"🐱 Vốn FatCat đã trừ: {vnd(cost)} · lãi <b>{vnd(paid - cost)}</b> (về tài khoản ngân hàng)"]
+    count, need = waiting
+    if count and balance is not None and need > balance:
+        lines.append(f"💳 <b>Cần nạp FatCat: {vnd(need - balance)}</b> — {count} đơn đang chờ ví")
+    else:
+        lines.append(f"💳 Nạp lại FatCat: <b>{vnd(cost)}</b> (đúng vốn đơn này)")
+    if balance is not None:
+        lines[-1] += f" · ví còn {vnd(balance)}"
+    return head + "\n" + "\n".join(lines)
+
+
+def topup_outcome(topup: Topup) -> str:
+    """Kết quả một mã nạp, ghi vào tin «Yêu cầu nạp» của admin khi mã đã xong."""
+    by = topup.resolved_by or ""
+    if topup.status == "paid":
+        who = "SePay tự cộng" if by == "sepay" else "Admin xác nhận"
+        return f"✅ <b>Đã cộng {vnd(topup.credited or 0)}</b> · {who}"
+    if topup.status == "cancelled":
+        if by == "user":
+            return "❌ <b>Khách tự huỷ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
+        if by == "expired":
+            return "⌛ <b>Hết hạn 24 giờ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
+        return "❌ <b>Admin đã huỷ</b>"
+    return "⏳ Đang chờ"
+
+
+def admin_after_credit_failed(topup: Topup) -> str:
+    want = f" để mua món #{topup.intent_product_id} × {topup.intent_quantity}" if topup.intent_product_id else ""
+    return (f"⚠️ SePay đã cộng {vnd(topup.credited or topup.amount)} (nạp #{topup.id}{want}) cho khách "
+            f"<code>{topup.user_id}</code> nhưng bước báo khách / tự mua bị lỗi. Tiền đang trong ví khách — "
+            "nhắn khách bấm mua lại, xem log store-api.")
+
+
+def admin_delivery_failed(order: Order) -> str:
+    return (f"⚠️ Gửi hàng đơn #{order.id} ({esc(order.product_name)}) cho khách <code>{order.user_id}</code> lỗi "
+            "2 lần (Telegram). Đơn đã xong, khách lấy lại ở 🧾 Đơn hàng → bấm đơn.")
 
 
 def admin_sold_out(product: Product) -> str:
@@ -688,6 +1158,36 @@ def admin_upstream_rejected(order: Order, status_code: int | None, message: str)
         f"⚠️ FatCat từ chối đơn #{order.id} ({status_code}): {esc(message)}\n"
         f"📦 {esc(order.product_name)} × {order.quantity} · đã hoàn {vnd(order.refunded)} cho khách.{hint}"
     )
+
+
+def admin_low_funds(balance: int, products: list[Product]) -> str:
+    names = "\n".join(f"• {esc(p.name)} (vốn {vnd(p.cost or 0)})" for p in products)
+    return (
+        f"🐱 <b>Ví FatCat còn {vnd(balance)}</b> — không đủ nhập {len(products)} món:\n"
+        f"{names}\n\nKhách vẫn đặt được; đơn sẽ chờ tới khi anh nạp. 👉 Nạp thêm ở bot FatCat."
+    )
+
+
+def admin_waiting_funds(order: Order, user: User | None, balance: int | None, count: int, need: int) -> str:
+    who = esc(user.label) if user else f"khách {order.user_id}"
+    funds = vnd(balance) if balance is not None else "?"
+    short = max(need - (balance or 0), 0)
+    return (
+        f"🔔 <b>Khách đã trả, chờ anh nạp ví FatCat</b>\n\n"
+        f"🧾 Đơn #{order.id} · {who}\n📦 {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}\n\n"
+        f"🐱 Ví FatCat: {funds} · {count} đơn đang chờ cần {vnd(need)}"
+        + (f" → <b>cần nạp {vnd(short)}</b>" if short else "")
+        + "\n👉 Nạp ở bot FatCat; nạp xong khoảng 30 giây là bot tự lấy hàng và gửi khách."
+    )
+
+
+def admin_waiting_expired(order: Order) -> str:
+    return (f"↩️ Đơn #{order.id} ({esc(order.product_name)} × {order.quantity}) chờ nạp ví FatCat quá 6 giờ → "
+            f"bot đã tự hoàn {vnd(order.refunded)} vào ví khách <code>{order.user_id}</code>.")
+
+
+def admin_waiting_cancelled(order: Order, user: User) -> str:
+    return f"↩️ {esc(user.label)} huỷ đơn #{order.id} ({esc(order.product_name)}) khi chờ nạp ví, đã hoàn {vnd(order.refunded)}."
 
 
 def admin_upstream_stuck(order: Order) -> str:

@@ -24,6 +24,7 @@ from cashback_bot.messages import (
     CLOSED,
     CLOSED_ALERT,
     DIEUKIEN,
+    THREADS_WELCOME,
     STALE_BUTTON,
     GENERIC_FAIL,
     HUONGDAN,
@@ -675,6 +676,9 @@ class CashbackService:
             return watchlist.action(self.repo, telegram_user_id, watchlist.LIST, moment)
         if command == "/magiam" and voucher.ready(self.repo):
             return voucher.list_reply(self.repo, telegram_user_id, moment)
+        if command == "/start" and source and source.startswith("threads_"):
+            home = self._page("home")
+            return replace(home, text=f"{THREADS_WELCOME}\n\n{home.text}")
         if command:
             return self._page("home")
         tiktok_url = parse_tiktok_target(stripped)

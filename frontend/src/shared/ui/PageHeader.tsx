@@ -8,12 +8,15 @@ export function PageHeader({
   classicHref,
   classicLabel = "Classic",
   classicHover = "hover:underline",
+  actions,
 }: {
   title: string;
   subtitle?: ReactNode;
   classicHref?: string;
   classicLabel?: string;
   classicHover?: string;
+  /** Nút bên phải tiêu đề — vd ⚙️ `ScreenSettingsButton`. */
+  actions?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -23,6 +26,7 @@ export function PageHeader({
           <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
         ) : null}
       </div>
+      <div className="flex items-center gap-3">
       {classicHref ? (
         <a
           href={classicHref}
@@ -34,6 +38,8 @@ export function PageHeader({
           {classicLabel} <ExternalLink className="size-3" />
         </a>
       ) : null}
+      {actions}
+      </div>
     </div>
   );
 }

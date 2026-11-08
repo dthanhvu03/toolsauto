@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from playwright.sync_api import sync_playwright
 from app.constants import AccountStatus
 from app.config import FACEBOOK_HOST, INSTAGRAM_HOST
+from app.features.threads.adapter import ThreadsAdapter
 
 
 def update_account_status(account_id: int, status: str, error: str = None):
@@ -36,20 +37,48 @@ def has_instagram_session(page) -> bool:
     cookie_names = {cookie.get("name") for cookie in cookies}
     return "sessionid" in cookie_names and "ds_user_id" in cookie_names
 
+THREADS_HOST = (os.getenv("THREADS_HOST") or "https://www.threads.com").strip().rstrip("/")
+
+
+def has_threads_session(page) -> bool:
+    cookies = page.context.cookies([f"{THREADS_HOST}/"])
+    return any(c.get("name") == "sessionid" and c.get("value") for c in cookies)
+
+
+def threads_checkpoint(url: str) -> bool:
+    """Trang xác minh / checkpoint (vd ``/auth_platform/challengepicker``) — cùng danh sách worker dùng."""
+    low = (url or "").lower()
+    return any(marker in low for marker in ThreadsAdapter.CHECKPOINT_URL_MARKERS)
+
+
+def threads_login_ok(url: str, has_session: bool) -> bool:
+    """Xong khi đã về Threads, có cookie phiên VÀ không còn ở trang đăng nhập / xác minh.
+
+    Trước đây chỉ kiểm «không có /login» + cookie → trang challenge (vẫn còn cookie cũ) bị coi là
+    đăng nhập xong, cửa sổ tự đóng sau 2 giây trước khi chủ bot kịp xác minh (07/11).
+    """
+    low = (url or "").lower()
+    return has_session and "threads." in low and not threads_checkpoint(low)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-account Login Bootstrapper")
     parser.add_argument("--profile-dir", required=True, help="Absolute path to the isolated profile directory")
     parser.add_argument("--account-id", type=int, required=True, help="Database ID of the account")
-    parser.add_argument("--platform", default="facebook", help="Platform name: facebook or instagram")
+    parser.add_argument("--platform", default="facebook", help="Platform name: facebook, instagram or threads")
     args = parser.parse_args()
 
     max_wait_seconds = 15 * 60 # 15 minutes failsafe
     poll_interval_seconds = 3
     elapsed = 0
+    challenge_noted = False
 
     print(f"Launching headed browser for profile: {args.profile_dir}")
 
-    login_url = f"{INSTAGRAM_HOST}/" if args.platform == "instagram" else f"{FACEBOOK_HOST}/"
+    login_url = {
+        "instagram": f"{INSTAGRAM_HOST}/",
+        "threads": f"{THREADS_HOST}/login",
+    }.get(args.platform, f"{FACEBOOK_HOST}/")
     
     with sync_playwright() as p:
         try:
@@ -83,7 +112,14 @@ def main():
 
         while elapsed < max_wait_seconds:
             try:
-                if args.platform == "instagram":
+                if args.platform == "threads":
+                    current_url = (page.url or "").lower()
+                    # Trang chủ Threads có sẵn ô mật khẩu ẩn → chỉ dựa vào URL + cookie sessionid.
+                    login_ok = threads_login_ok(current_url, has_threads_session(page))
+                    if not login_ok and threads_checkpoint(current_url) and not challenge_noted:
+                        print(f"LOGIN_CHALLENGE: đang ở bước xác minh ({current_url[:120]}) — hoàn tất trong cửa sổ")
+                        challenge_noted = True
+                elif args.platform == "instagram":
                     username_input = page.query_selector('input[name="username"]')
                     password_input = page.query_selector('input[name="password"]')
                     current_url = (page.url or "").lower()

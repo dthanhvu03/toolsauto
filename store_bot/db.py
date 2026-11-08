@@ -7,6 +7,7 @@ Bot Telegram và API đại lý là hai tiến trình dùng chung file này, nê
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import secrets
 import sqlite3
@@ -116,6 +117,26 @@ CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Khoản chi ngoài bot do admin tự ghi (bù khách, bảo hành, phí…): trừ vào lãi ròng và dòng tiền.
+CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER NOT NULL CHECK (amount > 0),
+    note TEXT NOT NULL,
+    order_id INTEGER REFERENCES orders(id),
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+
+-- Tiền admin nạp vào ví FatCat (vốn; số âm = rút về): đối chiếu với vốn đã dùng mua hàng + số dư FatCat thực.
+CREATE TABLE IF NOT EXISTS capital (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER NOT NULL CHECK (amount <> 0),
+    note TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 # Cột thêm sau khi bot đã chạy thật (PLAN-097 bước 2: lấy hàng từ FatCat). migrate() tự ALTER khi thiếu.
@@ -140,11 +161,15 @@ ADDED_COLUMNS = {
         "note": "TEXT",
         "updated_at": "TEXT",
         "unit_cost": "INTEGER",  # giá vốn 1 món lúc bán (hàng FatCat); NULL = hàng tự nhập, không tính vốn
+        # 1 = khách đã trả, ví FatCat của shop chưa đủ nhập: chưa gọi FatCat, chờ admin nạp ví rồi bot tự lấy hàng.
+        "waiting_funds": "INTEGER NOT NULL DEFAULT 0",
     },
     "topups": {
         # Thanh toán QR cho một đơn (mua thẳng không cần nạp ví trước): tiền vào là bot tự mua món này.
         "intent_product_id": "INTEGER",
         "intent_quantity": "INTEGER",
+        # Giá 1 món lúc tạo QR: tiền về (trong 24 giờ mã còn hiệu lực) thì bán đúng giá này dù giá đã tăng.
+        "intent_unit_price": "INTEGER",
     },
 }
 POST_MIGRATE = """
@@ -152,6 +177,9 @@ UPDATE orders SET unit_cost = (SELECT p.upstream_cost FROM products p WHERE p.id
     WHERE unit_cost IS NULL AND upstream_request_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_upstream ON products(upstream_id) WHERE upstream_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, id);
+CREATE INDEX IF NOT EXISTS idx_topups_user_status ON topups(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_topups_status_created ON topups(status, created_at);
 INSERT INTO order_items(order_id, content)
     SELECT s.order_id, s.content FROM stock_items s
     WHERE s.order_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM order_items o WHERE o.order_id = s.order_id);
@@ -162,9 +190,17 @@ STOCK_SQL = """CASE WHEN p.upstream_id IS NULL
         ELSE COALESCE(p.upstream_stock, 0) END AS stock"""
 
 ICT = timezone(timedelta(hours=7))
+FUNDS_BASE_KEY = "funds_base"  # mốc đối chiếu ví FatCat: {"balance": số dư lẽ ra còn, "at": giờ đọc}
+FUNDS_MIN_DELTA = 1_000  # lệch dưới mức này cộng dồn, chưa ghi sổ
+FUNDS_QUIET_SEC = 120
+AUTO_CAPITAL_BY = "auto"
 TOPUP_CODE_RE = re.compile(r"NAP[A-Z0-9]{6}")
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # bỏ 0/O, 1/I dễ gõ nhầm
 KEY_PREFIX = "sk_"
+
+
+UPSTREAM_FUNDS_KEY = "upstream_balance"
+AUTO_REFUND_NOTE = "tự hoàn sau 6 giờ chờ nhập hàng"
 
 
 class StoreError(Exception):
@@ -225,6 +261,8 @@ class Order:
     status: str = "done"
     refunded: int = 0
     note: str | None = None
+    waiting_funds: bool = False
+    upstream_order_id: str | None = None  # mã đơn FatCat trả về (vd DH5FG3NW) — khách đưa mã này khi khiếu nại
 
 
 @dataclass(frozen=True)
@@ -238,6 +276,8 @@ class Topup:
     created_at: str
     intent_product_id: int | None = None
     intent_quantity: int | None = None
+    intent_unit_price: int | None = None
+    resolved_by: str | None = None  # sepay · admin:<id> · user · expired
 
 
 @dataclass(frozen=True)
@@ -340,6 +380,18 @@ class StoreRepository:
         with self._tx() as conn:
             conn.execute("DELETE FROM state WHERE key = ?", (key,))
 
+    def states_with_prefix(self, prefix: str) -> dict[str, str]:
+        """Mọi state có khoá bắt đầu bằng `prefix` — một truy vấn (dùng khoảng khoá, đi theo chỉ mục)."""
+        with self._read() as conn:
+            rows = conn.execute("SELECT key, value FROM state WHERE key >= ? AND key < ?",
+                                (prefix, prefix + "\U0010ffff")).fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+    def upstream_funds(self) -> int | None:
+        """Số dư ví FatCat lần đọc gần nhất (trừ dần theo đơn vừa đặt). None = chưa biết."""
+        raw = self.get_state(UPSTREAM_FUNDS_KEY)
+        return int(raw) if raw and raw.lstrip("-").isdigit() else None
+
     # ---------- users ----------
 
     def touch_user(self, user_id: int, username: str | None, first_name: str | None) -> User:
@@ -367,7 +419,7 @@ class StoreRepository:
             rows = conn.execute(
                 """SELECT s.value, COUNT(*) AS n FROM state s
                    JOIN users u ON u.user_id = CAST(substr(s.key, 5) AS INTEGER)
-                   WHERE s.key LIKE 'src:%' AND u.created_at >= ?
+                   WHERE s.key >= 'src:' AND s.key < 'src;' AND u.created_at >= ?
                    GROUP BY s.value ORDER BY n DESC, s.value LIMIT 6""",
                 (since,),
             ).fetchall()
@@ -464,7 +516,8 @@ class StoreRepository:
     # ---------- orders ----------
 
     def buy(self, user_id: int, product_id: int, quantity: int, client_ref: str | None = None, *,
-            discount_bps: int = 0, source: str = "bot", api_key_id: int | None = None) -> Order:
+            discount_bps: int = 0, source: str = "bot", api_key_id: int | None = None,
+            locked_unit_price: int | None = None) -> Order:
         """Trừ tiền + lấy hàng trong cùng một giao dịch. client_ref trùng thì trả lại đơn cũ, không mua lần hai."""
         if quantity < 1:
             raise StoreError("bad_quantity")
@@ -486,9 +539,15 @@ class StoreRepository:
                 raise StoreError("product_blocked")
             if product.stock < quantity:
                 raise StoreError("out_of_stock", available=product.stock)
+            funds = _upstream_funds(conn) if product.upstream_id is not None and product.cost else None
+            # Ví FatCat không đủ nhập: vẫn bán, nhưng giữ đơn chờ admin nạp ví — không gọi FatCat để khỏi bị 402
+            # rồi hoàn tiền bắt khách mua lại (sự cố 04/11 đơn #2 #3).
+            waiting = funds is not None and funds < product.cost * quantity
             if product.max_quantity and quantity > product.max_quantity:
                 raise StoreError("bad_quantity", max=product.max_quantity)
             unit = unit_price(product.price, discount_bps)
+            if locked_unit_price:
+                unit = min(unit, locked_unit_price)  # giá đã báo trên QR; giá giảm thì khách được giá mới
             if product.cost:
                 unit = max(unit, product.cost)  # giảm cho đại lý cấp dưới không bao giờ bán dưới giá vốn
             total = unit * quantity
@@ -502,10 +561,10 @@ class StoreRepository:
             order_id = int(conn.execute(
                 """INSERT INTO orders(user_id, product_id, product_name, quantity, unit_price, total, source,
                                       api_key_id, client_ref, created_at, status, upstream_request_id, updated_at,
-                                      unit_cost)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                      unit_cost, waiting_funds)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (user_id, product_id, product.name, quantity, unit, total, source, api_key_id, client_ref, now,
-                 "pending" if upstream else "done", request_id, now, product.cost),
+                 "pending" if upstream else "done", request_id, now, product.cost, int(waiting)),
             ).lastrowid)
             if not upstream:
                 item_ids = [row["id"] for row in conn.execute(
@@ -521,16 +580,21 @@ class StoreRepository:
                     (order_id, order_id),
                 )
             _move_money(conn, user_id, -total, "order", f"order:{order_id}", product.name)
+            if funds is not None and not waiting:
+                # Giữ chỗ trong ví FatCat để hai đơn cùng lúc không vượt số dư; lần đồng bộ sau ghi lại số thật.
+                conn.execute("UPDATE state SET value = ? WHERE key = ?",
+                             (str(funds - product.cost * quantity), UPSTREAM_FUNDS_KEY))
             return _load_order(conn, order_id)
 
     # ---------- đơn lấy từ FatCat ----------
 
     def upstream_job(self, order_id: int) -> tuple[int, int, str] | None:
-        """(id sản phẩm FatCat, số lượng, request_id) của đơn đang chờ; None nếu đơn đã xong."""
+        """(id sản phẩm FatCat, số lượng, request_id) của đơn đang chờ; None nếu đơn đã xong / đang chờ ví."""
         with self._read() as conn:
             row = conn.execute(
                 """SELECT p.upstream_id, o.quantity, o.upstream_request_id FROM orders o
-                   JOIN products p ON p.id = o.product_id WHERE o.id = ? AND o.status = 'pending'""",
+                   JOIN products p ON p.id = o.product_id
+                   WHERE o.id = ? AND o.status = 'pending' AND o.waiting_funds = 0""",
                 (order_id,),
             ).fetchone()
         return (row[0], row[1], row[2]) if row else None
@@ -539,8 +603,119 @@ class StoreRepository:
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
         with self._read() as conn:
             return [row["id"] for row in conn.execute(
-                "SELECT id FROM orders WHERE status = 'pending' AND created_at <= ? ORDER BY id", (cutoff,)
+                "SELECT id FROM orders WHERE status = 'pending' AND waiting_funds = 0 AND created_at <= ? ORDER BY id",
+                (cutoff,),
             )]
+
+    def cleanup_state(self, now: float, keep_sec: int = 24 * 3600) -> int:
+        """Dọn khoá state hết tác dụng (vòng nền gọi mỗi giờ). Trả số dòng đã xoá. Không đụng src:/menu_sent:/icon:/markup.
+        - stuck_alerted:<đơn> khi đơn hết chờ · topup_msg:<mã> khi mã nạp đã xong
+        - announced:<món> / callme:<khách> (giá trị = thời điểm) cũ hơn keep_sec
+        - await:<khách> (đang chờ gõ chữ) của khách không hoạt động quá keep_sec"""
+        cutoff_iso = datetime.fromtimestamp(now - keep_sec, timezone.utc).isoformat(timespec="seconds")
+        with self._tx() as conn:
+            deleted = 0
+            for sql, args in (
+                ("""DELETE FROM state WHERE key >= 'stuck_alerted:' AND key < 'stuck_alerted;'
+                    AND CAST(substr(key, 15) AS INTEGER) NOT IN (SELECT id FROM orders WHERE status = 'pending')""", ()),
+                ("""DELETE FROM state WHERE key >= 'topup_msg:' AND key < 'topup_msg;'
+                    AND CAST(substr(key, 11) AS INTEGER) NOT IN (SELECT id FROM topups WHERE status = 'pending')""", ()),
+                ("""DELETE FROM state WHERE ((key >= 'announced:' AND key < 'announced;')
+                                            OR (key >= 'callme:' AND key < 'callme;'))
+                    AND CAST(value AS REAL) < ?""", (now - keep_sec,)),
+                ("""DELETE FROM state WHERE key >= 'await:' AND key < 'await;'
+                    AND CAST(substr(key, 7) AS INTEGER) IN (SELECT user_id FROM users WHERE last_seen_at < ?)""",
+                 (cutoff_iso,)),
+            ):
+                deleted += conn.execute(sql, args).rowcount
+            return deleted
+
+    def has_order_ref(self, user_id: int, client_ref: str) -> bool:
+        with self._read() as conn:
+            return conn.execute("SELECT 1 FROM orders WHERE user_id = ? AND client_ref = ?",
+                                (user_id, client_ref)).fetchone() is not None
+
+    def waiting_summary(self) -> tuple[int, int]:
+        """(số đơn chờ ví, tổng vốn cần nạp) — một truy vấn, không tải cả đơn (vòng nền gọi mỗi 10 giây)."""
+        with self._read() as conn:
+            row = conn.execute(
+                """SELECT COUNT(*), SUM(COALESCE(unit_cost, 0) * quantity) FROM orders
+                   WHERE status = 'pending' AND waiting_funds = 1"""
+            ).fetchone()
+        return int(row[0] or 0), int(row[1] or 0)
+
+    def waiting_orders(self) -> list[Order]:
+        """Đơn khách đã trả, đang chờ admin nạp ví FatCat (cũ trước)."""
+        with self._read() as conn:
+            ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM orders WHERE status = 'pending' AND waiting_funds = 1 ORDER BY id")]
+            return [_load_order(conn, order_id) for order_id in ids]
+
+    def release_waiting(self) -> list[int]:
+        """Ví FatCat đủ lại: mở các đơn chờ (cũ trước) vừa đủ số dư, giữ chỗ ví cho từng đơn. Trả id đơn được mở."""
+        released = []
+        if not self.waiting_summary()[0]:
+            return released  # không giữ khoá ghi mỗi 10 giây khi chẳng có đơn chờ
+        with self._tx() as conn:
+            funds = _upstream_funds(conn)
+            if funds is None:
+                return []
+            for row in conn.execute(
+                """SELECT id, quantity, COALESCE(unit_cost, 0) AS cost FROM orders
+                   WHERE status = 'pending' AND waiting_funds = 1 ORDER BY id"""
+            ).fetchall():
+                need = row["cost"] * row["quantity"]
+                if need > funds:
+                    break  # giữ thứ tự: đơn trước chưa đủ thì đơn sau cũng chờ
+                funds -= need
+                conn.execute("UPDATE orders SET waiting_funds = 0, updated_at = ? WHERE id = ?", (utcnow(), row["id"]))
+                released.append(row["id"])
+            if released:
+                conn.execute("UPDATE state SET value = ? WHERE key = ?", (str(funds), UPSTREAM_FUNDS_KEY))
+        return released
+
+    def wait_for_funds(self, order_id: int) -> tuple[Order, bool]:
+        """FatCat báo 402 (ví shop thiếu, FatCat KHÔNG trừ tiền): giữ đơn chờ ví thay vì hoàn tiền.
+        Đổi request_id mới vì id cũ đã bị từ chối. Trả (đơn, vừa chuyển sang chờ không)."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                """UPDATE orders SET waiting_funds = 1, upstream_request_id = ?, updated_at = ?
+                   WHERE id = ? AND status = 'pending' AND waiting_funds = 0""",
+                (f"aps-{secrets.token_hex(8)}", utcnow(), order_id),
+            )
+            return _load_order(conn, order_id), cur.rowcount == 1
+
+    def expire_waiting(self, older_than_sec: int) -> list[Order]:
+        """Đơn chờ ví quá lâu (admin chưa nạp): tự hoàn đủ vào số dư khách. Trả các đơn vừa hoàn."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id FROM orders WHERE status = 'pending' AND waiting_funds = 1 AND created_at < ?",
+                (cutoff,),
+            ).fetchall()
+        done = []
+        for row in rows:
+            order = self.cancel_waiting(row["id"], row["user_id"], note=AUTO_REFUND_NOTE)
+            if order is not None:
+                done.append(order)
+        return done
+
+    def cancel_waiting(self, order_id: int, user_id: int, note: str = "khách huỷ khi chờ nhập hàng") -> Order | None:
+        """Huỷ đơn đang chờ ví (khách bấm huỷ / quá hạn), hoàn đủ vào số dư. Đơn đã được mở lấy hàng thì không huỷ."""
+        with self._tx() as conn:
+            row = conn.execute(
+                "SELECT * FROM orders WHERE id = ? AND user_id = ? AND status = 'pending' AND waiting_funds = 1",
+                (order_id, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            _move_money(conn, user_id, row["total"], "refund", f"order:{order_id}", note)
+            conn.execute(
+                """UPDATE orders SET status = 'failed', refunded = ?, waiting_funds = 0, note = ?, updated_at = ?
+                   WHERE id = ?""",
+                (row["total"], note, utcnow(), order_id),
+            )
+            return _load_order(conn, order_id)
 
     def complete_upstream(self, order_id: int, items: list[str], upstream_order_id: str | None) -> tuple[Order, bool]:
         """Ghi hàng FatCat giao. Thiếu món nào hoàn tiền món đó cho khách. Chỉ chạy một lần mỗi đơn."""
@@ -632,16 +807,21 @@ class StoreRepository:
                     changed += 1
         return changed
 
-    def sales_by_product(self, days: int = 30) -> dict[int, tuple[int, int, int]]:
-        """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất."""
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    def sales_by_product(self, days: int = 30, since: str | None = None,
+                         exclude: Iterable[int] = ()) -> dict[int, tuple[int, int, int]]:
+        """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất (hoặc từ mốc `since`)."""
+        if since is None:
+            since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        not_admin, args = _not_in(exclude)
         with self._read() as conn:
             rows = conn.execute(
-                """SELECT o.product_id, SUM(n.items), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * n.items)
-                   FROM orders o JOIN (SELECT order_id, COUNT(*) AS items FROM order_items GROUP BY order_id) n
-                        ON n.order_id = o.id
-                   WHERE o.status IN ('done', 'partial') AND o.created_at >= ? GROUP BY o.product_id""",
-                (since,),
+                f"""SELECT product_id, SUM(items), SUM(total - refunded), SUM(COALESCE(unit_cost, 0) * items)
+                   FROM (SELECT o.product_id, o.total, o.refunded, o.unit_cost,
+                                (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id) AS items
+                         FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
+                         AND o.user_id {not_admin})
+                   WHERE items > 0 GROUP BY product_id""",
+                (since, *args),
             ).fetchall()
         return {row[0]: (int(row[1] or 0), int(row[2] or 0), int(row[3] or 0)) for row in rows}
 
@@ -662,20 +842,57 @@ class StoreRepository:
     # ---------- topups ----------
 
     def create_topup(self, user_id: int, amount: int, product_id: int | None = None,
-                     quantity: int | None = None) -> Topup:
+                     quantity: int | None = None, unit_price: int | None = None) -> Topup:
         with self._tx() as conn:
             for _ in range(10):
                 code = "NAP" + "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
                 try:
                     cur = conn.execute(
-                        """INSERT INTO topups(user_id, code, amount, created_at, intent_product_id, intent_quantity)
-                           VALUES (?, ?, ?, ?, ?, ?)""",
-                        (user_id, code, amount, utcnow(), product_id, quantity),
+                        """INSERT INTO topups(user_id, code, amount, created_at, intent_product_id, intent_quantity,
+                                              intent_unit_price)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (user_id, code, amount, utcnow(), product_id, quantity, unit_price),
                     )
                 except sqlite3.IntegrityError:
                     continue
                 return _topup(conn.execute("SELECT * FROM topups WHERE id = ?", (cur.lastrowid,)).fetchone())
         raise StoreError("topup_code_exhausted")
+
+    def find_pending_topup(self, user_id: int, amount: int, product_id: int | None, quantity: int | None,
+                           max_age_sec: int) -> Topup | None:
+        """Mã nạp còn chờ y hệt (cùng số tiền, cùng món) để khách bấm QR lại thì dùng lại, không đẻ mã mới."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=max_age_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            row = conn.execute(
+                """SELECT * FROM topups WHERE user_id = ? AND status = 'pending' AND amount = ? AND created_at >= ?
+                   AND intent_product_id IS ? AND intent_quantity IS ? ORDER BY id DESC LIMIT 1""",
+                (user_id, amount, cutoff, product_id, quantity),
+            ).fetchone()
+        return _topup(row) if row else None
+
+    def latest_pending_topup(self, user_id: int) -> Topup | None:
+        with self._read() as conn:
+            row = conn.execute(
+                "SELECT * FROM topups WHERE user_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", (user_id,)
+            ).fetchone()
+        return _topup(row) if row else None
+
+    def expire_topups(self, older_than_sec: int) -> list[int]:
+        """Huỷ mã nạp chờ quá lâu, trả id các mã vừa huỷ. Tiền lỡ về mã quá hạn vẫn được cộng (confirm_topup)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_sec)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            if not conn.execute("SELECT 1 FROM topups WHERE status = 'pending' AND created_at < ? LIMIT 1",
+                                (cutoff,)).fetchone():
+                return []  # thường gặp: không mở giao dịch ghi
+        with self._tx() as conn:
+            ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM topups WHERE status = 'pending' AND created_at < ?", (cutoff,))]
+            conn.executemany(
+                "UPDATE topups SET status = 'cancelled', resolved_by = 'expired', resolved_at = ? WHERE id = ? "
+                "AND status = 'pending'",
+                [(utcnow(), i) for i in ids],
+            )
+            return ids
 
     def get_topup(self, topup_id: int) -> Topup | None:
         with self._read() as conn:
@@ -713,15 +930,19 @@ class StoreRepository:
             already_used = bank_ref and conn.execute(
                 "SELECT 1 FROM topups WHERE bank_ref = ?", (bank_ref,)
             ).fetchone()
-            if row["status"] != "pending" or already_used:
+            # Khách tự huỷ / mã quá 24 giờ mà tiền vẫn về: vẫn cộng vào ví, nhưng bỏ ý định mua (khách có thể đã
+            # chọn món khác). Mã admin huỷ thì không tự cộng.
+            revived = row["status"] == "cancelled" and row["resolved_by"] in ("user", "expired")
+            if (row["status"] != "pending" and not revived) or already_used:
                 return _topup(row), _balance(conn, row["user_id"]), False
             amount = row["amount"] if credited is None else credited
             if amount <= 0:
                 raise StoreError("bad_amount")
             conn.execute(
-                """UPDATE topups SET status = 'paid', credited = ?, bank_ref = ?, resolved_by = ?, resolved_at = ?
+                """UPDATE topups SET status = 'paid', credited = ?, bank_ref = ?, resolved_by = ?, resolved_at = ?,
+                          intent_product_id = CASE WHEN ? THEN NULL ELSE intent_product_id END
                    WHERE id = ?""",
-                (amount, bank_ref, by, utcnow(), topup_id),
+                (amount, bank_ref, by, utcnow(), revived, topup_id),
             )
             balance = _move_money(conn, row["user_id"], amount, "topup", f"topup:{row['code']}", by)
             return _topup(conn.execute("SELECT * FROM topups WHERE id = ?", (topup_id,)).fetchone()), balance, True
@@ -810,8 +1031,10 @@ class StoreRepository:
 
     # ---------- stats ----------
 
-    def stats(self) -> dict[str, int]:
-        """Số liệu admin. Doanh thu chỉ tính đơn đã giao (trừ phần hoàn); vốn = giá vốn × số món thực giao."""
+    def stats(self, admins: Iterable[int] = ()) -> dict[str, int]:
+        """Số liệu admin. Doanh thu chỉ tính đơn đã giao (trừ phần hoàn); vốn = giá vốn × số món thực giao.
+        `admins`: tài khoản admin — tiền tự nạp / tự mua của admin không tính là của khách."""
+        not_admin, args = _not_in(admins)
         today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
         periods = {
             "today": today.astimezone(timezone.utc).isoformat(timespec="seconds"),
@@ -825,27 +1048,220 @@ class StoreRepository:
             result = {
                 "users": one("SELECT COUNT(*) FROM users"),
                 "buyers": one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE status IN ('done', 'partial')"),
-                "balances": one("SELECT SUM(balance) FROM users"),
+                "balances": one(f"SELECT SUM(balance) FROM users WHERE user_id {not_admin}", *args),
                 "pending_topups": one("SELECT COUNT(*) FROM topups WHERE status = 'pending'"),
                 "pending_orders": one("SELECT COUNT(*) FROM orders WHERE status = 'pending'"),
                 "stock": one("SELECT COUNT(*) FROM stock_items WHERE status = 'available'"),
             }
             for name, since in periods.items():
                 row = conn.execute(
-                    """SELECT COUNT(*), SUM(o.total - o.refunded),
-                              SUM(COALESCE(o.unit_cost, 0) * (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id))
-                       FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?""",
-                    (since,),
+                    f"""SELECT COUNT(*), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL})
+                        FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ?
+                        AND o.user_id {not_admin}""",
+                    (since, *args),
                 ).fetchone()
                 result[f"orders_{name}"] = int(row[0] or 0)
                 result[f"revenue_{name}"] = int(row[1] or 0)
                 result[f"cost_{name}"] = int(row[2] or 0)
-                result[f"profit_{name}"] = result[f"revenue_{name}"] - result[f"cost_{name}"]
+                result[f"expense_{name}"] = one("SELECT SUM(amount) FROM expenses WHERE created_at >= ?", since)
+                result[f"profit_{name}"] = result[f"revenue_{name}"] - result[f"cost_{name}"] - result[f"expense_{name}"]
                 result[f"topup_{name}"] = one(
-                    "SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ?", since)
+                    f"SELECT SUM(credited) FROM topups WHERE status = 'paid' AND resolved_at >= ? AND user_id {not_admin}",
+                    since, *args)
                 result[f"refunded_{name}"] = one(
                     "SELECT SUM(refunded) FROM orders WHERE refunded > 0 AND created_at >= ?", since)
             return result
+
+    def cashflow(self, days: int | None = 7, top: int = 5, admins: Iterable[int] = ()) -> dict:
+        """Báo cáo «Dòng tiền & biên lãi» cho một kỳ: `days` ngày tính theo lịch VN (1 = hôm nay), None = từ đầu.
+        Trả tổng kỳ, kỳ liền trước (để so sánh), diễn biến (ngày ≤ 7 ngày · tuần với 30 ngày · tháng với từ đầu),
+        món lãi nhất trong kỳ, tiền đang giữ hộ khách. Cách tính như stats(): doanh thu = đơn đã giao trừ phần hoàn,
+        vốn = giá vốn × số món thực giao (hàng tự nhập không có giá vốn).
+        `admins`: tiền admin tự nạp / tự mua tách riêng thành «admin», không tính vào khách."""
+        admins = tuple(admins)
+        not_admin, args = _not_in(admins)
+        today = datetime.now(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
+        with self._read() as conn:
+            if days is None:
+                first = conn.execute(
+                    "SELECT MIN(t) FROM (SELECT MIN(created_at) AS t FROM orders "
+                    "UNION ALL SELECT MIN(resolved_at) FROM topups WHERE status = 'paid' "
+                    "UNION ALL SELECT MIN(created_at) FROM expenses)").fetchone()[0]
+                first_day = (datetime.fromisoformat(first).astimezone(ICT).replace(hour=0, minute=0, second=0,
+                                                                                  microsecond=0)
+                             if first else today)
+            else:
+                first_day = today - timedelta(days=days - 1)
+            start = _utc_iso(first_day)
+            daily = _daily_totals(conn, start, None, admins)
+            previous = (_sum_totals(_daily_totals(conn, _utc_iso(first_day - timedelta(days=days)), start, admins)
+                                    .values()) if days else None)
+            admin_total = (_sum_totals(_daily_totals(conn, start, None, admins, admin_side=True).values())
+                           if admins else None)
+            balances = int(conn.execute(f"SELECT SUM(balance) FROM users WHERE user_id {not_admin}",
+                                        args).fetchone()[0] or 0)
+            admin_balance = (int(conn.execute(f"SELECT SUM(balance) FROM users WHERE NOT (user_id {not_admin})",
+                                              args).fetchone()[0] or 0) if admins else 0)
+            capital = int(conn.execute("SELECT SUM(amount) FROM capital").fetchone()[0] or 0)
+            capital_count = int(conn.execute("SELECT COUNT(*) FROM capital").fetchone()[0] or 0)
+            used_all = int(conn.execute(
+                f"""SELECT SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL}) FROM orders o
+                    WHERE o.status IN ('done', 'partial')""").fetchone()[0] or 0)
+            names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM products")}
+
+        span = (today - first_day).days + 1
+        day_keys = [(today - timedelta(days=back)).date().isoformat() for back in range(span)]  # mới nhất trước
+        if days is None:
+            unit, groups = "month", {}
+            for key in day_keys:
+                groups.setdefault(key[:7], []).append(key)
+        elif days > 7:
+            unit, groups = "week", {}
+            for i in range(0, len(day_keys), 7):
+                chunk = day_keys[i:i + 7]
+                groups[f"{chunk[-1]}|{chunk[0]}"] = chunk
+        else:
+            unit, groups = "day", {key: [key] for key in day_keys} if days > 1 else {}
+        buckets = [{"key": key, **_sum_totals(daily.get(k, {}) for k in keys)} for key, keys in groups.items()]
+
+        products = [
+            {"name": names.get(pid, f"#{pid}"), "sold": n, "revenue": revenue, "profit": revenue - cost}
+            for pid, (n, revenue, cost) in self.sales_by_product(since=start, exclude=admins).items()
+        ]
+        waiting_orders, waiting_cost = self.waiting_summary()
+        return {
+            "days": days,
+            "from": first_day.date().isoformat(),
+            "to": today.date().isoformat(),
+            "total": _sum_totals(daily.values()),
+            "previous": previous,
+            "unit": unit,
+            "buckets": buckets,
+            "top": sorted(products, key=lambda p: p["profit"], reverse=True)[:top],
+            "balances": balances,
+            "admin": admin_total,  # None = không tách admin
+            "admin_balance": admin_balance,
+            "capital": capital,  # tổng admin đã ghi nạp ví FatCat (từ đầu)
+            "capital_count": capital_count,
+            "capital_used": used_all,  # vốn FatCat đã dùng cho mọi đơn đã giao (cả đơn admin tự mua), từ đầu
+            "waiting_orders": waiting_orders,
+            "waiting_cost": waiting_cost,
+        }
+
+    # ---------- khoản chi ngoài bot ----------
+
+    def add_expense(self, amount: int, note: str, by: str, order_id: int | None = None) -> int:
+        if amount <= 0 or not note.strip():
+            raise StoreError("bad_amount")
+        with self._tx() as conn:
+            if order_id is not None and conn.execute("SELECT 1 FROM orders WHERE id = ?", (order_id,)).fetchone() is None:
+                order_id = None
+            cur = conn.execute(
+                "INSERT INTO expenses(amount, note, order_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                (amount, note.strip()[:200], order_id, by, utcnow()),
+            )
+            return int(cur.lastrowid)
+
+    def recent_expenses(self, limit: int = 10) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM expenses ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_expense(self, expense_id: int) -> bool:
+        """Xoá khoản admin ghi nhầm (chỉ bảng expenses, không đụng ví khách / đơn)."""
+        with self._tx() as conn:
+            return conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,)).rowcount > 0
+
+    # ---------- vốn nạp ví FatCat ----------
+
+    def add_capital(self, amount: int, note: str, by: str) -> int:
+        if amount == 0:
+            raise StoreError("bad_amount")
+        with self._tx() as conn:
+            cur = conn.execute("INSERT INTO capital(amount, note, created_by, created_at) VALUES (?, ?, ?, ?)",
+                               (amount, note.strip()[:200], by, utcnow()))
+            return int(cur.lastrowid)
+
+    def reconcile_funds(self, balance: int, read_at: datetime) -> int | None:
+        """Tự đối chiếu ví FatCat sau mỗi lần đọc số dư. Lẽ ra còn = mốc trước − giá vốn đơn bot giao từ mốc đó;
+        số dư thực lệch ≥ FUNDS_MIN_DELTA → tự ghi một dòng sổ vốn (dương: anh nạp / FatCat hoàn; âm: FatCat trừ
+        ngoài bot, vd anh mua thẳng). Chỉ đối chiếu lúc yên: không có đơn đang gọi FatCat và không đơn nào vừa đổi
+        trạng thái trong FUNDS_QUIET_SEC giây (tránh tính đơn FatCat đã trừ mà bot chưa ghi). Lệch nhỏ cộng dồn.
+        Lần đầu chỉ đặt mốc. Trả id dòng sổ vốn vừa ghi, hoặc None."""
+        read_iso = read_at.astimezone(timezone.utc).isoformat(timespec="seconds")
+        with self._tx() as conn:
+            row = conn.execute("SELECT value FROM state WHERE key = ?", (FUNDS_BASE_KEY,)).fetchone()
+            base = json.loads(row["value"]) if row else None
+
+            def save(expected: int) -> None:
+                conn.execute(
+                    "INSERT INTO state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (FUNDS_BASE_KEY, json.dumps({"balance": expected, "at": read_iso})))
+
+            if base is None:
+                save(balance)
+                return None
+            if read_iso < base["at"]:
+                return None  # số đọc cũ hơn mốc (tiến trình kia vừa đối chiếu)
+            quiet_from = (read_at - timedelta(seconds=FUNDS_QUIET_SEC)).astimezone(timezone.utc).isoformat(
+                timespec="seconds")
+            busy = conn.execute(
+                """SELECT 1 FROM orders WHERE (status = 'pending' AND waiting_funds = 0)
+                   OR (unit_cost IS NOT NULL AND updated_at >= ?) LIMIT 1""", (quiet_from,)).fetchone()
+            if busy:
+                return None
+            bot_cost = int(conn.execute(
+                f"""SELECT SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL}) FROM orders o
+                    WHERE o.status IN ('done', 'partial') AND o.updated_at >= ? AND o.updated_at <= ?""",
+                (base["at"], read_iso)).fetchone()[0] or 0)
+            expected = int(base["balance"]) - bot_cost
+            delta = balance - expected
+            capital_id = None
+            if abs(delta) >= FUNDS_MIN_DELTA:
+                note = ("tự ghi: ví FatCat tăng ngoài đơn bot (anh nạp?)" if delta > 0
+                        else "tự ghi: FatCat trừ ngoài đơn bot (anh mua thẳng trên FatCat?)")
+                capital_id = int(conn.execute(
+                    "INSERT INTO capital(amount, note, created_by, created_at) VALUES (?, ?, ?, ?)",
+                    (delta, note, AUTO_CAPITAL_BY, read_iso)).lastrowid)
+                expected = balance
+            save(expected)
+            return capital_id
+
+    def auto_capital_after(self, last_id: int) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM capital WHERE created_by = ? AND id > ? ORDER BY id",
+                                (AUTO_CAPITAL_BY, last_id)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_capital(self, capital_id: int) -> dict | None:
+        with self._read() as conn:
+            row = conn.execute("SELECT * FROM capital WHERE id = ?", (capital_id,)).fetchone()
+        return dict(row) if row else None
+
+    def order_cost(self, order_id: int) -> int | None:
+        """Vốn FatCat của một đơn = giá vốn × số món thực giao; hàng tự nhập (không giá vốn) → None."""
+        with self._read() as conn:
+            row = conn.execute(f"SELECT o.unit_cost, {_SOLD_SQL} FROM orders o WHERE o.id = ?", (order_id,)).fetchone()
+        return None if row is None or row[0] is None else int(row[0]) * int(row[1] or 0)
+
+    def last_synced(self) -> str | None:
+        """Lần đồng bộ FatCat gần nhất (synced_at mới nhất của sản phẩm FatCat)."""
+        with self._read() as conn:
+            return conn.execute("SELECT MAX(synced_at) FROM products WHERE upstream_id IS NOT NULL").fetchone()[0]
+
+    def capital_total(self) -> int:
+        with self._read() as conn:
+            return int(conn.execute("SELECT SUM(amount) FROM capital").fetchone()[0] or 0)
+
+    def recent_capital(self, limit: int = 10) -> list[dict]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT * FROM capital ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_capital(self, capital_id: int) -> bool:
+        """Xoá lần ghi nạp nhầm (chỉ dòng ghi chép, không đụng ví FatCat)."""
+        with self._tx() as conn:
+            return conn.execute("DELETE FROM capital WHERE id = ?", (capital_id,)).rowcount > 0
 
     def recent_ledger(self, limit: int = 15) -> list[dict]:
         """Các lần tiền vào / ra ví khách, mới nhất trước (nạp, mua, hoàn, admin cộng/trừ)."""
@@ -857,6 +1273,73 @@ class StoreRepository:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+_SOLD_SQL = "(SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id)"
+_ZERO_TOTALS = {"orders": 0, "revenue": 0, "cost": 0, "cash_in": 0, "adjust": 0, "expense": 0}
+
+
+def _utc_iso(local: datetime) -> str:
+    return local.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _not_in(ids: Iterable[int]) -> tuple[str, tuple[int, ...]]:
+    """Mảnh SQL «NOT IN (?, ?)» cho cột user_id; danh sách rỗng → luôn đúng."""
+    ids = tuple(int(i) for i in ids)
+    return (f"NOT IN ({', '.join('?' * len(ids))})", ids) if ids else ("IS NOT NULL", ())
+
+
+def _daily_totals(conn: sqlite3.Connection, start: str, end: str | None, admins: tuple[int, ...] = (),
+                  admin_side: bool = False) -> dict[str, dict[str, int]]:
+    """{ngày VN "YYYY-MM-DD": đơn, doanh thu, vốn, tiền chuyển vào, admin cộng/trừ tay, khoản chi} trong [start, end).
+    Mặc định chỉ tiền của khách (bỏ tài khoản `admins`) + khoản chi; admin_side=True: chỉ tiền tài khoản admin."""
+    end = end or "9999"
+    not_admin, ids = _not_in(admins)
+    def who(column: str = "user_id") -> str:
+        return f"NOT ({column} {not_admin})" if admin_side else f"{column} {not_admin}"
+    out: dict[str, dict[str, int]] = {}
+
+    def add(day: str, **values: int) -> None:
+        row = out.setdefault(day, dict(_ZERO_TOTALS))
+        for name, value in values.items():
+            row[name] += int(value or 0)
+
+    for day, orders, revenue, cost in conn.execute(
+        f"""SELECT date(o.created_at, '+7 hours'), COUNT(*), SUM(o.total - o.refunded),
+                   SUM(COALESCE(o.unit_cost, 0) * {_SOLD_SQL})
+            FROM orders o WHERE o.status IN ('done', 'partial') AND o.created_at >= ? AND o.created_at < ?
+            AND {who('o.user_id')} GROUP BY 1""", (start, end, *ids)):
+        add(day, orders=orders, revenue=revenue, cost=cost)
+    for day, amount in conn.execute(
+        f"""SELECT date(resolved_at, '+7 hours'), SUM(credited) FROM topups
+            WHERE status = 'paid' AND resolved_at >= ? AND resolved_at < ? AND {who()} GROUP BY 1""", (start, end, *ids)):
+        add(day, cash_in=amount)
+    for day, amount in conn.execute(
+        f"""SELECT date(created_at, '+7 hours'), SUM(delta) FROM ledger
+            WHERE kind = 'adjust' AND created_at >= ? AND created_at < ? AND {who()} GROUP BY 1""", (start, end, *ids)):
+        add(day, adjust=amount)
+    if admin_side:
+        return out
+    for day, amount in conn.execute(
+        """SELECT date(created_at, '+7 hours'), SUM(amount) FROM expenses
+           WHERE created_at >= ? AND created_at < ? GROUP BY 1""", (start, end)):
+        add(day, expense=amount)
+    return out
+
+
+def _sum_totals(rows: Iterable[dict[str, int]]) -> dict[str, int]:
+    total = dict(_ZERO_TOTALS)
+    for row in rows:
+        for name in total:
+            total[name] += row.get(name, 0)
+    total["profit"] = total["revenue"] - total["cost"]  # lãi gộp
+    total["net"] = total["profit"] - total["expense"]  # lãi ròng sau khoản chi ngoài bot
+    return total
+
+
+def _upstream_funds(conn: sqlite3.Connection) -> int | None:
+    row = conn.execute("SELECT value FROM state WHERE key = ?", (UPSTREAM_FUNDS_KEY,)).fetchone()
+    return int(row["value"]) if row and str(row["value"]).lstrip("-").isdigit() else None
 
 
 def _balance(conn: sqlite3.Connection, user_id: int) -> int:
@@ -901,7 +1384,9 @@ def _load_product(conn: sqlite3.Connection, product_id: int) -> Product | None:
 def _order(row: sqlite3.Row, **extra) -> Order:
     return Order(row["id"], row["user_id"], row["product_id"], row["product_name"], row["quantity"],
                  row["unit_price"], row["total"], row["source"], row["created_at"], status=row["status"],
-                 refunded=row["refunded"], note=row["note"], **extra)
+                 refunded=row["refunded"], note=row["note"],
+                 waiting_funds=bool(row["waiting_funds"]) if "waiting_funds" in row.keys() else False,
+                 upstream_order_id=row["upstream_order_id"] if "upstream_order_id" in row.keys() else None, **extra)
 
 
 def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False) -> Order:
@@ -912,7 +1397,9 @@ def _load_order(conn: sqlite3.Connection, order_id: int, replayed: bool = False)
 
 def _topup(row: sqlite3.Row) -> Topup:
     return Topup(row["id"], row["user_id"], row["code"], row["amount"], row["credited"], row["status"], row["created_at"],
-                 row["intent_product_id"], row["intent_quantity"])
+                 row["intent_product_id"], row["intent_quantity"],
+                 row["intent_unit_price"] if "intent_unit_price" in row.keys() else None,
+                 row["resolved_by"] if "resolved_by" in row.keys() else None)
 
 
 def _load_key(conn: sqlite3.Connection, key_id: int) -> ApiKey | None:

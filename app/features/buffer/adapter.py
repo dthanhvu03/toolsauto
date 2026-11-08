@@ -88,6 +88,22 @@ def public_media_url(job) -> str | None:
     )
 
 
+
+def missing_video(job, media: str | None) -> PublishResult | None:
+    """PLAN-162: bài từ video (có material) mà không có link video công khai → không đăng thành bài chỉ chữ."""
+    if media or not getattr(job, "viral_material_id", None):
+        return None
+    return PublishResult(
+        ok=False,
+        is_fatal=True,
+        error=(
+            f"Không có link video cho material #{job.viral_material_id} (file reup mất, hoặc thiếu "
+            "BUFFER_MEDIA_BASE_URL / SECRET_KEY) — không gửi Buffer để tránh bài chỉ có chữ."
+        ),
+        error_code="VALIDATION",
+    )
+
+
 def schedule_mode(job) -> tuple[str, str | None]:
     raw = getattr(job, "schedule_ts", None)
     try:
@@ -168,6 +184,9 @@ class BufferAdapter(AdapterInterface):
             if client is None:
                 return PublishResult(ok=False, error="Kênh chưa gắn với key đang mở.")
             media = public_media_url(job)
+            no_video = missing_video(job, media)
+            if no_video:
+                return no_video
             mode, due_at = schedule_mode(job)
 
             # Resolve service for channel
@@ -294,6 +313,9 @@ class BufferAdapter(AdapterInterface):
             if client is None:
                 return PublishResult(ok=False, error="Kênh chưa gắn với key đang mở.")
             media = public_media_url(job)
+            no_video = missing_video(job, media)
+            if no_video:
+                return no_video
             mode, due_at = schedule_mode(job)
 
             # Resolve service for channel

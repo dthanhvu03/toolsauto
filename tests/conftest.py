@@ -41,6 +41,14 @@ def _khong_gui_telegram_that(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _viral_source_rest_file_tam(monkeypatch, tmp_path):
+    """PLAN-161: trạng thái nghỉ của nguồn ghi vào file tạm, không đụng storage/db/config thật."""
+    import app.config as app_config
+
+    monkeypatch.setattr(app_config, "VIRAL_SOURCE_REST_FILE", tmp_path / "viral_source_rest.json")
+
+
+@pytest.fixture(autouse=True)
 def _buffer_cooldown_file_tam(monkeypatch, tmp_path):
     """Mốc 429 ghi vào file tạm; không để test khóa key thật trong storage/db/config."""
     from app.features.buffer import client as buffer_client

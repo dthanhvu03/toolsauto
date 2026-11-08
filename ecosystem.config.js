@@ -2,6 +2,21 @@
 // All paths are dynamic via __dirname (no hardcoded absolute paths)
 const path = require("path");
 const childProcess = require("child_process");
+const fs = require("fs");
+
+// Đọc một khoá trong .env (file không commit) — dùng cho mật khẩu 9Router, không để bí mật trong file này.
+function envFromDotenv(key) {
+  try {
+    const line = fs
+      .readFileSync(path.join(__dirname, ".env"), "utf8")
+      .split(/\r?\n/)
+      .find((l) => l.startsWith(`${key}=`));
+    return line ? line.slice(key.length + 1).trim().replace(/^["']|["']$/g, "") : "";
+  } catch (e) {
+    return "";
+  }
+}
+const ROUTER_INITIAL_PASSWORD = process.env.NINE_ROUTER_INITIAL_PASSWORD || envFromDotenv("NINE_ROUTER_INITIAL_PASSWORD");
 
 const PROJECT_ROOT = path.resolve(__dirname);
 const VENV_PYTHON = path.join(PROJECT_ROOT, "venv/bin/python");
@@ -11,8 +26,25 @@ try {
   routerPath = childProcess.execSync("which 9router").toString().trim();
 } catch (err) {
   // If which fails (e.g., local environment without 9router yet), use a fallback or keep it empty
-  routerPath = "9router"; 
+  routerPath = "9router";
 }
+
+// 9Router v0.5: chạy thẳng server Next.js (bộ khởi động `9router` có menu + system tray, dưới PM2/WSL
+// server con tự chết). Cần Node ≥ 20 (global File) → Node riêng /opt/node22, Node hệ thống (18) giữ nguyên.
+// Cài riêng ở /opt/9router (npm của Node 22): bản global /usr/local/lib/node_modules kéo theo better-sqlite3
+// build cho Node 18 hệ thống (libnode.so.109) → mở /dashboard là SIGSEGV.
+const ROUTER_OPT = "/opt/9router/node_modules/9router";
+const ROUTER_PKG = fs.existsSync(ROUTER_OPT)
+  ? ROUTER_OPT
+  : fs.existsSync(routerPath) ? path.dirname(fs.realpathSync(routerPath)) : "";
+const ROUTER_APP = path.join(ROUTER_PKG, "app");
+// server.js (không dùng custom-server.js: bản 0.5.112 trên Node 22/WSL bị SIGSEGV vài giây sau khi chạy)
+const ROUTER_SERVER = path.join(ROUTER_APP, "server.js");
+const ROUTER_NODE = fs.existsSync("/opt/node22/bin/node") ? "/opt/node22/bin/node" : "node";
+const ROUTER_NODE_PATH = [
+  path.join(process.env.HOME || "/root", ".9router/runtime/node_modules"),
+  path.join(ROUTER_PKG, "node_modules"),
+].join(path.delimiter);
 
 module.exports = {
   apps: [
@@ -101,9 +133,17 @@ module.exports = {
     },
     {
       name: "9Router_Gateway",
-      script: routerPath,
-      interpreter: "node",
-      cwd: PROJECT_ROOT,
+      script: ROUTER_SERVER,
+      interpreter: ROUTER_NODE,
+      node_args: "--dns-result-order=ipv4first",
+      cwd: ROUTER_APP,
+      env: {
+        PORT: "20128",
+        HOSTNAME: "0.0.0.0",
+        NODE_PATH: ROUTER_NODE_PATH,
+        // Bản 0.5 chặn mật khẩu mặc định khi vào từ xa → đặt mật khẩu ban đầu qua .env (đổi lại được trong Settings).
+        ...(ROUTER_INITIAL_PASSWORD ? { INITIAL_PASSWORD: ROUTER_INITIAL_PASSWORD } : {}),
+      },
       max_restarts: 10,
       min_uptime: 5000,
       restart_delay: 3000,
@@ -131,6 +171,20 @@ module.exports = {
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
+      autorestart: true,
+      max_memory_restart: "1G",
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
+    },
+    {
+      // PLAN-158: quét Threads theo từ khóa + tự reply kéo khách về bot (bật/tắt trên web: growth.enabled)
+      name: "Threads_Growth",
+      script: "app/features/threads/growth/worker.py",
+      interpreter: VENV_PYTHON,
+      cwd: PROJECT_ROOT,
+      kill_timeout: 60000,
+      max_restarts: 10,
+      min_uptime: 30000,
+      restart_delay: 10000,
       autorestart: true,
       max_memory_restart: "1G",
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },

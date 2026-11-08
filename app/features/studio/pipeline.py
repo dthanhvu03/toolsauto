@@ -14,7 +14,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioProject, StudioTask
-from app.features.studio import analyze, caption, compose, dub, fetch, intake, publish, render, review, taskqueue
+from app.features.studio import analyze, caption, compose, doc, dub, fetch, intake, publish, render, review, taskqueue
 from app.features.studio.contracts import ProjectStatus, Stage, StageError, StageResult
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ STAGES: dict[Stage, StageFn] = {
     Stage.FETCH: fetch.run,
     Stage.INTAKE: intake.run,
     Stage.ANALYZE: analyze.run,
+    Stage.DOC_PLAN: doc.run,
     Stage.DUB: dub.run,
     Stage.COMPOSE: compose.run,
     Stage.RENDER: render.run,
@@ -47,6 +48,10 @@ FLOWS: dict[str, list[Stage]] = {
     # nút «Lồng tiếng lại» (PLAN-118): lồng lại rồi dựng dự án mới từ asset đã có
     "redub": [Stage.DUB, Stage.COMPOSE, Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],
     "recompose": [Stage.COMPOSE, Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],  # duyệt tay xong → sang Buffer (P3, cầu nối viral_materials)
+    # ADR-064 Phase 0: MP3 → transcript → beats/shots; dừng ở doc_plan chờ gắn ảnh + quyền.
+    "audio_doc": [Stage.INTAKE, Stage.ANALYZE, Stage.DOC_PLAN],
+    # Chỉ render preview documentary — không caption/Buffer.
+    "doc_preview": [Stage.RENDER],
 }
 
 
@@ -120,6 +125,6 @@ def run_task(db: Session, task: StudioTask) -> StageResult | None:
         if taskqueue.fail(db, task_id, error):
             _mark_project_failed(db, project_id, error)
         return None
-    taskqueue.done(db, task_id, result.note)
+    taskqueue.done(db, task_id, result.note, project_id=result.project_id)
     advance(db, db.get(StudioTask, task_id), result)
     return result

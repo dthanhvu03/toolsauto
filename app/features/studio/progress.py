@@ -30,6 +30,7 @@ DOING = {
 }
 SOURCE = {
     "link": "TikTok", "upload": "Tải lên", "reup": "Reup", "rerender": "Render lại", "recompose": "Đổi mẫu",
+    "audio_doc": "Audio→Doc",
     "redub": "Lồng tiếng lại",
     "publish": "Gửi đăng",
 }

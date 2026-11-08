@@ -36,6 +36,7 @@ from app.features.buffer.cluster_router import router as buffer_cluster
 from app.features.viral_intake import router as viral
 from app.features.viral_intake import intro_router as viral_intros
 from app.features.studio import router as studio
+from app.features.threads.growth import router as threads_growth
 from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
 from app.bootstrap_hooks import register_feature_hooks
@@ -78,6 +79,7 @@ app.include_router(telegram.router)
 app.include_router(viral_intros.router)
 app.include_router(viral.router)
 app.include_router(studio.router)
+app.include_router(threads_growth.router)
 app.include_router(doctype_api.router)
 app.include_router(buffer_media.router)
 app.include_router(buffer_cluster)

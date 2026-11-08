@@ -264,3 +264,94 @@ def test_queue_full_skips_quota_request(db, monkeypatch):
     assert ok is False
     assert "đã kín (10/10 bài)" in msg
     assert calls["n"] == 0
+
+
+def test_post_just_due_still_counts_in_queue(db, monkeypatch):
+    """PLAN-160: bài vừa tới giờ hẹn (Buffer chưa đăng xong) vẫn chiếm chỗ — không gửi CreatePost để bị «10/10»."""
+    calls = {"n": 0}
+
+    def _count(*a, **k):
+        calls["n"] += 1
+        return "Chặn ở bước hỏi suất (test không gọi Buffer)."
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job._quota_block", _count)
+    channel_id = CHANNELS[0]["id"]
+    now = int(time.time())
+    for i in range(9):
+        db.add(Job(platform="buffer", caption=f"cu {i}", target_page=channel_id, schedule_ts=now + 3600 + i * 600,
+                   status=JobStatus.DONE, external_post_id=f"p{i}"))
+    just_due = Job(platform="buffer", caption="vua toi gio", target_page=channel_id, schedule_ts=now - 60,
+                   status=JobStatus.DONE, external_post_id="due")
+    db.add(just_due)
+    mat = ViralMaterial(platform="tiktok", url="https://t/grace", ai_caption="Demo grace")
+    db.add(mat)
+    db.commit()
+
+    ok, msg = schedule_reup(db, mat.id, channel_id, now + 86400)
+    assert ok is False and "đã kín (10/10 bài)" in msg
+    assert calls["n"] == 0
+
+    just_due.schedule_ts = now - 16 * 60  # quá 15 phút → coi như đã đăng, chỗ trống
+    db.commit()
+    ok, msg = schedule_reup(db, mat.id, channel_id, now + 86400)
+    assert ok is False and "hỏi suất" in msg
+    assert calls["n"] == 1
+
+
+def test_queue_full_on_buffer_marks_failed_not_pending(db, monkeypatch):
+    """PLAN-162: Buffer báo 10/10 → FAILED (không PENDING mồ côi chặn video); gọi lại vẫn xếp được."""
+    replies = [
+        PublishResult(ok=False, error="Scheduled posts limit reached. You have 10 scheduled posts out of 10 allowed."),
+        PublishResult(ok=True, external_post_id="buf_ok"),
+    ]
+
+    class Fake:
+        def publish(self, job):
+            return replies.pop(0)
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job.BufferAdapter", Fake)
+    mat = ViralMaterial(platform="tiktok", url="https://t/full10", ai_caption="Câu")
+    db.add(mat)
+    db.commit()
+
+    ok, msg = queue_reup(db, mat.id, CHANNELS[0]["id"])
+    assert ok is False and "10/10" in msg
+    job = db.query(Job).one()
+    assert job.status == JobStatus.FAILED and job.finished_at
+
+    ok2, _ = queue_reup(db, mat.id, CHANNELS[0]["id"])
+    assert ok2 is True
+    assert db.query(Job).filter(Job.status == JobStatus.DONE).count() == 1
+
+
+def test_stuck_running_job_expires_and_does_not_block_sweep(db, monkeypatch):
+    """PLAN-162: job RUNNING kẹt (tiến trình chết) quá 30 phút → FAILED; RUNNING mới thì không bị gỡ."""
+    from app.features.buffer import queue_job
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    channel_id = CHANNELS[0]["id"]
+    now = int(time.time())
+    stuck_mat = ViralMaterial(platform="tiktok", url="https://t/stuck", ai_caption="Câu", target_page=channel_id,
+                              status="READY")
+    fresh_mat = ViralMaterial(platform="tiktok", url="https://t/fresh", ai_caption="Câu", target_page=channel_id,
+                              status="READY")
+    db.add_all([stuck_mat, fresh_mat])
+    db.commit()
+    stuck = Job(platform="buffer", caption="x", viral_material_id=stuck_mat.id, target_page=channel_id,
+                status=JobStatus.RUNNING, created_at=now - 31 * 60)
+    fresh = Job(platform="buffer", caption="x", viral_material_id=fresh_mat.id, target_page=channel_id,
+                status=JobStatus.RUNNING, created_at=now - 60)
+    db.add_all([stuck, fresh])
+    db.commit()
+
+    queue_job._expire_stuck_running(db, stuck_mat.id, channel_id)
+    queue_job._expire_stuck_running(db, fresh_mat.id, channel_id)
+    db.refresh(stuck)
+    db.refresh(fresh)
+    assert stuck.status == JobStatus.FAILED and "Kẹt RUNNING" in stuck.last_error
+    assert fresh.status == JobStatus.RUNNING
+
+    ok, msg = queue_job.auto_schedule_ready(db, fresh_mat.id)
+    assert ok is False and "Đang xếp lịch" in msg  # không được đếm là «đã xếp»

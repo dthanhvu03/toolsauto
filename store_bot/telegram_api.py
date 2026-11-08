@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as jsonlib
 import logging
+import threading
 
 import requests
 
@@ -17,11 +18,20 @@ class TelegramApi:
         self._base = f"https://api.telegram.org/bot{token}"
         self._file_base = f"https://api.telegram.org/file/bot{token}"
         self._timeout = timeout
+        # Giữ kết nối HTTPS tới Telegram (mỗi luồng 1 Session): mở mới mỗi lần mất ~0,5s cho DNS + TCP + TLS.
+        self._local = threading.local()
+
+    @property
+    def _http(self) -> requests.Session:
+        session = getattr(self._local, "session", None)
+        if session is None:
+            session = self._local.session = requests.Session()
+        return session
 
     def _call(self, method: str, *, json: dict | None = None, data: dict | None = None,
               files: dict | None = None) -> dict | list | bool | None:
         try:
-            response = requests.post(f"{self._base}/{method}", json=json, data=data, files=files,
+            response = self._http.post(f"{self._base}/{method}", json=json, data=data, files=files,
                                      timeout=self._timeout)
         except requests.RequestException as exc:
             logger.error("[Store] %s network error: %s", method, type(exc).__name__)
@@ -46,7 +56,7 @@ class TelegramApi:
 
     def get_updates(self, offset: int) -> list[dict]:
         """Lỗi mạng ném lên để vòng lặp nghỉ rồi thử lại."""
-        response = requests.get(
+        response = self._http.get(
             f"{self._base}/getUpdates",
             params={"offset": offset, "timeout": 30, "allowed_updates": '["message","callback_query"]'},
             timeout=self._timeout,
@@ -81,7 +91,7 @@ class TelegramApi:
         if reply_markup:
             body["reply_markup"] = reply_markup
         try:
-            response = requests.post(f"{self._base}/sendMessage", json=body, timeout=self._timeout)
+            response = self._http.post(f"{self._base}/sendMessage", json=body, timeout=self._timeout)
         except requests.RequestException as exc:
             logger.warning("[Store] broadcast network error: %s", type(exc).__name__)
             return "error", 0
@@ -130,7 +140,7 @@ class TelegramApi:
         if int(info.get("file_size") or 0) > max_bytes:
             return None
         try:
-            response = requests.get(f"{self._file_base}/{info['file_path']}", timeout=self._timeout)
+            response = self._http.get(f"{self._file_base}/{info['file_path']}", timeout=self._timeout)
             response.raise_for_status()
         except requests.RequestException as exc:
             logger.error("[Store] download file error: %s", type(exc).__name__)

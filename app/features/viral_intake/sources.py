@@ -10,6 +10,8 @@ video đạt ``min_views`` được ghi thành ``ViralMaterial(NEW, scraped_by_a
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import logging
 import random
@@ -22,9 +24,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.config as config
-from app.constants import ViralStatus
+from app.core.notifier.service import NotifierService
+from app.constants import JobStatus, ViralStatus
 from app.core import settings as runtime_settings
-from app.core.database.models import ViralMaterial, ViralSource
+from app.core.database.models import Job, ViralMaterial, ViralSource
 from app.core.database.models.base import now_ts
 from app.core.yt_dlp_path import impersonate_args, yt_dlp_cmd
 from app.features.viral_intake.intake import normalize_source_url
@@ -41,6 +44,15 @@ SCAN_TIMEOUT_SEC = 90
 RESOLVE_TIMEOUT_SEC = 60
 MAX_VIDEOS_CAP = 500
 _ERROR_MAX_LEN = 300  # đủ chỗ cho câu dịch + bản yt-dlp + lệnh sửa
+
+# PLAN-161: nguồn quét thành công mà không ra video mới N lần liền → coi là cạn, tự nghỉ rồi tự thử lại.
+EMPTY_SCANS_TO_REST = 3
+REST_HOURS = 24
+# PLAN-164: kênh còn dưới LOW_READY video chưa hẹn và không còn nguồn nào đang quét → tự bật lại một nguồn đang tắt.
+LOW_READY = 5
+REVIVE_MIN_OFF_SEC = 24 * 3600  # chủ bot vừa tắt (< 24 giờ) thì không bật lại
+REVIVE_COOLDOWN_SEC = 7 * 24 * 3600  # mỗi nguồn tự bật tối đa 1 lần / 7 ngày
+ACTIVE_PAGE_DAYS = 14  # chỉ lo cho kênh còn đăng Buffer gần đây (kênh đã bỏ thì không bật nguồn)
 
 # ADR-028: TikTok trả trang kênh thiếu dữ liệu với một số tài khoản; yt-dlp báo đúng câu này
 # và gợi ý dùng `tiktokuser:<channel_id>`. CẢNH BÁO: cùng thông báo này cũng nổ khi channel_id
@@ -292,6 +304,164 @@ def _resolve_tiktok_user_from_video(video_url: str) -> tuple[tuple[str, str, str
     if not handle:
         handle = channel_id[:24]
     return ("tiktok", f"tiktokuser:{channel_id}", handle), ""
+
+
+
+def _load_rest_state() -> dict[str, dict]:
+    """Trạng thái nghỉ của nguồn, khoá = id nguồn (chuỗi). Hỏng / chưa có file → rỗng."""
+    try:
+        with open(config.VIRAL_SOURCE_REST_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_rest_state(state: dict[str, dict]) -> None:
+    try:
+        config.VIRAL_SOURCE_REST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = config.VIRAL_SOURCE_REST_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(config.VIRAL_SOURCE_REST_FILE)
+    except OSError as exc:
+        logger.warning("[VIRAL_SOURCES] Không ghi được trạng thái nghỉ: %s", exc)
+
+
+@contextlib.contextmanager
+def _rest_state_locked():
+    """Đọc → sửa → ghi trạng thái nghỉ dưới khoá file: Maintenance và web (quét tay) có thể quét cùng lúc."""
+    lock_path = config.VIRAL_SOURCE_REST_FILE.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            state = _load_rest_state()
+            yield state
+            _save_rest_state(state)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _rest_entry(state: dict[str, dict], src: ViralSource) -> dict:
+    """Mục trạng thái của nguồn; bỏ qua mục cũ nếu nguồn đã đổi URL (hoặc id bị dùng lại)."""
+    entry = state.get(str(src.id)) or {}
+    return entry if entry.get("url") == src.url else {}
+
+
+def _page_names() -> dict[str, str]:
+    data = runtime_settings.get_json("BUFFER_CHANNELS") or []
+    return {
+        str(item["id"]).strip(): str(item.get("name") or item["id"]).strip()
+        for item in data
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+
+
+def _notify(message: str) -> None:
+    try:
+        NotifierService._broadcast(message)
+    except Exception as exc:  # tin báo hỏng không được làm hỏng vòng quét
+        logger.warning("[VIRAL_SOURCES] Gửi Telegram lỗi: %s", exc)
+
+
+def _note_scan_result(db: Session, src: ViralSource, found: int, error: str | None, now: int) -> None:
+    """PLAN-161: cập nhật chuỗi lần quét rỗng; đủ ngưỡng thì cho nguồn nghỉ và báo một lần."""
+    if error:
+        return  # lỗi quét không phải dấu hiệu nguồn cạn
+    with _rest_state_locked() as state:
+        _apply_scan_result(db, state, src, found, now)
+
+
+def _apply_scan_result(db: Session, state: dict[str, dict], src: ViralSource, found: int, now: int) -> None:
+    key = str(src.id)
+    name = src.handle or src.url
+    entry = _rest_entry(state, src)
+    if found > 0:
+        if entry.get("notified"):
+            _notify(f"🔔 Nguồn @{name} có lại {found} video mới — quét bình thường trở lại.")
+            logger.info("[VIRAL_SOURCES] Nguồn %s có lại video (+%d), hết nghỉ", name, found)
+        state.pop(key, None)
+        return
+    streak = int(entry.get("empty_streak") or 0) + 1
+    entry["empty_streak"] = streak
+    entry["url"] = src.url
+    if streak >= EMPTY_SCANS_TO_REST:
+        entry["rest_until"] = now + REST_HOURS * 3600
+        logger.info(
+            "[VIRAL_SOURCES] Nguồn %s cạn (%d lần quét liền không có video mới) — nghỉ %d giờ",
+            name, streak, REST_HOURS,
+        )
+        if not entry.get("notified"):
+            ready = SourceService._ready_by_page(db)
+            names = _page_names()
+            pages = "\n".join(
+                f"• {names.get(p, p)}: còn {ready.get(p, 0)} video chưa hẹn" for p in src.target_pages_list if p
+            )
+            _notify(
+                f"🔕 Nguồn @{name} hết video mới ({streak} lần quét liền) — bot tự nghỉ, "
+                f"{REST_HOURS} giờ sau tự thử lại.\n{pages}\nKênh sắp hết bài thì cần thêm nguồn mới."
+            )
+            entry["notified"] = True
+    state[key] = entry
+
+
+
+def _revive_sources_for_starving_pages(db: Session, now: int) -> list[int]:
+    """PLAN-164: kênh thiếu bài mà không còn nguồn nào đang quét → bật lại một nguồn đang tắt của kênh đó.
+
+    Trả danh sách id nguồn vừa bật. Mỗi kênh tối đa một nguồn mỗi vòng.
+    """
+    all_sources = db.query(ViralSource).order_by(
+        ViralSource.last_scanned_at.asc().nullsfirst(), ViralSource.id.asc()
+    ).all()
+    if not all_sources:
+        return []
+    rest = _load_rest_state()
+    ready = SourceService._ready_by_page(db)
+
+    def awake(src: ViralSource) -> bool:
+        return src.enabled and int(_rest_entry(rest, src).get("rest_until") or 0) <= now
+
+    active_pages = {
+        page for (page,) in db.query(Job.target_page)
+        .filter(Job.platform == "buffer", Job.created_at >= now - ACTIVE_PAGE_DAYS * 86400)
+        .distinct()
+        if page
+    }
+    pages = {p for src in all_sources for p in src.target_pages_list if p and p in active_pages}
+    starving = sorted(
+        p for p in pages
+        if ready.get(p, 0) < LOW_READY
+        and not any(awake(src) and p in src.target_pages_list for src in all_sources)
+    )
+    if not starving:
+        return []
+
+    revived: list[int] = []
+    names = _page_names()
+    with _rest_state_locked() as state:
+        for page in starving:
+            for src in all_sources:
+                if src.enabled or page not in src.target_pages_list or src.id in revived:
+                    continue
+                if now - int(src.updated_at or 0) < REVIVE_MIN_OFF_SEC:
+                    continue  # chủ bot vừa tắt — để yên
+                mark = state.get(f"revive:{src.id}") or {}
+                if now - int(mark.get("at") or 0) < REVIVE_COOLDOWN_SEC:
+                    continue
+                src.enabled = True
+                db.commit()
+                state[f"revive:{src.id}"] = {"at": now, "page": page, "url": src.url}
+                state.pop(str(src.id), None)  # bắt đầu lại chuỗi quét rỗng từ 0
+                revived.append(src.id)
+                name = src.handle or src.url
+                logger.info("[VIRAL_SOURCES] Kênh %s thiếu bài (%d) → tự bật lại nguồn %s", page[-6:], ready.get(page, 0), name)
+                _notify(
+                    f"🔌 Kênh {names.get(page, page)} còn {ready.get(page, 0)} video chưa hẹn, không còn nguồn nào đang quét "
+                    f"→ bot tự bật lại nguồn @{name}. Không muốn dùng nguồn này thì xoá nguồn."
+                )
+                break
+    return revived
 
 
 class SourceService:
@@ -640,9 +810,24 @@ class SourceService:
 
     @staticmethod
     def _ready_by_page(db: Session) -> dict[str, int]:
+        """Video READY chưa hẹn Buffer. Video đã hẹn vẫn READY khi sync «đã đăng» tắt, nên phải bỏ ra (PLAN-160)."""
+        scheduled = (
+            db.query(Job.id)
+            .filter(
+                Job.platform == "buffer",
+                Job.status == JobStatus.DONE,
+                Job.viral_material_id == ViralMaterial.id,
+                Job.target_page == ViralMaterial.target_page,
+            )
+            .exists()
+        )
         rows = (
             db.query(ViralMaterial.target_page, func.count(ViralMaterial.id))
-            .filter(ViralMaterial.status == ViralStatus.READY, ViralMaterial.target_page.isnot(None))
+            .filter(
+                ViralMaterial.status == ViralStatus.READY,
+                ViralMaterial.target_page.isnot(None),
+                ~scheduled,
+            )
             .group_by(ViralMaterial.target_page)
             .all()
         )
@@ -653,15 +838,33 @@ class SourceService:
         """Quét mọi nguồn ``enabled`` (``only_due``: bỏ nguồn quét chưa quá ``viral.source_scan_interval_min``)."""
         interval_sec = max(1, _setting_int(db, "viral.source_scan_interval_min", 60)) * 60
         now = int(now_ts())
+        revived: list[int] = []
+        if only_due:
+            try:
+                revived = _revive_sources_for_starving_pages(db, now)
+            except Exception:  # tự bật nguồn hỏng không được dừng vòng quét
+                db.rollback()
+                logger.exception("[VIRAL_SOURCES] Tự bật lại nguồn lỗi")
         sources = (
             db.query(ViralSource)
             .filter(ViralSource.enabled == True)  # noqa: E712
             .order_by(ViralSource.last_scanned_at.asc().nullsfirst(), ViralSource.id.asc())
             .all()
         )
-        summary = {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0}
+        summary = {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0, "resting": 0,
+                   "revived": len(revived)}
+        rest = _load_rest_state()
         if only_due:
             sources = [s for s in sources if not s.last_scanned_at or now - int(s.last_scanned_at) >= interval_sec]
+            # PLAN-161: nguồn cạn đang nghỉ thì chờ tới hạn rồi tự thử lại.
+            awake = []
+            for src in sources:
+                until = int(_rest_entry(rest, src).get("rest_until") or 0)
+                if until > now:
+                    summary["resting"] += 1
+                    continue
+                awake.append(src)
+            sources = awake
             # PLAN-071: page đủ video chờ đăng thì quét thêm chỉ để video quá hạn bị dọn.
             enough = max(0, _setting_int(db, "viral.source_skip_ready_per_page", 15))
             if enough and sources:
@@ -694,4 +897,9 @@ class SourceService:
             summary["scanned"] += 1
             if error:
                 summary["errors"] += 1
+            try:
+                _note_scan_result(db, src, found, error, int(now_ts()))
+            except Exception:  # trạng thái nghỉ hỏng không được dừng vòng quét các nguồn còn lại
+                db.rollback()
+                logger.exception("[VIRAL_SOURCES] Ghi trạng thái nghỉ nguồn #%s lỗi", src.id)
         return summary

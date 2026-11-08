@@ -94,6 +94,46 @@ def _fit_chain(src: str, out: str, i: int, spec: ProjectSpec) -> str:
     )
 
 
+_MOTIONS = ("slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right")
+
+
+def _ken_burns(src: str, out: str, i: int, spec: ProjectSpec, dur: float) -> str:
+    """
+    ADR-064: pan/zoom nhẹ trên ảnh tĩnh. Video hoặc motion=static → ``_fit_chain``.
+    Ảnh vào là ``-loop`` theo fps nên ``d=1`` (1 frame vào → 1 frame ra), chuyển động tính theo ``on``.
+    ``d=<số frame>`` trên ảnh lặp ra frames² frame; trên ảnh 1 frame thì zoompan đẩy sẵn cả clip vào
+    hàng chờ concat (~300 MB / clip 1080p — WSL hết RAM 05/11).
+    """
+    motion = spec.clips[i].motion
+    if motion not in _MOTIONS:
+        return _fit_chain(src, out, i, spec)
+    c, kb = spec.canvas, spec.motion
+    frames = max(1, int(round(dur * c.fps)))
+    # Phóng ảnh lên ``upscale`` × khung rồi zoompan để tránh vỡ pixel khi zoom (số chẵn cho yuv420p).
+    sw, sh = (int(round(c.w * kb.upscale / 2)) * 2, int(round(c.h * kb.upscale / 2)) * 2)
+    step, top, pan = f"{kb.zoom_per_sec / c.fps:.6g}", f"{kb.zoom_max:.6g}", f"{kb.pan_zoom:.6g}"
+    if motion == "slow_zoom_in":
+        z, x, y = f"min(1+{step}*on,{top})", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    elif motion == "slow_zoom_out":
+        z, x, y = f"if(eq(on,1),{top},max({top}-{step}*on,1))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    elif motion == "pan_left":
+        z = pan
+        x = f"(iw-iw/zoom)*(1-on/{frames})"
+        y = "ih/2-(ih/zoom/2)"
+    else:  # pan_right
+        z = pan
+        x = f"(iw-iw/zoom)*(on/{frames})"
+        y = "ih/2-(ih/zoom/2)"
+    flip = ""
+    if spec.clips[i].hflip:
+        flip, src = f"[{src}]hflip[hf{i}];", f"hf{i}"
+    return (
+        f"{flip}[{src}]scale={sw}:{sh}:force_original_aspect_ratio=increase,crop={sw}:{sh},"
+        f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={c.w}x{c.h}:fps={c.fps},"
+        f"format=yuv420p,setsar=1[{out}]"
+    )
+
+
 def build(
     spec: ProjectSpec,
     media: dict[int, Media],
@@ -124,9 +164,10 @@ def build(
         dur = end - start
         if m.kind == "image":
             inputs += ["-loop", "1", "-framerate", str(spec.canvas.fps), "-t", _num(dur), "-i", m.path]
+            graph.append(_ken_burns(f"{n_in}:v", f"v{i}", i, spec, dur))
         else:
             inputs += ["-ss", _num(start), "-t", _num(dur), "-i", m.path]
-        graph.append(_fit_chain(f"{n_in}:v", f"v{i}", i, spec))
+            graph.append(_fit_chain(f"{n_in}:v", f"v{i}", i, spec))
         own_audio = m.has_audio and m.kind == "video" and spec.audio.original > 0
         n_in += 1
         subs = spec.clips[i].audio

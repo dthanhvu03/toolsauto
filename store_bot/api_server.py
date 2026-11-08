@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import hmac
 import logging
+from concurrent.futures import Executor, ThreadPoolExecutor
 
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from store_bot import messages as msg
 from store_bot.bot import StoreBot
@@ -35,13 +37,15 @@ ERROR_STATUS = {
     "product_not_found": 404,
     "product_inactive": 409,
     "out_of_stock": 409,
+    "shop_closed": 503,  # giờ nghỉ / admin đóng shop: thử lại sau
 }
 
 
 class OrderRequest(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
-    request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    # Bắt buộc: mạng chập đại lý gọi lại cùng request_id thì nhận lại đơn cũ, không bị trừ tiền 2 lần.
+    request_id: str = Field(min_length=1, max_length=64)
 
 
 def _order_json(order: Order) -> dict:
@@ -58,13 +62,16 @@ def _order_json(order: Order) -> dict:
         "replayed": order.replayed,
         "status": order.status,
         "refunded": order.refunded,
+        "upstream_order_id": order.upstream_order_id,
     }
 
 
 def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
-               fulfiller: Fulfiller | None = None) -> FastAPI:
+               fulfiller: Fulfiller | None = None, executor: Executor | None = None) -> FastAPI:
     app = FastAPI(title=f"{settings.shop_name} API", docs_url="/docs", redoc_url=None)
-    notifier = StoreBot(settings, repo, telegram, bot_username="", fulfiller=fulfiller)
+    notifier = StoreBot(settings, repo, telegram, bot_username="", fulfiller=fulfiller, executor=executor)
+    # Việc chạy sau khi đã trả lời SePay (gửi Telegram, tự mua): SePay chỉ chờ 30 giây, mỗi tin Telegram ~0,2–0,7s.
+    background = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="sepay")
 
     @app.exception_handler(StoreError)
     def _store_error(_: Request, exc: StoreError) -> JSONResponse:
@@ -118,12 +125,18 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
     def create_order(body: OrderRequest, key: ApiKey = Depends(current_key)):
         if body.quantity > settings.max_order_quantity:
             raise StoreError("bad_quantity", max=settings.max_order_quantity)
+        status = notifier.shop_status()
+        if status.closed and not repo.has_order_ref(key.user_id, f"api:{body.request_id}"):
+            raise StoreError("shop_closed", reopen=status.reopen)  # gọi lại đơn cũ (cùng request_id) vẫn trả đơn
         order = repo.buy(
             key.user_id, body.product_id, body.quantity,
-            client_ref=f"api:{body.request_id}" if body.request_id else None,
+            client_ref=f"api:{body.request_id}",
             discount_bps=key.discount_bps, source="api", api_key_id=key.id,
         )
-        if order.status == "pending":
+        if order.status == "pending" and order.waiting_funds:
+            if not order.replayed:  # ví FatCat thiếu: đơn chờ admin nạp ví, đại lý hỏi lại GET /orders/{id}
+                notifier.on_waiting_funds(order, repo.get_user(key.user_id), None, None)
+        elif order.status == "pending":
             # Đơn hàng FatCat (mới, hoặc gọi lại khi đang chờ): thử lấy hàng ngay trong lượt gọi này.
             order, result, newly = notifier.fulfiller.attempt(order.id)
             if newly:
@@ -159,8 +172,15 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         given = request.headers.get("authorization") or ""
         if not expected or not hmac.compare_digest(given.encode(), f"Apikey {expected}".encode()):
             raise HTTPException(status_code=401, detail="unauthorized")
-        payload = await request.json()
-        if payload.get("transferType") != "in":
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="bad json") from None
+        # Phần dưới gọi SQLite + Telegram (chặn tới 35 giây/tin): chạy ở luồng riêng để không đứng cả server API.
+        return await run_in_threadpool(_credit_transfer, payload)
+
+    def _credit_transfer(payload: dict) -> dict:
+        if not isinstance(payload, dict) or payload.get("transferType") != "in":
             return {"success": True}
         amount = int(payload.get("transferAmount") or 0)
         content = str(payload.get("content") or payload.get("description") or "")
@@ -168,14 +188,24 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         if amount <= 0 or repo.bank_ref_seen(bank_ref):
             return {"success": True}
         topup = repo.find_topup_in_text(content)
-        if topup is None or topup.status != "pending":
-            notifier.notify_admins(msg.admin_unmatched_transfer(amount, content))
+        newly = False
+        if topup is not None:
+            topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
+        if not newly:  # không có mã / mã đã trả / admin đã huỷ → anh xử lý tay
+            background.submit(notifier.notify_admins, msg.admin_unmatched_transfer(amount, content))
             return {"success": True}
-        topup, balance, newly = repo.confirm_topup(topup.id, "sepay", credited=amount, bank_ref=bank_ref)
-        if newly:
-            notifier.on_topup_credited(topup, balance)
-            notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
+        # Tiền đã ghi DB: trả lời SePay NGAY, báo khách / tự mua / báo admin chạy sau (trước đây làm xong mới trả lời,
+        # đo thật ~6,9 giây). SePay gửi lại cũng không cộng nữa (bank_ref).
+        background.submit(_after_credit, topup, balance, amount)
         return {"success": True}
+
+    def _after_credit(topup, balance: int, amount: int) -> None:
+        try:
+            notifier.on_topup_credited(topup, balance)
+        except Exception:
+            logger.exception("[Store] SePay: xử lý sau khi cộng nạp #%s lỗi", topup.id)
+            notifier.notify_admins(msg.admin_after_credit_failed(topup))
+        notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
 
     return app
 

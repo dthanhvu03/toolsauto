@@ -17,6 +17,7 @@ PM2_SAFE_NAMES: frozenset[str] = frozenset({
     "Threads_AutoReply",
     "Threads_NewsWorker",
     "Threads_Publisher",
+    "Threads_Growth",  # PLAN-158 kéo khách về bot
     # Studio (ADR-061) + sao lưu DB — trước PLAN-115 thiếu nên trang Panel không điều khiển được
     "Studio_Heavy",
     "Studio_Light",
@@ -39,6 +40,7 @@ PM2_LOG_MAP: dict[str, dict[str, str]] = {
     "Threads_Publisher": {"out": "Threads-Publisher-out.log", "error": "Threads-Publisher-error.log"},
     "Threads_NewsWorker": {"out": "Threads-NewsWorker-out.log", "error": "Threads-NewsWorker-error.log"},
     "Threads_AutoReply": {"out": "Threads-AutoReply-out.log", "error": "Threads-AutoReply-error.log"},
+    "Threads_Growth": {"out": "Threads-Growth-out.log", "error": "Threads-Growth-error.log"},
     "Studio_Heavy": {"out": "Studio-Heavy-out.log", "error": "Studio-Heavy-error.log"},
     "Studio_Light": {"out": "Studio-Light-out.log", "error": "Studio-Light-error.log"},
     "VieNeu_TTS": {"out": "VieNeu-TTS-out.log", "error": "VieNeu-TTS-error.log"},
@@ -65,6 +67,26 @@ APP_INFO: dict[str, dict] = {
                    "if_stopped": "Lồng tiếng tự dùng giọng edge-tts; bật lại mất ~1 phút nạp model", "can_stop": True},
     "9Router_Gateway": {"label": "Cổng AI (9Router)", "role": "Cổng gọi AI (caption, dịch, viết nội dung)",
                         "if_stopped": "Caption AI / dịch có thể lỗi hoặc đổi sang đường dự phòng", "can_stop": True},
+    "Threads_Growth": {"label": "Threads · kéo khách", "role": "Quét Threads theo từ khóa, tự reply kéo khách về 2 bot",
+                       "if_stopped": "Không quét / reply nữa; bài đã duyệt nằm chờ tới khi bật lại", "can_stop": True},
     "DB_Backup": {"label": "Sao lưu DB", "role": "3 giờ sáng tự sao lưu Postgres (giữ 14 bản) rồi dừng",
                   "if_stopped": "«Đã dừng» là bình thường; bấm Bật = sao lưu ngay một bản", "can_stop": True},
+}
+
+
+# Bot chạy bằng systemd (không qua PM2) — Panel hệ thống chỉ XEM trạng thái, không bật / tắt từ web
+# (chủ bot tự restart: `systemctl restart cashback-bot cashback-zalo`, `systemctl restart store-bot store-api`).
+SYSTEMD_SERVICES: dict[str, dict] = {
+    "cashback-bot": {"label": "Cashback · Telegram", "group": "Bot Cashback (@zt_shopee_bot)",
+                     "role": "Bot hoàn tiền Shopee / TikTok trên Telegram",
+                     "manage": "systemctl restart cashback-bot cashback-zalo"},
+    "cashback-zalo": {"label": "Cashback · Zalo", "group": "Bot Cashback (@zt_shopee_bot)",
+                      "role": "Kênh Zalo của bot hoàn tiền",
+                      "manage": "systemctl restart cashback-bot cashback-zalo"},
+    "store-bot": {"label": "AI Pass Store · Telegram", "group": "Bot AI Pass Store (@aipass_shop_bot)",
+                  "role": "Bot bán tài khoản AI trên Telegram",
+                  "manage": "systemctl restart store-bot store-api"},
+    "store-api": {"label": "AI Pass Store · API", "group": "Bot AI Pass Store (@aipass_shop_bot)",
+                  "role": "API đại lý + webhook nạp tiền",
+                  "manage": "systemctl restart store-bot store-api"},
 }

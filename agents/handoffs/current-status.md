@@ -1,3 +1,353 @@
+## Phiên 2026-11-08 (PLAN-164) — Kênh hết bài tự bật lại nguồn đang tắt (chủ bot yêu cầu)
+- `sources._revive_sources_for_starving_pages` mỗi vòng scan_all: kênh còn đăng Buffer 14 ngày, < 5 video chưa hẹn, không còn
+  nguồn đang bật + thức → bật 1 nguồn tắt (tắt ≥ 24h, mỗi nguồn ≤ 1 lần/7 ngày), báo Telegram 🔌. Proof PLAN-164 (114 test).
+- Mô phỏng thật: sẽ bật `nnpt2310` cho Sống Nhẹ. trnvp89 hết nguồn → cần chủ bot thêm nguồn. Kéo khách Threads: AI đọc bài
+  qua 9Router OK (không còn «9Router failed»), đang loại đúng bài người bán.
+- **Cần chủ bot:** `pm2 restart Maintenance`. Chưa commit (PLAN-160 → 164).
+
+## Phiên 2026-11-08 (9router-key) — App gọi 9Router bằng key cũ (401 → circuit_open) → đồng bộ key + model
+- `storage/db/config/9router_config.json`: api_key cũ không có trong 9Router (sau nâng 0.5) → thay bằng key trong 9Router DB
+  (sao lưu file cũ ở scratchpad); default_model `ollama/kimi-k2.5` → `ag/gemini-3.8-flash` (9Router có 4 provider antigravity,
+  32 model, 0 combo). `pipeline.test_connection` OK 5,4 s. `.env` không có OPENROUTER_API_KEY (nguồn lỗi `no_api_key`).
+- Config chỉ nạp lúc khởi động (hoặc lưu qua Panel) → **cần chủ bot:** `pm2 restart Maintenance Web_Dashboard Threads_Growth Studio_Heavy Studio_Light`.
+
+## Phiên 2026-11-08 (9router-login) — Không đăng nhập được dashboard 9Router từ xa
+- 9Router 0.5: chưa đặt mật khẩu → dùng mặc định 123456 nhưng chặn truy cập «remote» (403 «Default password must be changed
+  before remote access»). Sửa: `ecosystem.config.js` đọc `NINE_ROUTER_INITIAL_PASSWORD` từ `.env` (không commit) → env
+  `INITIAL_PASSWORD` cho 9Router_Gateway. Đã thêm khoá vào `.env` (mật khẩu ngẫu nhiên đã báo chủ bot).
+- **Cần chủ bot:** `pm2 restart ecosystem.config.js --only 9Router_Gateway --update-env && pm2 save`, đăng nhập, đổi mật khẩu
+  trong Settings nếu muốn. Chưa commit.
+
+## Phiên 2026-11-07 (PLAN-163) — Kéo khách Threads: AI đọc tâm lý / nhu cầu từng bài (chủ bot yêu cầu)
+- Lọc người bán bằng từ khoá (không gọi AI) → AI đọc JSON (người bán?, ý định, cảm xúc, nhu cầu, giai đoạn, băn khoăn, chữ của
+  họ, góc nói, buy_score) → điểm = buy_score; người bán / < 40 → rejected; reply viết theo bản đọc; hàng chờ xếp theo điểm.
+  AI đọc lỗi → không tự đăng. `growth.auto_post_min_relevance` = 60.
+- Lọc lại 114 bài chờ: 111 bỏ (97 người bán), còn 2 approved + 1 pending. Proof PLAN-163 (62 test qua). Chưa commit.
+- **Cần chủ bot:** `pm2 restart Threads_Growth Web_Dashboard`, rồi bật lại kéo khách.
+
+## Phiên 2026-11-07 (threads-cookie) — Đăng nhập lại @us28qt bằng cookie Chrome Windows: OK
+- Mở Chrome Windows `--remote-debugging-port=9222 --user-data-dir=C:\toolsauto_threads` → chủ bot khôi phục + đăng nhập →
+  `C:\toolsauto_tmp\dump_cookies.ps1` (PowerShell, CDP Storage.getCookies, chỉ giữ threads/instagram) → 6 cookie có sessionid
+  → `import_threads_cookies.py --delete`: «ĐĂNG NHẬP OK» (về threads.com/, thấy a[href^="/@"]). File cookie đã xoá; Chrome
+  debug đã đóng (cổng 9222 đóng). Account 52 = ACTIVE. Đã tắt msrdc.exe cũ để đóng cửa sổ ma WSLg.
+- Giữ lại để dùng lần sau: profile `C:\toolsauto_threads` (còn phiên đăng nhập) + `C:\toolsauto_tmp\dump_cookies.ps1`.
+- `growth.enabled` vẫn False; giới hạn 25/ngày, 5/giờ. **Next:** chủ bot bật lại kéo khách; chọn a/b/c (lọc điểm ≥60 + độ
+  phủ ≥5 · dồn suất AI Pass Store · mã riêng từng reply).
+
+## Phiên 2026-11-07 (threads-novnc) — Đăng nhập Threads qua màn hình ảo (cửa sổ WSLg trong suốt)
+- Dựng tạm: `Xvfb :99` + `x11vnc -localhost :5999` (phải bỏ WAYLAND_DISPLAY) + `websockify 127.0.0.1:6080` (noVNC).
+  Cửa sổ đăng nhập (`start_login`, DISPLAY=:99) mở tại http://localhost:6080/vnc.html — chỉ nghe 127.0.0.1.
+- 18:5x VN: chủ bot chọn cách cookie Chrome Windows (như Shopee) → đã tắt Xvfb/x11vnc/websockify + cửa sổ đăng nhập.
+  Script mới `app/scripts/import_threads_cookies.py <file.json> --delete` (JSON J2TEAM / Cookie-Editor, chỉ giữ cookie
+  threads/instagram, nạp vào instagram_5, kiểm phiên chạy ngầm). Test 8 passed, ruff sạch.
+- (cũ) **Next:** chủ bot khôi phục + đăng nhập xong → tắt 3 tiến trình tạm (`pkill -f "Xvfb :99"; pkill x11vnc; pkill -f "websockify --web"`).
+  Muốn nút web luôn dùng màn ảo: đặt `THREADS_GROWTH_DISPLAY=:99` (cần màn ảo chạy thường trực — chưa làm).
+
+## Phiên 2026-11-07 (threads-relogin) — @us28qt bị khoá «possible hack», mở lại cửa sổ đăng nhập + hạ giới hạn (chủ bot yêu cầu)
+- Ảnh chụp trong trình duyệt: «We locked your account… Choose a way to recover» (mã gửi email v*******3@gmail.com). Cửa sổ
+  WSLg lần 18:25 hiện trong suốt; thử `--ozone-platform=wayland` thì treo → bỏ. Đã xoá SingletonLock hỏng của instagram_5.
+- Chủ bot yêu cầu «hạn chế cp»: `growth.max_replies_per_day` 200→25, `max_replies_per_hour` 60→5, `followup_max_per_day`
+  100→15 (updated_by=claude_code_owner_request). `growth.enabled` vẫn False.
+- 18:4x VN mở lại cửa sổ đăng nhập (`start_login`) cho chủ bot khôi phục + đăng nhập.
+- **Next:** chủ bot khôi phục xong → cửa sổ tự đóng (LOGIN_OK chỉ khi hết trang xác minh) → bật lại kéo khách.
+
+## Phiên 2026-11-07 (threads-login) — Sửa nút «Đăng nhập Threads» tự đóng ở trang xác minh (chủ bot báo lỗi UI)
+- Nguyên nhân: `app/scripts/login_browser.py` (threads) coi «URL không có /login + có cookie sessionid» là xong → trang
+  `auth_platform/challengepicker` (cookie cũ còn) bị báo LOGIN_OK, cửa sổ đóng sau 2 giây, tài khoản ghi ACTIVE (log 18:20,
+  18:21 VN). Sửa: `threads_login_ok` = có cookie + ở Threads + không dính `ThreadsAdapter.CHECKPOINT_URL_MARKERS`; in
+  `LOGIN_CHALLENGE` một lần. Test mới `tests/test_login_browser_threads.py` (+ orphan purge) 25 passed, ruff sạch.
+  Script chạy mới mỗi lần bấm → không cần restart.
+- 18:25 VN em mở cửa sổ đăng nhập (`start_login`, như nút web) cho chủ bot xác minh; tiến trình đang chờ.
+- **Next:** chủ bot xác minh xong trong cửa sổ → bật lại kéo khách (cân nhắc hạ giới hạn 200/ngày, 60/giờ). Chưa commit.
+
+## Phiên 2026-11-07 (threads-check) — Kéo khách Threads dính checkpoint, đã tự tắt (chỉ đọc log + DB)
+- 07/11 18:17 VN (11:17Z): @us28qt (profile instagram_5) bị chuyển tới `auth_platform/challengepicker` → worker tự đặt
+  `growth.enabled=False` + báo Telegram, đúng thiết kế (không thử vượt). PM2 Threads_Growth vẫn online nhưng nghỉ.
+- Trước đó: 143 reply ngày 06/11, 78 reply 07/11 (7–12 reply/giờ). Cài đặt đang là 200/ngày, 60/giờ (mặc định code 25/ngày,
+  5/giờ). Hàng chờ còn 114 bài approved; 8 failed; followup 0.
+- **Next (chủ bot):** tự mở Threads bằng profile instagram_5, qua bước xác minh; rồi bật lại `growth.enabled` (web/`/keokhach`).
+  Cân nhắc hạ `growth.max_replies_per_day` / `per_hour` trước khi bật.
+
+## Phiên 2026-11-07 (PLAN-162) — Vá an toàn luồng Buffer, mục 1–5 của buffer-review (chủ bot: «fix và vá»)
+- (1) Dọn ổ đĩa: lỗi DB → bỏ dọn video, log WARNING; mỗi video xoá có log INFO. Test `/donrac` không còn dọn `storage/` thật.
+- (2) `da-dang`: giữ file video còn bài Buffer hẹn. (3) Adapter: bài từ video mà không có link video → lỗi fatal, không gửi
+  bài chỉ chữ. (4) Job Buffer RUNNING > 30 phút → FAILED, sweep không còn dừng ở video đó. (5) `queue_reup` gặp 10/10 → FAILED
+  (không còn PENDING mồ côi).
+- Proof PLAN-162: 551 passed, 1 hỏng sẵn (test_edit_post_gui_kem_gio_va_chu). Chưa commit (cùng PLAN-160/161).
+- **Cần chủ bot:** `pm2 restart Maintenance Web_Dashboard`.
+- **Còn mở:** mục 6 (mức giữ suất 30 ngày, chủ bot chọn hướng), 7 (huỷ bài Buffer khi bỏ video mất file), 8 (log «Bo qua»),
+  9 (`_cleanup_orphaned_virals` đang ngủ), 10 (dashboard cluster gọi API live).
+
+## Phiên 2026-11-07 (buffer-review) — Code review toàn luồng Buffer + đăng bài (chỉ đọc; chưa sửa gì ngoài PLAN-161)
+- PLAN-161 sau review: khoá file khi ghi trạng thái nghỉ, mục mang `url`, lỗi không dừng vòng quét (122 test qua).
+- **Đã tự kiểm chứng:**
+  - (1) `StorageCleanupService` lỗi DB → các tập bảo vệ trả rỗng (log debug) → `prune_media` xoá mọi mp4 reup > 7 ngày.
+    `tests/test_telegram_resource_cleanup_commands.py` (`test_cmd_donrac_execute_subcommand`, `test_callback_donrac_now`)
+    gọi `run_all(retention_days=7)` thật trên `storage/` thật (REUP_DIR = storage/media/reup). Dấu vết 31/10 (261 file mất
+    đúng mốc mtime cũ hơn 7 ngày, không có «Đã dọn dẹp» trong DB) khớp kịch bản này — có khả năng, chưa chứng minh.
+    KHÔNG chạy file test đó tới khi sửa.
+  - (2) `reup/*/da-dang` bị xoá mỗi 6 giờ không cần xét bài Buffer còn hẹn.
+  - (4) job Buffer kẹt RUNNING (không heartbeat) → `auto_schedule_ready` trả True «Đang xếp lịch» → sweep dừng mãi ở video đó.
+  - (5) Đường «10/10» của `queue_reup` để job PENDING không worker nào chạy; chặn video qua unique index.
+- Chưa kiểm chứng (agent báo, đọc code): (3) thiếu file → đăng bài chỉ chữ; (6) mức giữ 70% theo cửa sổ 30 ngày + mỗi
+  restart tốn 3 request GetOrganizations; (7) `drop_ready_without_file` không huỷ bài đã hẹn; (9) `_cleanup_orphaned_virals`
+  sẽ xoá target Buffer nếu có tài khoản FB có page (đang ngủ); (10) dashboard cluster gọi API live mỗi 5 phút khi mở tab.
+- «Bo qua 1 kenh» = Uyển Nhi kín 10/10 (đếm nhầm vào câu «key cooldown»), không phải lỗi key.
+- **Next:** chủ bot chọn mục cần sửa; ưu tiên (1) rồi (2), (4), (5), (3).
+
+## Phiên 2026-11-07 (PLAN-161) — Nguồn video tự nghỉ khi cạn, tự quét lại, báo Telegram (chủ bot yêu cầu)
+- Công tắc nguồn vẫn của chủ bot (tắt tay = không quét). Nguồn đang bật: kênh đủ 15 video chưa hẹn → nghỉ (PLAN-071/160);
+  3 lần quét thành công liền không ra video mới → nghỉ 24 giờ rồi tự thử lại; lỗi quét không tính. Báo Telegram 1 lần khi cạn
+  (kèm số video chưa hẹn từng kênh) và khi có lại video. Trạng thái: `storage/db/config/viral_source_rest.json`.
+- File: `app/config.py`, `app/features/viral_intake/sources.py`, `tests/conftest.py`, `tests/test_viral_sources.py`.
+  Proof trong PLAN-161 (327 test qua, ruff sạch, lint-imports như HEAD). Chưa commit.
+- **Cần chủ bot:** `pm2 restart Maintenance` (gồm cả PLAN-160). Khoảng 3 giờ sau, `nunhanthongtue` và FB reels trnvp89
+  (đang cạn) sẽ tự nghỉ và báo Telegram.
+
+## Phiên 2026-11-07 (PLAN-160) — Sửa đếm «sẵn sàng» + chừa 15 phút hàng chờ Buffer; bật lại nguồn (chủ bot yêu cầu)
+- `sources._ready_by_page` bỏ video đã có job Buffer DONE cùng kênh; `queue_job.schedule_reup` đếm hàng chờ với
+  `schedule_ts > now − 900` (`QUEUE_GRACE_SEC`). Proof trong PLAN-160 (89 + 259 test qua, bỏ 2 file gọi Buffer thật; ruff sạch).
+- Bật lại nguồn 3 / 6 / 7, quét tay: Hoa Lệ Đây +11, Uyển Nhi +22 video mới (Maintenance tự tải + hẹn).
+  Sống Nhẹ (`nunhanthongtue` 68/68) và trnvp89 (FB reels 3/3) đã lấy hết video → vẫn 0, cần nguồn mới.
+- Chưa commit (nhánh hiện tại là feat/xe-tet). **Cần chủ bot:** `pm2 restart Maintenance`.
+- **Next:** chủ bot cấp nguồn mới cho Sống Nhẹ / trnvp89 (nguồn 4 `nnpt2310` → Sống Nhẹ đang tắt từ ~16/10, chưa bật vì
+  không rõ lý do tắt).
+
+## Phiên 2026-11-07 (buffer-chk4) — Báo cáo Buffer: 3/4 kênh hết bài, nguồn Sống Nhẹ bị chặn quét oan (chỉ đọc log + DB)
+- Không gọi API Buffer, không sửa code. PM2 Maintenance + Web_Dashboard online.
+- Job DONE/FAILED: 03/11 10/2, 04/11 6/1, 05/11 3/0, 06/11 3/1, 07/11 2/1 (tới 17:35). 5 lỗi «Scheduled posts limit 10/10»
+  (vẫn do đếm hàng chờ ngay khi qua giờ hẹn) + job 1288 «Video could not be read» (02/11, file mất 31/10).
+- Hàng chờ: Uyển Nhi 10/10 (tới 10/11 19:30) + 14 video chưa hẹn; Hoa Lệ Đây 2 (tới 08/11 09:00) rồi hết; Sống Nhẹ hết từ
+  05/11 17:30; trnvp89 hết từ 03/11 19:00. Kho «READY» 45/15/2 của 3 kênh này đều là video ĐÃ hẹn (material giữ READY vì
+  sync «đã đăng» tắt) → chưa hẹn thực = 0.
+- **Lỗi logic:** PLAN-071 đếm READY gồm cả video đã hẹn → «Bỏ quét nunhanthongtue — đủ 15 video (9cde9a=45)» suốt từ ~03/11,
+  Sống Nhẹ không bao giờ được cấp video mới. Nguồn TikTok khác quét ra found=0 skipped=50 (đã lấy hết); 4 reels FB trnvp89
+  lỗi yt-dlp «Cannot parse data».
+- Suất 30 ngày còn: f8pL 1347/2000, RZX2 444/2000, ZVsP 67/1000 → cả 3 dưới mức giữ 70%, sync «đã đăng» vẫn tắt.
+- **Next (chủ bot chọn):** (1) cấp video cho Sống Nhẹ / Hoa Lệ Đây / trnvp89; (2) PLAN backend: đếm «sẵn sàng» chỉ tính video
+  chưa có job Buffer DONE (PLAN-071) + chừa vài phút sau giờ hẹn khi đếm hàng chờ.
+
+## Phiên 2026-11-07 (store-sale-topup) — Tin báo đơn kèm số cần nạp FatCat (chủ bot yêu cầu)
+- `admin_sale` (tin «🛒 … mua …» gửi admin, bot + API): hàng FatCat thêm «Vốn FatCat đã trừ X · lãi Y (về tài khoản ngân
+  hàng)» + «💳 Nạp lại FatCat: X (đúng vốn đơn này) · ví còn Z»; có đơn chờ ví mà ví thiếu → «Cần nạp FatCat: vốn chờ − ví».
+  Tin «Khách đã trả, chờ anh nạp» đổi chữ thành «cần nạp X». `repo.order_cost(order_id)`.
+- Proof: pytest tests/test_store_bot.py 97 passed (mở rộng test 402 → kiểm tin bán), ruff sạch.
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-topup-exact) — Báo «nạp thêm đúng X» = vốn đơn chờ − ví FatCat
+- Trang Quản lý shop («Cần xử lý») và mục Số dư của 💵 Dòng tiền trước hiện tổng vốn đơn chờ; giờ hiện thêm số còn thiếu
+  (tin «Khách đã trả, chờ anh nạp» vốn đã tính vậy). Proof: pytest tests/test_store_bot.py 97 passed, ruff sạch.
+
+## Phiên 2026-11-07 (store-menu) — Menu bàn phím bot bán hàng không tự bật lại (chủ bot yêu cầu)
+- `main_menu()` bỏ `is_persistent: True` → ẩn bằng biểu tượng ⌨️ thì giữ ẩn. Bàn phím đã gửi trước đó giữ kiểu cũ tới khi
+  bot gửi lại (/start). Proof: pytest tests/test_store_bot.py 97 passed. Cần: restart store-bot rồi gõ /start.
+
+## Phiên 2026-11-07 (store-funds-auto) — Tự đối chiếu ví FatCat → tự ghi sổ vốn (chủ bot hỏi «tự động được không»)
+- `repo.reconcile_funds(balance, read_at)` gọi sau mỗi lần `Fulfiller.refresh_funds()` (GET /api/balance có sẵn, 180 giây/lần
+  khi đồng bộ; không gọi /api/buy). Lẽ ra còn = mốc − giá vốn đơn bot giao từ mốc (updated_at). Lệch ≥ 1.000đ → dòng
+  `capital` created_by='auto' (dương: nạp / FatCat hoàn; âm: trừ ngoài bot). Lệch nhỏ cộng dồn (mốc = số lẽ ra còn).
+  Chỉ đối chiếu lúc yên: không đơn pending (trừ chờ ví) và không đơn FatCat nào đổi trạng thái trong 120 giây; số đọc cũ hơn
+  mốc bỏ qua (bot + API dùng chung DB). Lần đầu chỉ đặt mốc (state `funds_base`).
+- Bot báo admin mỗi dòng tự ghi một lần (state `auto_capital_notified`): nút «➖ Là bù khách» (`a:vx:<id>` → ghi khoản chi,
+  chặn ghi 2 lần bằng state `vx:<id>`) và «🗑 Xoá dòng này». Sổ vốn đánh dấu 🤖.
+- Lịch sử trước khi bật vẫn cần ghi tay 1 lần: +341.200 (tổng nạp từ 01/08) và −235.397 (mua thẳng ngoài bot).
+- Proof: pytest tests/test_store_bot.py 97 passed (thêm test_fatcat_wallet_reconciles_itself), ruff sạch.
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-admin-hub) — Tái cấu trúc ⚙️ Quản lý shop (chủ bot yêu cầu)
+- Trang đầu (`adm`): trạng thái mở cửa · bảng Hôm nay (đơn, doanh thu, lãi ròng, biên — tiền khách, đã trừ khoản chi)
+  · ví FatCat · «Cần xử lý» (nạp chờ duyệt, đơn chờ ví + vốn cần nạp, số món ví FatCat không đủ nhập, đơn chờ FatCat giao).
+  Nút tắt khi có việc: 💳 Duyệt nạp (N), 🏦 Ghi nạp vốn FatCat. Rồi 3 nhóm + giờ nghỉ + 🔄 Làm mới.
+- Nhóm: 💰 Tài chính `agf` (Dòng tiền, Thống kê, Giao dịch, Khoản chi, Sổ vốn) · 📦 Hàng hoá `agp` (Sản phẩm & kho, Đồng bộ
+  FatCat, Tăng giá bán, Logo hãng) · 👥 Khách & đại lý `agc` (Nạp chờ duyệt, Cộng/trừ tiền, Khóa API, Báo hàng mới).
+  Mỗi nhóm có bảng tóm tắt; nút «Quay lại» của màn con về đúng nhóm. Callback cũ giữ nguyên.
+- File: `store_bot/bot.py`, `messages.py` (admin_home mới + 3 hub), `db.py` (`last_synced()`), test.
+- Proof: pytest tests/test_store_bot.py 96 passed (thêm test_admin_home_groups_and_every_hub_button_works — bấm mọi nút
+  trong 3 nhóm), ruff sạch; xem trước trên bản sao DB (đã xoá).
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-capital) — Sổ vốn FatCat + tách ví admin (chủ bot chọn «cả hai»)
+- Bảng mới `capital` (CREATE IF NOT EXISTS). Màn 💵 Dòng tiền: «🏦 Nạp vốn FatCat» (gõ `200k nạp qua MB`, `-50k rút về`),
+  «📒 Sổ vốn» (10 dòng, 🗑 xoá ghi nhầm). Callback `avn` / `avl` / `a:vd:<id>`. Chỉ ghi sổ, không gọi FatCat.
+- Mục «Vốn FatCat (từ đầu)»: đã ghi nạp − đã dùng (giá vốn mọi đơn đã giao, cả đơn admin) = lẽ ra còn, so với số dư FatCat
+  thực → chênh lệch + cảnh báo; chưa ghi lần nào thì hiện «ước tính đã nạp = đã dùng + còn» (hiện 105.803đ).
+- Tách tài khoản admin (`settings.admin_ids`): doanh thu / tiền vào / ví khách chỉ của khách; mục «Ví admin» (tự nạp, tự mua,
+  giá vốn) + số dư ví admin. `stats(admins)` và `cashflow(admins=)`, `sales_by_product(exclude=)`.
+- Dữ liệu thật: Zusem10 (5967314745) là admin → doanh thu khách từ đầu 107.300đ (4 đơn), ví khách 0đ, ví admin 15.700đ.
+  Chủ bot đã tự ghi khoản chi #2: 52.000đ «bù khách đơn #8 key lỗi» → lãi ròng −43.680đ.
+- Proof: pytest tests/test_store_bot.py 95 passed (thêm test_admin_wallet_separated_and_fatcat_capital_reconciled), ruff
+  sạch; thử trên bản sao DB (đã xoá).
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-expenses) — Ghi khoản chi ngoài bot (chủ bot bù khách 52k)
+- Chủ bot bù khách 52.000đ ngoài bot → bot không biết, báo cáo vẫn lãi 8.700đ. Thêm bảng `expenses` (CREATE IF NOT EXISTS,
+  migrate tự tạo; không sửa dữ liệu cũ). Màn 💵 Dòng tiền: «➖ Ghi khoản chi» (gõ `52k bù khách đơn #8 …`, `#số` gắn đơn),
+  «🧾 Khoản chi» (10 dòng gần nhất, 🗑 xoá ghi nhầm — chỉ xoá dòng ghi chép).
+- Báo cáo: Lãi gộp → Chi ngoài → Lãi ròng + biên ròng; dòng tiền trừ chi ngoài; «Diễn biến» dùng lãi ròng; 📊 Thống kê và
+  trang Quản lý: lãi đã trừ chi ngoài. Không đụng ví khách / đơn.
+- EM KHÔNG tự ghi 52k vào DB thật — chủ bot tự ghi trong bot (chưa rõ đơn nào: #4 khách 5640150878 ngày 04/11 hay #8 khách
+  7537950601 ngày 06/11, đều «100$ API Claude 30D»).
+- Proof: pytest tests/test_store_bot.py 94 passed (thêm test_admin_records_outside_expense_and_profit_drops), ruff sạch;
+  thử trên bản sao DB (scratchpad, đã xoá): từ đầu lãi gộp 8.700 − 52.000 = lãi ròng −43.300đ, dòng tiền ròng −27.600đ.
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-cashflow-ux) — Làm lại màn «💵 Dòng tiền» kiểu báo cáo tài chính (chủ bot yêu cầu)
+- Chọn kỳ bằng nút: Hôm nay · 7 ngày · 30 ngày · Từ đầu (callback `acf1/acf7/acf30/acf0`, `acf` = 7 ngày; kỳ đang xem có «• •»).
+- Bố cục: Kết quả kinh doanh (doanh thu, giá vốn, lãi gộp, biên, số đơn, TB/đơn) + so với kỳ trước (▲▼ %, tăng ≥ 2 lần ghi «gấp N»)
+  · Dòng tiền (chuyển khoản − vốn = ròng; admin cộng tay ghi chú riêng) · Diễn biến (ngày / tuần / tháng theo kỳ)
+  · Sản phẩm lãi nhất trong kỳ · Số dư & nghĩa vụ (ví khách phải trả, ví FatCat, vốn cần nạp + cảnh báo ví thiếu).
+  Bảng dùng <pre> đơn cách ≤ 32 ký tự cho điện thoại.
+- `db.py`: `cashflow(days)` + `_daily_totals` / `_sum_totals`; `sales_by_product(since=)` (mặc định giữ như cũ cho fulfill).
+- Proof: pytest tests/test_store_bot.py 93 passed, ruff sạch; in đọc-only trên data/store.sqlite kỳ 7 / 30 ngày ~1.300 ký tự.
+- Cần chủ bot: `sudo systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-07 (store-cashflow) — Bot bán hàng: màn «💵 Dòng tiền & biên lãi» (chủ bot yêu cầu trực tiếp)
+- /admin → ⚙️ Quản lý shop → «💵 Dòng tiền» (callback `acf`, chỉ admin; cũng có nút ở màn 📊 Thống kê).
+  Kỳ Hôm nay / 7 ngày / 30 ngày / Từ đầu: tiền vào (topup đã cộng), vốn FatCat, dòng tiền ròng, đơn · doanh thu · lãi · biên;
+  dòng «Admin cộng/trừ tay» tách riêng (không phải tiền thật); 7 ngày từng ngày (giờ VN); top 5 món lãi 30 ngày;
+  tiền khách đang giữ trong ví + ví FatCat + vốn cần nạp cho đơn chờ ví. Màn 📊 Thống kê và trang Quản lý thêm «(biên x%)».
+- File: `store_bot/db.py` (`cashflow()`, chỉ SELECT), `messages.py` (`admin_cashflow`, `profit_margin`), `bot.py` (nút + route).
+- Proof: `pytest tests/test_store_bot.py` 93 passed (thêm test_cashflow_screen_shows_margin_and_customer_money), ruff sạch;
+  chạy đọc-only trên data/store.sqlite: 30 ngày vào 127.300đ − doanh thu 111.600đ = 15.700đ đúng bằng tiền khách giữ.
+- Cần chủ bot: `sudo systemctl restart store-bot store-api` để bot nhận bản mới.
+
+## Phiên 2026-11-07 (syspanel-layout) — Tái cấu trúc màn Panel hệ thống (chủ bot yêu cầu, chỉ frontend)
+- Đầu trang luôn hiện: 6 ô (RAM / CPU Windows, ổ đĩa đầy nhất, RAM / CPU WSL, GPU) + khung «Cần chú ý» tự rút từ số liệu
+  (RAM > 85%, ổ còn < 10%, app PM2 errored, bot systemd không chạy, lỗi đọc PM2 / systemd / Windows).
+- Chi tiết chia 3 tab, nhớ tab bằng localStorage: Tiến trình (PM2 + bot systemd) · Máy Windows (chương trình tốn RAM + ổ đĩa)
+  · Hàng đợi (hệ cũ) (job theo trạng thái + nút xử lý; đổi nhãn tiếng Việt, cùng API cũ).
+- Thanh tab tự làm trong `SyspanelPage.tsx`: `@/components/ui/tabs` dùng `data-horizontal:` mà Radix gắn `data-orientation`
+  → list và nội dung xếp ngang (ảnh hưởng cả TelegramUxPage — chưa sửa, ngoài scope).
+- File: `syspanel/components/HealthOverview.tsx`, `LegacyJobsPanel.tsx`, `hooks/useMachine.ts` (queryKey chung → không hỏi server 2 lần).
+- Proof: tsc + vite build sạch; Playwright 1280 / 390 px cả 3 tab, không tràn ngang, 0 lỗi JS, tải lại nhớ đúng tab.
+
+## Phiên 2026-11-07 (syspanel-windows) — Panel hệ thống xem máy Windows (chủ bot yêu cầu trực tiếp, chỉ đọc)
+- Khung «Máy Windows» trên /app/go/syspanel: RAM / CPU / ổ đĩa Windows + 10 chương trình tốn RAM nhất (gộp theo tên,
+  % CPU tính từ chênh lệch 2 lần đọc). `app/core/windows_host.py` gọi powershell.exe (~2,3 giây) giữ 8 giây; API
+  `GET /api/admin/processes/windows`; trang hỏi lại mỗi 10 giây. Thẻ cũ đổi nhãn «RAM (WSL)» / «CPU (WSL)».
+  Hàm hiển thị dùng chung tách ra `syspanel/components/meters.tsx`.
+- Proof: `tests/test_windows_host.py` 5 pass + process_control 11 pass; ruff, tsc, vite build sạch; Web_Dashboard restart;
+  Playwright 1280 / 390 px không tràn ngang, 0 lỗi JS.
+- Ghi nhận số liệu thật (07/11): RAM Windows 7,0 / 7,8 GB (`.wslconfig` cấp WSL memory=8GB = cả RAM máy); ổ C còn 27 GB,
+  E còn 14 GB. CPU của WSL không tính vào vmmemWSL (hiện «—»).
+
+## Phiên 2026-11-07 (9router-upgrade) — Nâng 9Router 0.3.82 → 0.5.112 (chủ bot yêu cầu)
+- Trước nâng: 9Router không có provider / combo / API key nào (`~/.9router/db.json` rỗng từ 06/10) → mọi lượt AI rơi về
+  Gemini dự phòng (flash 429, 2.5-pro đã ngừng). Sao lưu `~/.9router` (scratchpad 9router-backup) trước khi `npm i -g 9router@0.5.112`.
+- Bản 0.5 cần Node ≥ 20 (global `File`) → Node 22 riêng `/opt/node22` (v22.23.4, checksum OK); Node hệ thống 18 giữ nguyên.
+  Bộ khởi động `9router` (menu + system tray) dưới PM2/WSL làm server con chết; `custom-server.js` SIGSEGV trên Node 22 →
+  `ecosystem.config.js` chạy thẳng `app/server.js` (PORT 20128, NODE_PATH runtime). better-sqlite3 cài lại cho Node 22.
+  Dữ liệu tự chuyển JSON → `~/.9router/db/data.sqlite` (JSON cũ giữ nguyên).
+- 07/11 chiều: chạy thật vẫn SIGSEGV khi mở /dashboard (191 restart) — gdb: Node 22 nạp nhầm
+  `/usr/local/lib/node_modules/better-sqlite3` (cài kèm `npm i -g` bằng Node 18, link libnode.so.109). Sửa: cài riêng
+  `/opt/9router` bằng npm của Node 22, ecosystem trỏ vào đó; DB driver `node:sqlite`. Global 9router/better-sqlite3 để nguyên.
+  Đã thử Node 20 cũng sập — đã xoá /opt/node20 (07/11, chủ bot duyệt).
+- Proof: PM2 `9Router_Gateway` /opt/9router, 0 restart sau 2 phút mở /dashboard + /login 20 lần; `/v1/models` + chat trả 401 «API key required» (đúng — chưa có key).
+- Next Action (chủ bot): mở http://localhost:20128 → nối provider (Gemini CLI, Qwen…) → tạo combo `toolsauto` → tạo API key →
+  Panel hệ thống › 9Router: dán key, model `toolsauto`, Test. CHƯA `pm2 save` — sau khi WSL khởi động lại, PM2 dump cũ sẽ chạy
+  định nghĩa 9Router cũ (hỏng với 0.5) → chạy `pm2 delete 9Router_Gateway && pm2 start ecosystem.config.js --only 9Router_Gateway && pm2 save`.
+  Quay lại bản cũ: `npm i -g 9router@0.3.82` + `git revert` commit ecosystem.
+- 07/11 06:43 UTC chủ bot `pm2 save` (dump có 9Router mới). Phát hiện: WSL khởi động lại 04:32 UTC → PM2 nạp dump cũ KHÔNG có
+  Threads_Growth, Studio_Heavy/Light ở trạng thái tắt → kéo khách Threads dừng 11:32–13:44 VN. Chủ bot đã chạy (06:44 UTC, dump đủ 9 app):
+  `pm2 start ecosystem.config.js --only Threads_Growth && pm2 start Studio_Heavy Studio_Light && pm2 save`.
+
+## Phiên 2026-11-06 (PLAN-159) — Kéo khách ngoài reply: bài riêng, trả lời lại, 11/11, đo theo kênh
+- Chủ bot duyệt trọn gói (mục 2+3+4+6). Chi tiết + proof: `agents/plans/active/PLAN-159-threads-growth-beyond-reply.md`.
+- Bài riêng: khung 11:45 / 20:15 VN, AI viết từ kho deal Cashbot (chỉ đọc) hoặc nhắc dịp sale lớn ≤ 5 ngày; đăng qua hộp
+  «New thread» (selector adapter cũ đã hỏng: không còn «Start a thread»). Bài thật đầu tiên (nhắc 11.11):
+  https://www.threads.com/@us28qt/post/DfZLfuUid-g. Trả lời lại: mỗi 20 phút, ≤ 15 / ngày, AI SKIP câu không cần trả lời.
+- Mã kênh mới: threads_cb_post / _conv / _bio (+ threads_ai_*). Từ khóa 11/11 đã ghi vào DB cài đặt (xoá sau đợt sale).
+- AI: 9Router «no active credentials» → chủ bot đăng nhập lại http://localhost:20128; đang chạy Gemini dự phòng.
+- Next Action (chủ bot): restart cashback-bot cashback-zalo; sửa profile @us28qt + đặt link
+  https://t.me/zt_shopee_bot?start=threads_cb_bio ở bio. Theo dõi Telegram «Bài riêng» / «trả lời lại» vài ngày.
+
+## Phiên 2026-11-06 (growth-reach) — Kéo khách: nhắm bài nhiều người xem + Cashbot chào khách từ Threads
+- Số liệu lúc bắt đầu: 35 reply → 2 khách /start (cùng Cashbot, A 1 · B 1) → 0 khách gửi link. Xem công khai (không đăng
+  nhập): reply chỉ 3–24 lượt xem vì toàn reply bài mới đăng ít người xem → nút thắt là ĐỘ PHỦ, không phải câu chữ.
+  Profile @us28qt (2.101 follower) tên/bio «Tin ở đây», bài cũ là tin xã hội — không ăn nhập săn sale (anh tự sửa tay).
+- Làm: ghi like / reply / follower tác giả từ JSON tìm kiếm → `reach` = 10·log10(1+follower) + 3·reply + like
+  (`scanner.reach_score`) — follower tác giả KHÔNG có trong kết quả tìm kiếm Threads nên thực tế reach ≈ 3·reply + like; quét thêm tab «Hàng đầu» (`growth.search_top`, mặc định bật); hàng chờ đăng theo reach giảm dần;
+  `growth.min_reach` (mặc định 0); bài chờ quá `max_post_age_hours` tự bỏ khi tới lượt. Web: thẻ bài hiện «độ phủ · 👥»;
+  ⚙️ Kéo khách thêm 2 ô mới. Cashbot: `/start threads_*` khách mới → câu chào chỉ cách lấy link (`THREADS_WELCOME`).
+- Đưa lại 11 bài #39–#49 về «Chờ đăng» (chủ bot duyệt; sao lưu DB trong scratchpad trước khi sửa).
+- Proof: test growth 41 pass; growth+cashback+settings+process 1298 pass, 1 hỏng `test_cashback_payout_safety::test_b9_…`
+  (màn admin ví «Vừa đổi tài khoản» — không dính phần /start sửa); restart Threads_Growth + Web_Dashboard, log thấy
+  «(hàng đầu)» và trình duyệt không bị diệt nữa.
+- Next Action: ANH chạy `systemctl restart cashback-bot cashback-zalo` để câu chào Threads có hiệu lực. Sau 1–2 ngày so
+  khách mới / reply giữa bài reach cao và thấp (trang web) rồi chỉnh `growth.min_reach`.
+  Hướng tiếp (chưa làm): trả lời người hỏi lại dưới reply của mình; bài đăng riêng hằng ngày trên @us28qt.
+
+## Phiên 2026-11-06 (growth-check) — Kéo khách: trình duyệt bị Maintenance diệt giữa vòng → sửa
+- Triệu chứng: vòng 13:2x (giờ VN) đăng #31–#38 rồi 11 bài #39–#49 «failed: Target page, context or browser has been closed»;
+  vòng sau 12/14 từ khóa tìm lỗi cùng câu. Gốc: `app/core/process_scan.py` WORKER_MODULES thiếu
+  `app.features.threads.growth.worker` → Maintenance (`purge_orphan_toolsauto_browsers`) coi Chromium của kéo khách là
+  «mồ côi» và diệt (log Maintenance «Killing orphan ToolsAuto browser … chrome-headless-shell»).
+- Sửa: thêm worker vào WORKER_MODULES; `growth/worker.py`: trình duyệt chết → dừng vòng, GIỮ hàng chờ (không đánh failed),
+  mỗi vòng quét 1 bài / tác giả, trước khi đăng bỏ bài trùng tác giả đã reply trong cooldown (06/11 @pisharevn lọt 4 bài);
+  `storage.posted_to_author_since`. Test growth 37 pass (+5), process_scan/orphan 76 pass, ruff sạch.
+- Proof: restart Maintenance + Threads_Growth; khi Chromium instagram_5 mở, `find_orphan_toolsauto_browsers(now+600s)` = [].
+- Chưa làm (chờ anh): 11 bài #39–#49 vẫn «failed» — đưa lại «Chờ đăng» thì bot sẽ tự đăng (trùng tác giả tự bị bỏ).
+  Ghi nhận: AI 9Router trả 404 auth → đang chạy dự phòng Gemini flash-lite; hạn mức anh đặt 15/giờ · 35/24h.
+- Chưa commit (cùng phần nút ⚙️ cài đặt theo màn hình).
+
+## Phiên 2026-11-06 (screen-settings) — Cài đặt theo màn hình: nút ⚙️ + modal (chủ bot yêu cầu trực tiếp, chỉ frontend)
+- Mỗi màn hình có nút ⚙️ ở đầu trang → modal chỉ chứa cài đặt của màn đó, chia nhóm, Lưu là có hiệu lực (cùng API
+  `PATCH /api/settings/sections/{section}` như trang Cài đặt; lưu xong làm mới dữ liệu trang). Trang «Cài đặt vận hành» giữ nguyên.
+- Khai báo màn ↔ section + nhóm ở MỘT chỗ: `frontend/src/features/settings/lib/screenSettings.ts` (Audio→Doc, Kéo khách,
+  Viral, Nguồn video, Lịch đăng, Studio, AI Studio, Tổng quan=Tích hợp, Panel hệ thống). Component
+  `features/settings/components/ScreenSettingsButton.tsx`; `PageHeader` thêm prop `actions`; `saveSection` trả boolean.
+  Bỏ link «Cài đặt Audio→Doc» / «Từ khóa, câu A/B, hạn mức» cũ (thay bằng ⚙️). Section `threads_auto` chưa có màn SPA → chỉ ở trang Cài đặt.
+- Proof: `tsc` + `vite build` sạch; Playwright trên :8000 mở modal 4 màn (nhóm đúng), sửa ô → «Có thay đổi chưa lưu» + Lưu bật,
+  «Bỏ thay đổi» trả giá trị cũ, Esc đóng, 0 lỗi JS. KHÔNG bấm Lưu thật (tránh đổi cài đặt đang chạy).
+- Next Action: thêm màn mới → thêm 1 mục vào `SCREEN_SETTINGS` + `<ScreenSettingsButton screen=…/>`.
+
+## Phiên 2026-11-06 (audio-doc-e2e) — Chạy thật Audio→Doc trên web lần đầu, sửa 3 lỗi
+- Chạy trọn luồng qua API thật (audio TTS 24s «Vịnh Hạ Long», dự án thử **#14**): intake→Whisper→chia 3 cảnh ~15s, AI từ khóa
+  đúng; tìm ảnh Wikimedia thật, chọn → tự RIGHTS_VERIFIED + tác giả/giấy phép; preview 1080p 24,3s dựng 118s, phụ đề + Ken Burns OK.
+- Sửa: (1) web không mở được dự án sau khi tải audio — `doc_plan` dừng luồng không ghi `project_id` vào task
+  (`taskqueue.done(project_id=…)`, test hồi quy qua `progress.jobs`); (2) Wikimedia 403 vì User-Agent thiếu URL liên hệ
+  (`doc/images/search.py`); (3) 18 test `test_studio_pipeline` hỏng từ PLAN-157 (fixture thiếu bảng runtime_settings).
+  Openverse: thêm `filter_dead=false`; dịch vụ Openverse đang 504/timeout phía họ (06/11) — app tự bỏ qua nguồn lỗi.
+- Proof: test studio 183 pass (2 lỗi cũ dub_long), ruff sạch; Web_Dashboard + Studio_Heavy/Light đã restart.
+- Lưu ý: Whisper chép giọng máy sai chính tả («Vỉnh Hà Long») → anh sửa lời trên web trước khi dựng.
+
+## Phiên 2026-11-06 (threads-growth) — PLAN-158: Threads kéo khách CHẠY TỰ ĐỘNG (commit 59c5dc9 + chế độ auto)
+- System State: gói `app/features/threads/growth/` + trang web `/app/go/threads-growth` + Telegram `/keokhach` xong, Web_Dashboard
+  đã restart (06/11). Tài khoản Threads `@us28qt` (accounts id 52 `threads_growth`, profile `instagram_5`) ACTIVE.
+  Worker `Threads_Growth` khai trong `ecosystem.config.js` nhưng CHƯA start; `growth.enabled` = tắt. Playwright chromium-1208
+  vừa cài lại (trước đó thiếu → mọi tính năng Playwright không mở được trình duyệt).
+- Done (proof trong PLAN-158): xoá 4 bài mẫu + 16 profile cũ (1,57 GB, giữ `facebook_scanner` quét FB→TikTok); quét thử
+  14 từ khóa không đăng → 130 bài → 10 bài «Chờ duyệt» (#5–#14), AI viết reply, Telegram báo đủ; 26 test growth pass.
+- Reply thật đầu tiên: #13 → https://www.threads.com/@us28qt/post/DfYVsfpks3_ (06/11 07:39). Bỏ «VietQR», prompt giọng Threads,
+  poller Telegram nằm trong PM2 Maintenance (đã restart). Còn 9 bài «Chờ duyệt» (#5–#12, #14).
+- Unfinished: 1 test sẵn hỏng `test_telegram_schedule::test_edit_post_gui_kem_gio_va_chu` (buffer/client.py).
+- 06/11 ~08:00: `pm2 start Threads_Growth` + `growth.enabled`=bật. Vòng 1: 127 bài → tự reply #15 (@us28qt/post/DfYWokRnSVW).
+  Chủ bot chốt TỰ ĐỘNG HOÀN TOÀN: `growth.auto_post_min_relevance` mặc định 40 (= điểm tối thiểu), `growth.telegram_review`
+  mặc định tắt (Telegram chỉ nhận báo cáo vòng có link từng reply). 12 bài chờ cũ (AI viết) đã chuyển «Chờ đăng».
+- Panel hệ thống (/app/go/syspanel): thêm khung «Bot bán hàng (systemd)» CHỈ XEM — cashback-bot, cashback-zalo, store-bot,
+  store-api (trạng thái, RAM, CPU, thời gian chạy, số lần restart, lệnh restart để anh tự chạy); `Threads_Growth` vào danh sách
+  PM2 điều khiển được (sửa luôn test ecosystem khớp danh sách). Web_Dashboard đã restart.
+- Báo cáo nguồn khách (`growth/conversions.py`, CHỈ ĐỌC data/cashback.sqlite `bot_state` + data/store.sqlite `state`, khoá
+  `src:<user>` = mã ?start= PLAN-153): trang web khung «Khách về từ Threads» + cột Khách / Tỉ lệ theo A/B; `/keokhach` và báo cáo
+  vòng có dòng khách mới. 06/11: 1 khách `threads_cb_tier` (Cashbot B) lúc 08:03, mới /start chưa gửi link.
+- Next Action: theo dõi Telegram báo cáo / checkpoint; CHƯA `pm2 save` (Threads_Growth chưa tự lên sau khi WSL khởi động lại —
+  hỏi anh trước khi save vì list PM2 còn DB_Backup đang stopped).
+  Commit khi anh bảo (gồm cả phần review growth phiên 05/11).
+
+## Phiên 2026-11-05 (audio-doc-config) — PLAN-157: Audio→Doc cấu hình trên web + ảnh internet
+
+- **System State:** commit `b6e48c4` (code) + `5223c01` (bản build SPA, lần build trước là 03/11) đã push `feat/xe-tet`. 10:4xZ: `pm2 restart Web_Dashboard`, bật lại `Studio_Heavy` / `Studio_Light` (tắt từ ~31/10); worker nhận ngay việc tồn #81 (link → render → chờ duyệt, không tự đăng).
+- **Done (proof trong PLAN-157, ADR-065):** 38 key `doc.*` ở /app/settings (ngôn ngữ, thời gian, khung, phụ đề, hiệu ứng, 5 nguồn ảnh + key, từ khóa AI, luật quyền); chia cảnh theo câu Whisper / khoảng lặng (bỏ MU–Roma); chọn ngôn ngữ khi tải lên; tìm ảnh Wikimedia / Openverse / Pexels / Pixabay / Google, bấm chọn, quyền tự điền theo giấy phép; dựng theo đoạn (80 cảnh 1080p: 510 MB RAM). Test doc 24 qua.
+- **Next Action (chủ bot):** mở /app/go/studio-doc thử 1 audio; nhập key Pexels/Pixabay/Google ở /app/settings nếu muốn dùng; chưa thử tìm ảnh thật trên web.
+
+- **Đang làm:** Audio→Doc: cấu hình `doc.*` trên /app/settings, thời gian theo audio, chọn ngôn ngữ, ảnh internet (Wikimedia / Openverse / Pexels / Pixabay / Google) + AI rút từ khóa. Executor Claude Code, chủ bot duyệt trực tiếp.
+
+## Phiên 2026-11-05 (audio-doc-review) — PLAN-156: rà soát + sửa POC Audio→Doc của Cursor (chưa commit)
+
+- **Sự cố:** test render POC làm WSL hết RAM → WSL khởi động lại (Cursor «connection failed»). cashback-bot / cashback-zalo tự lên lại 09:30Z (đã có code mới).
+- **Done (proof trong PLAN-156):** Ken Burns `zoompan d=1` (RAM preview 9 clip 1080p 2,8 GB → 0,8 GB); kiểm schema trước khi lưu shot / quyền / transcript; chạy lại doc_plan không tạo dự án trùng; lỗi TS `StudioDocPage`. Test doc 8 qua, studio 166 qua (2 lỗi sẵn `dub_long`), tsc sạch.
+- **Next Action:** Cursor tiếp PLAN-156 (UI preview, docstring «rerender»). Chưa commit — chủ bot duyệt rồi commit cùng phần của Cursor.
+
 ## Phiên 2026-11-05 (cb-speed) — Rà soát timeout / trùng / tốc độ gửi tin, vá 2 chỗ chậm
 
 - **Số đo (từ 29/10):** thẻ link Telegram ~1s sau khi tạo; AddLiveTag 0 timeout / 94 link; 0 tin trùng (60 phút), 0 tin cách ly, 0 gửi hỏng / 1.223 tin hàng đợi; hàng đợi TB ~46s, deal TB ~4 phút (loạt tin). Zalo inbox ghi received_at = replied_at nên chưa đo được tốc độ trả lời Zalo.
@@ -5179,3 +5529,27 @@ Smoke process thật (Chromium thật, không đụng job production):
 
 - Restart `.\start.ps1 -Stack` và xác nhận log `[STACK] ensure web=... fb_publisher=... chrome_ta=`
 - Hủy Job #6 hoặc thay media bằng .mp4
+
+## 06/11 — Kiểm AI Pass Store (kéo khách Threads) — commit dcca082
+- Kết quả: 17 reply → 5 khách /start @aipass_shop_bot → **2 khách mua** (Slot Canva 2.200đ, API Claude 52.000đ). store-bot/store-api systemd chạy bình thường; báo cáo «Kéo khách» đếm đúng.
+- Sửa: `is_vietnamese` lọt bài tiếng Bồ/Pháp (đếm é á ô ã) → bắt buộc có chữ riêng tiếng Việt (ă đ ơ ư ĩ ũ, U+1EA0–1EF9); test thêm 4 ca. Gỡ 4 bài chờ đăng (3 ngoại ngữ + Exness) sang `rejected` (sao lưu scratchpad).
+- Câu B AI Store hứa «bảo hành 1 đổi 1 suốt hạn» — sai với nhiều món (KBH, BH 5 phút / 1 ngày) → đổi mặc định «bảo hành tuỳ món»; prompt cấm hứa ngoài «Ý chính», cấm bịa dịp (Tết).
+- Chưa làm (chờ anh): từ khóa `mua claude pro`, `mua midjourney`, `tài khoản elsa speak` — store không bán các món này. Hạn mức anh đặt 60/giờ · 200/ngày (rủi ro Threads hạn chế tài khoản).
+
+## 06/11 — Store bot: giao dịch & hiển thị — commit e9936ad (CHỜ anh restart store-bot store-api)
+- Sự cố: ví FatCat 33.863đ nhưng 6/9 món còn hàng có giá vốn cao hơn → khách trả tiền, FatCat 402, tiền kẹt trong ví bot (đã xảy ra 04/11 đơn #2 #3); tin báo khách sai lý do («tạm thiếu hàng»).
+- Sửa: `db.buy` chặn `restocking` trước khi trừ tiền + giữ chỗ ví theo đơn; `Fulfiller.refresh_funds` sau đơn / 402; khách thấy «đang nhập hàng», không tạo QR; admin nhận tin «Ví FatCat còn …» khi danh sách món khoá đổi; đơn 402 báo đúng + đường hoàn ngân hàng; không hứa giao 1 phút khi chưa có SePay; QR bấm lại dùng lại mã, mã > 24h tự huỷ; dòng 🛡️ Bảo hành từ ký hiệu tên. Threads AI Store A bỏ «30 giây».
+- Test: `tests/test_store_bot.py` 71 pass (+15), growth 55 pass, ruff sạch. Dựng màn hình trên bản sao DB thật: đúng 6 món «đang nhập hàng».
+- Tồn: SePay chưa cài (`STORE_SEPAY_WEBHOOK_KEY` trống; API chỉ nghe 127.0.0.1:8091, chưa có tunnel/domain). `STORE_API_PUBLIC_URL` đang = api.fatcatstore.click (sai, chưa ai có khóa đại lý nên chưa ảnh hưởng).
+- 06/11 (sau): anh đổi ý — ví FatCat thiếu VẪN BÁN. Commit sau e9936ad: đơn `waiting_funds=1` (đã trừ tiền khách, chưa gọi FatCat), FatCat 402 cũng chuyển sang chờ; có đơn chờ thì đọc ví mỗi 30s, đủ là tự lấy hàng (cũ trước); khách có nút ↩️ huỷ (hoàn về ví); admin nhận «Khách đã trả, chờ anh nạp ví FatCat … nạp thêm ít nhất X». Test 74 pass. CHỜ anh restart store-bot store-api.
+- 06/11: commit 9eb687f — khách thấy «🔖 Mã hàng» (= order.id FatCat, vd DHEQ9883) ở màn Mua thành công, tin giao hàng, danh sách đơn; admin thấy «mã …» trong tin bán; hàng giữ nguyên văn FatCat trả về. Test 75 pass. CHỜ restart store-bot store-api.
+- 06/11: commit sau 9eb687f — rà spam/timeout/trùng: webhook SePay chạy threadpool + báo admin khi lỗi sau cộng tiền; ≤3 mã nạp chờ/khách, ≤50tr/lần; gửi hàng thử lại + báo admin. Test 78 pass. CHỜ restart store-bot store-api. Còn để anh quyết: API đại lý không bắt buộc request_id; đơn chờ ví chưa tự hoàn; giá đổi giữa lúc tạo QR và lúc trả.
+- 06/11: commit tiếp — API /orders bắt buộc request_id (thiếu → 422); đơn chờ ví > 6 giờ tự hoàn về ví + báo khách/admin; QR lưu giá 1 món (topups.intent_unit_price), tiền về bán đúng giá đó (giá giảm thì lấy giá mới, không dưới vốn). Test 80 pass, migrate thử trên bản sao DB thật OK. CHỜ restart store-bot store-api.
+- 06/11: commit tiếp — mỗi khách 1 mã QR chờ (nút Xem lại / Huỷ); tiền về mã khách huỷ hoặc quá hạn vẫn cộng ví, không tự mua. Test 81 pass. CHỜ restart store-bot store-api.
+- 06/11: SePay qua Tailscale Funnel — https://laptop-t2hf25cd.tail15ebd5.ts.net → 127.0.0.1:8091 (anh chạy `tailscale funnel --bg 8091`; tắt: `tailscale funnel reset`). .env đã điền STORE_SEPAY_WEBHOOK_KEY (mới tạo) + STORE_API_PUBLIC_URL (bản cũ sao lưu scratchpad env.bak). CHỜ: anh tạo webhook trên my.sepay.vn (Tiền vào, JSON, API Key) + restart store-bot store-api, rồi thử mua Canva 1.100đ qua QR.
+- 06/11: đổi tài khoản nhận tiền store sang MB Bank 1608102003 (BIN 970422, chủ TK giữ NGUYEN THANH VU — chờ anh xác nhận), .env cũ sao lưu scratchpad env.bak2. SePay cần liên kết TK MB này. CHỜ restart store-bot store-api.
+- 06/11 17:24 UTC: anh đã tạo webhook SePay (MB 1608102003, Tiền vào, JSON, API Key, cảnh báo Telegram bot riêng) + restart store-bot store-api (chạy mọi commit tới 64b6c22). Thử qua Funnel: khoá đúng → 200 {success:true}, khoá sai → 401. Bot đã gửi tin «Ví FatCat còn…» (6 món khoá). Còn: anh mua thử Slot Canva 1.100đ bằng QR để xác nhận SePay tự giao.
+- 06/11 ~17:30 UTC: SePay CHẠY THẬT — anh nạp 10.000đ (nạp #9) → 1 phút bot tự cộng. Sửa: tin «Yêu cầu nạp» admin tự đổi thành kết quả (SePay tự cộng / Admin xác nhận / Khách tự huỷ / Hết hạn), bỏ nút. Test 82 pass. CHỜ restart store-bot store-api.
+- 06/11: commit perf — webhook SePay 6,9s → trả lời ngay sau ghi DB (việc Telegram chạy nền); TelegramApi giữ kết nối (0,8s→0,2s/tin). Phần đường Funnel (NAT kép, qua 45.57.137.67 + DERP Singapore ~50ms) không đổi được. Test 84 pass. CHỜ restart store-bot store-api.
+- 06/11: commit perf rà query/loop (chỉ mục, bỏ SCAN, bỏ N+1, vòng nền không giữ khoá ghi, luồng broadcast riêng). Test 86 pass. CHỜ restart store-bot store-api. Chưa làm: gọi lại đơn FatCat tuần tự (FatCat sập + nhiều đơn chờ → mỗi đơn tới 40s); state không dọn khoá cũ (stuck_alerted/announced/menu_sent…).
+- 06/11: commit giờ nghỉ — admin ⚙️ Quản lý shop → 🌙 Giờ nghỉ (khung hằng ngày + đóng tay); gọi lại FatCat ngân sách 60s/vòng + dừng khi offline 2 lần; dọn state mỗi giờ (thử trên bản sao: 49 khoá → dọn 12: announced/callme cũ, await khách nghỉ). Test 92 pass. CHỜ restart store-bot store-api + anh đặt giờ nghỉ.

@@ -37,6 +37,7 @@ WORKER_MODULES: tuple[str, ...] = (
     "app.features.threads.workers.auto_reply",
     "app.features.threads.workers.news_worker",
     "app.features.threads.workers.verifier",
+    "app.features.threads.growth.worker",
     "app.features.viral_intake.workers.ai_generator",
     "app.platform.local_supervisor",
 )

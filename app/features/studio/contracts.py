@@ -15,6 +15,7 @@ class Stage(StrEnum):
     FETCH = "fetch"  # tải video từ link (PLAN-113) — đứng đầu nên hạng thấp nhất: dự án đang dở làm xong trước
     INTAKE = "intake"
     ANALYZE = "analyze"
+    DOC_PLAN = "doc_plan"  # ADR-064: audio → beats/shots, dừng chờ người
     DUB = "dub"
     COMPOSE = "compose"
     RENDER = "render"

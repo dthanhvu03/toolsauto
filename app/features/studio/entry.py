@@ -90,6 +90,50 @@ def take_reup(
     return True
 
 
+def accept_audio_doc(
+    db: Session,
+    stream: BinaryIO,
+    filename: str,
+    *,
+    channel_id: int | None = None,
+    title: str = "",
+    language: str = "",
+) -> StudioTask:
+    """
+    ADR-064: upload MP3/WAV/M4A → flow ``audio_doc`` (intake → analyze → doc_plan).
+    ``language``: mã ngôn ngữ audio cho Whisper (PLAN-157); trống / ``auto`` = tự nhận.
+    Không tự render; người gắn ảnh + quyền rồi gọi ``queue_doc_preview``.
+    """
+    suffix = Path(filename or "").suffix.lower()
+    if kind_for(Path(f"x{suffix}")) != "audio":
+        raise ValueError(f"audio_doc chỉ nhận audio, nhận {suffix or '(không đuôi)'}")
+    dest = paths.inbox_dir() / f"audiodoc-{uuid.uuid4().hex[:10]}{suffix}"
+    with dest.open("wb") as out:
+        shutil.copyfileobj(stream, out, length=1024 * 1024)
+    payload: dict = {
+        "path": str(dest),
+        "origin": "upload",
+        "move": True,
+        "kind": "audio",
+        "title": (title or Path(filename).stem)[:200],
+    }
+    if channel_id is not None:
+        payload["channel_id"] = channel_id
+    lang = (language or "").strip().lower()
+    if lang and lang != "auto":
+        payload["language"] = lang[:8]
+    return pipeline.start(db, "audio_doc", payload=payload)
+
+
+def queue_doc_preview(db: Session, project_id: int, *, require_rights: bool = True) -> dict:
+    """Chuẩn bị spec documentary rồi xếp flow ``doc_preview`` (chỉ bước render)."""
+    from app.features.studio.doc import service as doc_service
+
+    prepared = doc_service.prepare_preview(db, project_id, require_rights=require_rights)
+    task = pipeline.start(db, "doc_preview", project_id=project_id, payload={"doc_preview": True})
+    return {**prepared, "task_id": task.id}
+
+
 def accept_file(
     db: Session,
     stream: BinaryIO,

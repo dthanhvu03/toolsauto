@@ -1,5 +1,6 @@
 import { Film, ListTodo, Orbit } from "lucide-react";
 import { formatTs } from "@/shared/lib/time";
+import { ScreenSettingsButton } from "@/features/settings/components/ScreenSettingsButton";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
@@ -22,7 +23,8 @@ export function OverviewPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Tổng quan" subtitle="Video → Buffer: kênh nào còn bài, cái gì đang lỗi" />
+      <PageHeader
+        actions={<ScreenSettingsButton screen="overview" />} title="Tổng quan" subtitle="Video → Buffer: kênh nào còn bài, cái gì đang lỗi" />
       <QueryBody
         isLoading={q.isLoading}
         isError={q.isError || (!q.isLoading && !d)}
