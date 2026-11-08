@@ -1,3 +1,51 @@
+## Phiên 2026-11-08 (PLAN-165) — Dọn rác đợt 1 (chủ bot yêu cầu)
+- `git rm` app/features/{fb_pro_tasks,insights,accounts} + experiments/ (sửa .importlinter + 1 test). 330 test qua (1 hỏng sẵn).
+- GIỮ scripts/archive (Maintenance chạy scrape_insights.py mỗi vòng). Chuỗi FB cũ (facebook/instagram/tiktok/story/affiliates/
+  jobs) cần PLAN refactor riêng. Chờ chủ bot: xoá profiles/ (88 MB) + content/ (9,2 MB) + scratch/ (ngoài git); tắt
+  scrape_insights trong Maintenance. Chưa commit.
+
+## Phiên 2026-11-08 (cashback-zero-comm) — 2 đơn 07/11 hoa hồng 0 (chỉ đọc DB, không gọi Shopee)
+- 247721903296070 cát mèo (SÂU PET, link 139): Shopee báo platform_commission_rate=0, brand=0 → sản phẩm 0%; bot báo khách
+  ước tính 0 từ lúc tạo link (đúng). 247765137255340 giỏ nhựa (link 142): actual_amount=0 (khách trả 0đ, voucher/xu phủ hết
+  giá 15k) → 2,5% × 0 = 0; bot từng báo ước tính 199đ theo giá niêm yết. Không phải lỗi bot. Sync chạy 04:14 UTC 08/11.
+
+## Phiên 2026-11-08 (growth-check2) — Kéo khách sau restart
+- Từ 02:29 UTC (restart): 18 lượt AI đọc bài, 0 lỗi 9Router / 0 fallback. 08/11 chưa reply vì quota cuộn 24 giờ còn 48 reply
+  của 07/11 (giới hạn mới 25/ngày).
+- Lọc lại 7 bài worker cũ nhận trước restart (chưa qua AI đọc, vd #415 bài voucher 99 điểm): 3 người bán + 4 điểm thấp → rejected
+  (sao lưu scratchpad threads_growth.before-rescreen2.sqlite). Hàng chờ: 9 approved (60–95 điểm) + 3 pending.
+
+## Phiên 2026-11-08 (trnvp89-source-add) — Gắn nguồn mới cho trnvp89 (chủ bot duyệt)
+- Thêm nguồn #8 `facebook.com/chuyenphoidonu/reels` (quét ra 49 video mới) và #9 `facebook.com/phoidostylee/reels` (39 mới),
+  đích trnvp89. Tắt nguồn #7 (Fits by Migs, nay nội dung nam). Maintenance tự tải → READY → hẹn Buffer.
+- #7 khoá hẳn (chủ bot duyệt): enabled=False + gỡ hết kênh đích (không xoá được vì 59 material tham chiếu, FK NO ACTION) →
+  PLAN-164 không bao giờ chọn lại. Theo dõi tỉ lệ tải hỏng yt-dlp FB của #8, #9.
+
+## Phiên 2026-11-08 (trnvp89-source) — Tìm nguồn reels FB mới cho trnvp89 (cô gái châu Á thử đồ)
+- Video nhiều view nhất trước đây của trnvp89 là cô gái thử đồ (trang 61595147031656 sau đổi sang «Fits by Migs» nam).
+- Tìm bằng phiên facebook_scanner (chỉ xem): đề xuất `facebook.com/chuyenphoidonu` (71+ reels, cô gái châu Á thử đồ),
+  dự phòng `facebook.com/phoidostylee` (40+). Loại: phoidoxinhnu (video AI sản phẩm), phoidonuoutfit (fanpage diễn viên Thái),
+  outfitnutheotrend (lẫn makeup / shop). Chờ chủ bot chọn để gắn nguồn.
+
+## Phiên 2026-11-08 (fb-scanner-login) — Đăng nhập lại facebook_scanner bằng cookie Chrome Windows
+- Profile facebook_scanner từng đăng nhập c_user 61595263392656 (phiên hết hạn). Chủ bot đăng nhập lại trên Chrome Windows
+  (`C:\toolsauto_fb`, cổng 9223) → `C:\toolsauto_tmp\dump_fb_cookies.ps1` → 9 cookie (có c_user) nạp vào facebook_scanner
+  (khoá facebook_scanner.lock khi nạp); file cookie tạm đã xoá, Chrome debug đã đóng.
+- Kiểm: đã đăng nhập (hết bảng «Xem thêm trên Facebook»), nhưng trang Fits by Migs giờ chỉ còn ~3 reels (cuộn tới hết trang)
+  → nguồn cạn thật, không phải do chặn. trnvp89 vẫn cần nguồn mới.
+
+## Phiên 2026-11-08 (fb-scanner) — Nguồn reels FB của trnvp89 «cạn» thật ra là bị chặn đăng nhập
+- facebook_scanner chạy không lỗi nhưng FB chỉ cho khách ẩn danh xem 2 reels rồi hiện «Xem thêm trên Facebook» (ảnh
+  headless 08/11) → trang «Fits by Migs» (61595147031656) báo found=0 skipped=3 thay vì ~50 như trước. Không tìm thấy TikTok
+  của Fits by Migs qua web. 6 tài khoản FB (id 15–20) INVALID — chủ bot đã bỏ, không dùng ở đâu.
+- Hướng: chủ bot gửi TikTok/IG của Fits by Migs (xem mục Giới thiệu trên FB) hoặc nguồn TikTok phối đồ nam châu Á;
+  hoặc PLAN cho scanner dùng cookie 1 tài khoản FB (rủi ro checkpoint).
+
+## Phiên 2026-11-08 (verify-restart) — Kiểm sau khi chủ bot restart: OK
+- PLAN-164 chạy thật: «Kênh 9cde9a thiếu bài (0) → tự bật lại nguồn nnpt2310»; quét ra 8 video mới (42 đã có), 1 đã READY
+  → Maintenance tự hẹn Sống Nhẹ. 9Router_Gateway có INITIAL_PASSWORD. main = feat/xe-tet = 37f5c0d (đã push).
+- trnvp89 vẫn cần chủ bot thêm nguồn mới.
+
 ## Phiên 2026-11-08 (PLAN-164) — Kênh hết bài tự bật lại nguồn đang tắt (chủ bot yêu cầu)
 - `sources._revive_sources_for_starving_pages` mỗi vòng scan_all: kênh còn đăng Buffer 14 ngày, < 5 video chưa hẹn, không còn
   nguồn đang bật + thức → bật 1 nguồn tắt (tắt ≥ 24h, mỗi nguồn ≤ 1 lần/7 ngày), báo Telegram 🔌. Proof PLAN-164 (114 test).

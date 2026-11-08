@@ -29,7 +29,6 @@ from app.core.observability.metrics_checker import (
     _MetricsJobTarget,
 )
 import app.features.system_panel.workers.maintenance as maint
-import app.features.insights.service as insights_svc
 from app.core.database.models import Job, Account
 from app.constants import JobStatus
 
@@ -217,50 +216,6 @@ class TestSubprocessReapingAndZombiePrevention:
             assert maint._insights_process is None
         finally:
             maint._insights_process = None
-
-    def test_insights_service_reaps_child_process_with_wait(self):
-        """Verifies insights service trigger_refresh spawns child process and reaps it."""
-        mock_proc = MagicMock()
-        mock_proc.pid = 12345
-        mock_proc.wait.return_value = 0
-
-        insights_svc._refresh_running = False
-
-        with patch("os.path.exists", return_value=True), \
-             patch("subprocess.Popen", return_value=mock_proc):
-            
-            res = insights_svc.trigger_refresh()
-            assert isinstance(res, dict)
-            assert res.get("status") == "success"
-            assert res.get("pid") == 12345
-
-            # Allow reaper thread to run wait()
-            time.sleep(0.1)
-
-            mock_proc.wait.assert_called()
-
-    def test_insights_service_reaps_child_process_on_timeout(self):
-        """Verifies insights service kills and reaps with wait(timeout=5) if child times out."""
-        mock_proc = MagicMock()
-        mock_proc.pid = 54321
-        # First call (timeout=1800) raises TimeoutExpired; second call (timeout=5) succeeds
-        mock_proc.wait.side_effect = [
-            subprocess.TimeoutExpired(cmd=["test"], timeout=1800),
-            0,
-        ]
-
-        insights_svc._refresh_running = False
-
-        with patch("os.path.exists", return_value=True), \
-             patch("subprocess.Popen", return_value=mock_proc):
-            
-            res = insights_svc.trigger_refresh()
-            assert res.get("status") == "success"
-
-            time.sleep(0.1)
-
-            mock_proc.kill.assert_called_once()
-            assert mock_proc.wait.call_count >= 2
 
     def test_real_subprocess_zombie_reaping(self):
         """Verifies a real OS process killed and reaped via wait() does not stay <defunct>."""
