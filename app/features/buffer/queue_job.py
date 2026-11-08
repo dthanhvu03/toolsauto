@@ -16,6 +16,11 @@ from app.features.buffer.when import accept_ts, due_iso, format_ict
 
 logger = logging.getLogger(__name__)
 
+# Buffer cần vài phút sau giờ hẹn mới đăng xong; trong khoảng này bài vẫn chiếm chỗ trong hàng chờ 10 bài.
+QUEUE_GRACE_SEC = 15 * 60
+# Một lần gửi Buffer chỉ mất vài giây; RUNNING lâu hơn mức này là tiến trình chết giữa chừng (PLAN-162).
+STUCK_RUNNING_SEC = 30 * 60
+
 
 def _channels() -> list[dict]:
     from app.core import settings as runtime_settings
@@ -80,6 +85,36 @@ def _stop_scheduling(msg: str) -> bool:
     )
 
 
+def _expire_stuck_running(db, material_id: int, channel_id: str) -> None:
+    """Job Buffer RUNNING quá ``STUCK_RUNNING_SEC`` → FAILED để video xếp lại được (PLAN-162).
+
+    Job Buffer không có heartbeat nên ``recover_crashed_jobs`` không gỡ được. Tiến trình chết đúng lúc
+    Buffer đã nhận bài thì có thể ra bài trùng — ghi rõ trong lỗi để chủ bot xem web Buffer.
+    """
+    cutoff = int(now_ts()) - STUCK_RUNNING_SEC
+    stuck = (
+        db.query(Job)
+        .filter(
+            Job.platform == "buffer",
+            Job.viral_material_id == material_id,
+            Job.target_page == channel_id,
+            Job.status == JobStatus.RUNNING,
+            Job.created_at < cutoff,
+        )
+        .all()
+    )
+    for job in stuck:
+        job.status = JobStatus.FAILED
+        job.finished_at = now_ts()
+        job.last_error = (
+            "Kẹt RUNNING quá 30 phút (tiến trình dừng giữa chừng). Xếp lại tự động; "
+            "nếu web Buffer đã có bài này thì xoá bản trùng."
+        )
+        logger.warning("[Buffer][job_%s] Ket RUNNING qua 30 phut -> FAILED", job.id)
+    if stuck:
+        db.commit()
+
+
 def auto_schedule_ready(db, material_id: int) -> tuple[bool, str]:
     """Video đã có page Buffer và caption thì lấy ô kế của kênh và hẹn giờ.
 
@@ -105,6 +140,7 @@ def auto_schedule_ready(db, material_id: int) -> tuple[bool, str]:
         job = _done_job(db, material_id, channel_id)
         when = f" lúc {format_ict(job.schedule_ts)}" if job and job.schedule_ts else ""
         return True, f"Đã có lịch {channel_name(channel_id)}{when}."
+    _expire_stuck_running(db, material_id, channel_id)
     running = (
         db.query(Job)
         .filter(
@@ -116,7 +152,8 @@ def auto_schedule_ready(db, material_id: int) -> tuple[bool, str]:
         .first()
     )
     if running:
-        return True, "Đang xếp lịch."
+        # Không trả True: sweep sẽ đếm là «đã xếp» và dừng ở đúng video này mãi (PLAN-162).
+        return False, "Đang xếp lịch (job khác đang chạy)."
 
     name = channel_name(channel_id)
     skip_days: set = set()
@@ -266,6 +303,7 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
     if (mat.target_page or "") != channel_id:
         mat.target_page = channel_id
         db.commit()
+    _expire_stuck_running(db, material_id, channel_id)
     existing = (
         db.query(Job)
         .filter(
@@ -317,12 +355,17 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
 
         is_queue_full = "scheduled posts limit reached" in err_lower or "10 scheduled posts out of 10" in err_lower
         if is_queue_full:
-            job.status = JobStatus.PENDING
-            job.last_error = "Hàng chờ Buffer đã đầy 10/10 bài (gói Free). Tự động thử lại sau 30 phút."
-            job.schedule_ts = int(now_ts()) + 1800
+            # PLAN-162: không có worker nào chạy lại job PENDING của Buffer, và PENDING còn chặn video qua
+            # unique index → đặt FAILED như đường 429; vòng tự xếp lịch sẽ hẹn lại khi hàng chờ trống.
+            job.status = JobStatus.FAILED
+            job.last_error = "Hàng chờ Buffer đã đầy 10/10 bài (gói Free). Buffer chưa nhận bài."
+            job.finished_at = now_ts()
             db.commit()
-            logger.info("[Buffer][job_%s] Queue limit 10/10 reached, scheduled backoff 30m: %s", job.id, job.last_error)
-            return False, "⚠️ Hàng chờ Buffer của kênh đã đầy 10/10 bài (giới hạn gói Free). Đã lưu và sẽ tự động thử lại sau 30 phút khi có bài được đăng."
+            logger.info("[Buffer][job_%s] Queue limit 10/10 reached, job FAILED", job.id)
+            return False, (
+                "⚠️ Hàng chờ Buffer của kênh đã đầy 10/10 bài (giới hạn gói Free). Chưa nhận bài — "
+                "video vẫn sẵn sàng, bot tự hẹn lại khi hàng chờ có chỗ."
+            )
 
         job.status = JobStatus.FAILED
         job.last_error = (result.error or "Buffer từ chối")[:300]
@@ -466,6 +509,7 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
         mat.target_page = channel_id
         db.commit()
 
+    _expire_stuck_running(db, material_id, channel_id)
     running_job = (
         db.query(Job)
         .filter(
@@ -484,6 +528,7 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
         return _apply_reschedule(db, existing, int(when_ts), name)
 
     # Đếm hàng chờ trong DB trước: kênh đã kín thì không tốn request hỏi suất (PLAN-086).
+    # Bài vừa tới giờ hẹn vẫn tính thêm QUEUE_GRACE_SEC vì Buffer cần vài phút mới đăng xong (PLAN-160).
     now = now_ts()
     future_count = (
         db.query(Job)
@@ -491,7 +536,7 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
             Job.platform == "buffer",
             Job.target_page == channel_id,
             Job.status == JobStatus.DONE,
-            Job.schedule_ts > now,
+            Job.schedule_ts > now - QUEUE_GRACE_SEC,
         )
         .count()
     )

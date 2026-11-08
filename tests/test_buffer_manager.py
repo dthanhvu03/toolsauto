@@ -162,6 +162,7 @@ def test_buffer_adapter_routes_with_manager(monkeypatch):
     job.schedule_ts = 0
     job.media_path = None
     job.processed_media_path = None
+    job.viral_material_id = None  # bài chữ thuần, không từ video (PLAN-162 chặn bài video thiếu file)
 
     monkeypatch.setattr("app.features.buffer.adapter.public_media_url", lambda j: None)
 

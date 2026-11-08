@@ -304,8 +304,8 @@ class StorageCleanupService:
                     f"protected session component '{protected}'. Aborting deletion immediately!"
                 )
 
-    def _get_active_job_media_paths(self) -> set[str]:
-        """Queries active DB jobs to shield their media files from pruning."""
+    def _get_active_job_media_paths(self) -> set[str] | None:
+        """Queries active DB jobs to shield their media files from pruning. ``None`` = không đọc được DB (PLAN-162)."""
         protected: set[str] = set()
         try:
             from app.core.database.core import SessionLocal
@@ -335,10 +335,11 @@ class StorageCleanupService:
                             else:
                                 protected.add(os.path.normpath(str(p)).lower())
         except Exception as exc:
-            logger.debug("Active jobs query skipped/failed: %s", exc)
+            logger.warning("[Cleanup] Không đọc được job đang chạy: %s", exc)
+            return None
         return protected
 
-    def _get_buffer_scheduled_material_ids(self) -> set[int]:
+    def _get_buffer_scheduled_material_ids(self) -> set[int] | None:
         """Material của bài đã hẹn trên Buffer — Buffer chỉ tải video lúc tới giờ đăng.
 
         Job Buffer DONE ngay khi hẹn và không có ``media_path``, nên ``_get_active_job_media_paths``
@@ -361,10 +362,10 @@ class StorageCleanupService:
                 )
                 return {int(mid) for (mid,) in rows}
         except Exception as exc:
-            logger.debug("Buffer scheduled jobs query skipped/failed: %s", exc)
-            return set()
+            logger.warning("[Cleanup] Không đọc được bài Buffer đã hẹn: %s", exc)
+            return None
 
-    def _get_ready_material_ids(self) -> set[int]:
+    def _get_ready_material_ids(self) -> set[int] | None:
         """Material READY chưa đăng. Page đăng 5 bài/ngày nên 7 ngày không đủ để đăng hết hàng chờ."""
         try:
             from app.core.database.core import SessionLocal
@@ -375,8 +376,8 @@ class StorageCleanupService:
                 rows = db.query(ViralMaterial.id).filter(ViralMaterial.status == ViralStatus.READY).all()
                 return {int(mid) for (mid,) in rows}
         except Exception as exc:
-            logger.debug("Ready materials query skipped/failed: %s", exc)
-            return set()
+            logger.warning("[Cleanup] Không đọc được video READY: %s", exc)
+            return None
 
     def _get_active_profile_names(self) -> set[str]:
         """Returns union of known active profiles and DB accounts."""
@@ -451,21 +452,30 @@ class StorageCleanupService:
         buffer_material_ids = self._get_buffer_scheduled_material_ids()
         ready_material_ids = self._get_ready_material_ids()
         ready_cutoff_ts = now - (max(retention_days, READY_RETENTION_DAYS) * 86400.0)
+        # PLAN-162: không biết file nào đang chờ đăng thì KHÔNG xoá video (31/10 mất 261 video theo đúng kiểu này).
+        can_prune_videos = None not in (protected_paths, buffer_material_ids, ready_material_ids)
+        if not can_prune_videos:
+            logger.warning("[Cleanup] Bỏ dọn video reup: không đọc được DB để biết video nào đang chờ đăng")
+            protected_paths, buffer_material_ids, ready_material_ids = set(), set(), set()
 
-        # 1. Prune da-dang posted files
-        for da_dang_dir in self.media_root.glob("reup/*/da-dang"):
+        # 1. Prune da-dang posted files (trừ video còn bài Buffer hẹn — PLAN-162)
+        for da_dang_dir in self.media_root.glob("reup/*/da-dang") if can_prune_videos else ():
             if not da_dang_dir.is_dir():
                 continue
             for file_path in da_dang_dir.iterdir():
                 if file_path.is_file():
+                    id_match = _VIRAL_ID_RE.search(file_path.name)
+                    if id_match and int(id_match.group(1)) in buffer_material_ids:
+                        continue
                     if posted_retention_days <= 0 or file_path.stat().st_mtime <= posted_cutoff_ts:
                         size = file_path.stat().st_size
                         reclaimed += size
                         if not dry_run:
                             file_path.unlink()
+                            logger.info("[Cleanup] Xoá video đã đăng %s", file_path.name)
 
         # 2. Prune stale raw and reup files older than retention_days
-        for media_dir in self.media_root.glob("reup/*"):
+        for media_dir in self.media_root.glob("reup/*") if can_prune_videos else ():
             if not media_dir.is_dir() or media_dir.name in ("da-dang", "frames"):
                 continue
             for file_path in media_dir.iterdir():
@@ -485,6 +495,7 @@ class StorageCleanupService:
                         reclaimed += size
                         if not dry_run:
                             file_path.unlink()
+                            logger.info("[Cleanup] Xoá video quá hạn %s", file_path.name)
                             self._update_material_failed_if_stale(file_path, retention_days)
 
         # 3. Prune orphan frames and stale thumbs

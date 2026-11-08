@@ -317,17 +317,52 @@ class TestStorageCleanupMediaPruning:
 
         assert not stale_reup.exists()
 
-    def test_ready_material_ids_db_error_returns_empty(self, cleanup_env):
+    def test_ready_material_ids_db_error_returns_none(self, cleanup_env):
+        """PLAN-162: lỗi DB phải phân biệt được với «không có video nào» — trả None, không trả set()."""
         svc: StorageCleanupService = cleanup_env["service"]
 
         with patch("app.core.database.core.SessionLocal", side_effect=RuntimeError("db down")):
-            assert svc._get_ready_material_ids() == set()
+            assert svc._get_ready_material_ids() is None
 
-    def test_buffer_scheduled_material_ids_db_error_returns_empty(self, cleanup_env):
+    def test_buffer_scheduled_material_ids_db_error_returns_none(self, cleanup_env):
         svc: StorageCleanupService = cleanup_env["service"]
 
         with patch("app.core.database.core.SessionLocal", side_effect=RuntimeError("db down")):
-            assert svc._get_buffer_scheduled_material_ids() == set()
+            assert svc._get_buffer_scheduled_material_ids() is None
+
+    def test_prune_media_keeps_every_video_when_db_unreachable(self, cleanup_env):
+        """PLAN-162 (sự cố 31/10): DB lỗi → không xoá video nào, kể cả video cũ hơn hạn."""
+        svc: StorageCleanupService = cleanup_env["service"]
+        reup = svc.media_root / "reup" / "tiktok"
+        posted = reup / "da-dang"
+        posted.mkdir(parents=True, exist_ok=True)
+        old_ts = time.time() - 40 * 86400
+        files = [reup / "viral_501_reup.mp4", posted / "viral_502_reup.mp4"]
+        for f in files:
+            f.write_bytes(b"x" * 10)
+            os.utime(f, (old_ts, old_ts))
+
+        with patch("app.core.database.core.SessionLocal", side_effect=RuntimeError("db down")):
+            svc.prune_media(retention_days=7)
+
+        assert all(f.exists() for f in files)
+
+    def test_da_dang_keeps_file_still_scheduled_on_buffer(self, cleanup_env):
+        """PLAN-162: video đã đăng kênh 1 nhưng còn hẹn kênh 2 → giữ file trong da-dang."""
+        svc: StorageCleanupService = cleanup_env["service"]
+        posted = svc.media_root / "reup" / "facebook" / "da-dang"
+        posted.mkdir(parents=True, exist_ok=True)
+        keep = posted / "viral_601_reup.mp4"
+        gone = posted / "viral_602_reup.mp4"
+        for f in (keep, gone):
+            f.write_bytes(b"x" * 10)
+
+        with patch.object(svc, "_get_active_job_media_paths", return_value=set()), \
+             patch.object(svc, "_get_buffer_scheduled_material_ids", return_value={601}), \
+             patch.object(svc, "_get_ready_material_ids", return_value=set()):
+            svc.prune_media(retention_days=7)
+
+        assert keep.exists() and not gone.exists()
 
     def test_buffer_scheduled_material_ids_query(self, cleanup_env):
         svc: StorageCleanupService = cleanup_env["service"]
