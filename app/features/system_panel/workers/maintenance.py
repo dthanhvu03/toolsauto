@@ -764,8 +764,8 @@ def run_loop():
             except Exception as e:
                 logger.error("[MAINT] _purge_zombies failed: %s", e)
 
-            # 8. Run Page Insights Scraper (12h interval)
-            _scrape_page_insights()
+            # 8. Page Insights Scraper — TẮT (PLAN-165, chủ bot duyệt 08/11): cào insights page FB bằng các
+            # tài khoản FB đã bỏ (đều INVALID), không còn ai đọc kết quả. Hàm giữ lại cho test / bật lại.
 
             # 9. Storage retention & cleanup (6h interval)
             _run_storage_cleanup()

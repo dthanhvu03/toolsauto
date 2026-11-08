@@ -1,8 +1,8 @@
 ## Phiên 2026-11-08 (PLAN-165) — Dọn rác đợt 1 (chủ bot yêu cầu)
 - `git rm` app/features/{fb_pro_tasks,insights,accounts} + experiments/ (sửa .importlinter + 1 test). 330 test qua (1 hỏng sẵn).
-- GIỮ scripts/archive (Maintenance chạy scrape_insights.py mỗi vòng). Chuỗi FB cũ (facebook/instagram/tiktok/story/affiliates/
-  jobs) cần PLAN refactor riêng. Chờ chủ bot: xoá profiles/ (88 MB) + content/ (9,2 MB) + scratch/ (ngoài git); tắt
-  scrape_insights trong Maintenance. Chưa commit.
+- GIỮ scripts/archive. Đợt 1b (chủ bot duyệt): profiles/ content/ scratch/ nén vào storage/backups/
+  cleanup-root-legacy-20261108.tar.gz rồi xoá; Maintenance thôi gọi scrape_insights; lập PLAN-166 (chưa chạy).
+  **Cần chủ bot:** `pm2 restart Maintenance`.
 
 ## Phiên 2026-11-08 (cashback-zero-comm) — 2 đơn 07/11 hoa hồng 0 (chỉ đọc DB, không gọi Shopee)
 - 247721903296070 cát mèo (SÂU PET, link 139): Shopee báo platform_commission_rate=0, brand=0 → sản phẩm 0%; bot báo khách

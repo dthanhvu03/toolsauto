@@ -23,3 +23,8 @@
 - pytest 9 file: 330 passed, 1 failed = test_metrics_checker_scrape_views_cleanup_no_unbound_local (HEAD cũng hỏng).
 - Phát hiện: Maintenance mỗi vòng chạy `scripts/archive/scrape_insights.py` (cào insights page FB bằng tài khoản FB đã bỏ)
   → đề xuất tắt (đợt sau, cần chủ bot duyệt).
+
+## Đợt 1b (08/11, chủ bot duyệt «anh duyệt cho em nhé»)
+- Nén `profiles/ content/ scratch/` → `storage/backups/cleanup-root-legacy-20261108.tar.gz` (60 MB, 1.017 mục, chmod 600) rồi xoá.
+- Maintenance: bỏ gọi `_scrape_page_insights()` mỗi 12 giờ (giữ hàm). ruff sạch; test 32 passed + 1 hỏng sẵn.
+- Lập PLAN-166 (gỡ chuỗi đăng trực tiếp cũ) — chưa thực thi.
