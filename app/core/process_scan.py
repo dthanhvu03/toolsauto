@@ -32,7 +32,6 @@ import app.config as config
 WORKER_MODULES: tuple[str, ...] = (
     "app.features.system_panel.workers.maintenance",
     "app.features.system_panel.workers.ai_reporter",
-    "app.features.threads.workers.verifier",
     "app.features.threads.growth.worker",
     "app.platform.local_supervisor",
 )

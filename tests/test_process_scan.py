@@ -79,7 +79,7 @@ def test_command_that_only_mentions_the_worker_is_not_the_worker():
 def test_live_workers_are_known_entrypoints():
     for cmdline in (
         ["python", "app/features/threads/growth/worker.py"],
-        ["python", "-m", "app.features.threads.workers.verifier"],
+        ["python", "-m", "app.features.system_panel.workers.ai_reporter"],
         ["python", "app/features/system_panel/workers/ai_reporter.py"],
         ["python", "app/features/threads/growth/worker.py"],
         ["python", "manage.py", "serve", "--no-reload"],

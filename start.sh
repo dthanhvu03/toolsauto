@@ -94,8 +94,6 @@ sleep 1
 if command -v pm2 &>/dev/null; then
     echo -e "${YELLOW}Starting via ecosystem.config.js...${NC}"
     pm2 start ecosystem.config.js --update-env
-    # Standby secondary publishers/AI by default (same as previous start.sh)
-    pm2 stop FB_Publisher_2 AI_Generator_2 2>/dev/null || true
     pm2 save
     echo ""
     echo -e "${GREEN}Started (PM2 + ecosystem.config.js).${NC}"
@@ -112,18 +110,9 @@ fi
 $VENV_PYTHON manage.py serve --no-reload > web.log 2>&1 &
 echo $! > .run_web.pid
 sleep 2
-env -u DISPLAY xvfb-run -a --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" \
-    $VENV_PYTHON app/features/facebook/workers/publisher.py > pub_worker.log 2>&1 &
-echo $! > .run_pub.pid
-env -u DISPLAY xvfb-run -a --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" \
-    $VENV_PYTHON app/features/viral_intake/workers/ai_generator.py > ai_worker.log 2>&1 &
-echo $! > .run_ai.pid
+# PLAN-166: FB publisher / AI_Generator / Threads cũ đã bỏ — đăng bài qua Buffer (Maintenance).
 $VENV_PYTHON app/features/system_panel/workers/maintenance.py > maint_worker.log 2>&1 &
 echo $! > .run_maint.pid
-$VENV_PYTHON app/features/threads/workers/publisher.py > threads_pub.log 2>&1 &
-echo $! > .run_threads_pub.pid
-$VENV_PYTHON app/features/threads/workers/news_worker.py > threads_news.log 2>&1 &
-echo $! > .run_threads_news.pid
 
 if command -v 9router &>/dev/null; then
     9router > 9router.log 2>&1 &

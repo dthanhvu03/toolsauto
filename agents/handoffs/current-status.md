@@ -1,3 +1,6 @@
+## Phiên 2026-11-08 (PLAN-166 đợt 2) — Gỡ Threads cũ (giữ adapter + growth)
+- 13 file, −2.326 dòng; start.sh không còn bật worker cũ. Proof trong PLAN-166. Đợt tiếp: 3 (IG / TikTok upload / Story).
+
 ## Phiên 2026-11-08 (PLAN-166 đợt 1) — Bỏ 7 worker đăng trực tiếp cũ khỏi PM2 / supervisor / Panel
 - ecosystem còn 9 app; process_scan, local_supervisor, pm2_apps, Panel log khớp. Proof trong PLAN-166 (665 test, 1 hỏng sẵn).
 - Đã push dọn đợt 1 + 1b (664a8f3). Đợt tiếp: 2 (Threads cũ) — chờ chủ bot.

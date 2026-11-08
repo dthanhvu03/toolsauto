@@ -45,3 +45,12 @@
   347 test vùng liên quan + 318 test Buffer/viral/growth/store/storage: qua hết trừ 1 hỏng sẵn (metrics_checker).
   `import app.main` OK; lint-imports như HEAD; ruff sạch file đổi.
 - Không cần restart: các app bỏ vốn không chạy. (Nếu từng `pm2 save` có chúng: `pm2 delete <tên>` — hiện `pm2 list` không có.)
+
+### Đợt 2 (08/11) — xong
+- `git rm` threads/workers (publisher, auto_reply, news_worker, verifier), threads/service (threads_news, news_scraper,
+  article_scorer, topic_key), threads/dashboard.py + 2 test (world_news, article_scorer). GIỮ adapter.py + growth/.
+- `process_scan` bỏ verifier; `start.sh` thôi khởi chạy FB publisher / AI_Generator / Threads cũ ở chế độ không PM2 và bỏ
+  `pm2 stop FB_Publisher_2 AI_Generator_2` (giữ pkill / PM2_APPS để dọn tiến trình sót).
+- Giữ: model DB `threads.py`, setting `topic_key`, `AIPurpose.THREADS_NEWS` (dữ liệu / cấu hình — xử lý ở đợt 6).
+- Test: 882 passed vùng threads / process / panel; 3 hỏng đều có sẵn trước đợt (2 test_adversarial_m3_concurrency + metrics_checker,
+  đã chạy lại trên HEAD trước đợt để đối chiếu); 248 test Buffer / viral / store / storage qua. import app.main + growth OK.
