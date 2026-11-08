@@ -47,61 +47,9 @@ const ROUTER_NODE_PATH = [
 ].join(path.delimiter);
 
 module.exports = {
+  // PLAN-166 đợt 1 (08/11): bỏ FB_Publisher_1/2, AI_Generator_1/2, Threads_AutoReply / NewsWorker / Publisher
+  // (đăng bài đã chuyển hết sang Buffer, các worker này dừng từ 20/10).
   apps: [
-    {
-      name: "FB_Publisher_1",
-      script: "app/features/facebook/workers/publisher.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 600000,       // 10 minutes — allow in-flight Playwright job to finish
-
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
-      name: "FB_Publisher_2",
-      script: "app/features/facebook/workers/publisher.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 600000,       // 10 minutes
-
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
-      name: "AI_Generator_1",
-      script: "app/features/viral_intake/workers/ai_generator.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 300000,       // 5 minutes
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
-      name: "AI_Generator_2",
-      script: "app/features/viral_intake/workers/ai_generator.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 300000,       // 5 minutes
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
     {
       name: "Maintenance",
       script: "app/features/system_panel/workers/maintenance.py",
@@ -163,19 +111,6 @@ module.exports = {
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
-      name: "Threads_AutoReply",
-      script: "app/features/threads/workers/auto_reply.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 60000,
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
       // PLAN-158: quét Threads theo từ khóa + tự reply kéo khách về bot (bật/tắt trên web: growth.enabled)
       name: "Threads_Growth",
       script: "app/features/threads/growth/worker.py",
@@ -185,33 +120,6 @@ module.exports = {
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 10000,
-      autorestart: true,
-      max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
-      name: "Threads_NewsWorker",
-      script: "app/features/threads/workers/news_worker.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 60000,
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
-      autorestart: true,
-      max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
-    },
-    {
-      name: "Threads_Publisher",
-      script: "app/features/threads/workers/publisher.py",
-      interpreter: VENV_PYTHON,
-      cwd: PROJECT_ROOT,
-      kill_timeout: 600000,
-
-      max_restarts: 10,
-      min_uptime: 30000,
-      restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },

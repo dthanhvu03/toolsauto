@@ -36,7 +36,7 @@ def _orphans(procs):
 def test_live_publisher_browser_is_protected():
     """PM2 spells the worker as a script path — it must still be recognised."""
     procs = [
-        _worker(10, ["python", "app/features/facebook/workers/publisher.py"]),
+        _worker(10, ["python", "app/features/system_panel/workers/maintenance.py"]),
         _chrome(50, 10, f"{PROFILES}/acc_1"),
     ]
     assert _orphans(procs) == set()
@@ -44,17 +44,17 @@ def test_live_publisher_browser_is_protected():
 
 def test_live_publisher_started_with_dash_m_is_protected():
     procs = [
-        _worker(10, ["python", "-m", "app.features.facebook.workers.publisher"]),
+        _worker(10, ["python", "-m", "app.features.system_panel.workers.maintenance"]),
         _chrome(50, 10, f"{PROFILES}/acc_1"),
     ]
     assert _orphans(procs) == set()
 
 
-def test_threads_and_ai_generator_browsers_are_protected():
+def test_live_worker_browsers_are_protected():
     procs = [
-        _worker(10, ["python", "app/features/threads/workers/publisher.py"]),
+        _worker(10, ["python", "app/features/threads/growth/worker.py"]),
         _chrome(50, 10, f"{PROFILES}/threads_1"),
-        _worker(20, ["python", "app/features/viral_intake/workers/ai_generator.py"]),
+        _worker(20, ["python", "app/features/threads/growth/worker.py"]),
         _chrome(60, 20, f"{PROFILES}/ai_1"),
     ]
     assert _orphans(procs) == set()
@@ -119,8 +119,8 @@ def test_browser_tree_shared_by_two_live_workers_is_protected():
     that tree may be purged — killing the root would take the other job with it.
     """
     procs = [
-        _worker(10, ["python", "app/features/facebook/workers/publisher.py"]),
-        _worker(11, ["python", "-m", "app.features.threads.workers.publisher"], ppid=10),
+        _worker(10, ["python", "app/features/system_panel/workers/maintenance.py"]),
+        _worker(11, ["python", "-m", "app.features.threads.growth.worker"], ppid=10),
         _chrome(50, 11, f"{PROFILES}/acc_shared"),
         _chrome(51, 50, f"{PROFILES}/acc_shared"),
     ]
@@ -208,7 +208,7 @@ def test_db_failure_disables_the_purge_instead_of_guessing():
 
 def test_counts_expose_named_fields_and_stay_tuple_compatible():
     procs = [
-        _worker(10, ["python", "-m", "app.features.facebook.workers.publisher"]),
+        _worker(10, ["python", "-m", "app.features.system_panel.workers.maintenance"]),
         _chrome(50, 10, f"{PROFILES}/acc_1"),
         _chrome(51, 50, f"{PROFILES}/acc_1"),
     ]
@@ -252,7 +252,7 @@ def test_explicit_snapshot_bypasses_cache(monkeypatch):
 
 def test_counts_separate_instances_from_helper_processes():
     procs = [
-        _worker(10, ["python", "-m", "app.features.facebook.workers.publisher"]),
+        _worker(10, ["python", "-m", "app.features.system_panel.workers.maintenance"]),
         _chrome(50, 10, f"{PROFILES}/acc_1"),
         _chrome(51, 50, f"{PROFILES}/acc_1"),
         # Someone else's browser: counted in the machine total only.

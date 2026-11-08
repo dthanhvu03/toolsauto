@@ -36,4 +36,12 @@
   (không chạy 2 file gọi Buffer thật), khởi động thử Maintenance + Web_Dashboard trên bản sao (không restart prod khi chưa báo).
 
 ## Proof
-(ghi khi thực thi)
+### Đợt 1 (08/11) — xong
+- `ecosystem.config.js`: bỏ 7 app (FB_Publisher_1/2, AI_Generator_1/2, Threads_AutoReply / NewsWorker / Publisher) → còn 9 app
+  đang chạy. AI_Generator chỉ xử lý job nháp FB (DB: 429 job đều buffer) → bỏ an toàn.
+- `process_scan.WORKER_MODULES`, `local_supervisor.build_apps`, `pm2_apps` (PM2_SAFE_NAMES + PM2_LOG_MAP, thêm DB_Backup log),
+  `system_panel.get_logs` (dùng PM2_SAFE_NAMES), ô chọn tiến trình `app_logs.html` → đúng 9 app.
+- Test: đổi worker mẫu sang maintenance / threads growth (logic không đổi); thêm khẳng định worker cũ đã bỏ.
+  347 test vùng liên quan + 318 test Buffer/viral/growth/store/storage: qua hết trừ 1 hỏng sẵn (metrics_checker).
+  `import app.main` OK; lint-imports như HEAD; ruff sạch file đổi.
+- Không cần restart: các app bỏ vốn không chạy. (Nếu từng `pm2 save` có chúng: `pm2 delete <tên>` — hiện `pm2 list` không có.)

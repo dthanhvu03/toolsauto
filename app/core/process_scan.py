@@ -30,15 +30,10 @@ import app.config as config
 # Every long-running python entrypoint of the project. Used both to protect
 # browsers owned by these processes and to detect "already running" instances.
 WORKER_MODULES: tuple[str, ...] = (
-    "app.features.facebook.workers.publisher",
     "app.features.system_panel.workers.maintenance",
     "app.features.system_panel.workers.ai_reporter",
-    "app.features.threads.workers.publisher",
-    "app.features.threads.workers.auto_reply",
-    "app.features.threads.workers.news_worker",
     "app.features.threads.workers.verifier",
     "app.features.threads.growth.worker",
-    "app.features.viral_intake.workers.ai_generator",
     "app.platform.local_supervisor",
 )
 

@@ -215,18 +215,11 @@ def test_supervisor_itself_is_not_mistaken_for_the_web_app():
 
 def test_build_apps_uses_module_specs():
     apps = {a.name: a for a in ls.build_apps(ls.StackConfig(port=8002))}
-    assert apps["fb_publisher"].match_spec == "app.features.facebook.workers.publisher"
     assert apps["maintenance"].match_spec == "app.features.system_panel.workers.maintenance"
     assert tuple(apps["web"].match_spec) == ("manage.py", "serve")
 
 
-def test_build_apps_includes_ai_generator():
-    """PM2 runs AI_Generator; the local stack must too or jobs stay AWAITING_STYLE."""
-    apps = {a.name: a for a in ls.build_apps(ls.StackConfig(port=8002))}
-    ai = apps["ai_generator"]
-    assert ai.match_spec == "app.features.viral_intake.workers.ai_generator"
-    assert ai.argv[1:] == ["-m", "app.features.viral_intake.workers.ai_generator"]
-
-    # Still present when the web server is skipped.
+def test_build_apps_drops_legacy_publishers():
+    """PLAN-166: đăng bài qua Buffer — local stack không còn chạy fb_publisher / ai_generator."""
     names = [a.name for a in ls.build_apps(ls.StackConfig(port=8002, no_web=True))]
-    assert names == ["maintenance", "fb_publisher", "ai_generator"]
+    assert names == ["maintenance"]

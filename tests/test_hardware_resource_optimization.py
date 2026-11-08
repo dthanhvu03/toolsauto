@@ -953,7 +953,7 @@ class TestTier1FeatureCoverage:
         assert res.returncode == 0
         data = json.loads(res.stdout)
         assert "apps" in data
-        assert len(data["apps"]) >= 10
+        assert len(data["apps"]) >= 9  # PLAN-166: bỏ 7 worker đăng trực tiếp cũ
 
     def test_ecosystem_memory_limit_policy_validator(self):
         """Validates that PM2 applications conform to max_memory_restart ceilings."""

@@ -9,17 +9,19 @@ def test_pm2_safe_names_match_ecosystem():
 
     eco = (ROOT / "ecosystem.config.js").read_text(encoding="utf-8")
     for name in (
-        "FB_Publisher_1",
-        "AI_Generator_1",
         "Maintenance",
         "Web_Dashboard",
-        "Threads_Publisher",
-        "Threads_NewsWorker",
-        "Threads_AutoReply",
+        "Threads_Growth",
+        "Studio_Heavy",
+        "Studio_Light",
+        "9Router_Gateway",
     ):
         assert name in PM2_SAFE_NAMES
         assert f'name: "{name}"' in eco
         assert name in PM2_LOG_MAP
+    # PLAN-166: worker đăng trực tiếp cũ đã bỏ khỏi PM2 và danh sách điều khiển
+    for gone in ("FB_Publisher_1", "AI_Generator_1", "Threads_Publisher", "Threads_NewsWorker", "Threads_AutoReply"):
+        assert gone not in PM2_SAFE_NAMES and f'name: "{gone}"' not in eco
 
 
 def test_start_sh_uses_ecosystem_not_legacy_workers_path():

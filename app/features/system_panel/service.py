@@ -451,12 +451,9 @@ def frag_screenshots(request: Request):
 
 def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "error", lines: int = 100):
     # Bao gồm cả process names của root PM2 (production) và vu PM2 (dev)
-    safe_workers = [
-        "FB_Publisher_1", "FB_Publisher_2", "AI_Generator_1", "AI_Generator_2",  # scaled
-        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",          # legacy
-        "9Router_Gateway",
+    safe_workers = set(PM2_SAFE_NAMES) | {
         "ai-worker", "publisher", "maintenance", "web", "ai", "worker",           # root PM2
-    ]
+    }
     if worker not in safe_workers:
         worker = "Web_Dashboard"
     log_type = "error" if log_type == "error" else "out"

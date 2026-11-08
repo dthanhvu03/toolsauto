@@ -117,19 +117,7 @@ def build_apps(cfg: StackConfig) -> list[AppSpec]:
             match_spec="app.features.system_panel.workers.maintenance",
             argv=[_python(), "-m", "app.features.system_panel.workers.maintenance"],
         ),
-        AppSpec(
-            name="fb_publisher",
-            match_spec="app.features.facebook.workers.publisher",
-            argv=[_python(), "-m", "app.features.facebook.workers.publisher"],
-        ),
-        # PM2 (ecosystem.config.js) runs AI_Generator but the local stack did not:
-        # without it, jobs stayed AWAITING_STYLE forever (no AWAITING_STYLE → DRAFT
-        # transition and no 30-minute _auto_style_default fallback).
-        AppSpec(
-            name="ai_generator",
-            match_spec="app.features.viral_intake.workers.ai_generator",
-            argv=[_python(), "-m", "app.features.viral_intake.workers.ai_generator"],
-        ),
+        # PLAN-166: fb_publisher / ai_generator đã bỏ (đăng bài qua Buffer).
     ]
     if not cfg.no_web:
         serve_argv = [

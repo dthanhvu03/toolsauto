@@ -21,7 +21,7 @@ from app.core.process_scan import (
     path_is_within,
 )
 
-PUBLISHER = "app.features.facebook.workers.publisher"
+PUBLISHER = "app.features.system_panel.workers.maintenance"
 PROFILES = str(config.PROFILES_DIR)
 
 
@@ -43,13 +43,13 @@ def test_dotted_module_and_script_path_match_same_worker():
     """PM2 runs the script path; the supervisor runs `-m`. Both are the worker."""
     assert cmdline_matches_spec(["python", "-m", PUBLISHER], PUBLISHER)
     assert cmdline_matches_spec(
-        ["python", "app/features/facebook/workers/publisher.py"], PUBLISHER
+        ["python", "app/features/system_panel/workers/maintenance.py"], PUBLISHER
     )
     assert cmdline_matches_spec(
-        [r"C:\proj\venv\python.exe", r"app\features\facebook\workers\publisher.py"], PUBLISHER
+        [r"C:\proj\venv\python.exe", r"app\features\system_panel\workers\maintenance.py"], PUBLISHER
     )
     assert cmdline_matches_spec(
-        ["/srv/toolsauto/venv/bin/python", "/srv/toolsauto/app/features/facebook/workers/publisher.py"],
+        ["/srv/toolsauto/venv/bin/python", "/srv/toolsauto/app/features/system_panel/workers/maintenance.py"],
         PUBLISHER,
     )
 
@@ -64,24 +64,24 @@ def test_command_that_only_mentions_the_worker_is_not_the_worker():
     mistaken for a running worker — that would stop the supervisor spawning it.
     """
     mentions = [
-        ["python", "-m", "compileall", "-q", "app/features/facebook/workers/publisher.py"],
-        ["python", "-m", "pytest", "tests/", "app/features/facebook/workers/publisher.py"],
-        ["git", "diff", "--", "app/features/facebook/workers/publisher.py"],
-        ["python", "-c", "import app.features.facebook.workers.publisher"],
-        ["code", "app/features/facebook/workers/publisher.py"],
-        ["rg", "publisher", "app/features/facebook/workers/publisher.py"],
+        ["python", "-m", "compileall", "-q", "app/features/system_panel/workers/maintenance.py"],
+        ["python", "-m", "pytest", "tests/", "app/features/system_panel/workers/maintenance.py"],
+        ["git", "diff", "--", "app/features/system_panel/workers/maintenance.py"],
+        ["python", "-c", "import app.features.system_panel.workers.maintenance"],
+        ["code", "app/features/system_panel/workers/maintenance.py"],
+        ["rg", "publisher", "app/features/system_panel/workers/maintenance.py"],
     ]
     for cmdline in mentions:
         assert not cmdline_matches_spec(cmdline, PUBLISHER), cmdline
         assert not is_toolsauto_entrypoint(cmdline), cmdline
 
 
-def test_threads_and_ai_generator_workers_are_known_entrypoints():
+def test_live_workers_are_known_entrypoints():
     for cmdline in (
-        ["python", "app/features/threads/workers/publisher.py"],
-        ["python", "-m", "app.features.threads.workers.auto_reply"],
-        ["python", "app/features/threads/workers/news_worker.py"],
-        ["python", "app/features/viral_intake/workers/ai_generator.py"],
+        ["python", "app/features/threads/growth/worker.py"],
+        ["python", "-m", "app.features.threads.workers.verifier"],
+        ["python", "app/features/system_panel/workers/ai_reporter.py"],
+        ["python", "app/features/threads/growth/worker.py"],
         ["python", "manage.py", "serve", "--no-reload"],
         ["python", "-m", "uvicorn", "app.main:app", "--port", "8002"],
     ):
@@ -102,7 +102,7 @@ def test_parse_entrypoint_skips_interpreter_flags():
 
 def test_argv0_is_not_trusted_alone():
     """A launcher may rewrite argv[0]; the OS process name is a second signal."""
-    renamed = ["FB_Publisher_1", "app/features/facebook/workers/publisher.py"]
+    renamed = ["Maintenance", "app/features/system_panel/workers/maintenance.py"]
     assert not cmdline_matches_spec(renamed, PUBLISHER)
     assert cmdline_matches_spec(renamed, PUBLISHER, exe_name="python.exe")
     assert is_toolsauto_entrypoint(renamed, exe_name="python3.11")
@@ -116,7 +116,7 @@ def test_snapshot_uses_process_name_for_matching():
     def loader(info):
         return ProcInfo.build(
             pid=10, ppid=1, name="python.exe",
-            cmdline=["FB_Publisher_1", "app/features/facebook/workers/publisher.py"],
+            cmdline=["Maintenance", "app/features/system_panel/workers/maintenance.py"],
         )
 
     snap = ProcessSnapshot([thin], hydrator=loader)
@@ -152,7 +152,7 @@ def test_two_independent_workers_are_still_two():
     snap = ProcessSnapshot(
         [
             _proc(10, ["python", "-m", PUBLISHER], ppid=1),
-            _proc(20, ["python", "app/features/facebook/workers/publisher.py"], ppid=1),
+            _proc(20, ["python", "app/features/system_panel/workers/maintenance.py"], ppid=1),
         ]
     )
     assert snap.find_pids(PUBLISHER) == [10, 20]
@@ -162,8 +162,8 @@ def test_find_pids_matches_both_spellings():
     snap = ProcessSnapshot(
         [
             _proc(10, ["python", "-m", PUBLISHER]),
-            _proc(11, ["python", "app/features/facebook/workers/publisher.py"]),
-            _proc(12, ["python", "-m", "app.features.system_panel.workers.maintenance"]),
+            _proc(11, ["python", "app/features/system_panel/workers/maintenance.py"]),
+            _proc(12, ["python", "-m", "app.features.threads.growth.worker"]),
         ]
     )
     assert snap.find_pids(PUBLISHER) == [10, 11]
@@ -210,7 +210,7 @@ def test_browser_with_relative_profile_path_is_attributed(monkeypatch, tmp_path)
 def test_browser_under_live_worker_is_attributed():
     snap = ProcessSnapshot(
         [
-            _proc(10, ["python", "app/features/facebook/workers/publisher.py"]),
+            _proc(10, ["python", "app/features/system_panel/workers/maintenance.py"]),
             _chrome(50, 10, "C:/somewhere/else"),
         ]
     )
@@ -220,7 +220,7 @@ def test_browser_under_live_worker_is_attributed():
 def test_threads_worker_browser_is_attributed():
     snap = ProcessSnapshot(
         [
-            _proc(10, ["python", "app/features/threads/workers/publisher.py"]),
+            _proc(10, ["python", "app/features/threads/growth/worker.py"]),
             _chrome(50, 10, "C:/tmp/pw-profile"),
         ]
     )
