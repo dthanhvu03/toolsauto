@@ -23,8 +23,6 @@ type = independence
 modules =
     app.features.threads
     app.features.facebook
-    app.features.instagram
-    app.features.tiktok
     app.features.viral_intake
     app.features.affiliates
     app.features.telegram_bot

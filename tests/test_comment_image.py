@@ -77,10 +77,8 @@ def test_moi_adapter_deu_nhan_image_path():
     import inspect
 
     from app.adapters.generic.adapter import GenericAdapter
-    from app.features.instagram.adapter import InstagramAdapter
-    from app.features.tiktok.adapter import TiktokAdapter
 
-    for cls in (FacebookAdapter, InstagramAdapter, TiktokAdapter, GenericAdapter):
+    for cls in (FacebookAdapter, GenericAdapter):  # PLAN-166: Instagram / TikTok upload đã gỡ
         params = inspect.signature(cls.post_comment).parameters
         assert "image_path" in params, cls.__name__
         assert params["image_path"].default is None, cls.__name__

@@ -25,8 +25,9 @@
    Threads_NewsWorker, Threads_Publisher); bỏ entry tương ứng trong `process_scan.py` / `local_supervisor.py`.
    Kiểm tra trước: AI_Generator còn việc gì cho Buffer không (caption viral hiện do Maintenance làm).
 2. **Threads cũ:** gỡ `threads/workers/*`, `threads/service`, `threads/dashboard.py` (giữ `adapter.py`, `growth/`).
-3. **IG / TikTok upload / Story:** gỡ khỏi `dispatcher.py`, `publisher_runtime.py`; gỡ module.
-4. **Facebook:** gỡ `features/facebook` + `metrics_checker` phần FB + dispatcher FB; tách `MediaProcessor` nếu viral_intake còn dùng.
+3. **IG / TikTok upload:** gỡ khỏi `dispatcher.py`; gỡ module. (Story dời sang đợt 4 — chỉ còn dùng ở giới hạn story/tuần của
+   publisher FB trong `publisher_runtime`.)
+4. **Facebook + Story:** gỡ `features/facebook` + `metrics_checker` phần FB + dispatcher FB; tách `MediaProcessor` nếu viral_intake còn dùng.
 5. **affiliates / jobs:** gỡ lookup_queue khỏi ai_generator (nếu AI_Generator đã bỏ ở đợt 1 thì gỡ luôn), gỡ router jobs.
 6. **Dọn còn lại:** tests của module đã gỡ, `.importlinter`, `scripts/archive` (khi không còn ai gọi), dữ liệu Postgres
    (bảng / account FB) — **không DROP / DELETE khi chưa có duyệt trực tiếp**.
@@ -54,3 +55,12 @@
 - Giữ: model DB `threads.py`, setting `topic_key`, `AIPurpose.THREADS_NEWS` (dữ liệu / cấu hình — xử lý ở đợt 6).
 - Test: 882 passed vùng threads / process / panel; 3 hỏng đều có sẵn trước đợt (2 test_adversarial_m3_concurrency + metrics_checker,
   đã chạy lại trên HEAD trước đợt để đối chiếu); 248 test Buffer / viral / store / storage qua. import app.main + growth OK.
+
+### Đợt 3 (08/11) — xong
+- `git rm` app/features/instagram, app/features/tiktok (1.119 dòng); dispatcher bỏ 2 adapter; `.importlinter` bỏ 2 module;
+  test_comment_image bỏ IG/TikTok. Story dời đợt 4 (dính `publisher_runtime.postpone_if_weekly_story_limit` của publisher FB).
+- DB `platform_configs` còn 2 dòng instagram / tiktok trỏ adapter đã gỡ → WorkflowRegistry trả DummyAdapter (không lỗi);
+  không có job IG / TikTok. Sửa / xoá 2 dòng này ở đợt 6 (dữ liệu — cần duyệt).
+- Test: bộ dispatcher / adapter 17 file — 21 hỏng, so trên HEAD trước đợt **trùng 21/21** (hỏng sẵn); test_workflow_registry_cache
+  hỏng thu thập sẵn (import module không tồn tại). 341 test Buffer / viral / growth / store / storage / process qua.
+  `get_adapter('buffer')` → BufferAdapter; import app.main OK; lint-imports như cũ.

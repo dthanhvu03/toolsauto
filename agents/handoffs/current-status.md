@@ -1,3 +1,6 @@
+## Phiên 2026-11-08 (PLAN-166 đợt 3) — Gỡ Instagram + TikTok upload
+- 8 file, −1.119 dòng; Story dời sang đợt 4 cùng Facebook. 21 test hỏng trùng hệt trước đợt. Proof trong PLAN-166.
+
 ## Phiên 2026-11-08 (PLAN-166 đợt 2) — Gỡ Threads cũ (giữ adapter + growth)
 - 13 file, −2.326 dòng; start.sh không còn bật worker cũ. Proof trong PLAN-166. Đợt tiếp: 3 (IG / TikTok upload / Story).
 

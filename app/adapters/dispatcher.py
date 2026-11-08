@@ -47,7 +47,8 @@ def get_adapter(platform: str) -> AdapterInterface:
     """
     Prefer DB-driven adapter from WorkflowRegistry (platform_configs.adapter_class).
     Fall back to legacy routing if Registry fails or returns DummyAdapter/GenericAdapter
-    for platforms that have dedicated adapters (facebook, threads, tiktok, instagram).
+    for platforms that have dedicated adapters (facebook, threads, buffer).
+    PLAN-166: Instagram / TikTok upload đã gỡ — platform_configs cũ trỏ tới chúng sẽ rơi về DummyAdapter.
 
     ``platform`` is normalized via ``normalize_platform`` — must match ``app.constants.Platform``.
     """
@@ -55,16 +56,12 @@ def get_adapter(platform: str) -> AdapterInterface:
     from app.adapters.generic.adapter import GenericAdapter
 
     from app.features.threads.adapter import ThreadsAdapter
-    from app.features.instagram.adapter import InstagramAdapter
-    from app.features.tiktok.adapter import TiktokAdapter
     from app.features.buffer.adapter import BufferAdapter
 
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
         Platform.FACEBOOK: lambda: FacebookAdapter(),
         Platform.THREADS: lambda: ThreadsAdapter(),
-        Platform.INSTAGRAM: lambda: InstagramAdapter(),
-        Platform.TIKTOK: lambda: TiktokAdapter(),
         Platform.BUFFER: lambda: BufferAdapter(),
     }
 
