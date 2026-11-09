@@ -223,13 +223,22 @@ class GrowthStorage:
                 rows = conn.execute("SELECT * FROM growth_posts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
 
-    def approved_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Bài đã duyệt chờ đăng — điểm thành khách cao trước (theo nấc 10, PLAN-163), cùng nấc thì độ phủ cao trước, rồi cũ trước."""
+    def approved_queue(self, limit: int = 20, bots: Optional[tuple] = None) -> List[Dict[str, Any]]:
+        """Bài đã duyệt chờ đăng — điểm thành khách cao trước (theo nấc 10, PLAN-163), cùng nấc thì độ phủ cao trước, rồi cũ trước.
+
+        ``bots``: chỉ bài của các bot này (vai của tài khoản đang đăng, PLAN-167); None = mọi bot.
+        """
+        where, args = "status = 'approved'", []
+        if bots is not None:
+            if not bots:
+                return []
+            where += f" AND target_bot IN ({','.join('?' * len(bots))})"
+            args.extend(bots)
         with self._connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM growth_posts WHERE status = 'approved' "
+                f"SELECT * FROM growth_posts WHERE {where} "
                 "ORDER BY COALESCE(relevance_score, 0) / 10 DESC, reach DESC, id ASC LIMIT ?",
-                (limit,),
+                (*args, limit),
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -362,17 +371,23 @@ class GrowthStorage:
         return [dict(r) for r in rows]
 
     # ── trả lời lại (PLAN-159) ─────────────────────────────────
-    def followup_targets(self, since: datetime, checked_before: datetime, limit: int) -> List[Dict[str, Any]]:
-        """Reply của mình đăng từ ``since``, lâu chưa kiểm (``followup_checked_at`` < ``checked_before``) — cũ trước."""
+    def followup_targets(self, since: datetime, checked_before: datetime, limit: int,
+                         account: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Reply của mình đăng từ ``since``, lâu chưa kiểm (``followup_checked_at`` < ``checked_before``) — cũ trước.
+
+        ``account``: chỉ reply tài khoản này đăng (mở bằng đúng profile đó mới thấy «trả lời cho mình»).
+        """
+        acc_sql, acc_args = ("AND COALESCE(account, ?) = ?", (DEFAULT_ACCOUNT, account)) if account else ("", ())
         with self._connection() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT * FROM growth_posts
                 WHERE status = 'posted' AND reply_url IS NOT NULL AND posted_at >= ?
-                  AND (followup_checked_at IS NULL OR followup_checked_at < ?)
+                  AND (followup_checked_at IS NULL OR followup_checked_at < ?) {acc_sql}
                 ORDER BY COALESCE(followup_checked_at, '') ASC, posted_at DESC LIMIT ?
                 """,
-                (since.astimezone(timezone.utc).isoformat(), checked_before.astimezone(timezone.utc).isoformat(), limit),
+                (since.astimezone(timezone.utc).isoformat(), checked_before.astimezone(timezone.utc).isoformat(),
+                 *acc_args, limit),
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -397,10 +412,14 @@ class GrowthStorage:
             )
             return cur.lastrowid if cur.rowcount else 0
 
-    def count_followups_since(self, since: datetime) -> int:
+    def count_followups_since(self, since: datetime, account: Optional[str] = None) -> int:
+        sql = "SELECT COUNT(*) FROM followups f WHERE f.status = 'answered' AND f.created_at >= ?"
+        args: list = [since.astimezone(timezone.utc).isoformat()]
+        if account:
+            sql += " AND (SELECT COALESCE(g.account, ?) FROM growth_posts g WHERE g.id = f.growth_post_id) = ?"
+            args.extend([DEFAULT_ACCOUNT, account])
         with self._connection() as conn:
-            row = conn.execute("SELECT COUNT(*) FROM followups WHERE status = 'answered' AND created_at >= ?",
-                               (since.astimezone(timezone.utc).isoformat(),)).fetchone()
+            row = conn.execute(sql, args).fetchone()
         return int(row[0])
 
     def list_followups(self, limit: int = 30) -> List[Dict[str, Any]]:
@@ -417,18 +436,21 @@ class GrowthStorage:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def count_posted_since(self, since: datetime) -> int:
+    def count_posted_since(self, since: datetime, account: Optional[str] = None) -> int:
+        """Reply đã đăng từ ``since`` — của một tài khoản (hạn mức riêng, PLAN-167) hoặc tất cả."""
+        acc_sql, acc_args = (" AND COALESCE(account, ?) = ?", (DEFAULT_ACCOUNT, account)) if account else ("", ())
         with self._connection() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM growth_posts WHERE status = 'posted' AND posted_at >= ?",
-                (since.astimezone(timezone.utc).isoformat(),),
+                "SELECT COUNT(*) FROM growth_posts WHERE status = 'posted' AND posted_at >= ?" + acc_sql,
+                (since.astimezone(timezone.utc).isoformat(), *acc_args),
             ).fetchone()
         return int(row[0])
 
-    def last_posted_at(self) -> Optional[datetime]:
+    def last_posted_at(self, account: Optional[str] = None) -> Optional[datetime]:
+        acc_sql, acc_args = (" AND COALESCE(account, ?) = ?", (DEFAULT_ACCOUNT, account)) if account else ("", ())
         with self._connection() as conn:
             row = conn.execute(
-                "SELECT MAX(posted_at) FROM growth_posts WHERE status = 'posted'"
+                "SELECT MAX(posted_at) FROM growth_posts WHERE status = 'posted'" + acc_sql, acc_args
             ).fetchone()
         return datetime.fromisoformat(row[0]) if row and row[0] else None
 

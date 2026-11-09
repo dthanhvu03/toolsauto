@@ -32,12 +32,17 @@ from app.features.threads.growth import content, conversions, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
 from app.features.threads.growth.config import (
+    ACCOUNTS,
+    DEFAULT_ACCOUNT,
     ABVariant,
+    AccountRole,
     TargetBot,
     WorkerConfig,
     account_for_profile,
+    load_account_roles,
     load_profiles,
     load_worker_config,
+    save_account_role,
 )
 from app.features.threads.growth.evaluator import GrowthEvaluator
 from app.features.threads.growth.runner import GrowthRunner
@@ -131,28 +136,35 @@ class GrowthWorker:
         self.sleep = sleep
         self.now = now
         self.last_scan: Optional[datetime] = None
-        self.last_followup: Optional[datetime] = None
+        self.last_followup: Dict[str, datetime] = {}   # theo tài khoản (PLAN-167)
         self.last_rewrite: Optional[datetime] = None
-        self.own_retry_at: Optional[datetime] = None
+        self.own_retry_at: Dict[str, datetime] = {}    # theo tài khoản
 
     # ── tiện ích ───────────────────────────────────────────────
-    def _profile_path(self) -> Optional[str]:
+    def _profile_path(self, account: str = DEFAULT_ACCOUNT) -> Optional[str]:
         with self.db_factory() as db:
-            st = growth_session.status(db)
+            st = growth_session.status(db, account)
         if not st.ready:
-            logger.info("growth: chưa đăng nhập Threads (%s) — nghỉ", st.login_status)
+            logger.info("growth: @%s chưa đăng nhập Threads (%s) — nghỉ", ACCOUNTS[account].handle, st.login_status)
             return None
-        if growth_session.profile_locked():
-            logger.info("growth: profile đang mở (cửa sổ đăng nhập?) — nghỉ")
+        if growth_session.profile_locked(growth_session.profile_dir(account)):
+            logger.info("growth: profile @%s đang mở (cửa sổ đăng nhập?) — nghỉ", ACCOUNTS[account].handle)
             return None
         return st.profile_path
 
-    def _disable(self, reason: str) -> None:
-        logger.error("growth: checkpoint / mất đăng nhập → tự tắt: %s", reason)
+    def _disable(self, reason: str, account: str = DEFAULT_ACCOUNT) -> None:
+        """Checkpoint / mất đăng nhập → chỉ tắt tài khoản đó (PLAN-167); tài khoản khác chạy tiếp."""
+        handle = ACCOUNTS[account].handle
+        logger.error("growth: @%s checkpoint / mất đăng nhập → tự tắt tài khoản này: %s", handle, reason)
+        try:
+            save_account_role(account, {"enabled": False})
+        except OSError as exc:  # không ghi được file vai → tắt cả kéo khách cho an toàn
+            logger.error("growth: không ghi được vai %s (%s) — tắt cả kéo khách", account, exc)
+            with self.db_factory() as db:
+                settings.upsert_setting(db, "growth.enabled", "false", updated_by="threads_growth_worker")
         with self.db_factory() as db:
-            settings.upsert_setting(db, "growth.enabled", "false", updated_by="threads_growth_worker")
-            growth_session.mark(db, False, reason)
-        self.notify.send(self.notify.checkpoint_text(reason))
+            growth_session.mark(db, False, reason, account=account)
+        self.notify.send(self.notify.checkpoint_text(f"@{handle}: {reason}"))
 
     def _fresh(self, post: ScannedPost, cfg: WorkerConfig) -> bool:
         if cfg.top_level_only and post.is_reply:
@@ -172,11 +184,14 @@ class GrowthWorker:
         return True
 
     # ── quét ───────────────────────────────────────────────────
-    def scan(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> List[tuple[ScannedPost, TargetBot]]:
+    def scan(self, profile_path: str, cfg: WorkerConfig, report: CycleReport,
+             bots: Optional[set] = None) -> List[tuple[ScannedPost, TargetBot]]:
+        """Quét từ khóa của các bot ``bots`` (bot mà ít nhất một tài khoản đang bật phục vụ); None = mọi bot."""
         found: Dict[str, tuple[ScannedPost, TargetBot]] = {}
         authors: set[str] = set()  # mỗi vòng tối đa 1 bài / tác giả (cooldown chỉ thấy bài đã lưu)
         tabs = (False, True) if cfg.search_top else (False,)
-        jobs = [(bot, kw, top) for bot, prof in load_profiles().items() for kw in prof.keywords for top in tabs]
+        jobs = [(bot, kw, top) for bot, prof in load_profiles().items() if bots is None or bot.value in bots
+                for kw in prof.keywords for top in tabs]
         random.shuffle(jobs)  # không quét cùng một thứ tự mỗi vòng
         with self.browser_factory(profile_path) as browser:
             for bot, kw, top in jobs:
@@ -225,21 +240,31 @@ class GrowthWorker:
                 self.runner.storage.mark_notified(row["id"])
 
     # ── đăng ───────────────────────────────────────────────────
-    def post_queue(self, profile_path: str, report: CycleReport) -> None:
-        queue = self.runner.storage.approved_queue(limit=20)
+    def post_queue(self, profile_path: str, report: CycleReport, account: Optional[str] = None,
+                   role: Optional[AccountRole] = None) -> None:
+        """Đăng hàng chờ bằng một tài khoản: chỉ bài của bot trong vai (``role.bots``), hạn mức riêng của tài khoản."""
+        account = account or account_for_profile(profile_path)
+        queue = self.runner.storage.approved_queue(limit=20, bots=role.bots if role else None)
         if not queue:
             return
-        quota = self.runner.posting_quota(self.now())
+
+        def quota_now():
+            if role is None:
+                return self.runner.posting_quota(self.now(), account=account)
+            return self.runner.posting_quota(self.now(), account=account,
+                                             max_per_day=role.max_per_day, max_per_hour=role.max_per_hour)
+
+        quota = quota_now()
         if not quota.allowed:
-            report.quota_note = quota.reason
+            report.quota_note = f"@{ACCOUNTS[account].handle}: {quota.reason}"
             return
         cfg = load_worker_config()
         done_authors: set[str] = set()
         with self.browser_factory(profile_path) as browser:
             for i, post in enumerate(queue):
-                quota = self.runner.posting_quota(self.now())
+                quota = quota_now()
                 if not quota.allowed:
-                    report.quota_note = quota.reason
+                    report.quota_note = f"@{ACCOUNTS[account].handle}: {quota.reason}"
                     break
                 created = _parse_ts(post.get("post_created_at"))
                 if created and created < self.now() - timedelta(hours=cfg.max_post_age_hours):
@@ -264,15 +289,15 @@ class GrowthWorker:
                         report.errors.append("trình duyệt bị đóng giữa chừng — vòng sau đăng tiếp")
                         logger.warning("growth: trình duyệt bị đóng khi đăng #%s — dừng, giữ hàng chờ", post["id"])
                         break
-                    self.runner.mark_failed(post["id"], str(exc), account=account_for_profile(profile_path))
+                    self.runner.mark_failed(post["id"], str(exc), account=account)
                     report.failed += 1
                     logger.warning("growth: đăng reply #%s lỗi: %s", post["id"], exc)
                 else:
                     done_authors.add(author)
-                    self.runner.mark_posted(post["id"], reply_url=url, account=account_for_profile(profile_path))
+                    self.runner.mark_posted(post["id"], reply_url=url, account=account)
                     report.posted += 1
                     report.posted_items.append({
-                        "id": post["id"], "bot": post["target_bot"], "variant": post["variant"],
+                        "id": post["id"], "bot": post["target_bot"], "variant": post["variant"], "account": account,
                         "author": post["author"], "post_url": post["post_url"], "reply_url": url, "text": text,
                     })
                     logger.info("growth: đã reply #%s → %s", post["id"], url or post["post_url"])
@@ -280,8 +305,11 @@ class GrowthWorker:
                     self.sleep(self.runner.next_delay_sec())
 
     # ── bài riêng (PLAN-159) ───────────────────────────────────
-    def _own_post_slot(self, cfg: WorkerConfig) -> Optional[str]:
-        """Khung giờ đang tới lượt mà chưa đăng: ``"2026-11-06 20:15"`` — lệch ngẫu nhiên cố định 0–25 phút / khung."""
+    def _own_post_slot(self, cfg: WorkerConfig, account: str = DEFAULT_ACCOUNT) -> Optional[str]:
+        """Khung giờ đang tới lượt mà chưa đăng: ``"2026-11-06 20:15"`` — lệch ngẫu nhiên cố định 0–25 phút / khung.
+
+        Tài khoản khác @us28qt có tiền tố: ``"anlinh 2026-11-06 20:15"`` (mỗi tài khoản một bài mỗi khung).
+        """
         now_vn = self.now().astimezone(content.ICT)
         day = now_vn.date().isoformat()
         for raw in str(cfg.own_post_times).replace(";", ",").split(","):
@@ -292,22 +320,26 @@ class GrowthWorker:
             except ValueError:
                 continue
             slot = f"{day} {hh:02d}:{mm:02d}"
+            if account != DEFAULT_ACCOUNT:
+                slot = f"{account} {slot}"
             jitter = int(hashlib.md5(slot.encode()).hexdigest(), 16) % 26
             if base + timedelta(minutes=jitter) <= now_vn < base + OWN_POST_WINDOW:
                 if not self.runner.storage.own_post_slot_done(slot):
                     return slot
         return None
 
-    def post_own(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> None:
-        if not cfg.own_posts_enabled or (self.own_retry_at and self.now() < self.own_retry_at):
+    def post_own(self, profile_path: str, cfg: WorkerConfig, report: CycleReport, account: Optional[str] = None) -> None:
+        account = account or account_for_profile(profile_path)
+        retry = self.own_retry_at.get(account)
+        if not cfg.own_posts_enabled or (retry and self.now() < retry):
             return
-        slot = self._own_post_slot(cfg)
+        slot = self._own_post_slot(cfg, account)
         if not slot:
             return
         storage = self.runner.storage
         draft = asyncio.run(content.write_own_post(self.now(), storage.own_post_refs(self.now() - timedelta(days=3))))
         if draft is None:
-            self.own_retry_at = self.now() + OWN_POST_RETRY  # AI lỗi / hết deal mới → thử lại trong khung
+            self.own_retry_at[account] = self.now() + OWN_POST_RETRY  # AI lỗi / hết deal mới → thử lại trong khung
             logger.info("growth: bài riêng khung %s chưa viết được — thử lại sau", slot)
             return
         try:
@@ -317,30 +349,31 @@ class GrowthWorker:
             raise
         except Exception as exc:
             if browser_dead(exc):
-                self.own_retry_at = self.now() + OWN_POST_RETRY
+                self.own_retry_at[account] = self.now() + OWN_POST_RETRY
                 return
-            storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "failed", error=str(exc),
-                                  account=account_for_profile(profile_path))
+            storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "failed", error=str(exc), account=account)
             report.errors.append(f"bài riêng: {exc}")
             logger.warning("growth: đăng bài riêng lỗi: %s", exc)
             return
-        storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "posted", post_url=url,
-                              account=account_for_profile(profile_path))
-        report.own_posts.append({"kind": draft.kind, "url": url, "text": draft.text})
+        storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "posted", post_url=url, account=account)
+        report.own_posts.append({"kind": draft.kind, "url": url, "text": draft.text, "account": account})
         logger.info("growth: đã đăng bài riêng (%s) → %s", draft.kind, url)
 
     # ── trả lời người hỏi lại (PLAN-159) ───────────────────────
-    def followups(self, profile_path: str, cfg: WorkerConfig, report: CycleReport) -> None:
+    def followups(self, profile_path: str, cfg: WorkerConfig, report: CycleReport, account: Optional[str] = None) -> None:
+        """Mở reply của CHÍNH tài khoản này (đúng profile mới thấy ai trả lời mình), hạn mức trả lời lại riêng."""
+        account = account or account_for_profile(profile_path)
         now = self.now()
-        if not cfg.followup_enabled or (self.last_followup and now - self.last_followup < FOLLOWUP_EVERY):
+        last = self.last_followup.get(account)
+        if not cfg.followup_enabled or (last and now - last < FOLLOWUP_EVERY):
             return
-        self.last_followup = now
+        self.last_followup[account] = now
         storage = self.runner.storage
-        left = cfg.followup_max_per_day - storage.count_followups_since(now - timedelta(days=1))
+        left = cfg.followup_max_per_day - storage.count_followups_since(now - timedelta(days=1), account=account)
         if left <= 0:
             return
         targets = storage.followup_targets(now - timedelta(hours=cfg.followup_lookback_hours),
-                                           now - FOLLOWUP_RECHECK, FOLLOWUP_PAGES)
+                                           now - FOLLOWUP_RECHECK, FOLLOWUP_PAGES, account=account)
         if not targets:
             return
         with self.browser_factory(profile_path) as browser:
@@ -382,7 +415,7 @@ class GrowthWorker:
                                           reply_text=text, reply_url=url)
                     left -= 1
                     report.followups.append({"author": c.author, "comment": c.content, "text": text,
-                                             "url": url or c.post_url, "bot": target["target_bot"]})
+                                             "url": url or c.post_url, "bot": target["target_bot"], "account": account})
                     logger.info("growth: đã trả lời lại @%s dưới #%s", c.author, target["id"])
                     self.sleep(self.runner.next_delay_sec())
                 if ai_down:
@@ -408,24 +441,36 @@ class GrowthWorker:
         cfg = load_worker_config()
         if not cfg.enabled and not force_scan:
             return None
-        profile = self._profile_path()
-        if not profile:
+        roles = load_account_roles()
+        # Tài khoản đang bật + đã đăng nhập + profile rảnh, theo thứ tự ACCOUNTS (tài khoản đầu quét bài cho cả nhóm).
+        ready: Dict[str, str] = {}
+        for key, role in roles.items():
+            if role.enabled:
+                profile = self._profile_path(key)
+                if profile:
+                    ready[key] = profile
+        if not ready:
             return None
         report = CycleReport()
         due = force_scan or self.last_scan is None or (
             self.now() - self.last_scan >= timedelta(minutes=cfg.scan_interval_min)
         )
+        current = next(iter(ready))
         try:
             if due:
                 self.last_scan = self.now()
-                self.ingest(self.scan(profile, cfg, report), cfg, report)
+                bots = {b for key in ready for b in roles[key].bots}
+                self.ingest(self.scan(ready[current], cfg, report, bots=bots), cfg, report)
             self.rewrite_fallbacks(cfg, report)
-            self.post_queue(profile, report)
-            self.post_own(profile, cfg, report)
-            self.followups(profile, cfg, report)
+            for current, profile in ready.items():
+                role = roles[current]
+                self.post_queue(profile, report, account=current, role=role)
+                if role.own_posts and role.serves(TargetBot.CASHBOT):  # bài riêng hiện chỉ có deal / sale Cashbot
+                    self.post_own(profile, cfg, report, account=current)
+                self.followups(profile, cfg, report, account=current)
         except ThreadsSessionInvalidError as exc:
-            self._disable(str(exc))
-            report.errors.append(str(exc))
+            self._disable(str(exc), current)
+            report.errors.append(f"@{ACCOUNTS[current].handle}: {exc}")
             return report
         if due or report.acted:
             logger.info("growth: vòng xong %s", report.as_dict())

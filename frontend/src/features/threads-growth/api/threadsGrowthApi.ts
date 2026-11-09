@@ -99,11 +99,22 @@ export type Overview = {
   settings_url: string;
 };
 
+export type AccountRole = {
+  enabled: boolean;
+  bots: string[];
+  max_per_day: number | null;
+  max_per_hour: number | null;
+  own_posts: boolean;
+};
+
 export type GrowthAccount = {
   key: string;
   handle: string;
   profile: string;
   running: boolean;
+  role?: AccountRole;
+  login?: { login_status: string; ready: boolean; login_error: string | null };
+  quota?: Quota & { max_per_day: number; max_per_hour: number };
   bio_links: Record<string, string>;
 };
 
@@ -142,3 +153,5 @@ export const switchPost = (id: number) => sendJson<{ post: GrowthPost }>(`${BASE
 export const toggleGrowth = (enabled: boolean) =>
   sendJson<{ enabled: boolean }>(`${BASE}/toggle`, "POST", { enabled });
 export const startLogin = () => sendJson<{ login: Overview["login"] }>(`${BASE}/login`, "POST");
+export const updateAccount = (key: string, changes: Partial<AccountRole>) =>
+  sendJson<{ role: AccountRole }>(`${BASE}/accounts/${key}`, "POST", changes);

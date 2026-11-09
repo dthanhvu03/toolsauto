@@ -15,10 +15,11 @@ from app.features.threads.growth.config import (
     ACCOUNTS,
     ABVariant,
     TargetBot,
-    account_for_profile,
     bio_url,
+    load_account_roles,
     load_limits,
     load_worker_config,
+    save_account_role,
 )
 from app.features.threads.growth.runner import GrowthRunner
 
@@ -73,6 +74,42 @@ def set_enabled(db: Session, enabled: bool, by: str) -> bool:
     return enabled
 
 
+def _account_rows(db: Session) -> list:
+    """Mỗi tài khoản: vai, đăng nhập, hạn mức riêng đang dùng, link bio (PLAN-167)."""
+    r = runner()
+    rows = []
+    for key, role in load_account_roles().items():
+        acc = ACCOUNTS[key]
+        st = growth_session.status(db, key)
+        quota = r.posting_quota(account=key, max_per_day=role.max_per_day, max_per_hour=role.max_per_hour)
+        lim = load_limits()
+        rows.append({
+            "key": key,
+            "handle": acc.handle,
+            "profile": acc.profile,
+            "running": role.enabled and st.ready,
+            "role": {**asdict(role), "bots": list(role.bots)},
+            "login": {"login_status": st.login_status, "ready": st.ready, "login_error": st.login_error},
+            "quota": {**asdict(quota),
+                      "max_per_day": role.max_per_day if role.max_per_day is not None else lim.max_replies_per_day,
+                      "max_per_hour": role.max_per_hour if role.max_per_hour is not None else lim.max_replies_per_hour},
+            "bio_links": {b.value: bio_url(b, key) for b in TargetBot},
+        })
+    return rows
+
+
+def update_account(key: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+    """Đổi vai một tài khoản từ web: bật/tắt, bot mời, hạn mức riêng, bài riêng."""
+    if key not in ACCOUNTS:
+        raise ActionError(f"Không có tài khoản {key}")
+    allowed = {"enabled", "bots", "max_per_day", "max_per_hour", "own_posts"}
+    clean = {k: v for k, v in changes.items() if k in allowed}
+    if "bots" in clean and not [b for b in clean["bots"] or [] if b in {t.value for t in TargetBot}]:
+        raise ActionError("Chọn ít nhất một bot")
+    role = save_account_role(key, clean)
+    return {**asdict(role), "bots": list(role.bots)}
+
+
 def overview(db: Session) -> Dict[str, Any]:
     r = runner()
     st = growth_session.status(db)
@@ -85,16 +122,7 @@ def overview(db: Session) -> Dict[str, Any]:
         "quota": asdict(quota),
         "stats": r.get_ab_summary(),
         # PLAN-167: tài khoản Threads + reply theo tài khoản × bot + link bio riêng để đếm khách theo tài khoản.
-        "accounts": [
-            {
-                "key": a.key,
-                "handle": a.handle,
-                "profile": a.profile,
-                "running": a.key == account_for_profile(st.profile_path),
-                "bio_links": {b.value: bio_url(b, a.key) for b in TargetBot},
-            }
-            for a in ACCOUNTS.values()
-        ],
+        "accounts": _account_rows(db),
         "account_stats": r.storage.get_account_stats(),
         "customers": conversions.report(),
         "counts": {s: len(r.storage.list_posts(s, limit=1000)) for s in ("pending", "approved", "posted", "failed")},

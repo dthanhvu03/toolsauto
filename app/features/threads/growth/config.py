@@ -8,13 +8,15 @@ Phần chỉnh trên web (/app/settings → «Threads — Kéo khách», key ``g
 Giữ cố định trong code: handle bot, mã ``?start=`` (gắn tracking phía bot), tên biến thể.
 """
 
+import json
 import logging
 import os
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
+from app.config import RUNTIME_CONFIG_DIR
 from app.core import settings
 
 logger = logging.getLogger(__name__)
@@ -91,6 +93,82 @@ ACCOUNTS: Dict[str, GrowthAccount] = {
     "anlinh": GrowthAccount("anlinh", "anlinh_08_10", "threads_anlinh"),
 }
 DEFAULT_ACCOUNT = "us28qt"  # mọi reply / bài riêng trước PLAN-167 đều do @us28qt đăng
+
+
+@dataclass(frozen=True)
+class AccountRole:
+    """Vai của một tài khoản (PLAN-167 đợt 2): bật/tắt, mời bot nào, hạn mức riêng, có đăng bài riêng không.
+
+    ``max_per_day`` / ``max_per_hour`` = None → dùng hạn mức chung ``growth.max_replies_per_*``.
+    """
+
+    enabled: bool = False
+    bots: Tuple[str, ...] = ("cashbot", "ai_store")
+    max_per_day: Optional[int] = None
+    max_per_hour: Optional[int] = None
+    own_posts: bool = False
+    note: str = field(default="", compare=False)
+
+    def serves(self, bot: "TargetBot | str") -> bool:
+        return (bot.value if isinstance(bot, TargetBot) else str(bot)) in self.bots
+
+
+# Mặc định khi chưa có file: @us28qt giữ như trước PLAN-167 (cả 2 bot, hạn mức chung, có bài riêng);
+# An Linh TẮT (đang làm ấm tới ~16/11), khi bật chỉ mời AI Pass Store, hạn mức thấp.
+DEFAULT_ROLES: Dict[str, AccountRole] = {
+    "us28qt": AccountRole(enabled=True, bots=("cashbot", "ai_store"), own_posts=True),
+    "anlinh": AccountRole(enabled=False, bots=("ai_store",), max_per_day=8, max_per_hour=2, own_posts=False),
+}
+ROLES_FILE = Path(os.getenv("THREADS_GROWTH_ROLES_FILE") or RUNTIME_CONFIG_DIR / "threads_growth_accounts.json")
+
+
+def _role_from(raw: dict, base: AccountRole) -> AccountRole:
+    def _int(v):
+        return None if v in (None, "") else max(0, int(v))
+
+    bots = tuple(b for b in (raw.get("bots") or base.bots) if b in {t.value for t in TargetBot})
+    return AccountRole(
+        enabled=bool(raw.get("enabled", base.enabled)),
+        bots=bots or base.bots,
+        max_per_day=_int(raw["max_per_day"]) if "max_per_day" in raw else base.max_per_day,
+        max_per_hour=_int(raw["max_per_hour"]) if "max_per_hour" in raw else base.max_per_hour,
+        own_posts=bool(raw.get("own_posts", base.own_posts)),
+        note=str(raw.get("note", base.note) or ""),
+    )
+
+
+def load_account_roles(path: Optional[Path] = None) -> Dict[str, AccountRole]:
+    """Vai từng tài khoản: mặc định trong code, ghi đè bằng ``storage/db/config/threads_growth_accounts.json``."""
+    path = path or ROLES_FILE
+    roles = dict(DEFAULT_ROLES)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError) as exc:
+        logger.warning("growth: đọc %s lỗi (%s) — dùng vai mặc định", path, exc)
+        data = {}
+    for key in ACCOUNTS:
+        if isinstance(data.get(key), dict):
+            try:
+                roles[key] = _role_from(data[key], roles.get(key, AccountRole()))
+            except (TypeError, ValueError) as exc:
+                logger.warning("growth: vai %s sai (%s) — giữ mặc định", key, exc)
+    return roles
+
+
+def save_account_role(key: str, changes: dict, path: Optional[Path] = None) -> AccountRole:
+    """Đổi vai một tài khoản (web / worker tự tắt khi checkpoint). Ghi file tạm rồi thay để không hỏng file."""
+    if key not in ACCOUNTS:
+        raise KeyError(key)
+    path = path or ROLES_FILE
+    roles = load_account_roles(path)
+    role = _role_from({**asdict(roles[key]), **changes}, roles[key])
+    roles[key] = role
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({k: {**asdict(r), "bots": list(r.bots)} for k, r in roles.items()},
+                              ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return role
 
 
 def account_for_profile(profile_path: str) -> str:

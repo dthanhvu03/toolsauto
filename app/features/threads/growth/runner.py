@@ -182,24 +182,34 @@ class GrowthRunner:
     def reject(self, post_id: int, reason: str = "user_rejected") -> bool:
         return self.storage.update_status(post_id, "rejected", error_message=reason)
 
-    def posting_quota(self, now: Optional[datetime] = None) -> PostingQuota:
+    def posting_quota(
+        self,
+        now: Optional[datetime] = None,
+        account: Optional[str] = None,
+        max_per_day: Optional[int] = None,
+        max_per_hour: Optional[int] = None,
+    ) -> PostingQuota:
         """Có được đăng reply tiếp theo ngay bây giờ không (theo giới hạn trên web).
 
+        ``account`` (PLAN-167): đếm riêng reply của tài khoản đó; ``max_per_*`` = hạn mức riêng của tài khoản
+        (None → hạn mức chung). Không có ``account`` = tổng mọi tài khoản (hiển thị trên web).
         Bên đăng bài PHẢI gọi hàm này trước mỗi lần đăng; ``mark_posted`` chỉ ghi nhận sau khi đã đăng.
         """
         lim = self.limits
+        per_day = lim.max_replies_per_day if max_per_day is None else max_per_day
+        per_hour = lim.max_replies_per_hour if max_per_hour is None else max_per_hour
         now = now or datetime.now(timezone.utc)
-        hour = self.storage.count_posted_since(now - timedelta(hours=1))
-        day = self.storage.count_posted_since(now - timedelta(days=1))
+        hour = self.storage.count_posted_since(now - timedelta(hours=1), account=account)
+        day = self.storage.count_posted_since(now - timedelta(days=1), account=account)
 
         def deny(reason: str, wait: float) -> PostingQuota:
             return PostingQuota(False, reason, max(int(wait), 1), hour, day)
 
-        if day >= lim.max_replies_per_day:
-            return deny(f"đủ {lim.max_replies_per_day} reply / 24 giờ", 3600)
-        if hour >= lim.max_replies_per_hour:
-            return deny(f"đủ {lim.max_replies_per_hour} reply / giờ", 600)
-        last = self.storage.last_posted_at()
+        if day >= per_day:
+            return deny(f"đủ {per_day} reply / 24 giờ", 3600)
+        if hour >= per_hour:
+            return deny(f"đủ {per_hour} reply / giờ", 600)
+        last = self.storage.last_posted_at(account=account)
         if last is not None:
             gap = (now - last).total_seconds()
             if gap < lim.min_delay_sec:

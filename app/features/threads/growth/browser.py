@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, List, Optional
@@ -19,6 +20,10 @@ from app.features.threads.adapter import ThreadsAdapter, ThreadsSessionInvalidEr
 from app.features.threads.growth.scanner import THREADS_HOST, ScannedPost, ThreadsScanner
 
 logger = logging.getLogger(__name__)
+
+COMPOSER_PROMPT_RE = re.compile(r"^(What[’']s new\?|Có gì mới\?)$")
+POST_BUTTON_RE = re.compile(r"^(Post|Đăng)$")
+POSTED_TOAST_RE = re.compile(r"^(Posted|Đã đăng)$")
 
 REPLY_BUTTON_SELECTORS = (
     'svg[aria-label="Reply"]',
@@ -218,7 +223,7 @@ class GrowthBrowser:
         except Exception:
             pass  # ảnh / stream / body đã giải phóng
 
-    def _embedded_payloads(self) -> list[Any]:
+    def _embedded_payloads(self, wide: bool = False) -> list[Any]:
         try:
             raw = self.page.eval_on_selector_all(
                 'script[type="application/json"]', "els => els.map(e => e.textContent)"
@@ -227,7 +232,10 @@ class GrowthBrowser:
             return []
         out = []
         for txt in raw or []:
-            if txt and "thread_items" in txt:
+            # Trang tìm kiếm / ẩn danh: bài nằm trong khối có ``thread_items``. Đã đăng nhập, trang một bài nhúng các
+            # reply trong khối KHÔNG có ``thread_items`` (PLAN-167: lỗi bỏ sót người trả lời #646) → ``wide`` nhận cả
+            # khối có ``text_post_app_info``. Trang tìm kiếm giữ hẹp (không lẫn bài gợi ý ngoài từ khoá).
+            if txt and ("thread_items" in txt or (wide and "text_post_app_info" in txt)):
                 try:
                     out.append(json.loads(txt))
                 except ValueError:
@@ -285,16 +293,21 @@ class GrowthBrowser:
         self.page.mouse.wheel(0, random.randint(900, 1500))
         self._pause(1.5, 2.5)
         found: dict[str, ScannedPost] = {}
-        for payload in [*self._embedded_payloads(), *self._payloads]:
+        for payload in [*self._embedded_payloads(wide=True), *self._payloads]:
             for p in replies_to_me(payload, me):
                 found.setdefault(p.thread_id, p)
         return list(found.values())
 
-    def create_post(self, text: str) -> Optional[str]:
-        """Đăng bài mới trên tường qua hộp «New thread» (DOM 06/11: nút ``[aria-label="New thread"]`` → hộp thoại có
-        ô soạn + nút «Post»). Thành công = hộp thoại đóng. Trả link bài nếu tìm thấy, None nếu không rõ link.
+    def create_post(self, text: str, dry_run: bool = False) -> Optional[str]:
+        """Đăng bài mới trên tường. Trả link bài nếu tìm thấy, None nếu đăng được mà không rõ link.
 
-        Lỗi trước khi bấm Post → ``RuntimeError`` (chưa đăng gì). Sau khi bấm mà hộp không đóng → ``RuntimeError``.
+        Mở ô soạn bằng nút ``[aria-label="New thread"]`` (@us28qt, 06/11) hoặc chữ «What’s new?» đầu feed (@anlinh_08_10,
+        09/11 — không có nút New thread) → hộp thoại → gõ → nút «Post». Đăng xong = (1) JSON Threads trả về có bài mới của
+        mình, hoặc (2) thông báo «Posted», hoặc (3) hộp soạn đóng — không dựa riêng vào hộp đóng (PLAN-167: 6/6 lần báo
+        «hộp soạn không đóng» ở @us28qt và bài KHÔNG lên). Hết giờ chờ → mở trang cá nhân tìm bài rồi mới báo lỗi
+        (không đăng lại lần 2). ``dry_run`` = gõ xong thì huỷ, không bấm Post (để chẩn đoán).
+
+        Lỗi trước khi bấm Post → ``RuntimeError`` (chưa đăng gì). Bấm rồi mà không thấy bài → ``RuntimeError``.
         """
         pg = self.page
         if (pg.viewport_size or {}).get("width", 0) < 1100:
@@ -304,11 +317,15 @@ class GrowthBrowser:
         self._pause(3.0, 5.0)
         self._check_session()
         opener = pg.locator('[aria-label="New thread"]').first
-        if not opener.count():
-            raise RuntimeError("Không thấy nút New thread")
-        opener.click(timeout=15000)
+        if opener.count() and opener.is_visible():
+            opener.click(timeout=15000)
+        else:
+            prompt = pg.get_by_text(COMPOSER_PROMPT_RE).first
+            if not prompt.count():
+                raise RuntimeError("Không thấy nút soạn bài (New thread / What’s new?)")
+            prompt.click(timeout=15000)
         self._pause(1.5, 2.5)
-        dialog = pg.locator('div[role="dialog"]').last
+        dialog = pg.locator('div[role="dialog"]:has(div[role="textbox"][contenteditable="true"])').last
         box = dialog.locator('div[role="textbox"][contenteditable="true"]').first
         if not box.count():
             raise RuntimeError("Không thấy ô soạn bài")
@@ -323,18 +340,52 @@ class GrowthBrowser:
         if head and head not in " ".join((box.inner_text() or "").split()):
             pg.keyboard.press("Escape")
             raise RuntimeError("Gõ nội dung không vào ô soạn")
-        button = dialog.get_by_role("button", name="Post", exact=True)
+        buttons = dialog.get_by_role("button", name=POST_BUTTON_RE)
+        if not buttons.count():
+            raise RuntimeError("Không thấy nút Post trong hộp soạn")
+        button = buttons.last
         deadline = time.time() + 10
         while time.time() < deadline and button.get_attribute("aria-disabled") == "true":
             time.sleep(0.5)
+        if button.get_attribute("aria-disabled") == "true":
+            raise RuntimeError("Nút Post vẫn khoá sau 10s — chưa đăng")
+        if dry_run:
+            pg.keyboard.press("Escape")
+            return None
+        self._payloads.clear()
         button.click(timeout=10000)
+
         deadline = time.time() + 30
-        while time.time() < deadline and pg.locator('div[role="dialog"]').count():
-            time.sleep(1.0)
-        if pg.locator('div[role="dialog"]').count():
-            raise RuntimeError("Đã bấm Post nhưng hộp soạn không đóng — kiểm tra tay trên Threads")
-        self._pause(2.0, 3.0)
-        return self._find_own_post(text)
+        url: Optional[str] = None
+        confirmed = False
+        while time.time() < deadline:
+            self._pause(1.0, 1.5)
+            if self.adapter._page_has_publish_error():
+                raise RuntimeError("Threads báo lỗi khi đăng bài")
+            url = self._own_post_in_payloads(text)
+            if url or pg.get_by_text(POSTED_TOAST_RE).count():
+                confirmed = True
+                break
+            if not pg.locator('div[role="dialog"]:has(div[role="textbox"][contenteditable="true"])').count():
+                break  # hộp đóng: chưa chắc đã đăng — phải thấy bài trên trang cá nhân
+        if url:
+            return url
+        found = self._find_own_post(text)  # mở trang cá nhân kiểm — tránh báo lỗi oan / đăng lại lần 2
+        if found or confirmed:
+            return found
+        raise RuntimeError("Đã bấm Post nhưng không thấy bài trên trang cá nhân — kiểm tra tay trên Threads")
+
+    def _own_post_in_payloads(self, text: str) -> Optional[str]:
+        """Bài vừa đăng có trong JSON Threads trả về cho trang (response mutation tạo bài / feed) chưa."""
+        me = self.own_handle()
+        if not me:
+            return None
+        prefix = " ".join(text.split())[:30]
+        for payload in list(self._payloads):
+            for p in posts_from_payload(payload, ""):
+                if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
+                    return p.post_url
+        return None
 
     def _find_own_post(self, text: str) -> Optional[str]:
         """Link bài vừa đăng: tìm trong JSON đã bắt, không có thì mở trang cá nhân."""
@@ -344,7 +395,7 @@ class GrowthBrowser:
         prefix = " ".join(text.split())[:30]
 
         def lookup() -> Optional[str]:
-            for payload in [*self._payloads, *self._embedded_payloads()]:
+            for payload in [*self._payloads, *self._embedded_payloads(wide=True)]:
                 for p in posts_from_payload(payload, ""):
                     if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
                         return p.post_url

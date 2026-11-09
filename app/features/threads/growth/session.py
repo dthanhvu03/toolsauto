@@ -1,8 +1,8 @@
-"""Tài khoản + đăng nhập Threads cho Growth Agent (PLAN-158).
+"""Tài khoản + đăng nhập Threads cho Growth Agent (PLAN-158, nhiều tài khoản từ PLAN-167).
 
-Một dòng ``accounts`` riêng (``name=threads_growth``, ``platform=threads``) dùng profile ``instagram_5``
-(đã có phiên Instagram → «Tiếp tục bằng Instagram»). ``is_active=False`` để các worker Threads cũ
-(``Threads_AutoReply`` / ``Threads_Publisher`` lọc ``is_active``) KHÔNG nhận tài khoản này; gói growth gọi nó theo tên.
+Mỗi tài khoản trong ``config.ACCOUNTS`` một dòng ``accounts`` (``platform=threads``, ``is_active=False``):
+@us28qt giữ tên cũ ``threads_growth`` (profile ``instagram_5``), tài khoản khác ``threads_growth_<key>``.
+``is_active=False`` để worker Threads cũ (lọc ``is_active``) không nhận; gói growth gọi theo tên.
 """
 
 from __future__ import annotations
@@ -19,10 +19,11 @@ from sqlalchemy.orm import Session
 from app.config import BASE_DIR, LOGS_DIR, PROFILES_DIR
 from app.core.database.models import Account
 from app.core.database.models.base import now_ts
+from app.features.threads.growth.config import ACCOUNTS, DEFAULT_ACCOUNT
 
 ACCOUNT_NAME = "threads_growth"
 PLATFORM = "threads"
-PROFILE_DIR = Path(PROFILES_DIR) / "instagram_5"
+PROFILE_DIR = Path(PROFILES_DIR) / ACCOUNTS[DEFAULT_ACCOUNT].profile
 LOGIN_SCRIPT = Path(BASE_DIR) / "app" / "scripts" / "login_browser.py"
 # WSLg: cửa sổ Chromium hiện thẳng trên màn hình Windows (không cần VNC :99).
 LOGIN_DISPLAY = os.getenv("THREADS_GROWTH_DISPLAY") or os.getenv("DISPLAY") or ":0"
@@ -35,6 +36,7 @@ class SessionBusy(RuntimeError):
 @dataclass(frozen=True)
 class SessionStatus:
     account_id: int
+    account: str
     profile_path: str
     login_status: str
     login_error: Optional[str]
@@ -68,15 +70,24 @@ def profile_locked(profile_dir: Path = PROFILE_DIR) -> bool:
     return _pid_alive(pid)
 
 
-def ensure_account(db: Session) -> Account:
-    acc = db.query(Account).filter(Account.name == ACCOUNT_NAME).first()
+def account_name(account: str = DEFAULT_ACCOUNT) -> str:
+    return ACCOUNT_NAME if account == DEFAULT_ACCOUNT else f"{ACCOUNT_NAME}_{account}"
+
+
+def profile_dir(account: str = DEFAULT_ACCOUNT) -> Path:
+    return Path(PROFILES_DIR) / ACCOUNTS[account].profile
+
+
+def ensure_account(db: Session, account: str = DEFAULT_ACCOUNT) -> Account:
+    name = account_name(account)
+    acc = db.query(Account).filter(Account.name == name).first()
     if acc:
         return acc
     acc = Account(
-        name=ACCOUNT_NAME,
+        name=name,
         platform=PLATFORM,
         is_active=False,
-        profile_path=str(PROFILE_DIR),
+        profile_path=str(profile_dir(account)),
         login_status="NEW",
     )
     db.add(acc)
@@ -85,8 +96,8 @@ def ensure_account(db: Session) -> Account:
     return acc
 
 
-def status(db: Session) -> SessionStatus:
-    acc = ensure_account(db)
+def status(db: Session, account: str = DEFAULT_ACCOUNT) -> SessionStatus:
+    acc = ensure_account(db, account)
     logging_in = acc.login_status == "LOGGING_IN" and _pid_alive(acc.login_process_pid)
     if acc.login_status == "LOGGING_IN" and not logging_in:
         # Tiến trình đăng nhập đã chết mà chưa kịp ghi trạng thái (vd tắt máy).
@@ -95,6 +106,7 @@ def status(db: Session) -> SessionStatus:
         db.commit()
     return SessionStatus(
         account_id=acc.id,
+        account=account,
         profile_path=acc.resolved_profile_path,
         login_status=acc.login_status or "NEW",
         login_error=acc.login_error,
@@ -103,18 +115,18 @@ def status(db: Session) -> SessionStatus:
     )
 
 
-def mark(db: Session, ok: bool, error: Optional[str] = None) -> None:
+def mark(db: Session, ok: bool, error: Optional[str] = None, account: str = DEFAULT_ACCOUNT) -> None:
     """Worker ghi lại kết quả kiểm phiên (mất đăng nhập / checkpoint → INVALID)."""
-    acc = ensure_account(db)
+    acc = ensure_account(db, account)
     acc.login_status = "ACTIVE" if ok else "INVALID"
     acc.login_error = None if ok else (error or "")[:500]
     acc.last_login_check = now_ts()
     db.commit()
 
 
-def start_login(db: Session, popen=subprocess.Popen) -> SessionStatus:
+def start_login(db: Session, popen=subprocess.Popen, account: str = DEFAULT_ACCOUNT) -> SessionStatus:
     """Mở cửa sổ Chromium (headed) để chủ bot đăng nhập Threads một lần."""
-    acc = ensure_account(db)
+    acc = ensure_account(db, account)
     if acc.login_status == "LOGGING_IN" and _pid_alive(acc.login_process_pid):
         raise SessionBusy("Cửa sổ đăng nhập đang mở")
     if profile_locked(Path(acc.resolved_profile_path)):
@@ -137,4 +149,4 @@ def start_login(db: Session, popen=subprocess.Popen) -> SessionStatus:
     acc.login_status, acc.login_process_pid = "LOGGING_IN", proc.pid
     acc.login_started_at, acc.login_error = now_ts(), None
     db.commit()
-    return status(db)
+    return status(db, account)

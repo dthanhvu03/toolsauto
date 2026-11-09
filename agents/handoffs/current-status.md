@@ -1,3 +1,12 @@
+## Phiên 2026-11-09 (PLAN-167 đợt 2) — Worker nhiều tài khoản + sửa 2 lỗi + link bio @us28qt (chủ bot giao trực tiếp)
+- Vai tài khoản ở storage/db/config/threads_growth_accounts.json (chưa có file = mặc định: us28qt bật 2 bot; anlinh tắt, chỉ Store,
+  8/ngày). Worker đăng theo vai + hạn mức riêng; checkpoint chỉ tắt tài khoản đó. Web: công tắc / chọn bot từng tài khoản.
+- Sửa: bỏ sót người trả lời (khối JSON không có thread_items khi đăng nhập — thử thật #646 OK); bài riêng (6 bài «lỗi» thật không lên;
+  hỗ trợ «What’s new?», xác nhận bằng JSON / toast / trang cá nhân). Test phụ thuộc giờ thật đã sửa → 127/127 qua.
+- Bio @us28qt thêm link «Hoàn tiền Shopee» ?start=threads_cb_bio_us28qt (giữ link Shopee cũ). anlinh session ACTIVE, vai TẮT.
+- **Cần chủ bot:** `pm2 restart Threads_Growth Web_Dashboard`. Sau restart worker sẽ tự trả lời @vivian_global_realty (#646) nếu AI thấy cần.
+- **Next:** đăng bài làm ấm An Linh 2–7 (10–15/11, tối); ~16/11 bật An Linh trên web + dán link bio Store; T4–5 đổi vai.
+
 ## Phiên 2026-11-09 (PLAN-167 đợt 1) — Số liệu kéo khách theo tài khoản Threads (chủ bot giao trực tiếp: «triển khai đi»)
 - Backend (ngoài vai mặc định của Claude Code — chủ bot giao thẳng, như PLAN-160..164): cột `account` cho growth_posts / own_posts
   (dữ liệu cũ gán us28qt), mã bio riêng `threads_{cb|ai}_bio_{us28qt|anlinh}`, `/overview` thêm `accounts` + `account_stats`,

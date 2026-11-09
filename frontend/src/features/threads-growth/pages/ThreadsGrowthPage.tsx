@@ -8,7 +8,8 @@ import type { GrowthStatus, Overview } from "../api/threadsGrowthApi";
 import { BotFunnel } from "../components/BotFunnel";
 import { ControlBar } from "../components/ControlBar";
 import { PostCard } from "../components/PostCard";
-import { Accounts, Followups, OwnPosts, RecentCustomers } from "../components/SidePanels";
+import { AccountsPanel } from "../components/AccountsPanel";
+import { Followups, OwnPosts, RecentCustomers } from "../components/SidePanels";
 import { BOT_LABEL } from "../lib/format";
 
 const TABS: { key: GrowthStatus; label: string; hint: string }[] = [
@@ -122,7 +123,7 @@ export function ThreadsGrowthPage() {
 
         <aside className="flex flex-col gap-4">
           {ov.data && <RecentCustomers rep={ov.data.customers} />}
-          <Accounts accounts={accounts} />
+          <AccountsPanel accounts={accounts} />
           <Followups items={fu.data?.items ?? []} />
           <OwnPosts items={own.data?.items ?? []} />
         </aside>

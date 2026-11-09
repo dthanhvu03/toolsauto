@@ -1,7 +1,7 @@
 # PLAN-167 — Kéo khách Threads chạy 2 tài khoản, mỗi tài khoản một bot, đổi vai để so tỉ lệ chốt
 
 - Trạng thái: chủ bot đồng ý chiến lược (09/11). **Đợt 1 (số liệu theo tài khoản) — Claude Code làm theo yêu cầu trực tiếp của chủ bot, XONG 09/11.**
-  Đợt 2 (worker chạy 2 tài khoản, đổi vai, nghe response, 2 lỗi) — chưa làm.
+  **Đợt 2 (worker chạy nhiều tài khoản, vai riêng, 2 lỗi) — Claude Code, XONG 09/11.** Còn: bật An Linh ~16/11, đổi vai T4–5.
 - Bối cảnh: worker `Threads_Growth` chỉ chạy 1 profile (`instagram_5` = @us28qt), một tài khoản mời cả Cashbot lẫn AI Pass Store.
   Số liệu 06–09/11 (mã `src:threads_*`): Store 48 reply → 30 khách (~62%), 3 người mua; Cashbot 209 reply → 10 khách (~5%), 1 đơn.
   Nguồn bài đủ điểm từ 08/11: Store ~4/ngày, Cashbot ~11/ngày → nút thắt là nguồn bài, không phải giới hạn reply.
@@ -40,6 +40,23 @@
   test_process_scan + test_orphan_browser_purge 47 passed; ruff sạch; chạy thử trên bản sao DB thật: us28qt cashbot posted 209 / failed 10,
   ai_store posted 49; khách us28qt 10 + 30, anlinh 0; server tạm cổng 8099 trỏ bản sao DB → chụp trang, bấm lọc tài khoản OK (đã tắt, đã xoá bản sao).
 - Cần: `pm2 restart Web_Dashboard Threads_Growth` (lần mở DB đầu tự thêm cột + gán us28qt). Đặt link bio vào bio 2 tài khoản.
+
+## Đợt 2 — XONG 09/11 (Claude Code, chủ bot giao trực tiếp)
+- Vai từng tài khoản `storage/db/config/threads_growth_accounts.json` (`config.load_account_roles` / `save_account_role`):
+  enabled, bots, max_per_day / max_per_hour (None = hạn mức chung), own_posts. Mặc định: us28qt bật, 2 bot, hạn mức chung, có bài
+  riêng; anlinh TẮT, chỉ ai_store, 8/ngày 2/giờ.
+- `session` theo tài khoản (us28qt giữ dòng `threads_growth`; anlinh = `threads_growth_anlinh`, đã kiểm phiên → ACTIVE).
+- Worker: quét 1 lần bằng tài khoản đầu (chỉ từ khoá của bot có tài khoản phục vụ) → mỗi tài khoản đăng hàng chờ của bot mình,
+  hạn mức riêng (`posting_quota(account=…)`), bài riêng (slot có tiền tố tài khoản), trả lời lại reply của chính mình.
+  Checkpoint → chỉ tắt tài khoản đó (vai enabled=False) + báo Telegram «@handle: …».
+- Lỗi bỏ sót người trả lời: khi đăng nhập, reply nhúng trong khối JSON KHÔNG có `thread_items` → `_embedded_payloads(wide=True)`
+  cho `replies_to_me` / tìm bài của mình (quét vẫn hẹp). Thử thật #646: bắt được @vivian_global_realty (can_reply True).
+- Bài riêng @us28qt: 6 bài «lỗi» thật sự KHÔNG lên (xem trang công khai). `create_post`: nút New thread hoặc «What’s new?», xác nhận
+  bằng JSON bài mới / toast «Posted», hộp đóng thì phải thấy bài trên trang cá nhân; `dry_run`. Thử dry-run thật trên @us28qt: OK.
+- API: `/overview.accounts[]` có role / login / quota; `POST /threads-growth/api/accounts/{key}`. Web: công tắc, chọn bot, hạn mức.
+- Bio @us28qt: thêm link «Hoàn tiền Shopee» `?start=threads_cb_bio_us28qt` (giữ link Shopee cũ). An Linh: chưa (từ ~16/11).
+- Proof: 127 test (growth + process_scan + orphan purge + login_browser) qua; sửa test phụ thuộc giờ thật; ruff sạch; tsc + vite OK.
+- Cần: `pm2 restart Threads_Growth Web_Dashboard`.
 
 ## Ngoài phạm vi
 - Không dùng tài khoản này để xác nhận / khen bot dưới reply của tài khoản kia.

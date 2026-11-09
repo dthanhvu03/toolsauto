@@ -28,6 +28,16 @@ class ToggleBody(BaseModel):
     enabled: bool
 
 
+class AccountBody(BaseModel):
+    """Đổi vai một tài khoản (PLAN-167) — chỉ gửi trường cần đổi."""
+
+    enabled: Optional[bool] = None
+    bots: Optional[list[str]] = None
+    max_per_day: Optional[int] = Field(default=None, ge=0, le=200)
+    max_per_hour: Optional[int] = Field(default=None, ge=0, le=60)
+    own_posts: Optional[bool] = None
+
+
 def _bad(exc: Exception) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
@@ -84,6 +94,14 @@ def switch(post_id: int, body: SwitchBody) -> dict:
 def toggle(body: ToggleBody, db: Session = Depends(get_db)) -> dict:
     try:
         return {"enabled": actions.set_enabled(db, body.enabled, by="web")}
+    except actions.ActionError as exc:
+        raise _bad(exc)
+
+
+@router.post("/accounts/{key}")
+def update_account(key: str, body: AccountBody) -> dict:
+    try:
+        return {"role": actions.update_account(key, body.model_dump(exclude_unset=True))}
     except actions.ActionError as exc:
         raise _bad(exc)
 

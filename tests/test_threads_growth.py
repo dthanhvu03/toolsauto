@@ -47,6 +47,16 @@ def fake_ai(monkeypatch):
     return calls
 
 
+@pytest.fixture(autouse=True)
+def roles_file(tmp_path, monkeypatch):
+    """Vai tài khoản (PLAN-167) ghi vào thư mục tạm — không đụng storage/db/config thật."""
+    from app.features.threads.growth import config as growth_config
+
+    path = tmp_path / "roles.json"
+    monkeypatch.setattr(growth_config, "ROLES_FILE", path)
+    return path
+
+
 @pytest.fixture
 def storage(tmp_path):
     return GrowthStorage(db_path=tmp_path / "growth.sqlite")
@@ -364,14 +374,20 @@ def make_worker(runner, monkeypatch):
         p.keywords.clear()
     profiles[TargetBot.CASHBOT].keywords.append("kw")
     monkeypatch.setattr(worker, "load_profiles", lambda: profiles)
-    monkeypatch.setattr(worker.GrowthWorker, "_profile_path", lambda self: "/profile")
+    monkeypatch.setattr(worker.GrowthWorker, "_profile_path", lambda self, account="us28qt": "/profile")
+    # PLAN-167: chỉ @us28qt bật, cả 2 bot, hạn mức chung — như trước khi có nhiều tài khoản.
+    roles = {"us28qt": worker.AccountRole(enabled=True, bots=("cashbot", "ai_store"), own_posts=True)}
+    monkeypatch.setattr(worker, "load_account_roles", lambda: roles)
     monkeypatch.setattr(worker.conversions, "report", lambda: {"total": 1, "last_24h": 1, "active": 0})
     # Bài riêng: mặc định không có deal / dịp sale (không đọc DB Cashbot thật); test riêng tự đặt.
     monkeypatch.setattr(content, "load_deals", lambda now, path=None: [])
     monkeypatch.setattr(content, "next_sale", lambda now, days=4: None)
     disabled = []
     monkeypatch.setattr(worker.settings, "upsert_setting", lambda db, k, v, updated_by=None: disabled.append((k, v)))
-    monkeypatch.setattr(worker.growth_session, "mark", lambda db, ok, err=None: disabled.append(("mark", ok)))
+    monkeypatch.setattr(worker.growth_session, "mark",
+                        lambda db, ok, err=None, account="us28qt": disabled.append(("mark", ok)))
+    monkeypatch.setattr(worker, "save_account_role",
+                        lambda key, changes: disabled.append(("role", key, changes)))
 
     class _DB:
         def __enter__(self):
@@ -532,6 +548,9 @@ def test_worker_scans_top_tab_and_queues_by_reach(make_worker, runner):
     small = _post("SMALL", "nho")
     big = _post("BIG", "lon")
     big.author_followers, big.replies = 50_000, 20
+    # Test chạy theo giờ thật (hạn mức so với posted_at thật) → bài cũng phải «mới» theo giờ thật,
+    # không thì quá max_post_age_hours (48h) kể từ NOW và bị loại (hỏng từ 08/11).
+    small.created_at = big.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
     w, _ = make_worker(FakeBrowser({"kw": [small], ("kw", "top"): [big]}))
     w.runner._limits = lambda: GrowthLimits(max_replies_per_hour=1, max_replies_per_day=10, min_delay_sec=0, max_delay_sec=0)
     w.now = lambda: datetime.now(timezone.utc)
@@ -571,7 +590,10 @@ def test_growth_worker_browser_is_protected_from_orphan_purge():
 def test_worker_checkpoint_disables(make_worker):
     w, n = make_worker(FakeBrowser(invalid=True))
     report = w.tick()
-    assert report.errors and ("growth.enabled", "false") in make_worker.disabled
+    # PLAN-167: chỉ tắt tài khoản dính checkpoint (vai enabled=False), không tắt cả kéo khách.
+    assert report.errors == ["@us28qt: checkpoint"]
+    assert ("role", "us28qt", {"enabled": False}) in make_worker.disabled
+    assert ("growth.enabled", "false") not in make_worker.disabled
     assert ("mark", False) in make_worker.disabled
     assert any(s.startswith("checkpoint") for s in n.sent)
 
@@ -782,7 +804,7 @@ def test_worker_followups_answer_skip_and_cap(make_worker, runner, monkeypatch):
     # Hết suất giữa chừng → reply chưa đánh dấu «đã kiểm»: mai mở lại, trả lời tiếp C3 (C2 chỉ là «cảm ơn» → bỏ).
     assert runner.storage.get_post_by_id(pid)["followup_checked_at"] is None
     make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_max_per_day=5)
-    w.last_followup = None
+    w.last_followup = {}
     w.tick()
     rows = {r["code"]: r["status"] for r in runner.storage.list_followups()}
     assert rows == {"C1": "answered", "C2": "skipped", "C3": "answered"}
@@ -1028,3 +1050,123 @@ def test_worker_records_account_of_profile(make_worker, runner, storage):
     w.post_queue("/x/storage/profiles/threads_anlinh", worker.CycleReport())
     row = storage.get_post_by_id(pid)
     assert row["status"] == "posted" and row["account"] == "anlinh"
+
+
+class ProfileBrowser(FakeBrowser):
+    """FakeBrowser ghi lại reply đăng bằng profile nào; ``bad_profile`` → checkpoint khi đăng."""
+
+    def __init__(self, bad_profile=None):
+        super().__init__()
+        self.profile = None
+        self.bad_profile = bad_profile
+        self.by_profile = []
+
+    def __call__(self, profile_path):
+        self.profile = profile_path
+        return super().__call__(profile_path)
+
+    def reply(self, url, text):
+        if self.profile == self.bad_profile:
+            raise ThreadsSessionInvalidError("checkpoint")
+        self.by_profile.append((self.profile, url))
+        return super().reply(url, text)
+
+
+def _two_accounts(monkeypatch, us=None, an=None):
+    roles = {
+        "us28qt": us or worker.AccountRole(enabled=True, bots=("cashbot",), own_posts=False),
+        "anlinh": an or worker.AccountRole(enabled=True, bots=("ai_store",), max_per_day=1, max_per_hour=1),
+    }
+    monkeypatch.setattr(worker, "load_account_roles", lambda: roles)
+    monkeypatch.setattr(worker.GrowthWorker, "_profile_path", lambda self, account="us28qt": f"/p/{account}")
+    return roles
+
+
+def test_worker_two_accounts_each_posts_its_own_bot_with_own_quota(make_worker, runner, monkeypatch):
+    _two_accounts(monkeypatch)
+    ids = {}
+    for tid, bot, who in (("C1", TargetBot.CASHBOT, "a"), ("S1", TargetBot.AI_STORE, "b"), ("S2", TargetBot.AI_STORE, "c")):
+        ids[tid] = _save(runner.storage, tid, bot=bot, author=who)
+        runner.storage.update_status(ids[tid], "approved")
+    fb = ProfileBrowser()
+    w, _ = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_enabled=False)
+    w.last_scan = NOW  # không quét
+    report = w.tick()
+    rows = {t: runner.storage.get_post_by_id(i) for t, i in ids.items()}
+    assert rows["C1"]["status"] == "posted" and rows["C1"]["account"] == "us28qt"
+    assert rows["S1"]["status"] == "posted" and rows["S1"]["account"] == "anlinh"
+    assert rows["S2"]["status"] == "approved"  # An Linh đủ 1 reply/ngày; @us28qt không mời Store
+    assert {p for p, _ in fb.by_profile} == {"/p/us28qt", "/p/anlinh"}
+    assert "@anlinh_08_10" in report.quota_note
+    assert runner.posting_quota(NOW, account="us28qt").posted_last_day == 1
+
+
+def test_worker_checkpoint_on_one_account_keeps_other_running(make_worker, runner, monkeypatch):
+    _two_accounts(monkeypatch, us=worker.AccountRole(enabled=True, bots=("cashbot", "ai_store")))
+    pid = _save(runner.storage, "S1", bot=TargetBot.AI_STORE, author="b")
+    runner.storage.update_status(pid, "approved")
+    fb = ProfileBrowser(bad_profile="/p/us28qt")
+    w, n = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_enabled=False)
+    w.last_scan = NOW
+    report = w.tick()
+    assert report.errors == ["@us28qt: checkpoint"]
+    assert ("role", "us28qt", {"enabled": False}) in make_worker.disabled
+    assert ("growth.enabled", "false") not in make_worker.disabled
+    assert any("@us28qt" in t for t in n.sent)
+
+
+def test_own_post_slot_prefixed_for_other_accounts(make_worker, runner, monkeypatch):
+    w, _ = make_worker(FakeBrowser())
+    cfg = WorkerConfig(enabled=True, own_post_times="00:00")
+    vn = NOW.astimezone(content.ICT)
+    w.now = lambda: vn.replace(hour=1, minute=0).astimezone(timezone.utc)
+    assert w._own_post_slot(cfg, "us28qt") == f"{vn.date().isoformat()} 00:00"
+    assert w._own_post_slot(cfg, "anlinh") == f"anlinh {vn.date().isoformat()} 00:00"
+
+
+def test_account_roles_file_roundtrip(roles_file):
+    from app.features.threads.growth import config as cfgmod
+
+    roles = cfgmod.load_account_roles()
+    assert roles["us28qt"].enabled and roles["us28qt"].serves("cashbot") and not roles["anlinh"].enabled
+    cfgmod.save_account_role("anlinh", {"enabled": True, "bots": ["ai_store", "nope"], "max_per_day": "6"})
+    again = cfgmod.load_account_roles()
+    assert again["anlinh"].enabled and again["anlinh"].bots == ("ai_store",) and again["anlinh"].max_per_day == 6
+    assert again["us28qt"] == roles["us28qt"]
+    roles_file.write_text("{hỏng")
+    assert cfgmod.load_account_roles()["us28qt"].enabled  # file hỏng → mặc định
+    with pytest.raises(KeyError):
+        cfgmod.save_account_role("ai_do", {})
+
+
+def test_actions_update_account_role(roles_file):
+    role = actions.update_account("anlinh", {"enabled": True, "max_per_day": 5, "junk": 1})
+    assert role["enabled"] and role["max_per_day"] == 5 and role["bots"] == ["ai_store"]
+    role = actions.update_account("anlinh", {"max_per_day": None})  # về hạn mức chung
+    assert role["max_per_day"] is None
+    with pytest.raises(actions.ActionError):
+        actions.update_account("anlinh", {"bots": []})
+    with pytest.raises(actions.ActionError):
+        actions.update_account("khong_co", {"enabled": True})
+
+
+def test_replies_to_me_reads_logged_in_blocks_without_thread_items():
+    """PLAN-167: đã đăng nhập, trang một bài nhúng reply trong khối không có ``thread_items`` (#646 bị bỏ sót)."""
+    import json as _json
+
+    reply = {"code": "Dffpjy7EzoL", "user": {"username": "vivian_global_realty"}, "taken_at": 1762634820,
+             "caption": {"text": "Cám ơn bà chắc để tui mua"},
+             "text_post_app_info": {"reply_to_author": {"username": "us28qt"}, "can_reply": True,
+                                    "has_viewer_replied": False}}
+    noise = {"code": "X1", "user": {"username": "khac"}, "caption": {"text": "bài gợi ý"},
+             "text_post_app_info": {"reply_to_author": None}}
+    blocks = [_json.dumps({"data": {"replies": [reply]}}), _json.dumps({"thread_items": [{"post": noise}]})]
+    b = object.__new__(browser.GrowthBrowser)
+    b.adapter = SimpleNamespace(page=SimpleNamespace(eval_on_selector_all=lambda sel, js: blocks))
+    assert len(b._embedded_payloads()) == 1            # trang tìm kiếm: chỉ khối thread_items
+    wide = b._embedded_payloads(wide=True)
+    assert len(wide) == 2
+    found = [p for payload in wide for p in browser.replies_to_me(payload, "us28qt")]
+    assert [(p.author, p.thread_id) for p in found] == [("vivian_global_realty", "Dffpjy7EzoL")]
