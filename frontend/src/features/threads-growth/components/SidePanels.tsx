@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
-import type { Followup, Overview, OwnPost } from "../api/threadsGrowthApi";
+import type { Followup, GrowthAccount, Overview, OwnPost } from "../api/threadsGrowthApi";
 import { BOT_LABEL, when } from "../lib/format";
 
 function Box({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
@@ -102,6 +102,48 @@ export function OwnPosts({ items }: { items: OwnPost[] }) {
       ) : (
         <Empty>Chưa có bài nào.</Empty>
       )}
+    </Box>
+  );
+}
+
+/** PLAN-167: tài khoản Threads + link bio riêng (khách vào qua link này được tính cho tài khoản đó). */
+export function Accounts({ accounts }: { accounts: GrowthAccount[] }) {
+  const [copied, setCopied] = useState("");
+  const copy = (url: string) => {
+    navigator.clipboard?.writeText(url).then(() => setCopied(url), () => setCopied(""));
+  };
+  if (!accounts.length) return null;
+  return (
+    <Box title="Tài khoản Threads" hint="Dán link bio vào bio tài khoản để đếm khách riêng từng tài khoản.">
+      <ul className="space-y-3 text-sm">
+        {accounts.map((a) => (
+          <li key={a.key}>
+            <div className="flex items-center gap-2">
+              <a href={`https://www.threads.com/@${a.handle}`} target="_blank" rel="noreferrer" className="font-medium text-indigo-600">
+                @{a.handle}
+              </a>
+              <span className={cn("rounded-full px-1.5 text-xs", a.running ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500")}>
+                {a.running ? "worker đang chạy" : "chưa chạy worker"}
+              </span>
+            </div>
+            {Object.entries(a.bio_links).map(([bot, url]) => (
+              <button
+                key={bot}
+                type="button"
+                onClick={() => copy(url)}
+                className="mt-1 flex w-full items-center gap-2 rounded-lg bg-slate-50 px-2 py-1 text-left text-xs hover:bg-slate-100"
+                title="Bấm để chép"
+              >
+                <span className="shrink-0 text-slate-500">{BOT_LABEL[bot]}</span>
+                <span className="truncate font-mono text-slate-700" title={url}>
+                  {url.split("start=")[1] ?? url}
+                </span>
+                <span className="ml-auto shrink-0 text-indigo-600">{copied === url ? "đã chép" : "chép"}</span>
+              </button>
+            ))}
+          </li>
+        ))}
+      </ul>
     </Box>
   );
 }

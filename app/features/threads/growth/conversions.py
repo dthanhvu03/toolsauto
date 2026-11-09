@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.features.threads.growth.config import _ROOT, ABVariant, TargetBot, code_channel, code_map
+from app.features.threads.growth.config import ACCOUNTS, _ROOT, ABVariant, TargetBot, code_channel, code_map
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,10 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
     by_variant: Dict[str, Dict[str, Dict[str, int]]] = {
         b.value: {v.value: {"customers": 0, "active": 0} for v in ABVariant} for b in TargetBot
     }
+    # PLAN-167: khách theo tài khoản Threads × bot. Mã lạ (không có trong code_map) → tài khoản None, không tính vào đây.
+    by_account: Dict[str, Dict[str, Dict[str, int]]] = {
+        acc: {b.value: {"customers": 0, "active": 0} for b in TargetBot} for acc in ACCOUNTS
+    }
     customers: List[Dict[str, Any]] = []
     by_channel: Dict[str, Dict[str, int]] = {}
     errors: List[str] = []
@@ -126,9 +130,10 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
             logger.warning("growth.conversions: %s %s", path, exc)
             continue
         for r in rows:
-            code_bot, variant = codes.get(r["code"], (bot, None))
+            code_bot, variant, account = codes.get(r["code"], (bot, None, None))
             cust = {
                 "bot": code_bot.value, "variant": variant.value if variant else None, "code": r["code"],
+                "account": account,
                 "channel": code_channel(r["code"]),
                 "user_id": r["user_id"], "username": r["username"], "joined_at": r["joined_at"],
                 "last_seen_at": r["last_seen_at"], "activity": r["activity"], "active": r["active"],
@@ -137,6 +142,10 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
             ch = by_channel.setdefault(cust["channel"], {"customers": 0, "active": 0})
             ch["customers"] += 1
             ch["active"] += 1 if r["active"] else 0
+            if account in by_account:
+                acc_slot = by_account[account][code_bot.value]
+                acc_slot["customers"] += 1
+                acc_slot["active"] += 1 if r["active"] else 0
             if variant:
                 slot = by_variant[code_bot.value][variant.value]
                 slot["customers"] += 1
@@ -149,6 +158,7 @@ def report(now: Optional[datetime] = None, cashback_path: Optional[Path] = None,
         "last_24h": sum(1 for c in customers if (_parse(c["joined_at"]) or now - timedelta(days=99)) >= day_ago),
         "by_variant": by_variant,
         "by_channel": by_channel,
+        "by_account": by_account,
         "customers": customers[:100],
         "errors": errors,
     }

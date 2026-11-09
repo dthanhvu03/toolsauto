@@ -8,7 +8,7 @@ import type { GrowthStatus, Overview } from "../api/threadsGrowthApi";
 import { BotFunnel } from "../components/BotFunnel";
 import { ControlBar } from "../components/ControlBar";
 import { PostCard } from "../components/PostCard";
-import { Followups, OwnPosts, RecentCustomers } from "../components/SidePanels";
+import { Accounts, Followups, OwnPosts, RecentCustomers } from "../components/SidePanels";
 import { BOT_LABEL } from "../lib/format";
 
 const TABS: { key: GrowthStatus; label: string; hint: string }[] = [
@@ -26,6 +26,8 @@ export function ThreadsGrowthPage() {
   const fu = useQuery({ queryKey: ["growth", "followups"], queryFn: api.fetchFollowups, refetchInterval: 30_000 });
   const [picked, setPicked] = useState<GrowthStatus | null>(null);
   const [bot, setBot] = useState<BotFilter>("all");
+  const [account, setAccount] = useState("all");
+  const accounts = ov.data?.accounts ?? [];
 
   const counts = ov.data?.counts;
   // Mặc định: có việc cần duyệt thì mở «Cần duyệt», không thì xem «Đã đăng».
@@ -45,7 +47,25 @@ export function ThreadsGrowthPage() {
       {ov.isError && <p className="text-sm text-red-600">{(ov.error as Error).message}</p>}
       {ov.isLoading && <p className="text-sm text-slate-500">Đang tải…</p>}
       {ov.data && <ControlBar ov={ov.data} own={own.data?.items ?? []} />}
-      {ov.data && <BotFunnel ov={ov.data} />}
+      {ov.data && accounts.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <span className="mr-1 text-slate-500">Hiệu quả theo:</span>
+          {[{ key: "all", label: "Tất cả tài khoản" }, ...accounts.map((a) => ({ key: a.key, label: `@${a.handle}` }))].map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => setAccount(o.key)}
+              className={cn(
+                "rounded-full px-2.5 py-1",
+                account === o.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {ov.data && <BotFunnel ov={ov.data} account={account} />}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <main className="flex min-w-0 flex-col gap-3">
@@ -102,6 +122,7 @@ export function ThreadsGrowthPage() {
 
         <aside className="flex flex-col gap-4">
           {ov.data && <RecentCustomers rep={ov.data.customers} />}
+          <Accounts accounts={accounts} />
           <Followups items={fu.data?.items ?? []} />
           <OwnPosts items={own.data?.items ?? []} />
         </aside>

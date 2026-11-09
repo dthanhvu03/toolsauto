@@ -1,3 +1,11 @@
+## Phiên 2026-11-09 (PLAN-167 đợt 1) — Số liệu kéo khách theo tài khoản Threads (chủ bot giao trực tiếp: «triển khai đi»)
+- Backend (ngoài vai mặc định của Claude Code — chủ bot giao thẳng, như PLAN-160..164): cột `account` cho growth_posts / own_posts
+  (dữ liệu cũ gán us28qt), mã bio riêng `threads_{cb|ai}_bio_{us28qt|anlinh}`, `/overview` thêm `accounts` + `account_stats`,
+  báo cáo khách thêm `by_account`. Web: chọn tài khoản trên thẻ hiệu quả + khung «Tài khoản Threads» chép link bio.
+- Proof trong PLAN-167 (65 test qua + 1 hỏng sẵn, ruff sạch, thử trên bản sao DB + server tạm 8099).
+- **Cần chủ bot:** `pm2 restart Web_Dashboard Threads_Growth`; dán link bio vào bio @us28qt (Cashbot) và @anlinh_08_10 (AI Pass Store).
+- Chưa làm (đợt 2): worker chạy An Linh, đổi vai, nghe response, 2 lỗi followup / bài riêng — cần xong trước ~16/11.
+
 ## Phiên 2026-11-09 (growth-ui) — Viết lại UI/UX trang Kéo khách (chủ bot yêu cầu; chỉ frontend, API giữ nguyên)
 - Tách `ThreadsGrowthPage.tsx` → components/ControlBar (bật/tắt, đăng nhập, thanh suất 24h/1h, cảnh báo tự suy: bài riêng lỗi liên tiếp,
   chưa đăng nhập, lỗi đọc khách), BotFunnel (mỗi bot: reply → khách → dùng bot + A/B; trước nằm cuối trang), PostCard (bản AI đọc

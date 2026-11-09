@@ -1,6 +1,7 @@
 # PLAN-167 — Kéo khách Threads chạy 2 tài khoản, mỗi tài khoản một bot, đổi vai để so tỉ lệ chốt
 
-- Trạng thái: **NHÁP do Claude Code soạn (09/11) — chờ Anti duyệt + chọn Executor (backend → Codex).** Chủ bot đã đồng ý chiến lược.
+- Trạng thái: chủ bot đồng ý chiến lược (09/11). **Đợt 1 (số liệu theo tài khoản) — Claude Code làm theo yêu cầu trực tiếp của chủ bot, XONG 09/11.**
+  Đợt 2 (worker chạy 2 tài khoản, đổi vai, nghe response, 2 lỗi) — chưa làm.
 - Bối cảnh: worker `Threads_Growth` chỉ chạy 1 profile (`instagram_5` = @us28qt), một tài khoản mời cả Cashbot lẫn AI Pass Store.
   Số liệu 06–09/11 (mã `src:threads_*`): Store 48 reply → 30 khách (~62%), 3 người mua; Cashbot 209 reply → 10 khách (~5%), 1 đơn.
   Nguồn bài đủ điểm từ 08/11: Store ~4/ngày, Cashbot ~11/ngày → nút thắt là nguồn bài, không phải giới hạn reply.
@@ -27,6 +28,18 @@
   ô «What’s new?» trên đầu feed.
 - KHÔNG: dựng request GraphQL (doc_id, token) từ Python để đăng / reply — khớp DECISION-004 (private API chỉ đọc).
 - Không dùng Threads API chính thức ở đợt này (cần app Meta + duyệt quyền keyword search).
+
+## Đợt 1 — XONG 09/11 (Claude Code): số liệu theo tài khoản
+- `config.ACCOUNTS` (us28qt → instagram_5, anlinh → threads_anlinh), `account_for_profile`, mã bio riêng
+  `threads_{cb|ai}_bio_{account}` (`bio_code` / `bio_url`); `code_map` trả (bot, biến thể, tài khoản), mã cũ = us28qt.
+- `growth_posts.account` + `own_posts.account` (thêm tại chỗ khi mở DB; gán `us28qt` một lần cho reply posted/failed và mọi bài riêng
+  cũ); worker ghi tài khoản theo profile lúc đăng / lỗi; `storage.get_account_stats()`.
+- `conversions.report()` thêm `by_account` + `account` từng khách; `/overview` thêm `accounts` (kèm link bio) + `account_stats`.
+- Web: hàng chọn «Hiệu quả theo: tất cả / @us28qt / @anlinh_08_10», khung «Tài khoản Threads» (chép link bio).
+- Proof: pytest tests/test_threads_growth.py 65 passed + 1 hỏng sẵn (`test_worker_scans_top_tab_and_queues_by_reach`, hỏng trước khi sửa);
+  test_process_scan + test_orphan_browser_purge 47 passed; ruff sạch; chạy thử trên bản sao DB thật: us28qt cashbot posted 209 / failed 10,
+  ai_store posted 49; khách us28qt 10 + 30, anlinh 0; server tạm cổng 8099 trỏ bản sao DB → chụp trang, bấm lọc tài khoản OK (đã tắt, đã xoá bản sao).
+- Cần: `pm2 restart Web_Dashboard Threads_Growth` (lần mở DB đầu tự thêm cột + gán us28qt). Đặt link bio vào bio 2 tài khoản.
 
 ## Ngoài phạm vi
 - Không dùng tài khoản này để xác nhận / khen bot dưới reply của tài khoản kia.

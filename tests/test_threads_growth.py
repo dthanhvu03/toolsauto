@@ -958,3 +958,73 @@ def test_no_auto_post_when_ai_reading_fails(runner, monkeypatch):
     pid = asyncio.run(runner.ingest_scanned_post(ScannedPost("s5", "u", "a", VI_SHOPEE, "k"), auto_post_min=0))
     row = runner.storage.get_post_by_id(pid)
     assert row["status"] == "pending" and "no_api_key" in row["ai_analysis"]
+
+
+# ── PLAN-167: số liệu theo tài khoản Threads ───────────────────────────────
+def test_bio_codes_per_account_map_to_account(tmp_path):
+    from app.features.threads.growth import config
+
+    assert config.bio_code(TargetBot.AI_STORE, "anlinh") == "threads_ai_bio_anlinh"
+    assert config.bio_url(TargetBot.CASHBOT, "us28qt") == "https://t.me/zt_shopee_bot?start=threads_cb_bio_us28qt"
+    codes = config.code_map()
+    assert codes["threads_ai_bio_anlinh"] == (TargetBot.AI_STORE, None, "anlinh")
+    assert codes["threads_cb_tier"] == (TargetBot.CASHBOT, ABVariant.VARIANT_B, "us28qt")  # mã cũ = @us28qt
+    assert config.code_channel("threads_ai_bio_anlinh") == "bio profile"
+    assert all(len(c) <= 64 for c in codes)  # giới hạn tham số /start của Telegram
+    assert config.account_for_profile("/x/storage/profiles/threads_anlinh") == "anlinh"
+    assert config.account_for_profile("/x/storage/profiles/instagram_5") == "us28qt"
+
+
+def test_conversions_by_account(tmp_path):
+    import sqlite3
+
+    from app.features.threads.growth import conversions
+
+    cb, st = _bot_dbs(tmp_path)
+    with sqlite3.connect(st) as c:
+        c.execute("INSERT INTO users VALUES (10, 'hoa', '2026-11-06T04:00:00Z', NULL)")
+        c.execute("INSERT INTO state VALUES ('src:10', 'threads_ai_bio_anlinh')")
+    rep = conversions.report(now=NOW, cashback_path=cb, store_path=st)
+    acc = rep["by_account"]
+    assert acc["us28qt"]["cashbot"] == {"customers": 2, "active": 1}
+    assert acc["us28qt"]["ai_store"] == {"customers": 1, "active": 1}
+    assert acc["anlinh"]["ai_store"] == {"customers": 1, "active": 0}
+    hoa = [c for c in rep["customers"] if c["username"] == "hoa"][0]
+    assert hoa["account"] == "anlinh" and hoa["channel"] == "bio profile" and hoa["variant"] is None
+
+
+def test_storage_backfills_account_and_records_poster(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "old.sqlite"
+    with sqlite3.connect(db) as c:  # DB cũ trước PLAN-167: chưa có cột account
+        c.executescript("""
+            CREATE TABLE growth_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT UNIQUE NOT NULL,
+              post_url TEXT NOT NULL, author TEXT NOT NULL, content TEXT NOT NULL, target_bot TEXT NOT NULL,
+              variant TEXT NOT NULL, relevance_score INTEGER DEFAULT 0, ai_analysis TEXT, suggested_reply TEXT NOT NULL,
+              actual_reply TEXT, status TEXT NOT NULL DEFAULT 'pending', error_message TEXT, created_at TEXT NOT NULL,
+              posted_at TEXT);
+            INSERT INTO growth_posts (thread_id, post_url, author, content, target_bot, variant, suggested_reply, status,
+              created_at) VALUES ('t1','u','a','c','cashbot','A','r','posted','x'), ('t2','u','b','c','ai_store','B','r','pending','x');
+            CREATE TABLE own_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, slot TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
+              ref TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, status TEXT NOT NULL, post_url TEXT, error_message TEXT,
+              created_at TEXT NOT NULL);
+            INSERT INTO own_posts (slot, kind, text, status, created_at) VALUES ('s1', 'deal', 't', 'failed', 'x');
+        """)
+    s = GrowthStorage(db_path=db)
+    assert s.get_post_by_id(1)["account"] == "us28qt" and s.get_post_by_id(2)["account"] is None
+    assert s.list_own_posts()[0]["account"] == "us28qt"
+    GrowthStorage(db_path=db)  # mở lại không gán lại
+    s.update_status(2, "posted", account="anlinh")
+    stats = s.get_account_stats()
+    assert stats["us28qt"]["cashbot"] == {"posted": 1} and stats["anlinh"]["ai_store"] == {"posted": 1}
+    assert stats["anlinh"]["cashbot"] == {}
+
+
+def test_worker_records_account_of_profile(make_worker, runner, storage):
+    pid = _save(storage, "acc1", author="khach")
+    storage.update_status(pid, "approved")
+    w, _ = make_worker(FakeBrowser())
+    w.post_queue("/x/storage/profiles/threads_anlinh", worker.CycleReport())
+    row = storage.get_post_by_id(pid)
+    assert row["status"] == "posted" and row["account"] == "anlinh"

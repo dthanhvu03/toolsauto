@@ -11,7 +11,15 @@ from sqlalchemy.orm import Session
 from app.core import settings
 from app.features.threads.growth import conversions, notify
 from app.features.threads.growth import session as growth_session
-from app.features.threads.growth.config import ABVariant, load_limits, load_worker_config
+from app.features.threads.growth.config import (
+    ACCOUNTS,
+    ABVariant,
+    TargetBot,
+    account_for_profile,
+    bio_url,
+    load_limits,
+    load_worker_config,
+)
 from app.features.threads.growth.runner import GrowthRunner
 
 _runner: Optional[GrowthRunner] = None
@@ -76,6 +84,18 @@ def overview(db: Session) -> Dict[str, Any]:
         "login": {**asdict(st), "ready": st.ready},
         "quota": asdict(quota),
         "stats": r.get_ab_summary(),
+        # PLAN-167: tài khoản Threads + reply theo tài khoản × bot + link bio riêng để đếm khách theo tài khoản.
+        "accounts": [
+            {
+                "key": a.key,
+                "handle": a.handle,
+                "profile": a.profile,
+                "running": a.key == account_for_profile(st.profile_path),
+                "bio_links": {b.value: bio_url(b, a.key) for b in TargetBot},
+            }
+            for a in ACCOUNTS.values()
+        ],
+        "account_stats": r.storage.get_account_stats(),
         "customers": conversions.report(),
         "counts": {s: len(r.storage.list_posts(s, limit=1000)) for s in ("pending", "approved", "posted", "failed")},
         "settings_url": "/app/settings",

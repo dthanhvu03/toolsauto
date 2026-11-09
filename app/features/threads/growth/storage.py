@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
-from app.features.threads.growth.config import ABVariant, DB_PATH, TargetBot
+from app.features.threads.growth.config import ACCOUNTS, DEFAULT_ACCOUNT, ABVariant, DB_PATH, TargetBot
 
 
 _EXTRA_COLUMNS = {
@@ -22,6 +22,7 @@ _EXTRA_COLUMNS = {
     "author_followers": "INTEGER NOT NULL DEFAULT 0",
     "reach": "INTEGER NOT NULL DEFAULT 0",
     "followup_checked_at": "TEXT",
+    "account": "TEXT",  # PLAN-167: tài khoản Threads đã đăng reply (ghi lúc đăng)
 }
 
 STATUSES = ("pending", "approved", "rejected", "posted", "failed")
@@ -83,6 +84,9 @@ class GrowthStorage:
             for col, ddl in _EXTRA_COLUMNS.items():
                 if col not in have:
                     conn.execute(f"ALTER TABLE growth_posts ADD COLUMN {col} {ddl}")
+            if "account" not in have:
+                # Trước PLAN-167 chỉ @us28qt đăng — gán một lần cho reply đã đăng / đã thử đăng.
+                conn.execute("UPDATE growth_posts SET account = ? WHERE status IN ('posted', 'failed')", (DEFAULT_ACCOUNT,))
             conn.execute("CREATE INDEX IF NOT EXISTS idx_growth_posts_author ON growth_posts(author, status)")
             # PLAN-159: bài riêng trên tài khoản + trả lời người hỏi lại dưới reply của mình.
             conn.execute(
@@ -100,6 +104,10 @@ class GrowthStorage:
                 )
                 """
             )
+            own_cols = {r["name"] for r in conn.execute("PRAGMA table_info(own_posts)")}
+            if "account" not in own_cols:
+                conn.execute("ALTER TABLE own_posts ADD COLUMN account TEXT")
+                conn.execute("UPDATE own_posts SET account = ?", (DEFAULT_ACCOUNT,))
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS followups (
@@ -277,6 +285,7 @@ class GrowthStorage:
         actual_reply: Optional[str] = None,
         error_message: Optional[str] = None,
         reply_url: Optional[str] = None,
+        account: Optional[str] = None,
     ) -> bool:
         now_str = datetime.now(timezone.utc).isoformat()
         posted_at = now_str if status == "posted" else None
@@ -288,10 +297,11 @@ class GrowthStorage:
                     actual_reply = COALESCE(?, actual_reply),
                     error_message = COALESCE(?, error_message),
                     posted_at = COALESCE(?, posted_at),
-                    reply_url = COALESCE(?, reply_url)
+                    reply_url = COALESCE(?, reply_url),
+                    account = COALESCE(?, account)
                 WHERE id = ?
                 """,
-                (status, actual_reply, error_message, posted_at, reply_url, post_id),
+                (status, actual_reply, error_message, posted_at, reply_url, account, post_id),
             )
             return cur.rowcount > 0
 
@@ -336,12 +346,13 @@ class GrowthStorage:
         return {part for (ref,) in rows for part in str(ref).split(",") if part}
 
     def save_own_post(self, slot: str, kind: str, ref: str, text: str, status: str,
-                      post_url: Optional[str] = None, error: Optional[str] = None) -> int:
+                      post_url: Optional[str] = None, error: Optional[str] = None,
+                      account: str = DEFAULT_ACCOUNT) -> int:
         with self._connection() as conn:
             cur = conn.execute(
-                "INSERT OR IGNORE INTO own_posts (slot, kind, ref, text, status, post_url, error_message, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (slot, kind, ref, text, status, post_url, error, datetime.now(timezone.utc).isoformat()),
+                "INSERT OR IGNORE INTO own_posts (slot, kind, ref, text, status, post_url, error_message, created_at, "
+                "account) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (slot, kind, ref, text, status, post_url, error, datetime.now(timezone.utc).isoformat(), account),
             )
             return cur.lastrowid if cur.rowcount else 0
 
@@ -445,3 +456,18 @@ class GrowthStorage:
                     stats[b][v][st] = cnt
 
             return stats
+
+    def get_account_stats(self) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """PLAN-167: reply đã đăng / lỗi theo tài khoản × bot (chỉ dòng đã ghi tài khoản — tức đã thử đăng)."""
+        stats: Dict[str, Dict[str, Dict[str, int]]] = {
+            acc: {b.value: {} for b in TargetBot} for acc in ACCOUNTS
+        }
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT account, target_bot, status, COUNT(*) AS n FROM growth_posts "
+                "WHERE account IS NOT NULL GROUP BY account, target_bot, status"
+            ).fetchall()
+        for r in rows:
+            if r["account"] in stats and r["target_bot"] in stats[r["account"]]:
+                stats[r["account"]][r["target_bot"]][r["status"]] = r["n"]
+        return stats

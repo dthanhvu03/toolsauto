@@ -76,6 +76,33 @@ CHANNELS = {"post": "bài riêng", "conv": "trả lời lại", "bio": "bio prof
 _CHANNEL_PREFIX = {TargetBot.CASHBOT: "threads_cb_", TargetBot.AI_STORE: "threads_ai_"}
 
 
+@dataclass(frozen=True)
+class GrowthAccount:
+    """Một tài khoản Threads kéo khách (PLAN-167). ``key`` ghi vào DB (cột ``account``) và nằm trong mã bio."""
+
+    key: str
+    handle: str
+    profile: str  # thư mục trong storage/profiles
+
+
+# Thứ tự = thứ tự hiện trên web. Tài khoản đầu là tài khoản worker đang chạy (session.PROFILE_DIR).
+ACCOUNTS: Dict[str, GrowthAccount] = {
+    "us28qt": GrowthAccount("us28qt", "us28qt", "instagram_5"),
+    "anlinh": GrowthAccount("anlinh", "anlinh_08_10", "threads_anlinh"),
+}
+DEFAULT_ACCOUNT = "us28qt"  # mọi reply / bài riêng trước PLAN-167 đều do @us28qt đăng
+
+
+def account_for_profile(profile_path: str) -> str:
+    """Tài khoản ứng với thư mục profile worker đang mở; profile lạ → ``DEFAULT_ACCOUNT`` (kèm log)."""
+    name = Path(str(profile_path or "")).name
+    for acc in ACCOUNTS.values():
+        if acc.profile == name:
+            return acc.key
+    logger.warning("growth: profile %r không có trong ACCOUNTS — ghi là %s", name, DEFAULT_ACCOUNT)
+    return DEFAULT_ACCOUNT
+
+
 def channel_code(bot: TargetBot, channel: str) -> str:
     return _CHANNEL_PREFIX[bot] + channel
 
@@ -84,26 +111,43 @@ def channel_url(bot: TargetBot, channel: str) -> str:
     return f"https://t.me/{_STATIC[bot][1]}?start={channel_code(bot, channel)}"
 
 
+def bio_code(bot: TargetBot, account: str) -> str:
+    """Mã link bio riêng từng tài khoản: ``threads_cb_bio_us28qt``, ``threads_ai_bio_anlinh``…"""
+    return f"{channel_code(bot, 'bio')}_{account}"
+
+
+def bio_url(bot: TargetBot, account: str) -> str:
+    return f"https://t.me/{_STATIC[bot][1]}?start={bio_code(bot, account)}"
+
+
 def code_map() -> Dict[str, tuple]:
-    """Mã ``?start=`` → (bot, biến thể) — biến thể None với mã kênh (bài riêng / trả lời lại / bio)."""
+    """Mã ``?start=`` → (bot, biến thể, tài khoản). Biến thể None với mã kênh (bài riêng / trả lời lại / bio).
+
+    Mã cũ (reply A/B, kênh chung) chỉ @us28qt từng dùng → gán ``DEFAULT_ACCOUNT``; mã bio riêng mang tài khoản.
+    """
     out: Dict[str, tuple] = {
-        code: (bot, v) for bot, (_, _, variants) in _STATIC.items() for v, (code, _) in variants.items()
+        code: (bot, v, DEFAULT_ACCOUNT)
+        for bot, (_, _, variants) in _STATIC.items()
+        for v, (code, _) in variants.items()
     }
     for bot in _STATIC:
         for ch in CHANNELS:
-            out[channel_code(bot, ch)] = (bot, None)
+            out[channel_code(bot, ch)] = (bot, None, DEFAULT_ACCOUNT)
+        for acc in ACCOUNTS:
+            out[bio_code(bot, acc)] = (bot, None, acc)
     return out
 
 
 def code_channel(code: str) -> str:
-    """Nhãn kênh cho báo cáo: «reply A», «bài riêng»…"""
+    """Nhãn kênh cho báo cáo: «reply A», «bài riêng», «bio profile»…"""
     hit = code_map().get(code)
     if not hit:
         return "khác"
-    bot, variant = hit
+    bot, variant, _ = hit
     if variant is not None:
         return f"reply {variant.value}"
-    return CHANNELS.get(code.removeprefix(_CHANNEL_PREFIX[bot]), "khác")
+    rest = code.removeprefix(_CHANNEL_PREFIX[bot])
+    return CHANNELS.get(rest.split("_", 1)[0], "khác")
 
 
 def _setting(key: str):

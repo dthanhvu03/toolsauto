@@ -31,7 +31,14 @@ from app.features.threads.adapter import ThreadsSessionInvalidError
 from app.features.threads.growth import content, conversions, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
-from app.features.threads.growth.config import ABVariant, TargetBot, WorkerConfig, load_profiles, load_worker_config
+from app.features.threads.growth.config import (
+    ABVariant,
+    TargetBot,
+    WorkerConfig,
+    account_for_profile,
+    load_profiles,
+    load_worker_config,
+)
 from app.features.threads.growth.evaluator import GrowthEvaluator
 from app.features.threads.growth.runner import GrowthRunner
 from app.features.threads.growth.scanner import ScannedPost, is_vietnamese
@@ -257,12 +264,12 @@ class GrowthWorker:
                         report.errors.append("trình duyệt bị đóng giữa chừng — vòng sau đăng tiếp")
                         logger.warning("growth: trình duyệt bị đóng khi đăng #%s — dừng, giữ hàng chờ", post["id"])
                         break
-                    self.runner.mark_failed(post["id"], str(exc))
+                    self.runner.mark_failed(post["id"], str(exc), account=account_for_profile(profile_path))
                     report.failed += 1
                     logger.warning("growth: đăng reply #%s lỗi: %s", post["id"], exc)
                 else:
                     done_authors.add(author)
-                    self.runner.mark_posted(post["id"], reply_url=url)
+                    self.runner.mark_posted(post["id"], reply_url=url, account=account_for_profile(profile_path))
                     report.posted += 1
                     report.posted_items.append({
                         "id": post["id"], "bot": post["target_bot"], "variant": post["variant"],
@@ -312,11 +319,13 @@ class GrowthWorker:
             if browser_dead(exc):
                 self.own_retry_at = self.now() + OWN_POST_RETRY
                 return
-            storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "failed", error=str(exc))
+            storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "failed", error=str(exc),
+                                  account=account_for_profile(profile_path))
             report.errors.append(f"bài riêng: {exc}")
             logger.warning("growth: đăng bài riêng lỗi: %s", exc)
             return
-        storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "posted", post_url=url)
+        storage.save_own_post(slot, draft.kind, draft.ref, draft.text, "posted", post_url=url,
+                              account=account_for_profile(profile_path))
         report.own_posts.append({"kind": draft.kind, "url": url, "text": draft.text})
         logger.info("growth: đã đăng bài riêng (%s) → %s", draft.kind, url)
 

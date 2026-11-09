@@ -211,11 +211,11 @@ class GrowthRunner:
         lim = self.limits
         return random.randint(lim.min_delay_sec, max(lim.min_delay_sec, lim.max_delay_sec))
 
-    def mark_posted(self, post_id: int, reply_url: Optional[str] = None) -> bool:
-        return self.storage.update_status(post_id, "posted", reply_url=reply_url)
+    def mark_posted(self, post_id: int, reply_url: Optional[str] = None, account: Optional[str] = None) -> bool:
+        return self.storage.update_status(post_id, "posted", reply_url=reply_url, account=account)
 
-    def mark_failed(self, post_id: int, error: str) -> bool:
-        return self.storage.update_status(post_id, "failed", error_message=error[:500])
+    def mark_failed(self, post_id: int, error: str, account: Optional[str] = None) -> bool:
+        return self.storage.update_status(post_id, "failed", error_message=error[:500], account=account)
 
     def get_ab_summary(self) -> Dict[str, Any]:
         return self.storage.get_ab_stats()

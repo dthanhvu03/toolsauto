@@ -39,6 +39,7 @@ export type Quota = {
 
 export type Customer = {
   bot: "cashbot" | "ai_store";
+  account: string | null;
   variant: "A" | "B" | null;
   code: string;
   channel: string;
@@ -55,6 +56,7 @@ export type CustomerReport = {
   last_24h: number;
   by_variant: Record<string, Record<"A" | "B", { customers: number; active: number }>>;
   by_channel: Record<string, { customers: number; active: number }>;
+  by_account?: Record<string, Record<string, { customers: number; active: number }>>;
   customers: Customer[];
   errors: string[];
 };
@@ -90,9 +92,19 @@ export type Overview = {
   };
   quota: Quota;
   stats: Record<string, Record<"A" | "B", Partial<Record<GrowthStatus, number>>>>;
+  accounts?: GrowthAccount[];
+  account_stats?: Record<string, Record<string, Partial<Record<GrowthStatus, number>>>>;
   counts: Record<"pending" | "approved" | "posted" | "failed", number>;
   customers: CustomerReport;
   settings_url: string;
+};
+
+export type GrowthAccount = {
+  key: string;
+  handle: string;
+  profile: string;
+  running: boolean;
+  bio_links: Record<string, string>;
 };
 
 export type OwnPost = {
