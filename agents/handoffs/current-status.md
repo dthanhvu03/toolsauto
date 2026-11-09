@@ -1,3 +1,47 @@
+## Phiên 2026-11-09 (growth-ui) — Viết lại UI/UX trang Kéo khách (chủ bot yêu cầu; chỉ frontend, API giữ nguyên)
+- Tách `ThreadsGrowthPage.tsx` → components/ControlBar (bật/tắt, đăng nhập, thanh suất 24h/1h, cảnh báo tự suy: bài riêng lỗi liên tiếp,
+  chưa đăng nhập, lỗi đọc khách), BotFunnel (mỗi bot: reply → khách → dùng bot + A/B; trước nằm cuối trang), PostCard (bản AI đọc
+  thành nhãn, câu reply đếm ký tự, nội dung dài thu gọn), SidePanels (khách mới, người trả lời, bài riêng) + lib/format.ts.
+  Hàng việc có lọc theo bot; tab mặc định «Cần duyệt» nếu có, không thì «Đã đăng». Thêm kiểu `profile_path`, `own_post_times`… (API đã trả sẵn).
+- Proof: `npm run build` (tsc + vite) OK; chụp trang thật 127.0.0.1:8000/app/go/threads-growth khổ 1400 và 390: không lỗi console,
+  không tràn ngang. Static build ra app/static/admin → không cần restart. Chưa commit.
+- PLAN-167 thêm mục «nghe response, không gửi request trực tiếp» (chủ bot chốt).
+
+## Phiên 2026-11-09 (threads-acc2-live) — An Linh vào profile bot + đăng bài làm ấm 1 (chủ bot: «triển khai đi», «em tự đăng»)
+- 2 lần đăng nhập đầu mất phiên (sessionid là cookie phiên, mất khi đóng Chrome). Lần 3 cookie hạn 2027 → `import_threads_cookies.py
+  --profile-dir storage/profiles/threads_anlinh --delete`: ĐĂNG NHẬP OK. Chrome debug đã đóng (Browser.close). Script mới ở
+  C:\toolsauto_tmp: dump_cookies_stdout.ps1 (in JSON ra stdout — bản ghi file từng ra 0 byte), close_chrome.ps1.
+- 09/11 ~22:10 VN đăng bài 1 «Biến mất gần 2 tháng, quay lại thấy mọi thứ vẫn vậy, chỉ có mình là khác đi một chút.» → toast «Posted», có trên profile.
+  Luồng đăng của An Linh: bấm «What’s new?» → dialog → Post (không có nút «New thread»). Script: scratchpad post2.py (không commit).
+- Soạn nháp PLAN-167 (2 tài khoản + A/B đổi vai + link bio mã riêng + từ khoá Store + 2 lỗi followup / bài riêng) → chờ Anti.
+- **Next:** đăng bài làm ấm 2–7 mỗi tối 20–22h (Claude Code chạy tay); tuần 2 đặt bio có link mã riêng (chủ bot duyệt câu bio).
+
+## Phiên 2026-11-09 (threads-acc2) — Đăng nhập + xem tài khoản Threads thứ 2 (chỉ xem, không đăng / bấm gì)
+- Chrome Windows `--remote-debugging-port=9222 --user-data-dir=C:\toolsauto_threads2` → chủ bot đăng nhập → dump_cookies.ps1: 6 cookie có sessionid
+  (ds_user_id 77477115060). Đã xoá file cookie tạm + đóng Chrome debug (cổng 9222 đóng). Phiên còn trong profile C:\toolsauto_threads2.
+- Tài khoản: @anlinh_08_10 «An Linh», 183 follower, 3.173 lượt xem/30 ngày, bài từ 25/08/2026 (ảnh cô gái + câu tâm trạng), bài cuối 17/09 → nghỉ ~7 tuần.
+- Đề xuất: An Linh chỉ lo AI Pass Store (vai nữ làm content / văn phòng dùng CapCut, Canva, AI), @us28qt chỉ Cashbot; làm ấm ~1 tuần, bắt đầu 5–10 reply/ngày, không link.
+  Worker chưa hỗ trợ 2 tài khoản + từ khoá Store mới → cần PLAN Anti. Chưa nạp cookie vào storage/profiles (import_threads_cookies.py cố định instagram_5).
+
+## Phiên 2026-11-09 (threads-conv) — Tỉ lệ khách vào bot từ Threads (mã src:threads_*, chỉ đọc DB)
+- AI Pass Store: 48 reply → 30 khách mới (~62%; 06–07/11 40→26, từ 08/11 8→4), 3 người mua (55.300đ).
+- Cashbot: 209 reply → 10 khách (~5%; 06–07/11 181→9, từ 08/11 28→1), 3 người gửi link, 1 đơn.
+- Chủ bot: «hiện tại ổn» — giữ nguyên cấu hình.
+
+## Phiên 2026-11-09 (threads-reactions) — Kiểm phản ứng dưới reply kéo khách (trình duyệt ẩn danh, chỉ đọc trang công khai)
+- Mẫu 50/257 reply: 44 còn, 6 biến mất (6/6 đều có link t.me; reply không link 20/20 còn; có link 24/30 còn). Like: 3 reply có 1 like; 2 reply có người trả lời.
+- 2 chủ post trả lời mình: #646 vivian_global_realty (08/11 20:47 «Cám ơn bà chắc để tui mua…», ai_store) và #819 arg.chocomink (09/11, cashbot).
+- **Lỗi:** bảng followups = 0 dù worker đã kiểm 254 reply; #646 kiểm lúc 09/11 12:44Z sau khi chủ post trả lời → `replies_to_me` bỏ sót (nghi payload khi đăng nhập khác ẩn danh). Cần PLAN backend.
+- Nội dung: mọi reply cùng một công thức (dán link qua @zt_shopee_bot / tích hạng Bạc Vàng / hoàn về tài khoản ngân hàng); vài reply lệch chủ đề (#631 hỏi mã TikTok → mời bot Shopee; #780 người chưa đủ 18 tuổi → «acc chuẩn tuổi»).
+- Chủ bot báo có thêm 1 tài khoản Threads — chờ username + mục đích (worker hiện chỉ chạy 1 profile instagram_5).
+
+## Phiên 2026-11-09 (status-report) — Báo cáo kéo khách + các bot (chỉ đọc DB / PM2 / systemd)
+- PM2: 8 app online (DB_Backup stopped = cron). systemd cashback-bot, cashback-zalo, store-bot, store-api active, đang chạy code mới nhất.
+- Kéo khách Threads: reply 06/11 143 · 07/11 78 · 08/11 23 · 09/11 12 (tới 14:25Z); từ 08/11: cashbot 27, ai_store 8. Hàng chờ 1 approved + 6 pending (40–45 điểm).
+- **Lỗi mở:** bài riêng (own_posts) failed 6/6 lần từ 06/11 «Đã bấm Post nhưng hộp soạn không đóng» — chưa kiểm bài có lên thật không.
+- Khách mới 01–09/11: cashback TG 19 (37 tổng), Zalo 5 (01–05/11), giới thiệu 0; đơn Shopee 4 (8.712đ HH). Store 40 (42 tổng), 06–07/11 = 28; đơn done 8.
+- **Next:** chủ bot xem tay Threads @us28qt có bài riêng 09/11 20:15 chưa → nếu chưa thì cần PLAN sửa đăng bài riêng.
+
 ## Phiên 2026-11-08 (PLAN-166 đợt 4) — Gỡ Facebook + Story + publisher_runtime
 - 67 file, −15.248 dòng (gồm 32 file test FB/Story). Maintenance thôi gọi MetricsChecker. Đối chiếu toàn bộ test với bản cũ:
   không lỗi mới. **Cần chủ bot:** `pm2 restart Maintenance`. Đợt tiếp: 5 (affiliates / jobs).

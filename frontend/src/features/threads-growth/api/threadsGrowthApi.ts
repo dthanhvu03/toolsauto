@@ -69,6 +69,10 @@ export type Overview = {
     posts_per_keyword: number;
     vietnamese_only: boolean;
     top_level_only: boolean;
+    own_posts_enabled?: boolean;
+    own_post_times?: string;
+    followup_enabled?: boolean;
+    followup_max_per_day?: number;
   };
   limits: {
     max_replies_per_hour: number;
@@ -77,7 +81,13 @@ export type Overview = {
     max_delay_sec: number;
     min_relevance: number;
   };
-  login: { login_status: string; login_error: string | null; logging_in: boolean; ready: boolean };
+  login: {
+    login_status: string;
+    login_error: string | null;
+    logging_in: boolean;
+    ready: boolean;
+    profile_path?: string | null;
+  };
   quota: Quota;
   stats: Record<string, Record<"A" | "B", Partial<Record<GrowthStatus, number>>>>;
   counts: Record<"pending" | "approved" | "posted" | "failed", number>;
