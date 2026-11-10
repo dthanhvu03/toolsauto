@@ -142,7 +142,13 @@ class StoreBot:
                                 product.name if product else None)
                 + "\n\n" + msg.topup_outcome(topup))
         for chat_id, message_id in json.loads(raw):
-            self.tg.edit_message_text(chat_id, message_id, html)
+            if self.tg.edit_message_text(chat_id, message_id, html):
+                continue
+            time.sleep(SEND_RETRY_SEC)
+            if not self.tg.edit_message_text(chat_id, message_id, html):
+                # Telegram treo / lỗi 2 lần: tin cũ còn nút ✅ ❌ như chưa xử lý → gửi tin mới ghi kết quả.
+                logger.warning("[Store] sửa tin nạp #%s cho admin %s lỗi, gửi tin mới", topup.id, chat_id)
+                self.tg.send_message(chat_id, html)
         return True
 
     def _buy_url(self, product_id: int) -> str:

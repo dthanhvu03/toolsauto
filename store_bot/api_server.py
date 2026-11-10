@@ -205,7 +205,8 @@ def create_app(settings: Settings, repo: StoreRepository, telegram: TelegramApi,
         except Exception:
             logger.exception("[Store] SePay: xử lý sau khi cộng nạp #%s lỗi", topup.id)
             notifier.notify_admins(msg.admin_after_credit_failed(topup))
-        notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}", quiet=True)
+        # Có chuông: đây là tin duy nhất báo admin tiền đã về (tin «Yêu cầu nạp» chỉ được sửa, không kêu).
+        notifier.notify_admins(f"💳 SePay: nạp #{topup.id} {topup.code} +{msg.vnd(amount)}")
 
     return app
 

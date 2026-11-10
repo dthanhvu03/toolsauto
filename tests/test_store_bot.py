@@ -1348,6 +1348,31 @@ def test_admin_topup_notice_closed_after_sepay_or_admin(fatcat, repo):
     assert any("Admin xác nhận" in e[2] and e[3] is None for e in telegram.edits if e[0] == ADMIN)
 
 
+def test_admin_topup_notice_resent_when_edit_fails(fatcat, repo, monkeypatch):
+    """Telegram treo lúc sửa tin «Yêu cầu nạp» (đơn #15, 10/11): thử lại, vẫn lỗi thì gửi tin mới; tin SePay có chuông."""
+    store, telegram, fake, products = fatcat
+    monkeypatch.setattr("store_bot.bot.SEND_RETRY_SEC", 0)
+    quiet: list[bool] = []
+    send = telegram.send_message
+
+    def send_message(chat_id, html, reply_markup=None, disable_notification=False):
+        if "SePay: nạp" in html:
+            quiet.append(disable_notification)
+        return send(chat_id, html, reply_markup, disable_notification)
+
+    monkeypatch.setattr(telegram, "send_message", send_message)
+    monkeypatch.setattr(telegram, "edit_message_text", lambda *a, **k: telegram.edits.append(a) and False)
+    client = TestClient(create_app(_settings(), repo, telegram, store.fulfiller, InlineExecutor()))
+    store.handle_update(_click(BUYER, "ta:50000"))
+    topup = repo.pending_topups()[0]
+    hook = {"id": 9300, "transferType": "in", "transferAmount": 50_000, "content": topup.code}
+    client.post("/webhooks/sepay", json=hook, headers={"Authorization": "Apikey sepay-secret"})
+    assert repo.get_user(BUYER).balance == 50_000
+    assert len([e for e in telegram.edits if e[0] == ADMIN]) == 2  # sửa 2 lần
+    resent = [h for cid, h, _ in telegram.sent if cid == ADMIN and f"Yêu cầu nạp #{topup.id}" in h and "SePay tự cộng" in h]
+    assert len(resent) == 1
+    assert quiet == [False]
+
 def test_telegram_keeps_one_connection_per_thread():
     api = TelegramApi("t")
     first = api._http

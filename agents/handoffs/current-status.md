@@ -1,3 +1,19 @@
+## Phiên 2026-11-10 (store-topup15) — Đơn/nạp #15 AI Pass Store «không xác nhận» (chủ bot hỏi)
+- DB: nạp #15 NAPEM2QYW 11.000đ SePay cộng 13:35:05Z; đơn #15 Canva 1.100đ done 13:35:33Z (DH7FZ9K3); khách ~aniyah~ còn 9.900đ. Tiền + hàng đúng.
+- Nguyên nhân: Telegram treo 13:35–13:37Z. store_api `editMessageText` ReadTimeout 13:35:40 → tin «Yêu cầu nạp #15» của admin không được
+  sửa (vẫn còn nút ✅ ❌; bấm giờ chỉ báo «đã xử lý», không cộng 2 lần). Khoá `topup_msg:15` đã xoá trước khi sửa → không sửa lại được.
+  Tin «💳 SePay: nạp #15» gửi im lặng (quiet=True), log không báo lỗi. store_bot luồng đồng bộ cũng sendMessage ReadTimeout 13:36:58.
+- ĐÃ SỬA (chủ bot duyệt): `close_topup_notice` sửa lỗi → nghỉ 2s thử lại → vẫn lỗi thì gửi tin mới ghi kết quả (giữ xoá khoá trước
+  để 2 tiến trình không sửa trùng); tin «💳 SePay: nạp» bỏ quiet → có chuông. Test mới `test_admin_topup_notice_resent_when_edit_fails`;
+  tests/test_store_bot.py 98 passed, ruff sạch. Cần chủ bot: `systemctl restart store-bot store-api`.
+
+## Phiên 2026-11-09 (disk-cleanup) — Dọn rác ổ đĩa (chủ bot yêu cầu)
+- C: còn 148 MB → 29,3 GB: xoá %TEMP%\DiagOutputDir\RdClientAutoTrace (27,6 GB nhật ký chẩn đoán msrdc/WSLg, phình từ 05/11)
+  + %TEMP%\wsl-crashes (1,5 GB dump node 07/11). Linux: apt clean, journal vacuum 200M, npm cache → 933 MB.
+- Chưa làm (chờ chủ bot): /tmp/pytest-of-root ~0,9 GB (bị chặn quét /tmp chung); co ổ ảo E:\WSL\Ubuntu (74 GB, Linux dùng 48 GB →
+  lấy lại ~25 GB, cần `wsl --shutdown` = dừng mọi bot); E:\docker 36,8 GB; storage/archive_legacy 429 MB. Giữ huggingface 3,6 GB.
+- RdClientAutoTrace sẽ phình lại (~7 GB/ngày) — cân nhắc dọn định kỳ.
+
 ## Phiên 2026-11-09 (PLAN-167 đợt 2) — Worker nhiều tài khoản + sửa 2 lỗi + link bio @us28qt (chủ bot giao trực tiếp)
 - Vai tài khoản ở storage/db/config/threads_growth_accounts.json (chưa có file = mặc định: us28qt bật 2 bot; anlinh tắt, chỉ Store,
   8/ngày). Worker đăng theo vai + hạn mức riêng; checkpoint chỉ tắt tài khoản đó. Web: công tắc / chọn bot từng tài khoản.
