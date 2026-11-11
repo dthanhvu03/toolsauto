@@ -1,3 +1,14 @@
+## Phiên 2026-11-12 (shopee-mcp-video) — thử lấy món trong link video Shopee qua shopee-mcp (chủ bot cho phép)
+- Sửa NGOÀI repo (chủ bot cho phép): `C:\Users\Admin\AppData\Roaming\npm\node_modules\@bintangtimurlangit\shopee-mcp\build\index.js`
+  thêm `GET /api/video_products?url=` (cầu nối 9224, chỉ đọc, dùng withPage chung khoá). Bản gốc: `index.js.bak-20261112`.
+  node --check OK. Cài lại / cập nhật gói sẽ mất phần vá. Chủ bot đã restart; thử 1 lần link vn.shp.ee/hqq0wxa6:
+  final_url = sv.shopee.vn/share-video/…, items = [], api_urls = [] (trang video web không tải JSON món nào trong 8s).
+  Thử thêm 2 lần (bắt mọi xhr/fetch, rồi giả iPhone 390x844): trang chỉ gọi Google Analytics/DoubleClick/dem.shopee.com,
+  HTML ~36 KB không có mã sản phẩm → web share-video (máy tính lẫn điện thoại) KHÔNG chứa danh sách món.
+  KẾT LUẬN: giữ cách hướng dẫn khách. Đường còn lại: Apify natanielsantos/shopee-video-scraper (trả products shopId/itemId,
+  chưa rõ hỗ trợ .vn, cần tài khoản chủ bot). ĐÃ GỠ phần vá (chủ bot đồng ý): chép index.js.bak-20261112 đè lại, cmp giống hệt,
+  node --check OK. Bản .bak vẫn để cạnh. Chờ chủ bot `pm2 restart shopee-mcp` (tiến trình đang chạy còn code đã vá trong RAM).
+
 ## Phiên 2026-11-12 (review-tiktok + short-video-link) — rà lại chữ Shopee/TikTok + link video Shopee
 - Rà: tin gửi KHÁCH về đơn TikTok đã đúng (qua `source_text`: «TikTok vừa ghi nhận…», hoàn 2.006đ khớp công thức).
   Màn admin «Chi tiết đơn» còn sót: nhãn «Shopee đã trả» (đơn đã khớp kỳ) + dòng «Lịch sử thay đổi» → đổi theo sàn.
