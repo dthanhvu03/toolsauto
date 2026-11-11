@@ -236,7 +236,7 @@ class ValidationAdmin:
             f"• Mã đơn: <code>{html.escape(short_order(row['order_sn']))}</code> · Sub ID: <code>{html.escape(row['sub_id'] or '-')}</code>",
             f"• Người được ghi nhận: {who}",
             f"• Trạng thái đơn: <b>{_order_label(row['order_status'])}</b>",
-            (f"• Duyệt hoa hồng: <b>{PAID_LABEL}</b> (đơn nằm trong kỳ thanh toán đã khớp)" if settled else
+            (f"• Duyệt hoa hồng: <b>{PAID_LABEL.replace('Shopee', market)}</b> (đơn nằm trong kỳ thanh toán đã khớp)" if settled else
              f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status']).replace('Shopee', market)}</b> · "
              f"{html.escape(reason)}"),
             f"• Tiền {market} đã trả: <b>{'đã trả, kỳ đã khớp' if settled else 'chưa'}</b>"
@@ -250,7 +250,8 @@ class ValidationAdmin:
             lines.append(f"• ✔️ Admin đã kiểm tra lúc {_vn(row['reviewed_at'])}")
         changes = self.repo.conversion_changes(conversion_id, limit=8)
         lines += ["", "🕘 <b>Lịch sử thay đổi</b>"]
-        lines += [_change_line(change) for change in changes] or ["Chưa có thay đổi nào sau lần ghi nhận đầu."]
+        lines += [_change_line(change).replace("Shopee", market) for change in changes] or [
+            "Chưa có thay đổi nào sau lần ghi nhận đầu."]
         keyboard = []
         if row["review_status"] == "needs_review":
             keyboard.append((("✔️ Đã kiểm tra cảnh báo", f"c:cv:ack:{conversion_id}"),))

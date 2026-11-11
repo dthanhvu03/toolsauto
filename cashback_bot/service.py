@@ -29,6 +29,7 @@ from cashback_bot.messages import (
     GENERIC_FAIL,
     HUONGDAN,
     NOT_FOUND,
+    SHORT_LINK_UNREADABLE,
     STALE,
     TIKTOK_NO_INFO,
     TIKTOK_NOT_OPEN,
@@ -719,13 +720,21 @@ class CashbackService:
         gate = self.desk.terms_gate(telegram_user_id, moment)
         if gate is not None:
             return gate
+        payload = None
         try:
             payload = self.client.fetch(target)
             quote = quote_from_payload(payload, moment, self.settings.product_max_age_hours)
         except ProductDataError as exc:
-            logger.info("[Cashback] product data rejected code=%s item=%s", exc.code, target.item_id)
+            # Ghi kèm câu AddLiveTag trả (status / message) để lần sau biết vì sao lỗi.
+            said = {k: str(payload.get(k))[:160] for k in ("status", "message", "error") if k in payload} \
+                if isinstance(payload, dict) else {}
+            logger.info("[Cashback] product data rejected code=%s item=%s short=%s api=%s",
+                        exc.code, target.item_id, target.short_url, said)
+            repeat = self._rejected_recently(telegram_user_id, target.original_url, exc.code, moment)
             self._reject(update_id, telegram_user_id, target.original_url, exc.code)
-            if self.admin_notifier and exc.code in {"timeout", "transport", "http_error", "invalid_json", "api_status"}:
+            # Khách gửi lại đúng link vừa lỗi: không báo admin lần nữa.
+            if (self.admin_notifier and not repeat
+                    and exc.code in {"timeout", "transport", "http_error", "invalid_json", "api_status"}):
                 self.admin_notifier.notify_request_failed(
                     error_type=f"product_data_{exc.code}",
                     update_id=update_id,
@@ -734,6 +743,8 @@ class CashbackService:
                 )
             if exc.code in _NOT_FOUND_CODES:
                 return BotReply(NOT_FOUND)
+            if exc.code == "api_status" and target.short_url:
+                return BotReply(SHORT_LINK_UNREADABLE)
             return BotReply(STALE)
 
         resolution = self._resolve_or_reject(update_id, telegram_user_id, target.original_url, moment)
@@ -1078,6 +1089,19 @@ class CashbackService:
             if not self.repo.sub_id_exists(sub_id):
                 return sub_id
         raise ProductDataError("sub_id_exhausted")
+
+    def _rejected_recently(self, telegram_user_id: int, original_url: str, reason: str, now: datetime) -> bool:
+        """Cùng khách, cùng link, cùng lỗi trong 1 giờ qua (để không báo admin lặp)."""
+        since = (now - timedelta(hours=1)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            with self.repo.connect() as conn:
+                return conn.execute(
+                    "SELECT 1 FROM link_requests WHERE telegram_user_id = ? AND original_url = ? AND reject_reason = ?"
+                    " AND created_at >= ? LIMIT 1",
+                    (telegram_user_id, (original_url or "")[:500] or "-", reason, since),
+                ).fetchone() is not None
+        except sqlite3.Error:
+            return False
 
     def _reject(self, update_id: int | None, telegram_user_id: int, original_url: str, reason: str) -> None:
         try:

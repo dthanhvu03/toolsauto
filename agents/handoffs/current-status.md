@@ -1,3 +1,13 @@
+## Phiên 2026-11-12 (review-tiktok + short-video-link) — rà lại chữ Shopee/TikTok + link video Shopee
+- Rà: tin gửi KHÁCH về đơn TikTok đã đúng (qua `source_text`: «TikTok vừa ghi nhận…», hoàn 2.006đ khớp công thức).
+  Màn admin «Chi tiết đơn» còn sót: nhãn «Shopee đã trả» (đơn đã khớp kỳ) + dòng «Lịch sử thay đổi» → đổi theo sàn.
+- Link `vn.shp.ee/hqq0wxa6?fromSource=copy_link` = link VIDEO Shopee (chủ bot mở thử). AddLiveTag trả status lỗi.
+  Sửa `service.py`: link rút gọn + api_status → tin mới `SHORT_LINK_UNREADABLE` (chỉ cách mở trang sản phẩm → Chia sẻ →
+  Sao chép liên kết) thay vì «thử lại sau»; log ghi kèm status/message AddLiveTag; cùng khách + cùng link + cùng lỗi trong
+  1 giờ thì không báo admin lại. Link sản phẩm thường lỗi API vẫn báo «thử lại sau» + báo admin như cũ.
+- Proof: 2 test mới; test cashback 1213 passed + 1 hỏng sẵn (test_b9 phụ thuộc giờ thật); ruff sạch.
+- Cần: `systemctl restart cashback-bot cashback-zalo`.
+
 ## Phiên 2026-11-12 (tiktok-order-label) — Màn «Chi tiết đơn» đơn TikTok ghi sai chữ (chủ bot gửi ảnh)
 - Đơn TikTok CjQxG5kW (link #183): số đúng — khách mua phân loại 64.400đ, HH 5% = 3.220đ (RioHub est_commission), link báo 412đ
   vì lúc tạo link là phân loại 16.500đ / 2,5%. Sai chữ: «Trạng thái đơn: Chưa xác định» (PENDING TikTok chưa có nhãn) và

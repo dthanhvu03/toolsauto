@@ -319,6 +319,14 @@ STALE = (
     "Thông tin hoàn tiền của món này chưa sẵn sàng.\n"
     "Bạn thử gửi lại sau ít phút nhé."
 )
+# Link rút gọn AddLiveTag không đọc ra sản phẩm (chủ bot 12/11: link vn.shp.ee…?fromSource=copy_link mở ra video Shopee).
+SHORT_LINK_UNREADABLE = (
+    "⚠️ <b>Bot chưa đọc được link này</b>\n"
+    "Link chia sẻ từ <b>video, livestream hoặc trang shop</b> chưa dùng được.\n"
+    "Bạn bấm vào món trong video để mở <b>trang sản phẩm</b> → <b>Chia sẻ</b> → <b>Sao chép liên kết</b>, "
+    "rồi gửi lại link đó nhé.\n"
+    "Đã là link trang sản phẩm thì bạn thử lại sau ít phút."
+)
 NOT_FOUND = (
     "⚠️ <b>Không tìm thấy sản phẩm</b>\n"
     "Mình không thấy sản phẩm nào từ link này.\n"

@@ -912,3 +912,27 @@ def test_link_shopeefood_chi_ghep_link_food():
         build_food_redir("https://spf.shopee.vn/x", "abc", "Ab12Cd34")
     with pytest.raises(ValueError):
         build_food_redir("https://spf.shopee.vn/x", "123", "FOOD")
+
+
+def test_link_video_rut_gon_chi_cach_lay_link_san_pham_va_khong_bao_admin_lap(tmp_path):
+    """12/11: vn.shp.ee…?fromSource=copy_link mở ra video Shopee, AddLiveTag trả status lỗi. Khách được chỉ cách lấy
+    link trang sản phẩm (không phải «thử lại sau»); gửi lại đúng link đó trong 1 giờ thì không báo admin thêm."""
+    admin = _CollectAdmin()
+    client = FakeClient({"status": "error", "message": "cannot resolve"})
+    bot = CashbackService(settings(tmp_path), repo(tmp_path), client, admin_notifier=admin)
+    video = "https://vn.shp.ee/hqq0wxa6?fromSource=copy_link&smtt=0.0.9"
+    first = bot.handle_text(111, "buyer", video, update_id=1, now=NOW)
+    assert "chưa đọc được link này" in first.text and "Sao chép liên kết" in first.text
+    assert client.targets[0].short_url == "https://vn.shp.ee/hqq0wxa6"
+    bot.handle_text(111, "buyer", video, update_id=2, now=NOW + timedelta(minutes=2))
+    assert [f["error_type"] for f in admin.failed] == ["product_data_api_status"], "lần gửi lại không báo admin"
+    with bot.repo.connect() as conn:  # DB ghi giờ thật: làm cũ các lần trước để giả lập đã quá 1 giờ
+        conn.execute("UPDATE link_requests SET created_at = '2000-01-01T00:00:00Z'")
+    bot.handle_text(111, "buyer", video, update_id=3, now=datetime.now(timezone.utc))
+    assert len(admin.failed) == 2, "quá 1 giờ thì báo lại"
+
+
+def test_link_san_pham_loi_api_van_bao_thu_lai(tmp_path):
+    bot = service(tmp_path, FakeClient({"status": "error"}))
+    reply = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=NOW)
+    assert "Chưa lấy được dữ liệu sản phẩm" in reply.text
