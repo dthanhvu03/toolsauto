@@ -1,3 +1,14 @@
+## Phiên 2026-11-12 (tiktok-order-label) — Màn «Chi tiết đơn» đơn TikTok ghi sai chữ (chủ bot gửi ảnh)
+- Đơn TikTok CjQxG5kW (link #183): số đúng — khách mua phân loại 64.400đ, HH 5% = 3.220đ (RioHub est_commission), link báo 412đ
+  vì lúc tạo link là phân loại 16.500đ / 2,5%. Sai chữ: «Trạng thái đơn: Chưa xác định» (PENDING TikTok chưa có nhãn) và
+  «Chờ Shopee duyệt» cho đơn TikTok. Sửa `admin/handlers/validation.py`: ORDER_LABELS thêm PENDING «Đang xử lý»; nhãn duyệt
+  đổi Shopee → TikTok theo sàn. 633 test validation/tiktok qua, ruff sạch. Cần: `systemctl restart cashback-bot cashback-zalo`.
+
+## Phiên 2026-11-11 (disk-full-2) — C: đầy lại (35 MB trống)
+- Thủ phạm cũ: %TEMP%\DiagOutputDir\RdClientAutoTrace (nhật ký msrdc/WSLg) 28,5 GB sau ~1,5 ngày (~19 GB/ngày). Đã xoá → C: 28,6 GB trống.
+- ĐÃ LÀM (chủ bot đồng ý): Task Scheduler `ToolsAuto_CleanRdTrace` chạy mỗi giờ, không hết hạn → `C:\toolsauto_tmp\clean_rdtrace.ps1`
+  xoá file trong RdClientAutoTrace cũ hơn 10 phút. Chạy thử: LastTaskResult 0. Gỡ: `Unregister-ScheduledTask ToolsAuto_CleanRdTrace`.
+
 ## Phiên 2026-11-11 (bot-users) — PLAN-168 một chỗ xem tổng khách mọi bot (chủ bot giao trực tiếp)
 - Web «Khách các bot» `/app/go/bot-users`: bảng tổng theo bot, khách mới 14 ngày, theo nguồn, danh sách (lọc bot + tìm).
   Telegram Cashbot: `/users` (tổng) và `/users <tên|ID>`. Chỉ đọc DB 2 bot. Chi tiết + proof: PLAN-168.

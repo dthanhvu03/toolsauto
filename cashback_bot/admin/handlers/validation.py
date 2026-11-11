@@ -66,6 +66,8 @@ ORDER_LABELS = {
     "UNPAID": "Chưa thanh toán",
     "PAID": "Đã thanh toán",
     "COMPLETED": "Đã hoàn thành",
+    # TikTok (RioHub status 1): đơn đã đặt, sàn chưa chốt (giao xong / hết hạn đổi trả).
+    "PENDING": "Đang xử lý",
     "CANCELLED": "Đã huỷ",
     "CANCELED": "Đã huỷ",
 }
@@ -235,7 +237,7 @@ class ValidationAdmin:
             f"• Người được ghi nhận: {who}",
             f"• Trạng thái đơn: <b>{_order_label(row['order_status'])}</b>",
             (f"• Duyệt hoa hồng: <b>{PAID_LABEL}</b> (đơn nằm trong kỳ thanh toán đã khớp)" if settled else
-             f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status'])}</b> · "
+             f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status']).replace('Shopee', market)}</b> · "
              f"{html.escape(reason)}"),
             f"• Tiền {market} đã trả: <b>{'đã trả, kỳ đã khớp' if settled else 'chưa'}</b>"
             + ("" if settled else " (đơn chưa nằm trong kỳ thanh toán đã khớp)"),
