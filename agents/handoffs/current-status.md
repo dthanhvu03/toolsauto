@@ -1,3 +1,15 @@
+## Phiên 2026-11-11 (bot-users) — PLAN-168 một chỗ xem tổng khách mọi bot (chủ bot giao trực tiếp)
+- Web «Khách các bot» `/app/go/bot-users`: bảng tổng theo bot, khách mới 14 ngày, theo nguồn, danh sách (lọc bot + tìm).
+  Telegram Cashbot: `/users` (tổng) và `/users <tên|ID>`. Chỉ đọc DB 2 bot. Chi tiết + proof: PLAN-168.
+- Chờ chủ bot: `pm2 restart Web_Dashboard` + `systemctl restart cashback-bot cashback-zalo`. Sau đó archive PLAN-168.
+- Hỏng sẵn (không sửa, ngoài phạm vi): `test_b9_doi_tai_khoan_cho_7_ngay_admin_xac_minh_thi_rut_ngay` phụ thuộc giờ thật.
+
+## Phiên 2026-11-11 (cashback-link-audit) — Kiểm link Shopee gửi gần đây có đúng hoa hồng (chủ bot hỏi, chỉ đọc DB)
+- 38 link tạo từ 04/11: hoa hồng = phần người bán + min(phần Shopee, 2,5% giá) (`ProductQuote.sure_commission_vnd`), tiền hoàn =
+  (HH − ceil 0,98% − ceil 10%) × 60/70% → khớp 100% với link_requests + link_policy_snapshots. Tin Telegram (#172–181) ghi đúng số.
+- Link: affiliate_id …0094 cả 142 link, sub_id không trùng (150/150), item/shop đúng link gốc. Đơn thật (#127–158): tỉ lệ HH Shopee
+  trả = tỉ lệ báo (2,5% / 4,5%). Không gọi Shopee, không sửa gì.
+
 ## Phiên 2026-11-10 (store-topup15) — Đơn/nạp #15 AI Pass Store «không xác nhận» (chủ bot hỏi)
 - DB: nạp #15 NAPEM2QYW 11.000đ SePay cộng 13:35:05Z; đơn #15 Canva 1.100đ done 13:35:33Z (DH7FZ9K3); khách ~aniyah~ còn 9.900đ. Tiền + hàng đúng.
 - Nguyên nhân: Telegram treo 13:35–13:37Z. store_api `editMessageText` ReadTimeout 13:35:40 → tin «Yêu cầu nạp #15» của admin không được

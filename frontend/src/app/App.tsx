@@ -23,6 +23,7 @@ import { StudioSetupPage } from "@/features/studio/pages/StudioSetupPage";
 import { StudioTiktokPage } from "@/features/studio/pages/StudioTiktokPage";
 import { StudioDocPage } from "@/features/studio/pages/StudioDocPage";
 import { ThreadsGrowthPage } from "@/features/threads-growth/pages/ThreadsGrowthPage";
+import { BotUsersPage } from "@/features/bot-users/pages/BotUsersPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="go/studio-tiktok" element={<StudioTiktokPage />} />
             <Route path="go/studio-doc" element={<StudioDocPage />} />
             <Route path="go/threads-growth" element={<ThreadsGrowthPage />} />
+            <Route path="go/bot-users" element={<BotUsersPage />} />
             <Route path="go/viral" element={<ViralPage />} />
             <Route path="go/viral-sources" element={<ViralSourcesPage />} />
             <Route path="go/compliance" element={<CompliancePage />} />

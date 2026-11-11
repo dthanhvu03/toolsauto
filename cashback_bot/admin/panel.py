@@ -47,6 +47,7 @@ from cashback_bot.admin.handlers.reserve import SCHEMA_PATH as RESERVE_SCHEMA_PA
 from cashback_bot.admin.handlers.shopee import ShopeeAdmin
 from cashback_bot.admin.handlers.simulation import SIM_AMOUNTS, SimulationAdmin, parse_sim_amount, simulate_share
 from cashback_bot.admin.handlers.insights import InsightsAdmin
+from cashback_bot.admin.handlers.users import users_reply
 from cashback_bot.admin.handlers.membership import MembershipAdmin
 from cashback_bot.admin.handlers.retention import RetentionAdmin
 from cashback_bot.admin.handlers.support import SupportAdmin
@@ -101,6 +102,8 @@ __all__ = [
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "migrations" / "004_admin_policy.sql"
 _SEARCH_COMMAND = re.compile(r"^/tim(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
+# /users [tên|ID]: tổng khách mọi bot (PLAN-168).
+_USERS_COMMAND = re.compile(r"^/users(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary|money|moneycfg|more)$")
 
 
@@ -174,6 +177,8 @@ class AdminPanel:
         # /tim <mã>: tìm link, đơn, ticket, yêu cầu rút, khách (PLAN-091).
         if (search := _SEARCH_COMMAND.fullmatch(text or "")) is not None:
             return self._insights().search(user_id, search.group(1) or "", now)
+        if (users := _USERS_COMMAND.fullmatch(text or "")) is not None:
+            return users_reply(users.group(1) or "", now, self.db_path)
         return self._router.dispatch_text(user_id, text, now, message_id)
 
     def handle_callback(self, user_id: int, data: str, chat_type: str, now: datetime) -> BotReply:

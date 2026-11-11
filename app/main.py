@@ -27,6 +27,7 @@ from app.core.ai import router as ai
 # Feature Routers
 from app.features.jobs import router as jobs
 from app.features.cashback_insights import router as cashback_insights
+from app.features.bot_users import router as bot_users
 from app.features.system_panel import router as system_panel
 from app.features.system_panel import worker_router as worker
 from app.features.system_panel import ai_studio_router as ai_studio
@@ -85,6 +86,7 @@ app.include_router(buffer_media.router)
 app.include_router(buffer_cluster)
 app.include_router(system_panel.router)
 app.include_router(cashback_insights.router)
+app.include_router(bot_users.router)
 app.include_router(compliance.router)
 app.include_router(database.router)
 app.include_router(ai.router)
