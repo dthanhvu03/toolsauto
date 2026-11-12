@@ -43,6 +43,7 @@ class Deal:
     usual: int
     cashback: int
     sold_30d: int
+    url: str = ""  # link món s.shopee.vn trong kho deal — dán cuối bài riêng (chủ bot 12/11)
 
     @property
     def off_pct(self) -> int:
@@ -77,7 +78,7 @@ def load_deals(now: datetime, path: Optional[Path] = None) -> List[Deal]:
             if d.get("seen", "") < since or d["item_id"] in removed or not d.get("lowest_30d"):
                 continue
             deals.append(Deal(int(d["item_id"]), str(d["name"]), int(d["price"]), int(d["usual"]),
-                              int(d.get("cashback") or 0), int(d.get("sold_30d") or 0)))
+                              int(d.get("cashback") or 0), int(d.get("sold_30d") or 0), str(d.get("url") or "")))
         except (KeyError, TypeError, ValueError):
             continue
     deals.sort(key=lambda x: (-x.off_pct, -x.sold_30d))
@@ -111,6 +112,7 @@ BUY_NOTES = "\n".join(f"- {_plain(r)}" for r in (CART_RULE, BUY_RULE, ITEM_RULE)
 # Chừa chỗ cho link cuối bài và ký tự Threads đếm khác Python (emoji).
 POST_LIMIT = 470
 _LENGTH_ASK = "Cả bài TỐI ĐA 380 ký tự (Threads chặn bài quá 500 ký tự, link cuối bài đã chiếm ~50). Ngắn gọn."
+_LENGTH_ASK_LINKS = "Cả bài TỐI ĐA 280 ký tự (Threads chặn bài quá 500 ký tự; link bot + link món ở cuối đã chiếm ~170). Ngắn gọn."
 _NOTES_ASK = f"""BẮT BUỘC có 1 dòng «lưu ý trước khi mua» thật ngắn, giữ đúng ý chính (chọn từ các ý dưới):
 {BUY_NOTES}
 Ý quan trọng nhất phải nói rõ: món đang nằm sẵn trong giỏ thì XOÁ khỏi giỏ trước, rồi mở lại món đó bằng link bot gửi
@@ -144,11 +146,12 @@ Món:
 {lines}
 
 {sale_line}
-Cuối bài nhắc: muốn mua thì tìm món trên Shopee, copy link dán vào bot Telegram (link dưới) để được hoàn tiền.
+Cuối bài nhắc: link từng món để ở dưới cùng — copy link món dán vào bot Telegram (link bot ở dưới) để được hoàn tiền,
+đừng bấm mua thẳng.
 KHÔNG viết «{handle}» (trên Threads «@…» là gắn thẻ tài khoản Threads, không mở bot) — link bot tự gắn cuối bài.
 
 Độ dài 4–6 dòng ngắn, mỗi món 1 dòng (tên rút gọn 3–6 chữ + giá). Số hoàn là «dự kiến».
-{_LENGTH_ASK}
+{_LENGTH_ASK if not any(d.url for d in deals) else _LENGTH_ASK_LINKS}
 {_NOTES_ASK}
 {_STYLE}"""
 
@@ -218,8 +221,26 @@ def fit_post(lines: List[str], link: str, limit: int = POST_LIMIT) -> List[str]:
     return lines
 
 
-def clean_post(text: str, link: str) -> str:
-    """Giữ xuống dòng (bài nhiều dòng), bỏ mọi link AI tự viết, đặt đúng link tracking ở dòng cuối; vừa 500 ký tự."""
+ITEM_LINKS_HEAD = "👇 Link món (copy dán vào bot ở trên để đc hoàn):"
+_NAME_NOISE = re.compile(r"\b(?:hot|sale|new|freeship|chính hãng|giá rẻ|siêu rẻ|cao cấp|hàng mới)\b", re.IGNORECASE)
+
+
+def _short_name(name: str, words: int = 5) -> str:
+    """Tên món gọn cho dòng link: bỏ ngoặc, emoji / ký hiệu, chữ quảng cáo (HOT, Freeship…), lấy vài chữ đầu."""
+    clean = re.sub(r"[\[【(].*?[\]】)]", " ", name)
+    clean = _NAME_NOISE.sub(" ", re.sub(r"[^\w\s.,+%/-]", " ", clean))
+    return " ".join(clean.split()[:words]) or name[:24]
+
+
+def item_links(deals: List[Deal]) -> List[str]:
+    """Khối link từng món dán cuối bài riêng (chủ bot 12/11: «dán link shopee xuống phía dưới»). Món không có link → bỏ."""
+    rows = [f"- {_short_name(d.name)}: {d.url}" for d in deals if d.url]
+    return [ITEM_LINKS_HEAD, *rows] if rows else []
+
+
+def clean_post(text: str, link: str, footer: Optional[List[str]] = None) -> str:
+    """Giữ xuống dòng (bài nhiều dòng), bỏ mọi link AI tự viết, đặt đúng link tracking sau phần thân, rồi ``footer``
+    (link từng món) ở dưới cùng; cả bài vừa 500 ký tự."""
     lines: List[str] = []
     for raw in (text or "").strip().strip('"').splitlines():
         line = " ".join(_MENTION.sub("bot Tele", _TME_TOKEN.sub("", raw)).split()).rstrip(" ,:")
@@ -227,7 +248,9 @@ def clean_post(text: str, link: str) -> str:
             lines.append(line)
     while lines and not lines[-1]:
         lines.pop()
-    return "\n".join(fit_post(lines, link) + [link])
+    tail = list(footer or [])
+    reserve = len("\n".join(tail)) + 1 if tail else 0
+    return "\n".join(fit_post(lines, link, POST_LIMIT - reserve) + [link] + tail)
 
 
 @dataclass(frozen=True)
@@ -255,7 +278,8 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
     text = await _ai(_deal_prompt(fresh, link, profile.handle, sale_line))
     if not text:
         return None
-    return OwnPostDraft("deal", clean_post(with_buy_note(text), link), ",".join(f"deal:{d.item_id}" for d in fresh))
+    body = clean_post(with_buy_note(text), link, item_links(fresh))
+    return OwnPostDraft("deal", body, ",".join(f"deal:{d.item_id}" for d in fresh))
 
 
 _NOT_WORTH = re.compile(r"^\W*$")

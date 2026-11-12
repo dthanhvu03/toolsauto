@@ -1,3 +1,9 @@
+## Phiên 2026-11-12 (own-post-links) — Bài deal Threads dán link từng món ở dưới cùng (chủ bot chọn)
+- `content.item_links`: dưới link bot thêm «👇 Link món (copy dán vào bot ở trên để đc hoàn):» + «- <tên gọn>: <url>» từ
+  deals_pool.url (s.shopee.vn). Thân bài rút còn ≤ 280 ký tự (prompt) để cả bài ≤ 470; prompt dặn copy link dán bot, đừng mua thẳng.
+  Lưu ý chủ bot đã biết: ai bấm mua thẳng → không được hoàn, không tính khách bot (vẫn có hoa hồng).
+- Thử AI thật (không đăng): 439 ký tự, đúng cấu trúc. Proof: 113 passed, ruff sạch. Cần: `pm2 restart Threads_Growth`.
+
 ## Phiên 2026-11-12 (psych-kb-test) — Theo dõi reply dùng kho + bài riêng 20:15
 - Restart 13:15Z. Reply đầu dùng kho: #1799 (AI Store, Claude Pro ở Trung Quốc) — trả lời nỗi lo trước, không hứa bảo hành.
   Lưu ý cho chủ bot: khu vực Claude không hỗ trợ → acc dễ khoá → dễ bị đòi bảo hành.

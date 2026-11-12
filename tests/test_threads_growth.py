@@ -1362,3 +1362,27 @@ def test_own_post_found_from_dom_when_json_misses():
     b.adapter = type("A", (), {"_own_handle": "@us28qt", "page": Page()})()
     b._payloads = []
     assert b._find_own_post(text) == "https://www.threads.com/@us28qt/post/DfpKp6eCdVd"
+
+
+def test_deal_post_appends_item_links_at_bottom(monkeypatch):
+    """Chủ bot 12/11: «dán link shopee xuống phía dưới» — link từng món ở dưới cùng, bài vẫn ≤ 500 ký tự."""
+    deals = [content.Deal(1, "Khăn tắm Kawaii cotton 5 cái siêu thấm [Hàng mới]", 35000, 45000, 2336, 100,
+                          "https://s.shopee.vn/4fxgpurUcE"),
+             content.Deal(2, "Chân váy xẻ tà 2 lớp", 139000, 175000, 6310, 50, "https://s.shopee.vn/AbCdEf1234")]
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: deals)
+    monkeypatch.setattr(content, "next_sale", lambda now, days=4: None)
+    long_body = "Nay t check đc 2 món rẻ nhất 30 ngày nè mấy bà " + "rất rất dài " * 40
+    seen = {}
+
+    async def fake_ai(prompt, min_len=20):
+        seen["p"] = prompt
+        return f"{long_body}\n- Khăn tắm Kawaii: 35k\n- Chân váy: 139k\nLưu ý: món có sẵn trong giỏ thì xoá đi nha"
+
+    monkeypatch.setattr(content, "_ai", fake_ai)
+    draft = asyncio.run(content.write_own_post(datetime(2026, 11, 20, tzinfo=timezone.utc), set()))
+    lines = draft.text.splitlines()
+    assert lines[-3:] == [content.ITEM_LINKS_HEAD, "- Khăn tắm Kawaii cotton 5: https://s.shopee.vn/4fxgpurUcE",
+                          "- Chân váy xẻ tà 2: https://s.shopee.vn/AbCdEf1234"]
+    assert lines[-4].endswith("start=threads_cb_post") and len(draft.text) <= content.POST_LIMIT
+    assert "280 ký tự" in seen["p"] and "link từng món để ở dưới cùng" in seen["p"]
+    assert content.item_links([content.Deal(3, "x", 1, 2, 0, 0)]) == []  # món không có link → không có khối
