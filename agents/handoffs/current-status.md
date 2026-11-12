@@ -1,3 +1,11 @@
+## Phiên 2026-11-12 (psych-kb-test) — Theo dõi reply dùng kho + bài riêng 20:15
+- Restart 13:15Z. Reply đầu dùng kho: #1799 (AI Store, Claude Pro ở Trung Quốc) — trả lời nỗi lo trước, không hứa bảo hành.
+  Lưu ý cho chủ bot: khu vực Claude không hỗ trợ → acc dễ khoá → dễ bị đòi bảo hành.
+- Bài riêng 20:15 (#14) LÊN trang (DfpKp6eCdVd) nhưng vẫn báo failed: bản sửa keep_closed đủ cho JSON trang ẩn danh, trang
+  đăng nhập thì không thấy. Sửa `_find_own_post`: đọc lại trang 3 lần (cách 3–4 s) + dự phòng DOM (_DOM_EXTRACT_JS).
+  Thử DOM trên trang thật: tìm đúng bài. Sửa tay DB #14 → posted. Kho: mục ranh giới đổi «ước tính» → «bot báo hoàn khoảng».
+  Proof: 112 passed (Threads + kho), ruff sạch. Cần: `pm2 restart Threads_Growth`. Kiểm: bài 11:45 ngày 13/11 ghi posted.
+
 ## Phiên 2026-11-12 (psych-kb) — PLAN-170 kho tâm lý khách cho reply Threads + /tamly (chủ bot giao trực tiếp)
 - Chủ bot: «tham khảo các học thuyết tâm lý học trên internet và chắt lọc tinh tuý» → kho RAG. Chi tiết + proof: PLAN-170.
 - Kho `app/features/psych_kb/kb/` 41 mục / 8 chủ đề (Cialdini, Fogg B=MAP, Reactance, Prospect theory, Kahneman, ELM, SDT,

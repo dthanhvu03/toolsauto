@@ -1333,3 +1333,32 @@ def test_write_followup_prompt_handles_fear_of_links(monkeypatch):
     assert "OTP" in seen["p"] and "tài khoản ngân hàng" in seen["p"]
     asyncio.run(content.write_followup(TargetBot.AI_STORE, "x", "sợ link lạ"))
     assert "gõ tìm aipass_shop_bot" in seen["p"] and "mã QR" in seen["p"]
+
+
+def test_own_post_found_from_dom_when_json_misses():
+    """12/11 20:15: bài riêng đã lên trang nhưng JSON trang đăng nhập không có → đọc chữ bài trên trang (DOM)."""
+    from app.features.threads.growth.browser import GrowthBrowser
+
+    text = "Nay t check đc 2 món giá thấp nhất 30 ngày nè mấy bà\n- Khăn tắm"
+
+    class Page:
+        url = "https://www.threads.com/@us28qt"
+        calls = 0
+
+        def goto(self, *a, **k): pass
+
+        def wait_for_timeout(self, ms): pass
+
+        def eval_on_selector_all(self, *a): return []
+
+        def evaluate(self, js):
+            Page.calls += 1
+            if Page.calls < 3:  # bài tải sau vài giây
+                return []
+            return [{"href": "/@us28qt/post/DfpKp6eCdVd", "datetime": "",
+                     "text": "us28qt\n31 phút\nNay t check đc 2 món giá thấp nhất 30 ngày nè mấy bà\n- Khăn tắm Kawaii"}]
+
+    b = GrowthBrowser.__new__(GrowthBrowser)
+    b.adapter = type("A", (), {"_own_handle": "@us28qt", "page": Page()})()
+    b._payloads = []
+    assert b._find_own_post(text) == "https://www.threads.com/@us28qt/post/DfpKp6eCdVd"

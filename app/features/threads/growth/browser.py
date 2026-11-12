@@ -41,6 +41,8 @@ _POST_LABEL_XPATH = (
     "normalize-space(.)='Post' or normalize-space(.)='Đăng'"
     " or .//*[local-name()='svg'][@aria-label='Reply' or @aria-label='Trả lời']"
 )
+OWN_POST_LOOKUPS = 3  # số lần đọc lại trang cá nhân tìm bài riêng vừa đăng (mỗi lần cách 3–4 s)
+
 DIALOG_POST_SELECTORS = (
     'div[role="dialog"] div[role="button"]:has-text("Post")',
     'div[role="dialog"] div[role="button"]:has-text("Đăng")',
@@ -403,6 +405,14 @@ class GrowthBrowser:
                 for p in posts_from_payload(payload, "", keep_closed=True):
                     if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
                         return p.post_url
+            # Dự phòng DOM (12/11 20:15: bài đã lên trang mà JSON trang đăng nhập không có): chữ bài trên trang.
+            try:
+                rows = self.page.evaluate(_DOM_EXTRACT_JS)
+            except Exception:
+                rows = []
+            for p in posts_from_dom_rows(rows or [], ""):
+                if p.author.lower() == me and prefix in " ".join(p.content.split()):
+                    return p.post_url
             return None
 
         url = lookup()
@@ -411,10 +421,14 @@ class GrowthBrowser:
         try:
             self._payloads.clear()
             self.page.goto(f"{THREADS_HOST}/@{me}", wait_until="domcontentloaded", timeout=60000)
-            self._pause(3.0, 4.0)
         except Exception:
             return None
-        return lookup()
+        for _ in range(OWN_POST_LOOKUPS):  # bài có thể tải sau vài giây (XHR) — thử lại thay vì kết luận ngay
+            self._pause(3.0, 4.0)
+            url = lookup()
+            if url:
+                return url
+        return None
 
     # ── đăng reply ─────────────────────────────────────────────
     def reply(self, post_url: str, text: str) -> Optional[str]:
