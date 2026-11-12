@@ -23,6 +23,7 @@ from cashback_bot import sale_calendar
 from cashback_bot.messages import BUY_RULE, CART_RULE, ITEM_RULE
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
+from app.features.psych_kb.prompting import guidance_block
 from app.features.threads.growth.config import TargetBot, channel_url, load_profiles
 from app.features.threads.growth.conversions import cashback_db
 from app.features.threads.growth.evaluator import _TME_TOKEN, clean_reply
@@ -273,6 +274,9 @@ async def write_followup(bot: TargetBot, our_reply: str, comment: str) -> tuple[
         return "skip", None
     profile = load_profiles()[bot]
     link = channel_url(bot, "conv")
+    kb = guidance_block(comment, "threads", k=2)  # PLAN-170: gợi ý tâm lý theo đúng câu họ nói
+    if kb:
+        logger.info("growth.followup kb: %s", ", ".join(kb.ids))
     prompt = f"""Bạn là chủ tài khoản Threads. Bạn đã để lại reply sau dưới bài của người khác:
 \"\"\"{our_reply}\"\"\"
 
@@ -286,7 +290,7 @@ trong giỏ thì xoá đi, mở lại bằng link bot rồi mới thêm giỏ. C
 Nếu họ ngại / sợ bấm link lạ, sợ lừa đảo — KHÔNG đưa link: đồng cảm («cẩn thận vậy là đúng á»), bảo họ tự mở Telegram,
 gõ tìm {profile.handle.lstrip("@")} (viết đúng như vậy, không có @); bot không hỏi mật khẩu / mã OTP / thông tin thẻ, {_SAFE_NOTE[bot]}
 Nếu họ chỉ cảm ơn / thả cảm xúc / chê / cãi / spam / bán hàng cạnh tranh / không liên quan thì chỉ xuất đúng chữ: SKIP
-
+{kb.text + chr(10) if kb else ''}
 Văn phong: 1–2 câu, tối đa 200 ký tự, như người thật nhắn qua lại, teencode vừa phải, không quảng cáo, không chữ «VietQR».
 Chỉ xuất câu trả lời (hoặc SKIP), không giải thích."""
     text = await _ai(prompt, min_len=2)

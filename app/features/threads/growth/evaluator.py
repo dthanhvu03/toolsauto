@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
+from app.features.psych_kb.prompting import guidance_block
 from app.features.threads.growth.config import (
     CASHBOT_ZALO_NAME,
     CASHBOT_ZALO_URL,
@@ -288,6 +289,10 @@ Cách viết: mở đầu bắt đúng cảm xúc đó (đồng cảm, không ph
 cái họ cần / gỡ đúng băn khoăn trước, rồi mới nhắc bot (bằng link) như cách chính mình đã làm và thấy được việc.
 """
 
+        # PLAN-170: gợi ý tâm lý từ kho, theo bài + cảm xúc / băn khoăn đã đọc được.
+        kb_query = content if reading is None else f"{content}\n{reading.emotion}\n{reading.objection or ''}"
+        kb = guidance_block(kb_query, "threads", k=2)
+        kb_block = f"{kb.text}\n" if kb else ""
         prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply.
 
 Bài đăng:
@@ -297,7 +302,7 @@ Thứ bạn muốn giới thiệu khéo: {profile.name} — {where}
 Góc nói (biến thể {variant.value}): {cfg.name}
 Ý chính: {cfg.angle}
 Link bot (bắt buộc, viết đúng nguyên văn một lần, thay cho tên bot — trên Threads «@tên» không bấm vào bot được): {link}
-{example_line}{insight}
+{example_line}{insight}{kb_block}
 Văn phong — viết y như người thật trên Threads:
 - 1–2 câu, tối đa khoảng 200 ký tự. Viết liền một mạch, không gạch đầu dòng, không xuống dòng.
 - Giọng nói chuyện, xưng t / mình, gọi b / bà / ông tuỳ bài. Viết thường cũng được, không cần chấm câu cuối.
@@ -319,7 +324,8 @@ Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
             if reply and len(reply.strip()) > 10:
                 cleaned = with_link(reply, link, profile.handle)
                 analysis = (f"AI [{variant.value}{' · Zalo' if zalo else ''}] - "
-                            f"{meta.get('provider', '?')}:{meta.get('model', '?')}")
+                            f"{meta.get('provider', '?')}:{meta.get('model', '?')}"
+                            + (f" · kb: {', '.join(kb.ids)}" if kb else ""))
                 return cleaned, analysis
             # Ghi lý do để biết vì sao AI im (router tắt, circuit mở, hết quota…).
             reason = meta.get("fail_reason") or meta.get("primary_fail_reason") or "empty output"

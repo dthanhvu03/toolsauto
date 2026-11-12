@@ -1,3 +1,11 @@
+## Phiên 2026-11-12 (psych-kb) — PLAN-170 kho tâm lý khách cho reply Threads + /tamly (chủ bot giao trực tiếp)
+- Chủ bot: «tham khảo các học thuyết tâm lý học trên internet và chắt lọc tinh tuý» → kho RAG. Chi tiết + proof: PLAN-170.
+- Kho `app/features/psych_kb/kb/` 41 mục / 8 chủ đề (Cialdini, Fogg B=MAP, Reactance, Prospect theory, Kahneman, ELM, SDT,
+  NVC, Festinger, Zajonc, FOMO, nhận thức rủi ro); nguồn ở `_nguon.md`. Tìm BM25 thuần Python, không thêm thư viện / lượt AI.
+- Gắn: reply + trả lời lại Threads (ai_analysis «· kb: …»); lệnh admin Cashbot `/tamly` (hỏi / soạn nháp, AI chạy nền).
+- Proof: 23 test mới; 1427 passed + 1 hỏng sẵn (test_b9); ruff sạch. Cần: `pm2 restart Threads_Growth`,
+  `systemctl restart cashback-bot cashback-zalo`. Next: thử `/tamly`; ~1 tuần so khách mã threads reply có kb / không kb.
+
 ## Phiên 2026-11-12 (threads-post-check) — Kiểm bài đăng Threads sau restart 10:31Z (chỉ đọc)
 - Bài riêng 17:30 VN (own_posts #13, 389 ký tự) ĐÃ LÊN trang @us28qt (Chromium ẩn danh, chỉ đọc) — rút ngắn ≤ 470 đã có tác dụng.
   Nhưng DB ghi failed «Đã bấm Post nhưng không thấy bài trên trang cá nhân» → BÁO LỖI OAN: `browser.create_post` /

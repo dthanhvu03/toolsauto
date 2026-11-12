@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from cashback_bot import admin_tiktok
+from cashback_bot.admin.handlers import tamly
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
@@ -140,6 +141,7 @@ class CashbackService:
         self._tiktok_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tiktok-link")
         self.tiktok_runner: Callable[[Callable[[], None]], object] = self._tiktok_pool.submit
         self.after_deferred: Callable[[], object] | None = None
+        self.tamly_generate: Callable[[str], tuple] | None = None  # PLAN-170: test thay AI giả; None = AI thật
         # Báo giảm giá món khách từng xem (price_watch): cùng khoá AddLiveTag với báo giá. Chỉ bot Telegram chạy lượt.
         self.price_history = PriceHistoryClient(settings.api_key)
         self.wallet = Wallet(repo)
@@ -649,6 +651,8 @@ class CashbackService:
         if command == "/admin":
             return self.admin_panel.menu(telegram_user_id, moment)
         if self.admin_panel.is_admin(telegram_user_id):
+            if (ask := tamly.TAMLY_COMMAND.fullmatch(stripped)) is not None:
+                return self._tamly(telegram_user_id, (ask.group(1) or "").strip(), moment)
             consumed = self.admin_panel.consume_text(telegram_user_id, stripped, moment, message_id=message_id)
             if consumed is not None:
                 return consumed
@@ -885,6 +889,30 @@ class CashbackService:
              "at": moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}))
         self.tiktok_runner(lambda: self._tiktok_deliver(update_id, telegram_user_id, url, sub_id, moment))
         return BotReply(TIKTOK_WORKING)
+
+    def _tamly(self, admin_id: int, question: str, moment: datetime) -> BotReply:
+        """PLAN-170 ``/tamly``: không câu hỏi → danh sách chủ đề; có → AI trả lời ở luồng nền (dùng chung pool link
+        TikTok), kết quả đi qua hàng đợi tin như thẻ link TikTok."""
+        if not question:
+            return tamly.topics_reply()
+        key = f"tamly:{admin_id}:{moment.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}"
+        self.tiktok_runner(lambda: self._tamly_deliver(admin_id, question, key))
+        return BotReply(tamly.WORKING)
+
+    def _tamly_deliver(self, admin_id: int, question: str, key: str) -> None:
+        try:
+            text = tamly.answer(question, generate=self.tamly_generate)
+        except Exception:
+            logger.exception("[Cashback] /tamly lỗi")
+            text = tamly.AI_DOWN
+        with self.repo.connect() as conn:
+            enqueue_event(conn, event_key=key, event_type="TAMLY_ANSWER", chat_id=admin_id, message_html=text,
+                          audience="customer", category="tamly", source_ref="tamly")
+        if self.after_deferred is not None:
+            try:
+                self.after_deferred()
+            except Exception:
+                logger.exception("[Cashback] gửi trả lời /tamly ngay lỗi; vòng sau sẽ gửi")
 
     def _tiktok_deliver(self, update_id: int | None, telegram_user_id: int, url: str, sub_id: str,
                         moment: datetime) -> None:
