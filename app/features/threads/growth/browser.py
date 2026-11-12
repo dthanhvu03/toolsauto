@@ -88,8 +88,12 @@ def _int(value: Any) -> int:
         return 0
 
 
-def posts_from_payload(payload: Any, keyword: str) -> List[ScannedPost]:
-    """Đi khắp JSON, nhặt mọi nút giống bài Threads: có ``code`` + ``user.username`` + ``caption.text``."""
+def posts_from_payload(payload: Any, keyword: str, keep_closed: bool = False) -> List[ScannedPost]:
+    """Đi khắp JSON, nhặt mọi nút giống bài Threads: có ``code`` + ``user.username`` + ``caption.text``.
+
+    ``keep_closed`` = giữ cả bài khoá reply — dùng khi tìm bài của chính mình (trang cá nhân trả ``can_reply: False``
+    cho bài của mình, 12/11: bài riêng lên trang mà bị báo «không thấy bài»).
+    """
     found: dict[str, ScannedPost] = {}
 
     def visit(node: Any) -> None:
@@ -101,7 +105,7 @@ def posts_from_payload(payload: Any, keyword: str) -> List[ScannedPost]:
                 text = caption.get("text") if isinstance(caption, dict) else None
                 info = node.get("text_post_app_info") or {}
                 # Bài khoá reply / mình đã reply rồi → bỏ.
-                closed = info.get("can_reply") is False or info.get("has_viewer_replied") is True
+                closed = not keep_closed and (info.get("can_reply") is False or info.get("has_viewer_replied") is True)
                 if text and code not in found and not closed:
                     author = str(user["username"])
                     found[code] = ScannedPost(
@@ -382,7 +386,7 @@ class GrowthBrowser:
             return None
         prefix = " ".join(text.split())[:30]
         for payload in list(self._payloads):
-            for p in posts_from_payload(payload, ""):
+            for p in posts_from_payload(payload, "", keep_closed=True):
                 if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
                     return p.post_url
         return None
@@ -396,7 +400,7 @@ class GrowthBrowser:
 
         def lookup() -> Optional[str]:
             for payload in [*self._payloads, *self._embedded_payloads(wide=True)]:
-                for p in posts_from_payload(payload, ""):
+                for p in posts_from_payload(payload, "", keep_closed=True):
                     if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
                         return p.post_url
             return None
@@ -429,6 +433,9 @@ class GrowthBrowser:
         if box is None:
             button = self.adapter._find_first_visible(REPLY_BUTTON_SELECTORS, timeout_ms=5000)
             if button is None:
+                here = ThreadsScanner.parse_post_url(self.page.url)
+                if target and (not here or here[1] != target[1]):  # Threads chuyển về trang chủ = bài đã xoá / ẩn
+                    raise RuntimeError("Bài gốc đã bị xoá hoặc ẩn (Threads chuyển về trang chủ)")
                 raise RuntimeError("Không thấy ô / nút Trả lời trên bài")
             button.click()
             self._pause(1.2, 2.2)

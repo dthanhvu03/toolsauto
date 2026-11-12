@@ -1,3 +1,18 @@
+## Phiên 2026-11-12 (threads-post-check) — Kiểm bài đăng Threads sau restart 10:31Z (chỉ đọc)
+- Bài riêng 17:30 VN (own_posts #13, 389 ký tự) ĐÃ LÊN trang @us28qt (Chromium ẩn danh, chỉ đọc) — rút ngắn ≤ 470 đã có tác dụng.
+  Nhưng DB ghi failed «Đã bấm Post nhưng không thấy bài trên trang cá nhân» → BÁO LỖI OAN: `browser.create_post` /
+  `_find_own_post` (so 30 ký tự đầu trong JSON trang cá nhân, chờ 3–4 s) không bắt được bài. Không đăng trùng (slot đã ghi).
+  Trang còn bài «@aipass_shop_bot» 2 ngày trước — chưa rõ nguồn.
+  ĐÃ SỬA (chủ bot giao): nguyên nhân = trang cá nhân trả `can_reply: False` cho bài của mình, `posts_from_payload` bỏ bài
+  khoá reply → thêm `keep_closed=True` cho `_own_post_in_payloads` / `_find_own_post`. Sửa tay DB own_posts #13 → posted +
+  link Dfo6PxdHXry (đã thấy trên trang).
+- Reply lỗi «Không thấy ô / nút Trả lời» (13 lần, gần nhất #1506): bài gốc đã xoá / ẩn — Threads chuyển về trang chủ
+  (kiểm #1506, #1358, #1051). #1506 chờ ~20 giờ (hạn mức) mới tới lượt. `reply()` giờ báo «Bài gốc đã bị xoá hoặc ẩn»
+  khi trang không còn là bài đó; sửa error_message 3 bản ghi. Proof: 2 test mới, tests Threads 87 passed, ruff sạch.
+  Cần: `pm2 restart Threads_Growth`. Kiểm: bài 20:15 VN ghi posted có link.
+- Reply sau sửa link (từ 09:22Z): 10/10 có link (t.me); 0 Zalo — chỉ 2 reply mới sinh sau đổi Zalo (#1743, #1753), còn lại là
+  reply chờ cũ giữ Telegram → chưa đủ mẫu. followups: 5 (trước 0) — sửa _run_async chạy được. Reply failed hôm nay: 0.
+
 ## Phiên 2026-11-12 (threads-own-posts) — Sửa bài riêng + số hoàn thật trong reply (chủ bot: «làm theo thứ tự», giữ 35/ngày)
 - Kiểm trang công khai @us28qt (Chromium ẩn danh, chỉ đọc, đóng trong finally): bài deal/sale 08–12/11 KHÔNG có trên trang →
   lỗi đăng thật. Nguyên nhân: Threads giới hạn 500 ký tự; bài #1 (358) lên, #2–#12 (554–918) đều không lên.

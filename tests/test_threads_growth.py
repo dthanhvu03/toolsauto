@@ -1277,3 +1277,39 @@ def test_vi_du_hoan_that_tu_db_cashbot(tmp_path):
     now = datetime(2026, 11, 12, 9, 0, tzinfo=timezone.utc)
     assert real(str(db), now) == "MIEN Áo len cổ V giá 179k, bot báo hoàn khoảng 15k", "5 chữ đầu tên"
     assert real(str(tmp_path / "khong_co.sqlite"), now) == ""
+
+
+def test_own_post_found_although_profile_says_can_reply_false():
+    """12/11: bài riêng đã lên trang nhưng JSON trang cá nhân ghi ``can_reply: False`` → trước bị bỏ, báo lỗi oan."""
+    from app.features.threads.growth.browser import GrowthBrowser, posts_from_payload
+
+    text = "Mình check giá 30 ngày thấy 2 món này đang rẻ nhất nè mn\n- Đèn"
+    payload = {"thread_items": [{"post": {"code": "OWN1", "user": {"username": "us28qt"}, "caption": {"text": text},
+                                          "text_post_app_info": {"can_reply": False, "is_reply": False}}}]}
+    assert posts_from_payload(payload, "") == []  # tìm bài người khác vẫn bỏ bài khoá reply
+    b = GrowthBrowser.__new__(GrowthBrowser)
+    b.adapter = type("A", (), {"_own_handle": "@us28qt"})()
+    b._payloads = [payload]
+    assert b._own_post_in_payloads(text) == "https://www.threads.com/@us28qt/post/OWN1"
+
+
+def test_reply_reports_deleted_post_when_threads_redirects_home():
+    """Bài gốc bị xoá: Threads chuyển về trang chủ → báo rõ «đã bị xoá», không phải «không thấy nút Trả lời»."""
+    from app.features.threads.growth.browser import GrowthBrowser
+
+    class Page:
+        url = "https://www.threads.com/"
+
+        def goto(self, *a, **k): pass
+
+        def wait_for_timeout(self, ms): pass
+
+    adapter = type("A", (), {"page": Page(), "_page_needs_login": lambda self: False,
+                             "_find_first_visible": lambda self, *a, **k: None})()
+    b = GrowthBrowser.__new__(GrowthBrowser)
+    b.adapter, b._payloads = adapter, []
+    with pytest.raises(RuntimeError, match="đã bị xoá"):
+        b.reply("https://www.threads.com/@htvnkp/post/Dfmk8Sqn23M", "hi")
+    adapter.page.url = "https://www.threads.com/@htvnkp/post/Dfmk8Sqn23M"
+    with pytest.raises(RuntimeError, match="Không thấy ô / nút Trả lời"):
+        b.reply("https://www.threads.com/@htvnkp/post/Dfmk8Sqn23M", "hi")
