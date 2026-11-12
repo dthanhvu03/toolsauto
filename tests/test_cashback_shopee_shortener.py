@@ -79,6 +79,10 @@ def test_shorten_if_an_redir():
         # Link đơn khách (sub_id 8 ký tự) -> giữ nguyên để đối soát
         url_cust = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fp&sub_id=a1b2c3d4"
         assert shopee_shortener.shorten_if_an_redir(url_cust) == url_cust
+        # Thẻ link Zalo (chủ bot 12/11): rút gọn cả link khách, giữ đúng sub_id → subId1 (= sub1 trong utm_content)
+        m.reset_mock()
+        assert shopee_shortener.shorten_if_an_redir(url_cust, any_sub=True) == "https://s.shopee.vn/short1"
+        assert m.call_args.kwargs["sub_id"] == "a1b2c3d4"
 
         # Link bình thường không phải an_redir -> giữ nguyên
         assert shopee_shortener.shorten_if_an_redir("https://google.com") == "https://google.com"

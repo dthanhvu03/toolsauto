@@ -79,3 +79,25 @@ def test_tin_moi_ban_gui_moi_khach_da_tao_link(tmp_path):
         assert sorted(recipients(conn, NOW, "invite-v1")) == [111, 222]
     text = ANNOUNCEMENTS["invite-v1"][1]
     assert "10% hoa hồng" in text and "6 tháng" in text and "hạng" not in text.lower()
+
+
+def test_tin_ru_thu_mot_mon_chi_gui_khach_chua_tao_link(tmp_path):
+    """12/11: khách đã vào bot (quá 1 giờ) mà chưa tạo link nào; khách đã tạo link không nhận."""
+    from datetime import datetime, timedelta, timezone
+
+    from cashback_bot.messages import START_ANNOUNCE
+
+    real = datetime.now(timezone.utc)  # _callback bấm theo giờ thật
+
+    bot = _bot(tmp_path, allowed_telegram_ids=frozenset({USER, OTHER}))
+    _link(bot)  # USER đã tạo link
+    with bot.repo.connect() as conn:
+        for uid, at in ((OTHER, real - timedelta(hours=5)), (333, real - timedelta(minutes=10))):
+            conn.execute("INSERT OR REPLACE INTO telegram_users (telegram_user_id, username, created_at, last_seen_at)"
+                         " VALUES (?, NULL, ?, ?)", (uid, at.strftime("%Y-%m-%dT%H:%M:%SZ"), at.strftime("%Y-%m-%dT%H:%M:%SZ")))
+    preview = _callback(bot, ADMIN, "c:an:v:start-v1")
+    assert "Sẽ gửi: <b>1 khách</b>" in preview.text, "chỉ OTHER: USER đã có link, 333 vừa vào"
+    _callback(bot, ADMIN, "c:an:ok:start-v1")
+    ((chat, html, markup),) = _announces(bot)
+    assert chat == OTHER and html == START_ANNOUNCE and "u:p:guide" in markup
+    assert "xoá khỏi giỏ" in START_ANNOUNCE and "link của bot" in START_ANNOUNCE, "tin bán hàng có lưu ý mua"

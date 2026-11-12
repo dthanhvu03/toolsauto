@@ -12,7 +12,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -20,6 +20,8 @@ from cashback_bot.messages import (
     DEALS_ANNOUNCE_KEYBOARD,
     INVITE_ANNOUNCE,
     INVITE_ANNOUNCE_KEYBOARD,
+    START_ANNOUNCE,
+    START_ANNOUNCE_KEYBOARD,
     WALLET_ANNOUNCE,
     WALLET_ANNOUNCE_KEYBOARD,
     WATCH_ANNOUNCE,
@@ -39,10 +41,18 @@ ANNOUNCEMENTS: dict[str, tuple[str, str, Keyboard]] = {
     "wallet-v1": ("Ví hoàn tiền xem trước · điều khoản V3", WALLET_ANNOUNCE, WALLET_ANNOUNCE_KEYBOARD),
     "watch-v1": ("Theo dõi giá · deal gửi liền · ShopeeFood sắp có", WATCH_ANNOUNCE, WATCH_ANNOUNCE_KEYBOARD),
     "invite-v1": ("Mời bạn bè nhận thưởng mỗi đơn", INVITE_ANNOUNCE, INVITE_ANNOUNCE_KEYBOARD),
+    "start-v1": ("Rủ khách chưa gửi link nào thử 1 món", START_ANNOUNCE, START_ANNOUNCE_KEYBOARD),
 }
 
 # Tin chỉ đúng với một nhóm khách: mã → điều kiện SQL thêm trên telegram_user_id (chưa tin nào cần).
 AUDIENCE_SQL: dict[str, str] = {}
+# Tin cho khách CHƯA tạo link (mặc định chỉ gửi khách đã tạo link): mã → câu SQL chọn telegram_user_id.
+# Vào bot quá 1 giờ, để không nhắn người vừa bấm Start.
+AUDIENCE_FULL_SQL: dict[str, str] = {
+    "start-v1": "SELECT telegram_user_id FROM telegram_users u WHERE u.created_at <= ? AND NOT EXISTS "
+                "(SELECT 1 FROM link_requests l WHERE l.telegram_user_id = u.telegram_user_id "
+                "AND l.link_status = 'created') ORDER BY telegram_user_id",
+}
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
@@ -53,6 +63,12 @@ def history_line(before: dict, after: dict) -> str:
 
 
 def recipients(conn: sqlite3.Connection, now: datetime, key: str | None = None) -> list[int]:
+    full = AUDIENCE_FULL_SQL.get(key or "")
+    if full:
+        cutoff = (now - timedelta(hours=1)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        users = [int(r[0]) for r in conn.execute(full, (cutoff,))]
+        cfg = NotifyConfig(True)
+        return [u for u in users if customer_block_reason(conn, {"category": CATEGORY, "chat_id": u}, cfg, now) is None]
     extra = AUDIENCE_SQL.get(key or "")
     users = [int(r[0]) for r in conn.execute(
         "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created'"
@@ -105,7 +121,8 @@ class AnnounceAdmin:
 
     def _home(self, now: datetime) -> BotReply:
         lines = ["📣 <b>Tin giới thiệu tính năng</b>", "",
-                 "Gửi một lần cho khách đã từng tạo link. Bấm để xem trước rồi mới gửi.", ""]
+                 "Gửi một lần cho khách đã từng tạo link (tin «Rủ khách…»: khách chưa tạo link nào). "
+                 "Bấm để xem trước rồi mới gửi.", ""]
         rows = []
         with self.repo.connect() as conn:
             for key, (title, _text, _kb) in ANNOUNCEMENTS.items():

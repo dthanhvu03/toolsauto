@@ -33,7 +33,7 @@ from datetime import datetime, time, timedelta, timezone
 
 import requests
 
-from cashback_bot import engagement, sale_calendar
+from cashback_bot import engagement, sale_calendar, upsell
 from cashback_bot.affiliate import build_an_redir
 from cashback_bot.config import load_settings
 from cashback_bot.db import TrackingRepository, enqueue_event
@@ -328,7 +328,8 @@ def merge(current: dict[str, dict], found: dict[str, list[dict]], now: datetime)
 
 def current_deals(repo: TrackingRepository, now: datetime, fresh: timedelta = FRESH) -> tuple[dict[str, list[dict]],
                                                                                                 str | None]:
-    """Món còn hời (thấy lại trong `fresh`), admin chưa bỏ, theo danh mục, rẻ nhất trước; kèm lần thấy gần nhất."""
+    """Món còn hời (thấy lại trong `fresh`), admin chưa bỏ, theo danh mục; kèm lần thấy gần nhất.
+    Thứ tự: tổng tiết kiệm (giảm + hoàn) cao trước (PLAN-169 B), admin tắt thì rẻ nhất trước như cũ."""
     since = _stamp(now - fresh)
     removed = removed_items(repo)
     by_cat: dict[str, list[dict]] = {}
@@ -338,8 +339,9 @@ def current_deals(repo: TrackingRepository, now: datetime, fresh: timedelta = FR
             continue
         by_cat.setdefault(deal["cat"], []).append(deal)
         latest = max(latest or "", deal["seen"])
+    by_saving = upsell.saving_rank_enabled(repo)
     for rows in by_cat.values():
-        rows.sort(key=lambda d: d["price"] / d["usual"])
+        rows.sort(key=lambda d: upsell.deal_rank(d, by_saving))
     return by_cat, latest
 
 
@@ -433,6 +435,10 @@ def build(repo: TrackingRepository, service, market: MarketSearchClient, history
 # --- Tin gửi khách ----------------------------------------------------------------------------------------------
 
 
+def _badge(deal: dict, on: bool) -> str:
+    return upsell.HIGH_BADGE if on and upsell.high_cashback(deal) else ""
+
+
 def _short(name: str, limit: int = 42) -> str:
     """Bỏ nhãn khuyến mãi shop gắn ở đầu tên («[MUA 2 TẶNG 1]», «【DAILY】») rồi cắt gọn."""
     text = " ".join(PROMO_TAG.sub("", name).split()) or " ".join(name.split())
@@ -502,10 +508,12 @@ def prefill_links(deals_by_id: dict[str, dict], seen: str, limit: int = PREFILL_
 
 
 def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int], *, limit: int = PER_MESSAGE,
-                min_drop: float = 0.0, reason: str | None = None, at: str = "") -> tuple[str, list[dict]] | None:
+                min_drop: float = 0.0, reason: str | None = None, at: str = "",
+                badge: bool = False) -> tuple[str, list[dict]] | None:
     """Tin của một khách: chia đều các danh mục, tối đa `limit` món. Không có món nào thì None.
     `removed`: món admin bỏ và món đã gửi khách này trong 3 ngày. `at`: giờ dữ liệu giá («14:00»).
 
+    `badge`: món hoàn cao có nhãn 🔥 (PLAN-169 B).
     `reason` có giá trị: khách chưa chọn danh mục, bot đoán gu từ món khách từng xem (thưa hơn, chặt hơn, có nút tắt)."""
     def strong(deal: dict) -> bool:
         return deal["item_id"] not in removed and deal["price"] <= deal["usual"] * (1 - min_drop)
@@ -537,7 +545,7 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
             name = html.escape(_short(deal["name"]))
             link = deal_link(deal)
             lines.append(f"{number}. {name}: <b>{_k(deal['price'])}</b> (thường {_k(deal['usual'])}{low}) "
-                         f"· hoàn ~{_k(deal['cashback'])} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
+                         f"· hoàn ~{_k(deal['cashback'])}{_badge(deal, badge)} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
             buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 24)} ↗",
                              "url": link, "deal_id": deal["item_id"]}])
     lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
@@ -575,6 +583,7 @@ def send_round(repo: TrackingRepository, now: datetime) -> int:
     if not deals:
         return 0
     stamp, at = _stamp(now), _clock(latest)
+    badge = upsell.saving_rank_enabled(repo)
     sent = 0
     with repo.connect() as conn:
         targets = {user: (cats, None) for user, cats in subscribers(conn, now).items()}
@@ -584,8 +593,9 @@ def send_round(repo: TrackingRepository, now: datetime) -> int:
             if not quota_ok(conn, user, now):
                 continue
             skip = recently_shown(conn, user, now)
-            built = (message_for(cats, deals, skip, at=at) if reason is None else
-                     message_for(cats, deals, skip, limit=INFER_ITEMS, min_drop=INFER_MIN_DROP, reason=reason, at=at))
+            built = (message_for(cats, deals, skip, at=at, badge=badge) if reason is None else
+                     message_for(cats, deals, skip, limit=INFER_ITEMS, min_drop=INFER_MIN_DROP, reason=reason, at=at,
+                                 badge=badge))
             if built is None:
                 continue
             text, keyboard = built
@@ -605,9 +615,10 @@ FEED_ITEMS = 8
 FEED_PER_CAT = 2
 
 
-def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None, at: str = "") -> tuple[str, list]:
-    """Tin 🔥 Deal hôm nay. `pools`: món theo danh mục (rẻ nhất trước). `mine`: danh mục khách đã chọn (xếp trước).
-    `only`: chỉ xem một danh mục. `at`: giờ dữ liệu giá."""
+def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None, at: str = "",
+                 by_saving: bool = False) -> tuple[str, list]:
+    """Tin 🔥 Deal hôm nay. `pools`: món theo danh mục (đã xếp). `mine`: danh mục khách đã chọn (xếp trước).
+    `only`: chỉ xem một danh mục. `at`: giờ dữ liệu giá. `by_saving`: xếp theo tổng tiết kiệm, có nhãn hoàn cao."""
     tail = [[{"text": "⚙️ Chọn danh mục nhận tin", "callback_data": "u:dc:home"},
              {"text": "◀️ Trang chủ", "callback_data": "u:p:home"}]]
     pools = {key: rows for key, rows in pools.items() if rows and key in CATEGORIES}
@@ -620,7 +631,7 @@ def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None
     else:
         only = None
         ranked = sorted(((key, d) for key, rows in pools.items() for d in rows),
-                        key=lambda pair: (pair[0] not in mine, pair[1]["price"] / pair[1]["usual"]))
+                        key=lambda pair: (pair[0] not in mine, upsell.deal_rank(pair[1], by_saving)))
         picked, per_cat, seen = [], {}, set()
         for key, deal in ranked:
             if deal["item_id"] in seen or per_cat.get(key, 0) >= FEED_PER_CAT or len(picked) >= FEED_ITEMS:
@@ -636,7 +647,7 @@ def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None
         drop = round((deal["usual"] - deal["price"]) * 100 / deal["usual"])
         link = deal_link(deal, shorten=False)
         lines.append(f"{number}. {icon} {html.escape(_short(deal['name']))}: <b>{_k(deal['price'])}</b> "
-                     f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
+                     f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])}{_badge(deal, by_saving)} · <a href=\"{html.escape(link, quote=True)}\">🔗 Mua ngay</a>")
         buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 24)} ↗",
                          "url": link, "deal_id": deal["item_id"]}])
     lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
@@ -650,7 +661,7 @@ def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None
 
 def feed_for(repo: TrackingRepository, user: int, only: str | None, now: datetime) -> tuple[str, list]:
     pools, latest = current_deals(repo, now, FEED_FRESH)
-    return feed_message(pools, user_categories(repo, user), only, _clock(latest))
+    return feed_message(pools, user_categories(repo, user), only, _clock(latest), upsell.saving_rank_enabled(repo))
 
 
 # --- Lịch chạy --------------------------------------------------------------------------------------------------

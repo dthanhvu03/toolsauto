@@ -17,7 +17,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, referral, shop_voucher, voucher, watchlist
+from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, referral, shop_voucher, upsell, voucher, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -803,8 +803,10 @@ class CashbackService:
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
+        xtra = upsell.xtra_note_enabled(self.repo) and upsell.shows_xtra_note(quote.seller_commission_vnd, cashback)
         card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped),
-                      rank_line=self._rank_line(telegram_user_id, quote.sure_commission_vnd, resolution, moment))
+                      rank_line=self._rank_line(telegram_user_id, quote.sure_commission_vnd, resolution, moment),
+                      xtra=xtra)
         if watchlist.enabled(self.repo):
             card = replace(card, inline_keyboard=watchlist.card_row(sub_id) + (card.inline_keyboard or ()))
         if shop_voucher.enabled(self.repo) and quote.shop_id:

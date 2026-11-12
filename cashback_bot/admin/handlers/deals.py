@@ -1,7 +1,7 @@
 """/admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🔥 Deal hời (deals.py, PLAN-100): bật / tắt, lượt quét gần nhất, món đang
 hời trong kho, bỏ món.
 
-Callback: c:dl:home · c:dl:on · c:dl:off · c:dl:infer:on|off · c:dl:rm:<item> · c:dl:back:<item>. Nút lượt trưa / tối
+Callback: c:dl:home · c:dl:on · c:dl:off · c:dl:infer:on|off · c:dl:xn:on|off (PLAN-169 C) · c:dl:sv:on|off (PLAN-169 B) · c:dl:rm:<item> · c:dl:back:<item>. Nút lượt trưa / tối
 cũ (c:dl:noon:*, c:dl:skip*, c:dl:rm:<lượt>:<item>) trả «không còn hiệu lực». Ghi 📊 Lịch sử action `deals`.
 """
 
@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime
 
-from cashback_bot import deals
+from cashback_bot import deals, upsell
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
@@ -26,6 +26,10 @@ AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
 
 def history_line(before: dict, after: dict) -> str:
+    if "saving_rank" in after:
+        return f"Deal hời xếp theo tổng tiết kiệm (giảm + hoàn): {'bật' if after['saving_rank'] else 'tắt'}"
+    if "xtra_note" in after:
+        return f"Thẻ link nhắc mua đúng món (món có XTRA): {'bật' if after['xtra_note'] else 'tắt'}"
     if "infer" in after:
         return f"Deal hời cho khách chưa chọn (bot đoán gu): {'bật' if after['infer'] else 'tắt'}"
     if "noon" in after:
@@ -59,6 +63,16 @@ class DealsAdmin:
             self.repo.set_state(deals.INFER_KEY, "1" if on else "0")
             self._log(admin_id, {"infer": not on}, {"infer": on}, now)
             return self._home(now, "Đã bật gửi cho khách chưa chọn." if on else "Đã tắt gửi cho khách chưa chọn.")
+        if data in ("c:dl:xn:on", "c:dl:xn:off"):
+            on = data.endswith(":on")
+            self.repo.set_state(upsell.XTRA_NOTE_KEY, "1" if on else "0")
+            self._log(admin_id, {"xtra_note": not on}, {"xtra_note": on}, now)
+            return self._home(now, "Đã bật nhắc mua đúng món." if on else "Đã tắt nhắc mua đúng món.")
+        if data in ("c:dl:sv:on", "c:dl:sv:off"):
+            on = data.endswith(":on")
+            self.repo.set_state(upsell.SAVING_RANK_KEY, "1" if on else "0")
+            self._log(admin_id, {"saving_rank": not on}, {"saving_rank": on}, now)
+            return self._home(now, "Đã xếp deal theo tổng tiết kiệm." if on else "Đã xếp deal theo % rẻ hơn như cũ.")
         found = _ITEM.fullmatch(data)
         if found:
             item, removed = int(found.group(2)), found.group(1) == "rm"
@@ -95,6 +109,11 @@ class DealsAdmin:
             f"🤖 Khách chưa chọn, bot đoán gu: {'🟢 bật' if infer_on else '⚪ tắt'} · lúc này đủ điều kiện "
             f"{len(guessed)} khách (tối đa 2 tin / tuần, món rẻ ≥ 12%, 3 món, nhận 3 tin không tạo link thì dừng)",
             "",
+            f"📌 Thẻ link nhắc «mua đúng món, đúng shop» (chỉ món có XTRA): "
+            f"{'🟢 bật' if upsell.xtra_note_enabled(self.repo) else '⚪ tắt'}",
+            f"💸 Xếp deal theo tổng tiết kiệm (giảm giá + hoàn), món hoàn ≥ {upsell.HIGH_CASHBACK_BPS // 100}% giá có nhãn "
+            f"«🔥 hoàn cao»: {'🟢 bật' if upsell.saving_rank_enabled(self.repo) else '⚪ tắt (xếp theo % rẻ hơn)'}",
+            "",
             self._scan_line(),
             f"📤 Hôm nay đã gửi {sent_today[0]} tin cho {sent_today[1]} khách.",
         ]
@@ -119,7 +138,11 @@ class DealsAdmin:
                 buttons.append(((f"↩️ Lấy lại {deals._short(deal['name'], 22)}", f"c:dl:back:{deal['item_id']}"),))
         toggle = ("⚪ Tắt deal hời", "c:dl:off") if on else ("🟢 Bật deal hời", "c:dl:on")
         infer = ("⚪ Tắt đoán gu", "c:dl:infer:off") if infer_on else ("🤖 Bật đoán gu", "c:dl:infer:on")
-        return BotReply("\n".join(lines), inline_keyboard=((toggle, infer), *buttons, *NAV))
+        xnote = ("⚪ Tắt nhắc đúng món", "c:dl:xn:off") if upsell.xtra_note_enabled(self.repo) \
+            else ("📌 Bật nhắc đúng món", "c:dl:xn:on")
+        saving = ("⚪ Tắt xếp tiết kiệm", "c:dl:sv:off") if upsell.saving_rank_enabled(self.repo) \
+            else ("💸 Bật xếp tiết kiệm", "c:dl:sv:on")
+        return BotReply("\n".join(lines), inline_keyboard=((toggle, infer), (xnote, saving), *buttons, *NAV))
 
     def _scan_line(self) -> str:
         scan = deals.scan_record(self.repo)

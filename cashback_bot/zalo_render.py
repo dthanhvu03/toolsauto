@@ -153,8 +153,14 @@ class _Flatten(HTMLParser):
             self.link_at = (len(self.parts), self.pos)
         elif tag == "br":
             self.emit("\n")
+        elif tag == "blockquote":
+            # Zalo không có khung trích dẫn như Telegram: tách thành đoạn riêng (dòng trống trên / dưới) cho nổi.
+            self.emit("\n")
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "blockquote":
+            self.emit("\n")
+            return
         if tag in STYLE_CODES:
             for index in range(len(self.open) - 1, -1, -1):
                 if self.open[index][0] == tag:
@@ -298,6 +304,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     elif body == with_tiktok(HUONGDAN):
         body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
     text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip(), footnotes=_footnotes(body))
+    text = text.rstrip("\n")  # đoạn trích dẫn cuối tin để lại dòng trống thừa (không có style ở đây)
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -312,7 +319,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         if text:
             add("\n\n")
         add(lead, bold=True)
-        add(f"\n{shorten_if_an_redir(reply.button_url)}")
+        add(f"\n{shorten_if_an_redir(reply.button_url, any_sub=True)}")
     choices = menu_choices(reply)
     if choices:
         add("\n\n")

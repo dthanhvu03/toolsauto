@@ -112,8 +112,11 @@ def _call_bridge(url: str, sub_id: str, timeout: float) -> Optional[str]:
     return None
 
 
-def shorten_if_an_redir(url: str, timeout: float = DEFAULT_TIMEOUT) -> str:
-    """Nếu URL là an_redir cho kênh sale / voucher (AUTOSALE, VOUCHERS), rút gọn thành s.shopee.vn/XXXXX."""
+def shorten_if_an_redir(url: str, timeout: float = DEFAULT_TIMEOUT, any_sub: bool = False) -> str:
+    """Nếu URL là an_redir cho kênh sale / voucher (AUTOSALE, VOUCHERS), rút gọn thành s.shopee.vn/XXXXX.
+
+    any_sub: rút gọn cả link mua riêng của khách (sub_id từng link) — Zalo in link ra chữ, link dài 6 dòng (chủ bot 12/11).
+    Link ngắn tạo bằng batchCustomLink kèm đúng sub_id nên đơn vẫn về đúng link. Lỗi / cầu nối tắt: giữ link dài."""
     try:
         parsed = urllib.parse.urlparse(url)
         host = (parsed.hostname or "").lower()
@@ -121,7 +124,7 @@ def shorten_if_an_redir(url: str, timeout: float = DEFAULT_TIMEOUT) -> str:
             qs = urllib.parse.parse_qs(parsed.query)
             origin = qs.get("origin_link", [None])[0]
             sub_id = qs.get("sub_id", ["AUTOSALE"])[0]
-            if origin and sub_id in {"AUTOSALE", "VOUCHERS"}:
+            if origin and (any_sub or sub_id in {"AUTOSALE", "VOUCHERS"}):
                 short = shorten_shopee_url(origin, sub_id=sub_id, timeout=timeout)
                 if short:
                     return short

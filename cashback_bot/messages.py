@@ -223,7 +223,8 @@ def rank_card_line(rank_code: str, bonus_vnd: int, gold_extra_vnd: int) -> str |
     if rank_code == "BRONZE":
         return f"🏅 Lên 🥇 Vàng, món này hoàn thêm {format_vnd(gold_extra_vnd)} · /hang" if gold_extra_vnd > 0 else None
     if bonus_vnd > 0:
-        return f"🏅 Hạng {RANK_NAMES[rank_code]}: đã cộng thêm {format_vnd(bonus_vnd)} so với hạng Đồng"
+        # Chủ bot 12/11: «đã cộng thêm» khiến khách tưởng hoàn = số trên + số này → nói rõ đã nằm trong số hoàn.
+        return f"🏅 Hạng {RANK_NAMES[rank_code]}: số hoàn trên <b>đã gồm</b> {format_vnd(bonus_vnd)} thưởng hạng"
     return None
 
 
@@ -350,7 +351,12 @@ def source_text(text: str, conversion_id: str | None) -> str:
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
 # Chủ bot 2026-11-03: món đã nằm trong giỏ trước khi bấm link thì sàn không tính hoa hồng → nhắc ngay trên thẻ link.
-CART_HINT = "🛒 Món đã có trong giỏ: <b>xoá khỏi giỏ trước</b> rồi mới bấm link."
+# 12/11: Telegram không đổi được cỡ chữ → khung trích dẫn (ô nền có vạch trái) + ⚠️ để khách để ý; 🛒 cũ lẫn với nút Mua.
+# Zalo bỏ khung, giữ chữ đậm. Giữ một dòng (test đếm dòng thẻ).
+CART_HINT = ("<blockquote>⚠️ <b>MÓN ĐÃ CÓ TRONG GIỎ: XOÁ KHỎI GIỎ TRƯỚC</b> rồi mới bấm link. "
+             "Không xoá thì có thể <b>không được hoàn</b>.</blockquote>")
+# PLAN-169 C: món có phần shop góp (XTRA) — mua món / shop khác thì phần này mất, chỉ còn hoa hồng Shopee.
+XTRA_HINT = "📌 Mức hoàn này chỉ có khi mua <b>đúng món, đúng shop này</b>."
 # Trang 🛡️ Lưu ý (chủ bot 2026-10-31: thẻ link chỉ còn tên, giá, số hoàn, nút mua; mọi lưu ý gom về đây). Gửi thành tin
 # riêng, không đè thẻ link: popup Telegram tối đa 200 ký tự, không đủ chỗ.
 BUY_RULE = "• Bấm nút <b>🛒 Mua</b> của bot rồi đặt hàng. Mua thẳng trong app sẽ không được hoàn."
@@ -520,7 +526,7 @@ def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, v12: bool = False,
                  tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
-                 rank_line: str | None = None) -> BotReply:
+                 rank_line: str | None = None, xtra: bool = False) -> BotReply:
     """Thẻ link: tên, giá tham khảo, số hoàn, nhắc xoá món trong giỏ (khi có hoàn), lời bấm nút ngay trên nút.
     Lưu ý khác ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
@@ -531,6 +537,7 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
         amount,
         *([rank_line] if rank_line and cashback_vnd > 0 else []),
+        *([XTRA_HINT] if xtra and cashback_vnd > 0 else []),
         *([CART_HINT] if cashback_vnd > 0 else []),
         TIKTOK_BUY_HINT if tiktok else BUY_HINT,
     ]
@@ -601,14 +608,15 @@ def food_link_reply(affiliate_url: str | None = None) -> BotReply:
 
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False,
-                   extra_vnd: int = 0, capped: bool = False, rank_line: str | None = None) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped, rank_line)
+                   extra_vnd: int = 0, capped: bool = False, rank_line: str | None = None,
+                   xtra: bool = False) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped, rank_line, xtra)
 
 
 def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
                        tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
-                       rank_line: str | None = None) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped, rank_line)
+                       rank_line: str | None = None, xtra: bool = False) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped, rank_line, xtra)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------
@@ -1421,6 +1429,16 @@ INVITE_ANNOUNCE = (
     "Phiền thì gõ /thongbao tắt nha 🫶"
 )
 INVITE_ANNOUNCE_KEYBOARD: Keyboard = ((("🤝 Lấy link mời bạn", "u:p:invite"),),)
+# 12/11 (chủ bot: mục tiêu 20 khách dùng thật / bot tuần này): khách đã vào bot mà chưa gửi link nào. Có lưu ý mua
+# (xoá giỏ → mở lại bằng link bot → thêm giỏ) như mọi tin bán hàng.
+START_ANNOUNCE = (
+    "👋 <b>Bạn đã vào bot hoàn tiền mà chưa thử món nào nè!</b>\n\n"
+    "Thử 30 giây: mở món bạn định mua trên Shopee → <b>Chia sẻ</b> → <b>Sao chép liên kết</b> → dán vào đây. "
+    "Bot báo luôn món đó được hoàn khoảng bao nhiêu, không cần đăng ký gì.\n\n"
+    "🛒 Món đã có trong giỏ thì xoá khỏi giỏ, mở lại bằng link của bot rồi mới thêm giỏ, để được ghi nhận hoàn.\n"
+    "Phiền thì gõ /thongbao tắt nha 🫶"
+)
+START_ANNOUNCE_KEYBOARD: Keyboard = ((("📖 Cách dùng", "u:p:guide"),),)
 DEALS_PICK_HINT = "👉 Bấm link hoặc nút bên dưới để mở Shopee mua ngay:"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"
