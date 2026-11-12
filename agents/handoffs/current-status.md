@@ -9,7 +9,11 @@
 - Reply lỗi «Không thấy ô / nút Trả lời» (13 lần, gần nhất #1506): bài gốc đã xoá / ẩn — Threads chuyển về trang chủ
   (kiểm #1506, #1358, #1051). #1506 chờ ~20 giờ (hạn mức) mới tới lượt. `reply()` giờ báo «Bài gốc đã bị xoá hoặc ẩn»
   khi trang không còn là bài đó; sửa error_message 3 bản ghi. Proof: 2 test mới, tests Threads 87 passed, ruff sạch.
-  Cần: `pm2 restart Threads_Growth`. Kiểm: bài 20:15 VN ghi posted có link.
+  Chủ bot đã restart Threads_Growth 12:03Z — chạy ổn, đăng nhập OK. Kiểm: bài 20:15 VN ghi posted có link.
+- Khách trả lời «sợ ấn vào link lạ» (chủ bot thấy trên Threads; bảng followups chưa có — bot mở 6 reply / 20 phút):
+  `content.write_followup` prompt thêm: người sợ link → không đưa link, tự mở Telegram gõ tìm tên bot (không @), bot không hỏi
+  mật khẩu / OTP / thẻ (+ ý riêng Cashbot / Store `_SAFE_NOTE`). Trả lời lại chỉ qua clean_reply nên không bị gắn link.
+  Proof: test mới, Threads 88 passed. Cần: `pm2 restart Threads_Growth`.
 - Reply sau sửa link (từ 09:22Z): 10/10 có link (t.me); 0 Zalo — chỉ 2 reply mới sinh sau đổi Zalo (#1743, #1753), còn lại là
   reply chờ cũ giữ Telegram → chưa đủ mẫu. followups: 5 (trước 0) — sửa _run_async chạy được. Reply failed hôm nay: 0.
 

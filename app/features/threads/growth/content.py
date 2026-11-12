@@ -259,6 +259,12 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
 
 _NOT_WORTH = re.compile(r"^\W*$")
 
+# Người sợ bấm link lạ (chủ bot 12/11): nói điều bot thật sự KHÔNG làm, để họ tự tìm bot thay vì bấm link.
+_SAFE_NOTE = {
+    TargetBot.CASHBOT: "chỉ cần dán link món Shopee vào bot, tiền hoàn rút về đúng tài khoản ngân hàng của mình.",
+    TargetBot.AI_STORE: "xem giá trước rồi mới nạp, chuyển khoản qua mã QR ngân hàng, bot gửi acc tự động.",
+}
+
 
 async def write_followup(bot: TargetBot, our_reply: str, comment: str) -> tuple[str, Optional[str]]:
     """Trả lời người vừa reply mình → ``("answer", câu)`` · ``("skip", None)`` không cần trả lời (cảm ơn, chê, spam…)
@@ -277,6 +283,8 @@ Nếu họ hỏi / tò mò / muốn thử về {profile.name} ({profile.handle})
 «link đâu» — thì trả lời ngắn gọn, đúng câu hỏi, thật thà (bot đang chạy thật; tiền hoàn là ước tính, về ví trong bot rồi rút
 về tài khoản ngân hàng). Hỏi cách dùng thì nhắc: dán link món vào bot, bấm nút Mua của bot rồi đặt; món có sẵn
 trong giỏ thì xoá đi, mở lại bằng link bot rồi mới thêm giỏ. Cần link thì đưa: {link}
+Nếu họ ngại / sợ bấm link lạ, sợ lừa đảo — KHÔNG đưa link: đồng cảm («cẩn thận vậy là đúng á»), bảo họ tự mở Telegram,
+gõ tìm {profile.handle.lstrip("@")} (viết đúng như vậy, không có @); bot không hỏi mật khẩu / mã OTP / thông tin thẻ, {_SAFE_NOTE[bot]}
 Nếu họ chỉ cảm ơn / thả cảm xúc / chê / cãi / spam / bán hàng cạnh tranh / không liên quan thì chỉ xuất đúng chữ: SKIP
 
 Văn phong: 1–2 câu, tối đa 200 ký tự, như người thật nhắn qua lại, teencode vừa phải, không quảng cáo, không chữ «VietQR».

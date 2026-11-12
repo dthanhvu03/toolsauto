@@ -1313,3 +1313,23 @@ def test_reply_reports_deleted_post_when_threads_redirects_home():
     adapter.page.url = "https://www.threads.com/@htvnkp/post/Dfmk8Sqn23M"
     with pytest.raises(RuntimeError, match="Không thấy ô / nút Trả lời"):
         b.reply("https://www.threads.com/@htvnkp/post/Dfmk8Sqn23M", "hi")
+
+
+def test_write_followup_prompt_handles_fear_of_links(monkeypatch):
+    """Khách sợ bấm link lạ (12/11): prompt dặn không đưa link, tự tìm bot trên Telegram, bot không hỏi mật khẩu / OTP."""
+    from app.features.threads.growth import content
+    from app.features.threads.growth.config import TargetBot
+
+    seen = {}
+
+    async def fake_ai(prompt, min_len=20):
+        seen["p"] = prompt
+        return "cẩn thận vậy là đúng á b, b mở Telegram gõ tìm zt_shopee_bot là ra nha"
+
+    monkeypatch.setattr(content, "_ai", fake_ai)
+    verdict, text = asyncio.run(content.write_followup(TargetBot.CASHBOT, "t dán link qua bot", "sợ ấn vào link lạ lắm"))
+    assert verdict == "answer" and "t.me" not in text
+    assert "sợ bấm link lạ" in seen["p"] and "KHÔNG đưa link" in seen["p"] and "gõ tìm zt_shopee_bot" in seen["p"]
+    assert "OTP" in seen["p"] and "tài khoản ngân hàng" in seen["p"]
+    asyncio.run(content.write_followup(TargetBot.AI_STORE, "x", "sợ link lạ"))
+    assert "gõ tìm aipass_shop_bot" in seen["p"] and "mã QR" in seen["p"]
