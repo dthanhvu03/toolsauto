@@ -1,3 +1,97 @@
+## Phiên 2026-11-12 (threads-own-posts) — Sửa bài riêng + số hoàn thật trong reply (chủ bot: «làm theo thứ tự», giữ 35/ngày)
+- Kiểm trang công khai @us28qt (Chromium ẩn danh, chỉ đọc, đóng trong finally): bài deal/sale 08–12/11 KHÔNG có trên trang →
+  lỗi đăng thật. Nguyên nhân: Threads giới hạn 500 ký tự; bài #1 (358) lên, #2–#12 (554–918) đều không lên.
+  Bài mới nhất trên trang (2 ngày trước) chỉ có chữ «@aipass_shop_bot» — chưa rõ nguồn.
+- Sửa content.py: prompt ≤ 380 ký tự, 4–6 dòng, 2 món / bài (trước 3); `fit_post` rút về ≤ POST_LIMIT 470 (lưu ý giỏ dài →
+  CART_NOTE; bỏ dòng phụ; bỏ món từ cuối, giữ ≥ 1; giữ dòng đầu / cuối / giỏ); «@zt_shopee_bot» → «bot Tele».
+  Thử trên 11 bài lỗi cũ: 554–918 → 394–470 ký tự, đều còn lưu ý giỏ + link.
+- Khung bài riêng: growth.own_post_times «11:45, 17:30, 20:15» (cũ mặc định 11:45, 20:15). Kho deal: 22 món mới.
+- Reply Cashbot: `evaluator.real_example()` lấy ngẫu nhiên món khách tạo link 7 ngày qua (≥ 3.000đ hoàn, chỉ đọc DB) →
+  «Nước giặt OMO giá 195k, bot báo hoàn khoảng 5k»; prompt dặn đổi cách nói, nói cụ thể.
+- Proof: tests Threads 85 passed; ruff sạch. Cần: `pm2 restart Threads_Growth`. Kiểm: bài 17:30 VN hôm nay lên trang.
+- Mục 4 (ảnh rút tiền thật): chưa có lượt rút nào (cashback_payouts rỗng) — chờ lượt rút đầu.
+- Sau restart 09:22Z: chạy ổn, 0 lỗi asyncio; #1701 (reply chờ cũ) đăng có link t.me thay @handle. Reply mới #1743 (Zalo)
+  bị câu cụt «dán link qua để…» (clean_reply gỡ link AI đặt giữa câu rồi gắn cuối) → sửa `with_link` giữ link đúng chỗ;
+  sửa tay actual_reply #1743 (đang approved). 85 passed. Cần restart Threads_Growth lần nữa.
+
+## Phiên 2026-11-12 (threads-zalo) — Reply Cashbot dẫn một nửa về bot Zalo (chủ bot gửi link zalo.me/2175525805361761559)
+- Chủ bot đã restart 08:58Z (cashback-bot, cashback-zalo, Threads_Growth) — có link + sửa trả lời người comment.
+- Mới: `config.CASHBOT_ZALO_URL`, `ZALO_SHARE = 0.5`; `GrowthEvaluator.generate_reply(channel=)` — Cashbot bốc Zalo 50%,
+  prompt nói «bot Zalo «Bot Săn Hoàn Tiền»» + link zalo.me; ai_analysis ghi «· Zalo». AI Store luôn Telegram. Reply đang chờ
+  (link_for) giữ Telegram. Lý do: Cashbot ra khách 2–5% reply, Store 30–60% → nghi khách Shopee ít dùng Telegram.
+- Đo: link Zalo không có mã nguồn → so số reply có «zalo.me» / ngày với khách Zalo mới / ngày (ID âm, «tự vào»).
+- Proof: tests Threads 83 passed (test mới Zalo; autouse cố định ZALO_SHARE=0). Cần: `pm2 restart Threads_Growth` lần nữa.
+
+## Phiên 2026-11-12 (threads-keywords) — Từ khoá tìm bài Threads (chủ bot: «cần kéo khách ở threads»)
+- Cashbot: bỏ 3 từ khoá 11/11 (đã qua) → thêm sale 12.12, săn sale 12/12, giỏ hàng shopee, xin mã freeship, review shopee.
+  Cũ: «săn sale shopee, mã giảm giá shopee, voucher shopee, áp mã shopee, mua shopee hoàn tiền, voucher tiktok shop,
+  tiết kiệm tiền shopee, săn sale 11/11, sale 11.11 shopee, giỏ hàng 11/11».
+- AI Store (trước dùng mặc định code): bỏ «mua midjourney», «tài khoản elsa speak» (shop KHÔNG bán) → thêm canva pro giá rẻ,
+  gemini pro, tài khoản gemini, office 365 bản quyền, duolingo super (shop có bán). Ghi qua settings.upsert_setting
+  (growth.keywords_*), có hiệu lực vòng quét sau. Muốn trả lại AI Store mặc định: xoá override growth.keywords_ai_store.
+
+## Phiên 2026-11-12 (goal-20) — Mục tiêu chủ bot: hết CN 15/11 mỗi bot 20 khách mới + theo dõi khách dùng thật
+- Từ T2 09/11: Cashbot mới 17 (TG 10 + Zalo 7), 8 người tạo link, 6 có đơn; AI Store mới 17, chỉ 3 người mua (14 chưa nạp lần nào).
+- Chủ bot duyệt 4 việc: (1) nhắn khách chưa dùng, (2) ưu đãi đơn đầu AI Store, (3) nhắc Mời bạn, (4) nâng hạn mức Threads.
+- ĐÃ LÀM (4): storage/db/config/threads_growth_accounts.json us28qt 35/ngày 5/giờ, anlinh 12/ngày 3/giờ (bản cũ ở scratchpad
+  threads_growth_accounts.before-20261112.json). Worker đọc lại mỗi vòng.
+- ĐÃ LÀM (1, Cashbot): tin giới thiệu mới `start-v1` (START_ANNOUNCE, có lưu ý xoá giỏ) cho khách CHƯA tạo link, vào bot quá
+  1 giờ (`AUDIENCE_FULL_SQL`). Số thật: 17 khách (12 TG, 5 Zalo). Chủ bot bấm gửi: /admin → Cài đặt → Nhắc mùa sale → 📣 Tin
+  giới thiệu. (3): invite-v1 đã gửi 22 khách 05/11, còn 11 khách chưa nhận → chủ bot bấm gửi tiếp, không cần code.
+- (2) Chủ bot: KHÔNG ưu đãi («tiền đâu anh cho ưu đãi»). (1, Store): lệnh mới `python -m store_bot.nudge` (chạy thử) /
+  `--send` (gửi thật): khách vào quá 1 giờ, chưa nạp paid, chưa đơn done, chưa tắt tin; khoá state `nudge:start-v1:<id>`;
+  gợi Canva Pro 1 tháng 1.100đ (nút p:9, top, noff). Chạy thử thật: 40 khách. CHƯA GỬI — chờ chủ bot duyệt câu chữ.
+  tests/test_store_nudge.py + test_store_bot 99 passed.
+- Proof: tests/test_cashback_announce.py 5 passed. Cần: `systemctl restart cashback-bot cashback-zalo`, `pm2 restart Threads_Growth`.
+
+## Phiên 2026-11-12 (threads-link-fix) — Reply luôn có link + sửa lỗi văng vòng khi có người trả lời (chủ bot giao trực tiếp)
+- ĐÍNH CHÍNH phiên threads-check: reply giảm từ 08/11 chủ yếu do hạn mức 25 reply / 24 giờ chủ bot yêu cầu 07/11
+  («hạn chế cp»; log: «@us28qt: đủ 25 reply / 24 giờ»), không phải do bộ lọc AI.
+- Link mất từ 08/11 = tác dụng phụ PLAN-163 (prompt thêm «nhắc @handle như cách mình đã làm» → AI bỏ link; dòng link vốn
+  «chỉ chèn nếu thấy tự nhiên»). «@zt_shopee_bot» trên Threads là gắn thẻ tài khoản Threads, không mở bot.
+  Sửa `evaluator.with_link` / `link_for`: thay lần nhắc @handle đầu bằng link ?start= đúng biến thể, không có thì gắn cuối;
+  prompt bắt buộc link; câu mẫu dự phòng cũng có link; worker gắn link cho reply đang chờ đăng (cập nhật actual_reply).
+- LỖI BACKEND đã sửa: `worker.followups` gọi asyncio.run() trong khối Playwright → «asyncio.run() cannot be called from
+  a running event loop» mỗi khi có người trả lời reply (từ PLAN-167 đợt 2 đọc được người trả lời). Từ 10/11 17:05: 174 vòng
+  văng / 18 vòng báo xong. Hậu quả: không ai được trả lời lại (followups = 0), An Linh (xếp sau us28qt) bị bỏ lượt mỗi
+  vòng văng. Sửa: `_run_async` chạy coroutine ở luồng riêng.
+- Proof: tests/test_threads_growth.py + login 82 passed (2 test mới: with_link, _run_async trong loop đang chạy); ruff sạch.
+- Cần: `pm2 restart Threads_Growth`. Chưa commit. Theo dõi 1 tuần: tỉ lệ reply có link bị xoá (mẫu 09/11: 6/30 có link
+  biến mất, 0/20 không link) so với khách có mã threads_*.
+
+## Phiên 2026-11-12 (threads-check) — Kiểm kéo khách Threads (chỉ đọc DB)
+- Reply đã đăng: 06/11 79 · 07/11 142 · 08/11 16 · 09/11 23 · 10/11 26 · 11/11 33 · 12/11 15 (tới 15h). anlinh (Store) chạy từ
+  10/11: 13 reply. Ứng viên tăng (300–400/ngày) nhưng ~87% bị loại (điểm <20: bài chào hàng / người bán).
+- Từ 08/11 reply hầu như không còn link t.me (chỉ ghi @zt_shopee_bot / @aipass_shop_bot) → khách vào không mang mã nguồn,
+  bị đếm «tự vào». Có mã threads 08–12/11: Store 10, Cashbot 2. «Tự vào» 09–11/11 tăng: Store 11, Cashbot TG 7 (trước đó ~1/ngày)
+  → ước Threads thật ~21 Store + ~9 Cashbot. Tổng có mã từ 06/11: Store 34 (4 có đơn, 56.400đ), Cashbot 11 (3 dùng, 1 đơn).
+- Lỗi vẫn mở (backend, cần PLAN Anti/Codex): bài riêng us28qt failed 9/9 từ 08/11 («không thấy bài trên trang cá nhân»);
+  bảng followups vẫn 0.
+- Đề xuất cho chủ bot: hỏi «Bạn biết bot từ đâu?» một chạm khi /start không mã để đo lại nguồn.
+
+## Phiên 2026-11-12 (high-commission) — PLAN-169 kéo khách sang món hoàn cao: XONG C + B, A chờ chốt
+- Chủ bot duyệt hướng: giữ link dài an_redir trên Telegram; C → B → A, mỗi mục một công tắc ở /admin → 🔥 Deal hời.
+- C: thẻ link món có XTRA (`seller_commission_vnd > 0`, có hoàn) thêm dòng «📌 Mức hoàn này chỉ có khi mua đúng món,
+  đúng shop này.» Món thường giữ thẻ cũ. B: deal xếp theo tổng tiết kiệm (giảm + hoàn), món hoàn ≥ 4% giá có nhãn
+  «🔥 hoàn cao». File: cashback_bot/upsell.py (mới), deals.py, messages.py, service.py, admin/handlers/deals.py.
+- Proof: tests/test_cashback_plan169.py 6 passed; 1219 passed + 1 hỏng sẵn (test_b9 phụ thuộc giờ thật); ruff sạch.
+- Sửa thêm (chủ bot gửi ảnh thẻ): dòng hạng «đã cộng thêm 2.151đ so với hạng Đồng» khiến khách tưởng 15.057 + 2.151 →
+  đổi thành «🏅 Hạng 🥇 Vàng: số hoàn trên đã gồm 2.151đ thưởng hạng», và đặt dòng hạng sát số hoàn, dòng 📌 xuống dưới.
+  1220 passed + 1 hỏng sẵn.
+- Chủ bot muốn khách để ý dòng nhắc giỏ: Telegram không đổi cỡ chữ → CART_HINT thành khung trích dẫn (<blockquote>),
+  ⚠️ thay 🛒 (lẫn với nút Mua), viết hoa «MÓN ĐÃ CÓ TRONG GIỎ: XOÁ KHỎI GIỎ TRƯỚC», thêm «Không xoá thì có thể không được
+  hoàn». Zalo bỏ khung, giữ chữ đậm. 1220 passed + 1 hỏng sẵn.
+- Zalo (chủ bot gửi ảnh): thẻ link in nguyên link an_redir dài 6 dòng — thẻ Zalo CHƯA BAO GIỜ rút gọn link khách
+  (shorten_if_an_redir chỉ rút AUTOSALE/VOUCHERS). Sửa: `shorten_if_an_redir(..., any_sub=True)` cho link mua trong
+  zalo_render; cầu nối gửi subId1 = sub_id (an_redir cũng là sub1 → utm_content) nên đơn vẫn khớp link. Lỗi / cầu nối tắt
+  → giữ link dài. Thêm: đoạn <blockquote> trên Zalo thành đoạn riêng có dòng trống. KIỂM: đơn Zalo đầu tiên qua link ngắn
+  phải khớp matched_link_id (chưa có đơn nào từ link ngắn để chứng minh). Zalo trả thẻ chậm thêm ~2–4,5 s.
+- Cần: `systemctl restart cashback-bot cashback-zalo`. Chưa commit.
+- A (gợi ý món tương tự sau hoàn rẻ hơn) CHƯA làm: cần chủ bot chốt nguồn tìm món (AddLiveTag market.php có sort=comm_rate,
+  không tốn quota nguồn, nhưng chưa biết trả giá/% hoa hồng không; tính số hoàn chính xác phải gọi product-data mỗi món).
+- Next: chủ bot restart → xem 1 thẻ món XTRA + /deal; sau ~1 tuần so tỷ lệ đơn giữ XTRA (link_requests.seller_commission_vnd
+  vs shopee_conversions) trước / sau.
+
 ## Phiên 2026-11-12 (shopee-mcp-video) — thử lấy món trong link video Shopee qua shopee-mcp (chủ bot cho phép)
 - Sửa NGOÀI repo (chủ bot cho phép): `C:\Users\Admin\AppData\Roaming\npm\node_modules\@bintangtimurlangit\shopee-mcp\build\index.js`
   thêm `GET /api/video_products?url=` (cầu nối 9224, chỉ đọc, dùng withPage chung khoá). Bản gốc: `index.js.bak-20261112`.
