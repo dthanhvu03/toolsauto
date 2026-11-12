@@ -21,6 +21,7 @@ import random
 import signal
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
@@ -44,7 +45,7 @@ from app.features.threads.growth.config import (
     load_worker_config,
     save_account_role,
 )
-from app.features.threads.growth.evaluator import GrowthEvaluator
+from app.features.threads.growth.evaluator import GrowthEvaluator, link_for
 from app.features.threads.growth.runner import GrowthRunner
 from app.features.threads.growth.scanner import ScannedPost, is_vietnamese
 from app.utils.logger import setup_shared_logger
@@ -117,6 +118,16 @@ class CycleReport:
     def as_dict(self) -> Dict:
         return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items),
                 "own_posts": list(self.own_posts), "followups": list(self.followups)}
+
+
+def _run_async(coro):
+    """Chạy coroutine từ trong khối trình duyệt Playwright (đã có event loop chạy ở luồng này → asyncio.run() lỗi).
+
+    Lỗi 10–12/11: mỗi lần có người trả lời reply của mình, vòng worker văng «asyncio.run() cannot be called from a
+    running event loop» (240 / 378 vòng) → không ai được trả lời lại, bảng followups = 0, tài khoản sau trong vòng
+    bị bỏ lượt. Chạy ở luồng riêng có loop riêng."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 class GrowthWorker:
@@ -279,6 +290,11 @@ class GrowthWorker:
                     logger.info("growth: bỏ #%s — đã reply @%s gần đây", post["id"], post["author"])
                     continue
                 text = post.get("actual_reply") or post["suggested_reply"]
+                # Reply viết trước 12/11 nằm hàng chờ chưa có link: gắn link đúng mã nguồn trước khi đăng.
+                linked = link_for(text, post["target_bot"], post["variant"])
+                if linked != text:
+                    self.runner.storage.update_status(post["id"], "approved", actual_reply=linked)
+                    text = linked
                 try:
                     url = browser.reply(post["post_url"], text)
                 except ThreadsSessionInvalidError:
@@ -394,7 +410,7 @@ class GrowthWorker:
                     if storage.followup_seen(c.thread_id):
                         continue
                     our = target.get("actual_reply") or target["suggested_reply"]
-                    verdict, text = asyncio.run(content.write_followup(TargetBot(target["target_bot"]), our, c.content))
+                    verdict, text = _run_async(content.write_followup(TargetBot(target["target_bot"]), our, c.content))
                     if verdict == "error":
                         ai_down = True  # AI lỗi: để lần sau (không đánh dấu đã kiểm reply này)
                         break

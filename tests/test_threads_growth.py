@@ -17,6 +17,8 @@ from app.features.threads.growth.runner import GrowthRunner
 from app.features.threads.growth.scanner import ScannedPost, ThreadsScanner, is_vietnamese
 from app.features.threads.growth.storage import GrowthStorage
 
+REAL_EXAMPLE = evaluator.real_example  # bản thật, trước khi fixture autouse thay bằng hàm rỗng
+
 LIMITS = GrowthLimits(
     max_replies_per_hour=2, max_replies_per_day=3, min_delay_sec=180, max_delay_sec=420, min_relevance=40
 )
@@ -45,6 +47,13 @@ def fake_ai(monkeypatch):
 
     monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_gen))
     return calls
+
+
+@pytest.fixture(autouse=True)
+def telegram_only(monkeypatch):
+    """Reply Cashbot bốc Zalo / Telegram ngẫu nhiên (12/11): test cố định Telegram, test Zalo bật riêng."""
+    monkeypatch.setattr(evaluator, "ZALO_SHARE", 0.0)
+    monkeypatch.setattr(evaluator, "real_example", lambda *a, **k: "")  # không đọc DB Cashbot thật
 
 
 @pytest.fixture(autouse=True)
@@ -179,7 +188,7 @@ def test_switch_regenerates_with_ai(runner):
     pid = asyncio.run(runner.ingest_scanned_post(ScannedPost("t1", "u", "a", "Săn sale Shopee nhận mã giảm giá", "k")))
     post = asyncio.run(runner.switch_variant(pid, ABVariant.VARIANT_B))
     assert post["variant"] == "B"
-    assert post["suggested_reply"] == "Câu trả lời AI cho biến thể B nè"
+    assert post["suggested_reply"] == "Câu trả lời AI cho biến thể B nè https://t.me/zt_shopee_bot?start=threads_cb_tier", "luôn gắn link (12/11)"
     assert asyncio.run(runner.switch_variant(999, ABVariant.VARIANT_A)) is None
 
 
@@ -423,7 +432,9 @@ def test_worker_cycle_filters_ingests_and_posts(make_worker, runner):
     assert report.scanned == 5 and report.ingested == 2
     assert report.auto == 1 and report.pending == 1
     assert report.posted == 1 and fb.replies[0][0].endswith("/P1")
+    assert "https://t.me/" in fb.replies[0][1] and "?start=threads_" in fb.replies[0][1], "reply luôn có link bot"
     p1 = runner.storage.get_post_by_id(1)
+    assert p1["actual_reply"] == fb.replies[0][1] or p1["suggested_reply"] == fb.replies[0][1]
     assert p1["status"] == "posted" and p1["reply_url"].endswith("/P1/reply")
     assert n.pending == []  # mặc định tự động hoàn toàn: không hỏi duyệt trên Telegram
     assert any(s.startswith("cycle") for s in n.sent)
@@ -637,6 +648,26 @@ def test_clean_reply_fixes_glued_links():
     out = evaluator.clean_reply("ghé t.me/zt_shopee_bot?start=sai nha\nb", url)
     assert out == f"ghé nha b {url}"
     assert evaluator.clean_reply("không có link nha b", url) == "không có link nha b"
+
+
+def test_with_link_thay_ten_bot_bang_link():
+    """Chủ bot 12/11: từ 08/11 reply chỉ ghi @zt_shopee_bot (trên Threads là gắn thẻ tài khoản Threads) → luôn có link."""
+    url = "https://t.me/zt_shopee_bot?start=threads_cb_tier"
+    out = evaluator.with_link("t toàn quăng link qua @zt_shopee_bot để hoàn tiền nha", url, "@zt_shopee_bot")
+    assert out == f"t toàn quăng link qua {url} để hoàn tiền nha"
+    assert evaluator.with_link("t dùng con bot hoàn tiền á.", url, "@zt_shopee_bot") == f"t dùng con bot hoàn tiền á {url}"
+    assert evaluator.with_link(f"vào {url} nha", url, "@zt_shopee_bot").count(url) == 1, "đã có link: không gắn thêm"
+    assert evaluator.with_link("qua @ZT_SHOPEE_BOT, @zt_shopee_bot", url, "@zt_shopee_bot").count(url) == 1
+    assert evaluator.with_link("hỏi @zt_shopee_bot_fake", url, "@zt_shopee_bot").endswith(url), "không thay nhầm tên khác"
+    queued = evaluator.link_for("qua @aipass_shop_bot lấy acc", "ai_store", "A")
+    assert "https://t.me/aipass_shop_bot?start=threads_ai_" in queued and "@aipass_shop_bot" not in queued
+    assert evaluator.link_for("x", "khong_co", "A") == "x"
+    # AI đặt link ngay trong câu: giữ đúng chỗ (12/11 #1743 bị gỡ link → «dán link qua để…»)
+    zalo = "https://zalo.me/2175525805361761559"
+    assert evaluator.with_link(f"dán link qua {zalo} để đc hoàn nha", zalo, "@zt_shopee_bot") == \
+        f"dán link qua {zalo} để đc hoàn nha"
+    assert evaluator.with_link("qua bot t.me/zt_shopee_bot?start=sai, hoàn luôn", url, "@zt_shopee_bot") == \
+        f"qua bot {url}, hoàn luôn"
 
 
 def _bot_dbs(tmp_path):
@@ -1170,3 +1201,79 @@ def test_replies_to_me_reads_logged_in_blocks_without_thread_items():
     assert len(wide) == 2
     found = [p for payload in wide for p in browser.replies_to_me(payload, "us28qt")]
     assert [(p.author, p.thread_id) for p in found] == [("vivian_global_realty", "Dffpjy7EzoL")]
+
+
+def test_run_async_chay_duoc_trong_loop_dang_chay():
+    """Lỗi 10–12/11: trả lời người comment gọi asyncio.run() trong khối Playwright (đã có loop) → văng cả vòng."""
+    import asyncio
+
+    async def answer():
+        return "answer", "ok nè"
+
+    async def inside_playwright():
+        coro = answer()
+        try:
+            asyncio.run(coro)
+        except RuntimeError:
+            coro.close()
+        else:  # pragma: no cover
+            raise AssertionError("asyncio.run lẽ ra phải lỗi trong loop đang chạy")
+        return worker._run_async(answer())
+
+    assert asyncio.run(inside_playwright()) == ("answer", "ok nè")
+
+
+
+def test_reply_cashbot_dan_ve_zalo(fake_ai):
+    """12/11: nửa reply Cashbot dẫn về bot Zalo (khách Shopee nhiều người không dùng Telegram). AI Store luôn Telegram."""
+    from app.features.threads.growth.config import CASHBOT_ZALO_URL
+
+    reply, analysis = asyncio.run(GrowthEvaluator.generate_reply("Săn sale Shopee", TargetBot.CASHBOT, ABVariant.VARIANT_A,
+                                                                 channel="zalo"))
+    assert reply.endswith(CASHBOT_ZALO_URL) and "t.me" not in reply and "Zalo" in analysis
+    tele, _ = asyncio.run(GrowthEvaluator.generate_reply("Săn sale Shopee", TargetBot.CASHBOT, ABVariant.VARIANT_A,
+                                                         channel="telegram"))
+    assert "https://t.me/zt_shopee_bot?start=threads_cb_save" in tele
+    store, _ = asyncio.run(GrowthEvaluator.generate_reply("Cần ChatGPT Plus", TargetBot.AI_STORE, ABVariant.VARIANT_A,
+                                                          channel="zalo"))
+    assert "t.me/aipass_shop_bot" in store and "zalo" not in store
+
+
+def test_bai_rieng_vua_gioi_han_500_ky_tu():
+    """12/11: Threads không đăng bài > 500 ký tự (11/11 bài 554–918 ký tự đều không lên). Giữ món, giỏ, link."""
+    link = "https://t.me/zt_shopee_bot?start=threads_cb_post"
+    long_note = "Lưu ý trc khi mua: món nào có sẵn trong giỏ thì XOÁ khỏi giỏ trc, rồi mở lại bằng link bot gửi " * 2
+    text = "\n".join([
+        "Nay lướt thấy mấy món này rẻ thiệt nè mấy bà",
+        "- Bộ 15 hộp đựng thực phẩm Deli: 69.000đ (thường 169.000đ) · hoàn dự kiến 4.237đ",
+        "- Cây lau nhà tự vắt 45cm: 59.000đ (thường 99.000đ) · hoàn dự kiến 6.019đ",
+        "- Cây lau nhà tặng 2 bông san hô: 59.000đ (thường 99.000đ) · hoàn dự kiến 6.080đ",
+        long_note,
+        "Nhớ bấm nút Mua của bot rồi đặt hàng mới đc tính á, mua thẳng trong app sẽ ko đc hoàn đâu nha mấy bà ơi.",
+        "Cần mua thì copy link dán vào bot Telegram @zt_shopee_bot để đc hoàn tiền nè",
+    ])
+    out = content.clean_post(text, link)
+    assert len(out) <= content.POST_LIMIT and out.endswith(link)
+    assert "giỏ" in out and "@zt_shopee_bot" not in out and "bot Tele để" in out
+    assert sum(content._is_item(x) for x in out.split("\n")) >= 1
+    short = content.clean_post("Mẹo săn sale nè\n- Gom giỏ trước nha", link)
+    assert short == f"Mẹo săn sale nè\n- Gom giỏ trước nha\n{link}", "bài ngắn giữ nguyên"
+
+
+
+def test_vi_du_hoan_that_tu_db_cashbot(tmp_path):
+    """12/11: reply Cashbot có số thật (món khách vừa tạo link 7 ngày qua), chỉ đọc DB."""
+    import sqlite3
+
+    real = REAL_EXAMPLE
+
+    db = tmp_path / "cb.sqlite"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE link_requests (product_name TEXT, price_vnd INT, estimated_cashback INT, "
+                     "link_status TEXT, created_at TEXT)")
+        conn.execute("INSERT INTO link_requests VALUES ('𝙈𝙄𝙀𝙉 Áo len cổ V dài tay phối', 179000, 15057, 'created', "
+                     "'2026-11-12T01:00:00Z')")
+        conn.execute("INSERT INTO link_requests VALUES ('Cũ', 99000, 9000, 'created', '2026-10-01T01:00:00Z')")
+    now = datetime(2026, 11, 12, 9, 0, tzinfo=timezone.utc)
+    assert real(str(db), now) == "MIEN Áo len cổ V giá 179k, bot báo hoàn khoảng 15k", "5 chữ đầu tên"
+    assert real(str(tmp_path / "khong_co.sqlite"), now) == ""

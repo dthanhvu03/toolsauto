@@ -106,7 +106,11 @@ def _plain(rule: str) -> str:
 # Lưu ý để đơn được ghi nhận hoàn — lấy NGUYÊN từ Cashbot (trang 🛡️ Lưu ý trước khi mua), sửa ở bot là bài viết theo.
 # Chủ bot 06/11: bài đăng phải nhắc «xoá giỏ hàng → bấm link hoàn → thêm lại giỏ».
 BUY_NOTES = "\n".join(f"- {_plain(r)}" for r in (CART_RULE, BUY_RULE, ITEM_RULE))
-_NOTES_ASK = f"""BẮT BUỘC có đoạn «lưu ý trước khi mua» (2–3 dòng ngắn, giữ đúng ý, viết lại theo giọng bài):
+# Threads chỉ nhận bài ≤ 500 ký tự: 11/11 bài riêng 06–12/11 dài 554–918 ký tự đều KHÔNG lên (bài duy nhất lên: 358).
+# Chừa chỗ cho link cuối bài và ký tự Threads đếm khác Python (emoji).
+POST_LIMIT = 470
+_LENGTH_ASK = "Cả bài TỐI ĐA 380 ký tự (Threads chặn bài quá 500 ký tự, link cuối bài đã chiếm ~50). Ngắn gọn."
+_NOTES_ASK = f"""BẮT BUỘC có 1 dòng «lưu ý trước khi mua» thật ngắn, giữ đúng ý chính (chọn từ các ý dưới):
 {BUY_NOTES}
 Ý quan trọng nhất phải nói rõ: món đang nằm sẵn trong giỏ thì XOÁ khỏi giỏ trước, rồi mở lại món đó bằng link bot gửi
 (bấm nút Mua của bot) rồi mới thêm vào giỏ / đặt — không thì đơn không được hoàn."""
@@ -139,10 +143,11 @@ Món:
 {lines}
 
 {sale_line}
-Cuối bài nhắc: muốn mua thì tìm món trên Shopee, copy link dán vào bot Telegram {handle} để được hoàn tiền,
-và để nguyên link này: {link}
+Cuối bài nhắc: muốn mua thì tìm món trên Shopee, copy link dán vào bot Telegram (link dưới) để được hoàn tiền.
+KHÔNG viết «{handle}» (trên Threads «@…» là gắn thẻ tài khoản Threads, không mở bot) — link bot tự gắn cuối bài.
 
-Độ dài 6–9 dòng ngắn, mỗi món 1 dòng (tên rút gọn dễ hiểu + giá). Số hoàn là «dự kiến».
+Độ dài 4–6 dòng ngắn, mỗi món 1 dòng (tên rút gọn 3–6 chữ + giá). Số hoàn là «dự kiến».
+{_LENGTH_ASK}
 {_NOTES_ASK}
 {_STYLE}"""
 
@@ -151,10 +156,11 @@ def _sale_prompt(event: sale_calendar.SaleEvent, today: date, link: str, handle:
     return f"""Viết 1 bài đăng Threads nhắc mọi người chuẩn bị săn sale Shopee {event.label} ({_countdown(event, today)}).
 
 Nội dung: 2–3 mẹo ngắn thật sự hữu ích (gom giỏ trước, lưu mã free ship / mã shop, canh 0h hoặc 12h, so giá trước
-khi chốt) và nhắc: trước khi thanh toán thì copy link món dán qua bot Telegram {handle} để được hoàn thêm tiền
-về tài khoản ngân hàng. Để nguyên link: {link}
+khi chốt) và nhắc: trước khi thanh toán thì copy link món dán qua bot Telegram (link dưới) để được hoàn thêm tiền
+về tài khoản ngân hàng. KHÔNG viết «{handle}» — link bot tự gắn cuối bài.
 
-Độ dài 6–9 dòng ngắn.
+Độ dài 4–6 dòng ngắn.
+{_LENGTH_ASK}
 {_NOTES_ASK}
 {_STYLE}"""
 
@@ -172,16 +178,55 @@ async def _ai(prompt: str, min_len: int = 20) -> Optional[str]:
     return text
 
 
+_MENTION = re.compile(r"(?:bot\s+(?:telegram|tele)\s+)?@(?:zt_shopee_bot|aipass_shop_bot)(?![\w.])", re.IGNORECASE)
+
+
+_PRICE = re.compile(r"\d[\d.,]*\s*(?:đ|k\b|vnđ)", re.IGNORECASE)
+
+
+def _is_item(line: str) -> bool:
+    """Dòng món deal: gạch đầu dòng có giá (69.000đ, 59k)."""
+    return line.lstrip().startswith(("-", "•")) and bool(_PRICE.search(line)) and "giỏ" not in line.lower()
+
+
+def fit_post(lines: List[str], link: str, limit: int = POST_LIMIT) -> List[str]:
+    """Bài quá 500 ký tự (Threads không đăng): (1) dòng nhắc giỏ dài → câu nhắc chuẩn ngắn; (2) bỏ dòng phụ ở giữa,
+    dài nhất trước; (3) bỏ món từ cuối, giữ ít nhất 1 món; (4) còn dài thì cắt dòng đầu. Luôn giữ dòng đầu, dòng cuối
+    (kêu gọi dán link vào bot) và lưu ý giỏ hàng."""
+    lines = list(lines)
+
+    def size() -> int:
+        return len("\n".join(lines + [link]))
+
+    if size() > limit:
+        lines = [CART_NOTE if "giỏ" in x.lower() and len(x) > len(CART_NOTE) else x for x in lines]
+    while size() > limit:
+        middle = range(1, len(lines) - 1)
+        extra = [i for i in middle if lines[i] and "giỏ" not in lines[i].lower() and not _is_item(lines[i])]
+        items = [i for i in middle if _is_item(lines[i])]
+        if extra:
+            del lines[max(extra, key=lambda i: len(lines[i]))]
+        elif len(items) > 1:
+            del lines[items[-1]]
+        else:
+            break
+    lines = [x for i, x in enumerate(lines) if x or (i and lines[i - 1])]
+    over = size() - limit
+    if over > 0 and lines:
+        lines[0] = lines[0][: max(len(lines[0]) - over - 1, 20)].rstrip(" ,.") + "…"
+    return lines
+
+
 def clean_post(text: str, link: str) -> str:
-    """Giữ xuống dòng (bài nhiều dòng), bỏ mọi link AI tự viết, đặt đúng link tracking ở dòng cuối."""
+    """Giữ xuống dòng (bài nhiều dòng), bỏ mọi link AI tự viết, đặt đúng link tracking ở dòng cuối; vừa 500 ký tự."""
     lines: List[str] = []
     for raw in (text or "").strip().strip('"').splitlines():
-        line = " ".join(_TME_TOKEN.sub("", raw).split()).rstrip(" ,:")
+        line = " ".join(_MENTION.sub("bot Tele", _TME_TOKEN.sub("", raw)).split()).rstrip(" ,:")
         if line or (lines and lines[-1]):
             lines.append(line)
     while lines and not lines[-1]:
         lines.pop()
-    return "\n".join(lines + [link])
+    return "\n".join(fit_post(lines, link) + [link])
 
 
 @dataclass(frozen=True)
@@ -202,7 +247,7 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
         text = await _ai(_sale_prompt(event, today, link, profile.handle))
         if text:
             return OwnPostDraft("sale", clean_post(with_buy_note(text), link), sale_ref)
-    fresh = [d for d in load_deals(now, deal_path) if f"deal:{d.item_id}" not in used_refs][:3]
+    fresh = [d for d in load_deals(now, deal_path) if f"deal:{d.item_id}" not in used_refs][:2]  # 3 món là quá 500 ký tự
     if not fresh:
         return None
     sale_line = f"Có thể mở bài bằng: {_countdown(event, today)}." if event else ""
