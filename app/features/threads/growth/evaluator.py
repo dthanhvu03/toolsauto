@@ -109,6 +109,23 @@ def clean_reply(reply: str, tracking_url: str) -> str:
     return text
 
 
+PLAIN_MAX_CHARS = 160
+_MENTION = re.compile(r"@[\w.]+")
+
+
+def clean_plain_reply(reply: str) -> str:
+    """Reply trò chuyện (no_link): bỏ url / @nhắc tên (AI hay lỡ viết @bot), dọn khoảng trắng, cắt ở ranh giới từ nếu
+    quá ``PLAIN_MAX_CHARS``."""
+    text = " ".join((reply or "").split()).strip().strip('"').strip("'").strip()
+    text = _TME_TOKEN.sub("", text)
+    text = re.sub(r"https?://\S+", "", text)
+    text = _MENTION.sub("", text)
+    text = " ".join(text.split()).rstrip(" ,")
+    if len(text) > PLAIN_MAX_CHARS:
+        text = text[:PLAIN_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,.")
+    return text
+
+
 def with_link(reply: str, tracking_url: str, handle: str) -> str:
     """Reply luôn có link bot đúng mã nguồn (chủ bot 12/11).
 
@@ -134,7 +151,11 @@ def with_link(reply: str, tracking_url: str, handle: str) -> str:
 
 
 def link_for(reply: str, bot: str, variant: str) -> str:
-    """with_link theo bot + biến thể của một dòng growth_posts (reply đang chờ đăng)."""
+    """with_link theo bot + biến thể của một dòng growth_posts (reply đang chờ đăng).
+    Reply đã dẫn về bot Zalo (Cashbot, ZALO_SHARE) giữ nguyên: trước đây worker đổi zalo.me thành link Telegram ngay
+    lúc đăng → 7 ngày tới 13/11 không reply nào có link Zalo dù 4 reply được chọn kênh Zalo."""
+    if CASHBOT_ZALO_URL in (reply or ""):
+        return reply
     try:
         profile = load_profiles()[TargetBot(bot)]
         cfg = profile.variants[ABVariant(variant)]
@@ -259,6 +280,7 @@ vấn đề mà {profile.name} giải quyết 70–100. Không đoán bừa: bà
         variant: ABVariant,
         reading: Optional[PostReading] = None,
         channel: Optional[str] = None,
+        include_link: Optional[bool] = None,
     ) -> Tuple[str, str]:
         """Sinh câu trả lời thông minh dựa trên biến thể A hoặc B.
 
@@ -266,6 +288,10 @@ vấn đề mà {profile.name} giải quyết 70–100. Không đoán bừa: bà
         """
         profile: BotGrowthProfile = load_profiles()[bot_type]
         cfg: VariantConfig = profile.variants[variant]
+
+        if include_link is None:
+            include_link = True
+
         # Cashbot: nửa reply dẫn về bot Zalo (12/11). channel: "zalo" | "telegram"; None = bốc ngẫu nhiên theo ZALO_SHARE.
         if channel is None:
             channel = "zalo" if bot_type == TargetBot.CASHBOT and random.random() < ZALO_SHARE else "telegram"
@@ -293,7 +319,9 @@ cái họ cần / gỡ đúng băn khoăn trước, rồi mới nhắc bot (bằ
         kb_query = content if reading is None else f"{content}\n{reading.emotion}\n{reading.objection or ''}"
         kb = guidance_block(kb_query, "threads", k=2)
         kb_block = f"{kb.text}\n" if kb else ""
-        prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply.
+
+        if include_link:
+            prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply.
 
 Bài đăng:
 \"\"\"{content}\"\"\"
@@ -316,14 +344,42 @@ Văn phong — viết y như người thật trên Threads:
 - KHÔNG ký tự lạ, KHÔNG lộ là AI / bot viết.
 Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
 """
+        else:
+            prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply trò chuyện bình thường.
+
+Bài đăng:
+\"\"\"{content}\"\"\"
+
+{insight}{kb_block}
+Mục tiêu: CHỈ TRÒ CHUYỆN — KHÔNG GẮN LINK, KHÔNG BÁN HÀNG, KHÔNG NHẮC TÊN BOT / APP / @ AI.
+- Bám đúng MỘT chi tiết cụ thể trong bài (món đồ, giá, tình huống, câu họ than) rồi nói tiếp ý đó: góp một mẹo nhỏ,
+  một nhận xét thật lòng, hoặc hỏi lại đúng chỗ họ đang kẹt. Người ta hỏi lại về sau mới giới thiệu.
+- KHÔNG bịa đã mua / đã dùng món cụ thể nào; nói kiểu chung («hay bị vậy lắm», «t hay canh…»).
+- KHÔNG mở đầu sáo: «Mình hiểu cảm giác…», «Đồng ý với bạn», «Bài viết hay quá», «Chúc bạn…». KHÔNG nhắc lại nguyên
+  câu của bài. Không phải reply nào cũng kết bằng câu hỏi.
+
+Văn phong — viết như người thật trên Threads:
+- 1–2 câu, dưới 150 ký tự, liền một mạch, không gạch đầu dòng, không xuống dòng.
+- Xưng t / mình, gọi b / bà / ông theo giọng của bài. Viết thường được, không cần chấm câu cuối.
+- Teencode chỉ khi hợp giọng bài, mỗi reply một hai từ là đủ, đừng lần nào cũng «trời ơi», «xỉu», «thật sự». Emoji: thường
+  không dùng, nhiều nhất 1.
+- KHÔNG url, KHÔNG @ ai, KHÔNG bán hàng, KHÔNG lộ là AI.
+Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
+"""
+
         try:
             reply, meta = await AIUseCases.generate_text_async(
                 prompt, purpose=AIPurpose.THREADS_REPLY
             )
             meta = meta or {}
             if reply and len(reply.strip()) > 10:
-                cleaned = with_link(reply, link, profile.handle)
-                analysis = (f"AI [{variant.value}{' · Zalo' if zalo else ''}] - "
+                cleaned = "" if include_link else clean_plain_reply(reply)
+                if len(cleaned) > 10:
+                    tag = " · no_link"
+                else:  # có link, hoặc no_link bỏ url / @ xong còn trơ → reply có link như thường
+                    cleaned = with_link(reply, link, profile.handle)
+                    tag = f"{' · Zalo' if zalo else ''}"
+                analysis = (f"AI [{variant.value}{tag}] - "
                             f"{meta.get('provider', '?')}:{meta.get('model', '?')}"
                             + (f" · kb: {', '.join(kb.ids)}" if kb else ""))
                 return cleaned, analysis

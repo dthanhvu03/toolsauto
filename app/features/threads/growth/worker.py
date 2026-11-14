@@ -29,9 +29,10 @@ from typing import Callable, Dict, List, Optional
 from app.core import settings
 from app.core.database.core import SessionLocal
 from app.features.threads.adapter import ThreadsSessionInvalidError
-from app.features.threads.growth import content, conversions, notify
+from app.features.threads.growth import content, conversions, dm_agent, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
+from app.features.threads.growth.dm import DmBrowser
 from app.features.threads.growth.config import (
     ACCOUNTS,
     DEFAULT_ACCOUNT,
@@ -56,6 +57,7 @@ TICK_SEC = 60
 FOLLOWUP_EVERY = timedelta(minutes=20)   # nhịp kiểm người hỏi lại
 FOLLOWUP_RECHECK = timedelta(hours=3)    # mỗi reply của mình kiểm lại tối đa 3 giờ / lần
 FOLLOWUP_PAGES = 6                       # số reply của mình mở mỗi nhịp
+DM_EVERY = timedelta(minutes=10)         # PLAN-171: nhịp đọc hộp tin nhắn riêng
 OWN_POST_WINDOW = timedelta(hours=2)     # khung giờ đăng bài riêng còn hiệu lực bao lâu
 OWN_POST_RETRY = timedelta(minutes=15)   # AI lỗi → thử lại trong khung
 REWRITE_EVERY = timedelta(minutes=30)    # thử cho AI viết lại bài đang dùng câu mẫu
@@ -108,16 +110,29 @@ class CycleReport:
     posted_items: List[Dict] = field(default_factory=list)
     own_posts: List[Dict] = field(default_factory=list)
     followups: List[Dict] = field(default_factory=list)
+    dms: List[Dict] = field(default_factory=list)  # PLAN-171
     rewritten: int = 0
     customers: Optional[Dict] = None
 
     @property
     def acted(self) -> bool:
-        return bool(self.posted or self.failed or self.own_posts or self.followups)
+        return bool(self.posted or self.failed or self.own_posts or self.followups
+                    or any(d["action"] != "skip" for d in self.dms))
 
     def as_dict(self) -> Dict:
         return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items),
-                "own_posts": list(self.own_posts), "followups": list(self.followups)}
+                "own_posts": list(self.own_posts), "followups": list(self.followups), "dms": list(self.dms)}
+
+
+def in_quiet_hours(now: datetime, spec: str) -> bool:
+    """``spec`` «00:30-06:30» theo giờ VN (qua nửa đêm được, vd «23:30-06:00»); rỗng / sai dạng → không nghỉ."""
+    try:
+        start, end = ((int(h) * 60 + int(m)) for h, m in (part.strip().split(":") for part in spec.split("-")))
+    except (ValueError, AttributeError):
+        return False
+    vn = now.astimezone(content.ICT)
+    minute = vn.hour * 60 + vn.minute
+    return start <= minute < end if start <= end else (minute >= start or minute < end)
 
 
 def _run_async(coro):
@@ -148,6 +163,7 @@ class GrowthWorker:
         self.now = now
         self.last_scan: Optional[datetime] = None
         self.last_followup: Dict[str, datetime] = {}   # theo tài khoản (PLAN-167)
+        self.last_dm: Dict[str, datetime] = {}         # theo tài khoản (PLAN-171)
         self.last_rewrite: Optional[datetime] = None
         self.own_retry_at: Dict[str, datetime] = {}    # theo tài khoản
 
@@ -204,6 +220,8 @@ class GrowthWorker:
         jobs = [(bot, kw, top) for bot, prof in load_profiles().items() if bots is None or bot.value in bots
                 for kw in prof.keywords for top in tabs]
         random.shuffle(jobs)  # không quét cùng một thứ tự mỗi vòng
+        if cfg.max_searches_per_scan > 0:
+            jobs = jobs[:cfg.max_searches_per_scan]  # 14/11: 48 lượt tìm / giờ / 24h trên một tài khoản → bốc ngẫu nhiên
         with self.browser_factory(profile_path) as browser:
             for bot, kw, top in jobs:
                 try:
@@ -291,10 +309,12 @@ class GrowthWorker:
                     continue
                 text = post.get("actual_reply") or post["suggested_reply"]
                 # Reply viết trước 12/11 nằm hàng chờ chưa có link: gắn link đúng mã nguồn trước khi đăng.
-                linked = link_for(text, post["target_bot"], post["variant"])
-                if linked != text:
-                    self.runner.storage.update_status(post["id"], "approved", actual_reply=linked)
-                    text = linked
+                # 14/11: Reply chỉ trò chuyện (no_link) thì không gắn link.
+                if "no_link" not in (post.get("ai_analysis") or ""):
+                    linked = link_for(text, post["target_bot"], post["variant"])
+                    if linked != text:
+                        self.runner.storage.update_status(post["id"], "approved", actual_reply=linked)
+                        text = linked
                 try:
                     url = browser.reply(post["post_url"], text)
                 except ThreadsSessionInvalidError:
@@ -438,6 +458,33 @@ class GrowthWorker:
                     return
                 storage.mark_followup_checked(target["id"], now)
 
+    # ── PLAN-171: tin nhắn riêng ───────────────────────────────
+    def dm_inbox(self, profile_path: str, report: CycleReport, account: Optional[str] = None) -> None:
+        """AI agent đọc Inbox + Requests, trả lời / chuyển chủ bot. Việc cần chủ bot báo Telegram ngay."""
+        account = account or account_for_profile(profile_path)
+        now = self.now()
+        last = self.last_dm.get(account)
+        if last and now - last < DM_EVERY:
+            return
+        self.last_dm[account] = now
+        with self.browser_factory(profile_path) as browser:
+            try:
+                events = dm_agent.handle_inbox(DmBrowser(browser), self.runner.storage, account, now, _run_async)
+            except ThreadsSessionInvalidError:
+                raise
+            except Exception as exc:
+                if browser_dead(exc):
+                    return
+                logger.warning("growth: hộp tin @%s lỗi: %s", ACCOUNTS[account].handle, exc)
+                report.errors.append(f"inbox @{ACCOUNTS[account].handle}: {exc}")
+                return
+        for ev in events:
+            ev["account"] = account
+            logger.info("growth.dm: @%s %s — %s", ev["handle"], ev["action"], (ev.get("note") or "")[:120])
+            if ev["action"] in ("handoff", "handoff_more", "failed"):
+                self.notify.send(self.notify.dm_handoff_text(ev))
+        report.dms.extend(events)
+
     # ── AI viết lại bài đang dùng câu mẫu ──────────────────────
     def rewrite_fallbacks(self, cfg: WorkerConfig, report: CycleReport) -> None:
         now = self.now()
@@ -457,6 +504,8 @@ class GrowthWorker:
         cfg = load_worker_config()
         if not cfg.enabled and not force_scan:
             return None
+        if not force_scan and in_quiet_hours(self.now(), cfg.quiet_hours):
+            return None
         roles = load_account_roles()
         # Tài khoản đang bật + đã đăng nhập + profile rảnh, theo thứ tự ACCOUNTS (tài khoản đầu quét bài cho cả nhóm).
         ready: Dict[str, str] = {}
@@ -473,10 +522,16 @@ class GrowthWorker:
         )
         current = next(iter(ready))
         try:
+            # PLAN-171: khách nhắn riêng chờ trả lời → đọc hộp tin TRƯỚC vòng quét (quét + AI đọc bài có khi > 20 phút).
+            for current, profile in ready.items():
+                if roles[current].dm:
+                    self.dm_inbox(profile, report, account=current)
+            current = next(iter(ready))
             if due:
                 self.last_scan = self.now()
-                bots = {b for key in ready for b in roles[key].bots}
-                self.ingest(self.scan(ready[current], cfg, report, bots=bots), cfg, report)
+                # 14/11: mỗi tài khoản tự quét từ khoá bot của mình (trước: tài khoản đầu quét cho cả nhóm).
+                for current, profile in ready.items():
+                    self.ingest(self.scan(profile, cfg, report, bots=set(roles[current].bots)), cfg, report)
             self.rewrite_fallbacks(cfg, report)
             for current, profile in ready.items():
                 role = roles[current]
@@ -484,6 +539,8 @@ class GrowthWorker:
                 if role.own_posts and role.serves(TargetBot.CASHBOT):  # bài riêng hiện chỉ có deal / sale Cashbot
                     self.post_own(profile, cfg, report, account=current)
                 self.followups(profile, cfg, report, account=current)
+                if role.dm:
+                    self.dm_inbox(profile, report, account=current)  # khách nhắn trong lúc quét (DM_EVERY chặn lặp)
         except ThreadsSessionInvalidError as exc:
             self._disable(str(exc), current)
             report.errors.append(f"@{ACCOUNTS[current].handle}: {exc}")

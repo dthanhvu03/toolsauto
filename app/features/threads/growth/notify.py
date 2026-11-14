@@ -73,6 +73,9 @@ def cycle_text(report: Dict[str, Any]) -> str:
         head.append(f"đăng {len(report['own_posts'])} bài riêng")
     if report.get("followups"):
         head.append(f"trả lời lại {len(report['followups'])} người")
+    dms = [d for d in report.get("dms", []) if d.get("action") in ("reply", "handoff")]
+    if dms:
+        head.append(f"nhắn riêng {len(dms)} người")
     parts = [
         f"🧵 <b>Kéo khách — {' · '.join(head)}</b>"
         + (f" · lỗi {report['failed']}" if report.get("failed") else ""),
@@ -92,6 +95,12 @@ def cycle_text(report: Dict[str, Any]) -> str:
         parts.append(
             f"\n💬 @{e(it['author'])}: «{e(it['comment'][:100])}»\n  → <i>{e(it['text'][:160])}</i>"
             f" (<a href=\"{e(it['url'])}\">xem</a>)"
+        )
+    for it in dms:
+        mark = "🙋 chuyển anh" if it["action"] == "handoff" else f"🔥{it.get('hot', 0)}"
+        parts.append(
+            f"\n✉️ @{e(it['handle'])} ({mark}): «{e((it.get('theirs') or '')[:100])}»"
+            + (f"\n  → <i>{e(it['reply'][:160])}</i>" if it.get("reply") else "")
         )
     if report.get("rewritten"):
         parts.append(f"\n✍️ AI viết lại {report['rewritten']} bài đang dùng câu mẫu")
@@ -164,3 +173,22 @@ def summary_text(stats: Dict[str, Any], quota, enabled: bool, login_status: str,
 
 def toggle_buttons(enabled: bool) -> list:
     return [[{"text": "⚪ Tắt" if enabled else "🟢 Bật", "callback_data": "gr:off" if enabled else "gr:on"}]]
+
+
+_DM_TITLE = {"handoff": "🙋 Khách cần anh xử lý", "handoff_more": "🙋 Khách (đang chờ anh) nhắn thêm",
+             "failed": "⚠️ Agent gửi tin lỗi"}
+
+
+def dm_handoff_text(ev: Dict[str, Any]) -> str:
+    """PLAN-171: agent chuyển việc cho chủ bot — kèm link mở thẳng cuộc trò chuyện trên Threads."""
+    e = html.escape
+    url = f"https://www.threads.com/messages/t/{ev['thread_id']}/"
+    lines = [f"{_DM_TITLE.get(ev['action'], '✉️ Tin nhắn riêng')} — @{e(ev['handle'])}",
+             f"Khách: «{e((ev.get('theirs') or '')[:300])}»"]
+    if ev.get("note"):
+        lines.append(f"Ghi chú: {e(ev['note'][:300])}")
+    if ev.get("reply"):
+        lines.append(f"Agent đã nhắn: <i>{e(ev['reply'][:300])}</i>")
+    lines.append(f'<a href="{e(url)}">Mở cuộc trò chuyện</a> · agent im cuộc này 24 giờ')
+    return "\n".join(lines)
+

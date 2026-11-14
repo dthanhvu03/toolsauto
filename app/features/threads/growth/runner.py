@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -109,11 +110,19 @@ class GrowthRunner:
             return None
 
         # 4. Sinh phản hồi AI theo góc độ A hoặc B, dựa trên bản đọc
+        # 14/11: ~1/3 reply chỉ trò chuyện tự nhiên không gắn link (trừ khi bài có hỏi xin link)
+        asks_link = bool(re.search(
+            r"(xin link|cho mình link|link ở|mua ở đâu|chỗ nào|ai biết|xin chỗ|có link|gửi link|ib link|xin app|xin bot|dùng bot|dùng app)",
+            post.content, re.IGNORECASE,
+        ))
+        include_link = True if asks_link else (random.random() >= 0.33)
+
         suggested_reply, analysis = await GrowthEvaluator.generate_reply(
             content=post.content,
             bot_type=bot_type,
             variant=variant,
             reading=reading,
+            include_link=include_link,
         )
         analysis = f"{analysis} | {reading.summary()}" if reading else f"{analysis} | Đọc AI lỗi: {read_fail}"
 

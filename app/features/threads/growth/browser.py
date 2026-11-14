@@ -195,8 +195,15 @@ class GrowthBrowser:
     def __enter__(self) -> "GrowthBrowser":
         if not self.adapter.open_session(self.profile_path):
             raise ThreadsSessionInvalidError("Không mở được trình duyệt Threads")
-        self._check_session()
-        self.adapter.page.on("response", self._capture)
+        try:
+            self._check_session()
+            self.adapter.page.on("response", self._capture)
+        except BaseException:
+            # Lỗi trong __enter__ thì __exit__ KHÔNG chạy: phải tự đóng, không thì Playwright kẹt lại vòng lặp của nó
+            # trong luồng → mọi lần mở sau báo «Sync API inside the asyncio loop» (14/11: checkpoint @us28qt 09:40
+            # làm cả @anlinh bị tự tắt oan).
+            self.adapter.close_session()
+            raise
         return self
 
     def __exit__(self, *exc) -> None:

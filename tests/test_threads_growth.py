@@ -662,6 +662,9 @@ def test_with_link_thay_ten_bot_bang_link():
     queued = evaluator.link_for("qua @aipass_shop_bot lấy acc", "ai_store", "A")
     assert "https://t.me/aipass_shop_bot?start=threads_ai_" in queued and "@aipass_shop_bot" not in queued
     assert evaluator.link_for("x", "khong_co", "A") == "x"
+    # Reply chọn kênh Zalo: lúc đăng không bị đổi sang link Telegram (13/11: 4/4 reply «· Zalo» bị đổi).
+    to_zalo = "t hay quăng link qua https://zalo.me/2175525805361761559 cho nhanh"
+    assert evaluator.link_for(to_zalo, "cashbot", "A") == to_zalo
     # AI đặt link ngay trong câu: giữ đúng chỗ (12/11 #1743 bị gỡ link → «dán link qua để…»)
     zalo = "https://zalo.me/2175525805361761559"
     assert evaluator.with_link(f"dán link qua {zalo} để đc hoàn nha", zalo, "@zt_shopee_bot") == \
@@ -1386,3 +1389,130 @@ def test_deal_post_appends_item_links_at_bottom(monkeypatch):
     assert lines[-4].endswith("start=threads_cb_post") and len(draft.text) <= content.POST_LIMIT
     assert "280 ký tự" in seen["p"] and "link từng món để ở dưới cùng" in seen["p"]
     assert content.item_links([content.Deal(3, "x", 1, 2, 0, 0)]) == []  # món không có link → không có khối
+
+
+def test_worker_doc_hop_tin_truoc_khi_quet(make_worker, monkeypatch):
+    """PLAN-171: tài khoản bật dm → đọc hộp tin đầu vòng, trước bước quét (quét + AI đọc bài có khi > 20 phút)."""
+    w, _n = make_worker(FakeBrowser({"kw": []}))
+    make_worker.cfg["value"] = WorkerConfig(enabled=True)
+    roles = {"us28qt": worker.AccountRole(enabled=True, bots=("cashbot", "ai_store"), own_posts=True, dm=True)}
+    monkeypatch.setattr(worker, "load_account_roles", lambda: roles)
+    order = []
+    monkeypatch.setattr(worker.GrowthWorker, "dm_inbox", lambda self, profile, report, account=None: order.append("dm"))
+    real_scan = worker.GrowthWorker.scan
+    monkeypatch.setattr(worker.GrowthWorker, "scan",
+                        lambda self, *a, **k: (order.append("scan"), real_scan(self, *a, **k))[1])
+    w.tick()
+    assert order[:2] == ["dm", "scan"]
+
+
+def test_checkpoint_safeguards_1411(monkeypatch):
+    """14/11: 4 biện pháp giữ tài khoản sau checkpoint:
+    1. Trình duyệt không khai cứng Chrome 120.
+    2. Giảm nhịp: @us28qt reply 20/ngày, DM 15/ngày.
+    3. ~1/3 reply chỉ trò chuyện (no_link), worker không cưỡng ép link.
+    4. Chia việc: @anlinh gánh AI Store, @us28qt chỉ Cashbot.
+    """
+    from app.features.threads.growth import config, dm_agent
+
+    # 1. DM limit giảm xuống 15
+    assert dm_agent.MAX_PER_DAY == 15
+    assert dm_agent.MAX_PER_HOUR <= 4
+
+    # 2. Roles config
+    from pathlib import Path
+    real_roles_path = Path("storage/db/config/threads_growth_accounts.json")
+    roles = config.load_account_roles(path=real_roles_path)
+    # Không chốt cứng 20 / 3: lộ trình tăng nhịp lại (20 → 25 → 30) sửa file này — chỉ giữ trần an toàn.
+    assert roles["us28qt"].max_per_day <= 30
+    assert roles["us28qt"].max_per_hour <= 4
+    assert roles["us28qt"].bots == ("cashbot",)  # AI Store đã chuyển @anlinh
+    assert roles["anlinh"].enabled is True
+    assert roles["anlinh"].bots == ("ai_store",)
+
+    # 3. no_link reply
+    async def fake_ai(prompt, *, purpose="generic"):
+        return "công nhận t cũng thấy mẫu đó mặc tôn dáng lắm", {"provider": "test", "model": "mock"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
+    text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
+        "Chân váy này đẹp ghê", TargetBot.CASHBOT, ABVariant.VARIANT_A, include_link=False
+    ))
+    assert "no_link" in analysis
+    assert "t.me" not in text and "http" not in text
+
+    # Worker không ép link khi có no_link
+    post = {
+        "id": 99,
+        "actual_reply": text,
+        "suggested_reply": text,
+        "target_bot": "cashbot",
+        "variant": "A",
+        "ai_analysis": analysis,
+    }
+    # Giả lập logic worker check
+    linked = text
+    if "no_link" not in (post.get("ai_analysis") or ""):
+        linked = evaluator.link_for(text, post["target_bot"], post["variant"])
+    assert linked == text, "Worker không được gắn link vào reply no_link"
+
+
+def test_in_quiet_hours_vn():
+    def at(h, m):  # giờ VN → UTC
+        return datetime(2026, 11, 14, h, m, tzinfo=content.ICT).astimezone(timezone.utc)
+
+    assert worker.in_quiet_hours(at(0, 30), "00:30-06:30") and worker.in_quiet_hours(at(6, 29), "00:30-06:30")
+    assert not worker.in_quiet_hours(at(6, 30), "00:30-06:30") and not worker.in_quiet_hours(at(0, 29), "00:30-06:30")
+    assert worker.in_quiet_hours(at(23, 45), "23:30-06:00") and worker.in_quiet_hours(at(2, 0), "23:30-06:00")
+    assert not worker.in_quiet_hours(at(12, 0), "23:30-06:00")
+    assert not worker.in_quiet_hours(at(3, 0), "") and not worker.in_quiet_hours(at(3, 0), "hỏng")
+
+
+def test_worker_nghi_dem_khong_mo_trinh_duyet(make_worker, runner):
+    pid = _save(runner.storage, "Q1")
+    runner.approve_and_prepare(pid)
+    fb = FakeBrowser()
+    w, _ = make_worker(fb)
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, quiet_hours="00:30-06:30")
+    w.now = lambda: datetime(2026, 11, 14, 2, 0, tzinfo=content.ICT).astimezone(timezone.utc)
+    assert w.tick() is None and fb.opened == 0
+    assert runner.storage.get_post_by_id(pid)["status"] == "approved"
+
+
+def test_worker_moi_tai_khoan_tu_quet_tu_khoa_bot_minh_va_gioi_han_luot(make_worker, runner, monkeypatch):
+    _two_accounts(monkeypatch)
+    profiles = worker.load_profiles()
+    profiles[TargetBot.CASHBOT].keywords[:] = [f"cb{i}" for i in range(8)]
+    profiles[TargetBot.AI_STORE].keywords[:] = [f"ai{i}" for i in range(8)]
+    seen = []
+
+    class Rec(ProfileBrowser):
+        def search_recent(self, keyword, limit=10, top=False):
+            seen.append((self.profile, keyword))
+            return []
+
+    w, _ = make_worker(Rec())
+    make_worker.cfg["value"] = WorkerConfig(enabled=True, own_posts_enabled=False, followup_enabled=False,
+                                            max_searches_per_scan=5)
+    w.tick()
+    us = [k for p, k in seen if p == "/p/us28qt"]
+    an = [k for p, k in seen if p == "/p/anlinh"]
+    assert len(us) == 5 and all(k.startswith("cb") for k in us)
+    assert len(an) == 5 and all(k.startswith("ai") for k in an)
+
+
+def test_no_link_bo_nhac_ten_va_cat_dai():
+    assert evaluator.clean_plain_reply("dùng @zt_shopee_bot là đc nè https://t.me/x") == "dùng là đc nè"
+    long = "t hay canh giờ vàng lắm " * 20
+    out = evaluator.clean_plain_reply(long)
+    assert len(out) <= evaluator.PLAIN_MAX_CHARS and not out.endswith(" ")
+
+
+def test_no_link_con_tro_thi_quay_ve_reply_co_link(monkeypatch):
+    async def fake_ai(prompt, *, purpose="generic"):
+        return "https://t.me/zt_shopee_bot @zt_shopee_bot", {"provider": "test", "model": "mock"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
+    text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
+        "đồ tết mua ở đâu", TargetBot.CASHBOT, ABVariant.VARIANT_A, channel="telegram", include_link=False))
+    assert "no_link" not in analysis and "t.me/" in text

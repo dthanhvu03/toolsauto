@@ -125,6 +125,40 @@ class GrowthStorage:
                 )
                 """
             )
+            # PLAN-171: tin nhắn riêng — một dòng / cuộc trò chuyện + nhật ký mọi tin vào / ra.
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dm_threads (
+                    thread_id TEXT NOT NULL,
+                    account TEXT NOT NULL,
+                    handle TEXT NOT NULL,
+                    folder TEXT NOT NULL,        -- inbox · requests
+                    preview TEXT,                -- chữ hàng lúc xem gần nhất: không đổi thì không mở lại
+                    handled_sig TEXT,            -- dấu các tin khách đã xử lý (dm.signature)
+                    status TEXT NOT NULL,        -- open · handoff · ignored
+                    hold_until TEXT,             -- handoff: agent im tới lúc này
+                    note TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (thread_id, account)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dm_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id TEXT NOT NULL,
+                    account TEXT NOT NULL,
+                    handle TEXT NOT NULL,
+                    direction TEXT NOT NULL,     -- in · out · note
+                    text TEXT NOT NULL,
+                    action TEXT,                 -- reply · handoff · skip · failed
+                    hot INTEGER,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_dm_messages_out ON dm_messages(account, direction, created_at)")
 
     def is_thread_scanned(self, thread_id: str) -> bool:
         with self._connection() as conn:
@@ -493,3 +527,46 @@ class GrowthStorage:
             if r["account"] in stats and r["target_bot"] in stats[r["account"]]:
                 stats[r["account"]][r["target_bot"]][r["status"]] = r["n"]
         return stats
+
+    # ── PLAN-171: tin nhắn riêng ───────────────────────────────
+    def dm_thread(self, thread_id: str, account: str) -> Optional[Dict[str, Any]]:
+        with self._connection() as conn:
+            row = conn.execute("SELECT * FROM dm_threads WHERE thread_id = ? AND account = ?",
+                               (thread_id, account)).fetchone()
+        return dict(row) if row else None
+
+    def save_dm_thread(self, thread_id: str, account: str, handle: str, folder: str, *, preview: Optional[str],
+                       handled_sig: Optional[str], status: str, hold_until: Optional[str] = None,
+                       note: Optional[str] = None) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO dm_threads (thread_id, account, handle, folder, preview, handled_sig, status, hold_until,
+                                        note, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(thread_id, account) DO UPDATE SET
+                    handle = excluded.handle, folder = excluded.folder, preview = excluded.preview,
+                    handled_sig = excluded.handled_sig, status = excluded.status, hold_until = excluded.hold_until,
+                    note = excluded.note, updated_at = excluded.updated_at
+                """,
+                (thread_id, account, handle, folder, preview, handled_sig, status, hold_until, note,
+                 datetime.now(timezone.utc).isoformat()),
+            )
+
+    def log_dm(self, thread_id: str, account: str, handle: str, direction: str, text: str,
+               action: Optional[str] = None, hot: Optional[int] = None) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO dm_messages (thread_id, account, handle, direction, text, action, hot, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (thread_id, account, handle, direction, text, action, hot, datetime.now(timezone.utc).isoformat()),
+            )
+
+    def count_dm_sent_since(self, since: datetime, account: str, thread_id: Optional[str] = None) -> int:
+        sql = "SELECT COUNT(*) FROM dm_messages WHERE account = ? AND direction = 'out' AND created_at >= ?"
+        args: list = [account, since.astimezone(timezone.utc).isoformat()]
+        if thread_id:
+            sql += " AND thread_id = ?"
+            args.append(thread_id)
+        with self._connection() as conn:
+            return int(conn.execute(sql, args).fetchone()[0])

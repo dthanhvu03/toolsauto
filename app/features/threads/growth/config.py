@@ -80,7 +80,7 @@ _STATIC = {
 
 
 # Kênh ngoài reply A/B (PLAN-159) — mỗi kênh một mã ``?start=`` để biết khách đến từ đâu.
-CHANNELS = {"post": "bài riêng", "conv": "trả lời lại", "bio": "bio profile"}
+CHANNELS = {"post": "bài riêng", "conv": "trả lời lại", "bio": "bio profile", "dm": "tin nhắn riêng"}
 _CHANNEL_PREFIX = {TargetBot.CASHBOT: "threads_cb_", TargetBot.AI_STORE: "threads_ai_"}
 
 
@@ -113,6 +113,7 @@ class AccountRole:
     max_per_day: Optional[int] = None
     max_per_hour: Optional[int] = None
     own_posts: bool = False
+    dm: bool = False  # PLAN-171: AI agent trả lời tin nhắn riêng (Inbox + Requests)
     note: str = field(default="", compare=False)
 
     def serves(self, bot: "TargetBot | str") -> bool:
@@ -139,6 +140,7 @@ def _role_from(raw: dict, base: AccountRole) -> AccountRole:
         max_per_day=_int(raw["max_per_day"]) if "max_per_day" in raw else base.max_per_day,
         max_per_hour=_int(raw["max_per_hour"]) if "max_per_hour" in raw else base.max_per_hour,
         own_posts=bool(raw.get("own_posts", base.own_posts)),
+        dm=bool(raw.get("dm", base.dm)),
         note=str(raw.get("note", base.note) or ""),
     )
 
@@ -325,6 +327,10 @@ class WorkerConfig:
     followup_enabled: bool = True
     followup_max_per_day: int = 15
     followup_lookback_hours: int = 48
+    # 14/11 (sau checkpoint): giờ VN worker nghỉ hẳn «HH:MM-HH:MM» ("" = không nghỉ); số lượt tìm tối đa / tài khoản / vòng
+    # (0 = không giới hạn). Mặc định dataclass tắt cả hai; giá trị thật đọc runtime_settings (mặc định bật bên dưới).
+    quiet_hours: str = ""
+    max_searches_per_scan: int = 0
 
 
 def load_worker_config() -> WorkerConfig:
@@ -347,6 +353,8 @@ def load_worker_config() -> WorkerConfig:
             followup_enabled=settings.get_bool("growth.followup_enabled", d.followup_enabled),
             followup_max_per_day=settings.get_int("growth.followup_max_per_day", d.followup_max_per_day),
             followup_lookback_hours=settings.get_int("growth.followup_lookback_hours", d.followup_lookback_hours),
+            quiet_hours=str(settings.get("growth.quiet_hours") or "00:30-06:30"),
+            max_searches_per_scan=settings.get_int("growth.max_searches_per_scan", 10),
         )
     except Exception as exc:
         logger.warning("growth: không đọc được cài đặt worker, dùng mặc định — TẮT (%s)", exc)
