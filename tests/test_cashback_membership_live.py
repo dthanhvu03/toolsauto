@@ -252,3 +252,11 @@ def test_the_link_hien_tien_them_nho_hang(tmp_path):
 
 def test_tat_hang_the_link_khong_co_dong_hang(tmp_path):
     assert "🏅" not in _bot(tmp_path).handle_text(NEW, "moi", LINK, update_id=1, now=NOW).text
+
+
+def test_trang_chu_gon_hang_thanh_vien_nam_trong_vi(tmp_path):
+    bot = _bot(tmp_path, membership_enabled=True)
+    home = bot.handle_text(NEW, "moi", "/start", update_id=1, now=NOW)
+    assert "u:p:rank" not in [d for row in home.inline_keyboard for _l, d in row]
+    wallet = bot.handle_text(NEW, "moi", "/vi", update_id=2, now=NOW)
+    assert wallet.inline_keyboard[-2:] == ((("🏅 Hạng thành viên", "u:p:rank"),), (("◀️ Trang chủ", "u:p:home"),))

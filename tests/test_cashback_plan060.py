@@ -96,8 +96,13 @@ def test_start_co_nut_va_trang_con_doi_bang_edit(tmp_path):
     tg = Telegram()
     process_updates(bot, tg, bot.repo, [_message(1, "/start")], Admin())
     home = tg.sent[0]
-    assert _callbacks(home["markup"]) == ["u:p:wallet", "u:p:orders", "u:p:guide", "u:p:tips", "u:p:calc", "u:p:support"]
+    assert _callbacks(home["markup"]) == ["u:p:wallet", "u:p:orders", "u:p:guide", "u:p:support"]
+    assert home["markup"]["inline_keyboard"][0][1]["text"] == "📦 Đơn hàng", "2 nút / hàng"
     assert "u:p:rank" not in _callbacks(home["markup"])
+
+    # Trang chủ gọn (2026-11-13): Để được ghi nhận + Cách tính nằm trong 📖 Hướng dẫn.
+    guide = bot.handle_text(111, "buyer", "/huongdan", update_id=50)
+    assert [d for row in guide.inline_keyboard for _l, d in row] == ["u:p:tips", "u:p:calc", "u:p:home"]
 
     process_updates(bot, tg, bot.repo, [_callback(2, "u:p:calc")], Admin())
     assert len(tg.sent) == 1, "đổi trang không được sinh tin mới"
@@ -113,7 +118,7 @@ def test_start_co_nut_va_trang_con_doi_bang_edit(tmp_path):
 
 def test_lenh_go_tay_co_nut_ve_trang_chu(tmp_path):
     bot = service(tmp_path, _fresh_client())
-    for index, command in enumerate(("/huongdan", "/dieukien", "/cachtinh", "/hang"), start=10):
+    for index, command in enumerate(("/dieukien", "/cachtinh", "/hang"), start=10):
         reply = bot.handle_text(111, "buyer", command, update_id=index)
         assert reply.inline_keyboard == ((("◀️ Trang chủ", "u:p:home"),),)
     unknown = bot.handle_text(111, "buyer", "/abc", update_id=20)

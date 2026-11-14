@@ -63,28 +63,36 @@ DESCRIPTION_WALLET = (
 )
 
 
+def _pairs(buttons: list[tuple[str, str]]) -> Keyboard:
+    return tuple(tuple(buttons[i : i + 2]) for i in range(0, len(buttons), 2))
+
+
 def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
                   show_voucher: bool = False, show_invite: bool = False) -> Keyboard:
-    second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
-    if show_rank:
-        second += (("🏅 Hạng thành viên", "u:p:rank"),)
-    orders: tuple[tuple[str, str], ...] = (("📦 Đơn hàng của tôi", "u:p:orders"),)
-    if show_invite:
-        orders += (("🤝 Mời bạn", "u:p:invite"),)
-    rows: Keyboard = (
-        orders,
-        (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:tips")),
-        second,
-    )
+    """Trang chủ gọn (chủ bot 2026-11-13: «càng gọn càng tốt»): tối đa 7 nút, 2 nút / hàng.
+    Cách dùng · Để được ghi nhận · Cách tính nằm trong 📖 Hướng dẫn; Danh mục deal trong 🔥 Deal hôm nay;
+    🏅 Hạng thành viên trong 👛 Ví (show_rank giữ tham số cho chỗ gọi cũ, không còn hiện ở đây)."""
+    buttons: list[tuple[str, str]] = []
+    if show_wallet:
+        buttons.append(("👛 Ví của tôi", "u:p:wallet"))
+    buttons.append(("📦 Đơn hàng", "u:p:orders"))
     if show_deals:
-        # 🔥 Deal hôm nay xem ngay trong bot (PLAN-099) và màn chọn danh mục nhận tin (chủ bot duyệt 2026-10-27).
-        rows = rows[:1] + ((("🔥 Deal hôm nay", "u:dh"), ("🛍️ Danh mục deal", "u:dc:home")),) + rows[1:]
+        buttons.append(("🔥 Deal hôm nay", "u:dh"))
     if show_voucher:
         # 🎟 Mã giảm giá AddLiveTag (PLAN-104): chỉ hiện khi admin đã gắn kênh báo mã.
-        rows = rows[:-2] + ((("🎟 Mã giảm giá", "u:vc:l"),),) + rows[-2:]
-    if show_wallet:
-        rows = ((("👛 Ví của tôi", "u:p:wallet"),),) + rows
-    return rows
+        buttons.append(("🎟 Mã giảm giá", "u:vc:l"))
+    if show_invite:
+        buttons.append(("🤝 Mời bạn", "u:p:invite"))
+    buttons += [("📖 Hướng dẫn", "u:p:guide"), ("📩 Hỗ trợ", "u:p:support")]
+    return _pairs(buttons)
+
+
+# 📖 Hướng dẫn: trang Cách dùng kèm hai trang con trước đây nằm ở trang chủ.
+GUIDE_PAGE_KEYBOARD: Keyboard = (
+    (("🛡️ Để được ghi nhận", "u:p:tips"), ("💰 Cách tính", "u:p:calc")),
+    (("◀️ Trang chủ", "u:p:home"),),
+)
+RANK_BUTTON = ("🏅 Hạng thành viên", "u:p:rank")
 CLOSED = (
     "🔒 <b>Tài khoản này chưa được mở</b>\n"
     "Bot đang mở thử cho một số tài khoản."
@@ -814,8 +822,13 @@ def entry_notice(
     available_at: str | None,
     hold_days: int,
     estimated_vnd: int | None = None,
+    invite_pct: int | None = None,
 ) -> str:
-    """Tin báo khách khi đơn đổi trạng thái. estimated_vnd: số đã báo lúc tạo link."""
+    """Tin báo khách khi đơn đổi trạng thái. estimated_vnd: số đã báo lúc tạo link.
+    invite_pct: Mời bạn đang bật → tin vui (đơn hoàn thành / tiền vào ví) kèm một dòng rủ bạn (chủ bot 13/11:
+    Mời bạn 0 lượt; lúc khách vừa có tiền là lúc dễ rủ bạn nhất)."""
+    invite = (f"\n\n🤝 Rủ bạn bè dùng bot: mỗi đơn của bạn ấy, bạn được thêm {invite_pct}% hoa hồng. "
+              "Gõ /moiban để lấy link mời.") if invite_pct else ""
     item = html.escape(buyer_name(item_name or "-"))
     if status == "pending":
         lower = ""
@@ -835,12 +848,14 @@ def entry_notice(
             "✅ <b>Đơn đã hoàn thành</b>\n\n"
             f"🛍️ {item}\n💰 Hoàn tạm tính: <b>{format_vnd(cashback_vnd)}</b>\n\n"
             f"ⓘ Tiền hoàn đang {_lower(WAIT_SHOPEE)} hoa hồng cho đơn này (Shopee trả theo kỳ). Bot báo khi tiền vào ví."
+            + invite
         )
     if status == "available":
         return (
             "💰 <b>Tiền hoàn đã vào ví</b>\n\n"
             f"🛍️ {item}\n+<b>{format_vnd(cashback_vnd)}</b>\n\n"
             "Gõ /vi để xem số dư và rút tiền."
+            + invite
         )
     return (
         "❌ <b>Đơn không được hoàn</b>\n\n"

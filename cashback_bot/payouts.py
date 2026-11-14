@@ -361,6 +361,20 @@ def shared_account_users(conn: sqlite3.Connection, sha: str) -> int:
     ).fetchone()[0])
 
 
+def same_name_users(conn: sqlite3.Connection, user_id: int, account_name: str, sha: str | None) -> list[int]:
+    """Khách khác từng khai tài khoản KHÁC số nhưng cùng tên chủ tài khoản: dấu hiệu một người nhiều tài khoản bot.
+    Chỉ để admin xem kỹ (tên người Việt hay trùng), không chặn gì. Trùng cả số tài khoản đã có shared_account_users."""
+    key = " ".join((account_name or "").upper().split())
+    if not key:
+        return []
+    rows = conn.execute(
+        "SELECT DISTINCT telegram_user_id, account_name FROM bank_account_history "
+        "WHERE telegram_user_id != ? AND account_sha != ?",
+        (user_id, sha or ""),
+    )
+    return sorted({int(uid) for uid, name in rows if " ".join((name or "").upper().split()) == key})
+
+
 def verify_bank(conn: sqlite3.Connection, user_id: int, sha: str, admin_id: int, method: str, evidence: str,
                 now: datetime, verified: bool = True) -> None:
     proof = clean_text(evidence, 300)

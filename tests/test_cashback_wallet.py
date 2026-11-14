@@ -673,6 +673,13 @@ class TestPaidBasisWording:
         assert "Lúc tạo link" not in same
         assert "Lúc tạo link" not in entry_notice("pending", "Áo", 5_000, None, 15)
 
+    def test_tin_vui_kem_loi_moi_ban_khi_bat_moi_ban(self):
+        for status in ("holding", "available"):
+            assert "/moiban" in entry_notice(status, "Áo", 5_000, None, 7, invite_pct=10)
+            assert "/moiban" not in entry_notice(status, "Áo", 5_000, None, 7)
+        assert "/moiban" not in entry_notice("pending", "Áo", 5_000, None, 7, invite_pct=10), "đơn mới: chưa rủ"
+        assert "/moiban" not in entry_notice("cancelled", "Áo", 5_000, None, 7, invite_pct=10)
+
     def test_refresh_passes_link_estimate_to_customer(self, tmp_path):
         bot = _bot(tmp_path)
         _financially_ready(bot)

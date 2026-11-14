@@ -28,7 +28,9 @@ from cashback_bot.messages import (
     THREADS_WELCOME,
     STALE_BUTTON,
     GENERIC_FAIL,
+    GUIDE_PAGE_KEYBOARD,
     HUONGDAN,
+    RANK_BUTTON,
     NOT_FOUND,
     SHORT_LINK_UNREADABLE,
     STALE,
@@ -360,7 +362,7 @@ class CashbackService:
                               wallet_open=wallet.enabled, show_voucher=voucher.ready(self.repo),
                               show_invite=self.settings.referral_enabled)
         if name == "guide":
-            return page_reply(HUONGDAN)
+            return BotReply(HUONGDAN, inline_keyboard=GUIDE_PAGE_KEYBOARD)
         if name == "rules":
             return self.desk.rules_page(user_id, datetime.now(timezone.utc))
         if name == "tips":
@@ -382,7 +384,12 @@ class CashbackService:
                     return page_reply(hang_message(membership.progress(conn, user_id, now), membership.thresholds(conn)))
             return page_reply(hang_message())
         if name == "wallet" and user_id is not None:
-            return self._wallet_page(user_id)
+            page = self._wallet_page(user_id)
+            if self.settings.membership_enabled and page.inline_keyboard:
+                # 🏅 Hạng thành viên chuyển từ trang chủ vào Ví (trang chủ gọn 2026-11-13), đặt trên nút ◀️ Trang chủ.
+                rows = page.inline_keyboard
+                page = replace(page, inline_keyboard=(*rows[:-1], (RANK_BUTTON,), rows[-1]))
+            return page
         if name == "invite" and user_id is not None and self.settings.referral_enabled:
             with self.repo.connect() as conn:
                 stats = referral.stats(conn, user_id, datetime.now(timezone.utc))
@@ -499,6 +506,7 @@ class CashbackService:
                 message_html=entry_notice(
                     item.status, item.item_name, item.cashback_vnd, item.available_at, settings.hold_days,
                     item.estimated_vnd,
+                    invite_pct=referral.SHARE_BPS // 100 if self.settings.referral_enabled else None,
                 ),
             )
 

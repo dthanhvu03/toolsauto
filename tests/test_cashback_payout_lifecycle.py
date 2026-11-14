@@ -195,6 +195,20 @@ def test_tai_khoan_dung_chung_bi_canh_bao(tmp_path):
         assert payouts.shared_account_users(conn, payouts.account_sha("MB", "0123456789")) == 2
 
 
+def test_cung_ten_chu_tai_khoan_khac_so_bi_canh_bao(tmp_path):
+    bot = _ready(tmp_path, users=(USER, OTHER))
+    bot.wallet.save_bank(USER, ACCOUNT, T)
+    bot.wallet.save_bank(OTHER, BankAccount("VCB", "9876543210", ACCOUNT.account_name.lower() + "  "), T)
+    sha = payouts.account_sha(ACCOUNT.bank_code, ACCOUNT.account_no)
+    with bot.repo.connect() as conn:
+        assert payouts.same_name_users(conn, USER, ACCOUNT.account_name, sha) == [OTHER]
+        assert payouts.same_name_users(conn, USER, "TRAN THI B", sha) == []
+    # Trùng cả số tài khoản thì đã có cảnh báo «dùng chung», không báo thêm dòng cùng tên.
+    bot.wallet.save_bank(OTHER, ACCOUNT, T)
+    with bot.repo.connect() as conn:
+        assert payouts.same_name_users(conn, USER, ACCOUNT.account_name, sha) == [OTHER]  # lịch sử VCB cũ vẫn tính
+
+
 def test_13_37_doi_tai_khoan_sau_khi_gui_yeu_cau(tmp_path):
     bot = _ready(tmp_path)
     _available(bot, 20_000, "a")

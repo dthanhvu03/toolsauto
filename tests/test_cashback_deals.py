@@ -159,8 +159,10 @@ def test_trang_chu_co_loi_vao_deal_khi_bat(tmp_path):
     assert "u:dc:home" not in [d for row in _callback(bot, USER, "u:p:home").inline_keyboard for _l, d in row]
     bot.repo.set_state(deals.ENABLED_KEY, "1")
     rows = _callback(bot, USER, "u:p:home").inline_keyboard
-    assert rows[1:3] == ((("📦 Đơn hàng của tôi", "u:p:orders"),), (("🔥 Deal hôm nay", "u:dh"), ("🛍️ Danh mục deal", "u:dc:home"))), \
-        "ngay dưới Đơn hàng của tôi"
+    assert rows[:2] == ((("👛 Ví của tôi", "u:p:wallet"), ("📦 Đơn hàng", "u:p:orders")),
+                        (("🔥 Deal hôm nay", "u:dh"), ("📖 Hướng dẫn", "u:p:guide"))), "ngay dưới Ví / Đơn hàng"
+    # Trang chủ gọn (2026-11-13): Danh mục deal nằm trong 🔥 Deal hôm nay, không còn ở trang chủ.
+    assert "u:dc:home" not in [d for row in rows for _l, d in row]
 
 
 # --- Khách chưa chọn danh mục: bot đoán gu ----------------------------------------------------------------------

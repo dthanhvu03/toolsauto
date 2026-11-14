@@ -360,6 +360,7 @@ class WalletAdmin:
             history = payouts.events(conn, int(row["id"]))
             state = payouts.bank_status(conn, int(row["telegram_user_id"]), row["account_sha"])
             shared = payouts.shared_account_users(conn, row["account_sha"]) if row["account_sha"] else 0
+            same_name = payouts.same_name_users(conn, int(row["telegram_user_id"]), row["account_name"], row["account_sha"])
             fund = payouts.fund_position(conn)
         show_account = row["status"] == payouts.PROCESSING and not locked
         photo = qr_problem = None
@@ -368,7 +369,7 @@ class WalletAdmin:
         text = payout_text(
             row, None if user is None else user["username"], BANKS.get(row["bank_code"], ("", row["bank_code"]))[1],
             allocations=parts, conditions=conditions, events=history, bank_state=state, shared_users=shared,
-            fund=fund, notice=notice, show_account=show_account, qr_problem=qr_problem, qr_sent=photo is not None,
+            same_name_users=same_name, fund=fund, notice=notice, show_account=show_account, qr_problem=qr_problem, qr_sent=photo is not None,
         )
         targets = list(payouts.TRANSITIONS.get(row["status"], {}))
         return BotReply(text, inline_keyboard=payout_keyboard(row, targets, locked), photo=photo)

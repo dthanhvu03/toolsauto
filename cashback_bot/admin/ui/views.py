@@ -976,7 +976,7 @@ def wallet_member_text(label: str, balance, entries, bank) -> str:
 
 def payout_text(payout, username, bank_name: str, *, allocations, conditions, events, bank_state: str,
                 shared_users: int, fund, notice: str = "", show_account: bool = False, qr_problem: str | None = None,
-                qr_sent: bool = False) -> str:
+                qr_sent: bool = False, same_name_users: list[int] | tuple[int, ...] = ()) -> str:
     """Chi tiết một yêu cầu rút. Số tài khoản đầy đủ chỉ hiện ở bước Đang chuyển (show_account)."""
     amount = int(payout["amount_vnd"])
     account = payout["account_no"] if show_account else f"••••{payout['account_no'][-4:]}"
@@ -991,6 +991,13 @@ def payout_text(payout, username, bank_name: str, *, allocations, conditions, ev
         f"{html.escape(payout['account_name'])}",
         f"Tài khoản: <b>{_BANK_STATE.get(bank_state, '⚪ chưa xác minh')}</b>"
         + (f" · ⚠️ dùng chung với {shared_users - 1} khách khác" if shared_users > 1 else ""),
+    ]
+    if same_name_users:
+        ids = ", ".join(f"<code>{uid}</code>" for uid in same_name_users[:5])
+        more = f" (+{len(same_name_users) - 5})" if len(same_name_users) > 5 else ""
+        lines.append(f"🔎 Cùng tên chủ TK, khác số TK: {len(same_name_users)} khách ({ids}{more}) · "
+                     "có thể chỉ trùng tên, xem kỹ trước khi duyệt")
+    lines += [
         f"Nội dung chuyển: <code>{html.escape(payout['transfer_note'] or '')}</code>",
         "",
         "🧾 <b>Nguồn từng đồng</b>",
