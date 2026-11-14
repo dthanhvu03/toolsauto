@@ -360,6 +360,9 @@ def ask_topup_amount(min_amount: int) -> str:
     return f"✍️ Gõ số tiền muốn nạp, ví dụ <code>150k</code> hoặc <code>150000</code> (tối thiểu {vnd(min_amount)})."
 
 
+TOPUP_VALID_MIN = 5  # mã nạp tự huỷ sau bấy nhiêu phút (bot.TOPUP_EXPIRE_SEC / TOPUP_REUSE_SEC lấy từ đây)
+
+
 def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str, auto: bool,
                        product_name: str | None = None) -> str:
     if product_name:
@@ -381,6 +384,7 @@ def topup_instructions(topup: Topup, bank_name: str, account_no: str, owner: str
         f"Số tiền: <code>{topup.amount}</code>\n"
         f"Nội dung: <code>{topup.code}</code>\n\n"
         f"⚠️ Ghi đúng nội dung <b>{topup.code}</b>, sai nội dung bot không nhận ra được.\n"
+        f"⏳ Mã có hiệu lực <b>{TOPUP_VALID_MIN} phút</b>.\n"
         f"{when}"
     )
 
@@ -393,6 +397,17 @@ def topup_pending_exists(topup: Topup, product_name: str | None) -> str:
         "Mỗi lần chỉ dùng 1 mã: thanh toán mã này và đợi xác nhận rồi mới tạo mã khác.\n"
         "⚠️ Đã chuyển khoản rồi thì <b>đừng huỷ</b>, chỉ cần đợi shop xác nhận. "
         "Chưa chuyển và muốn đổi món / số tiền thì bấm ❌ Huỷ mã này."
+    )
+
+
+def topup_expired(topup: Topup, product_name: str | None) -> str:
+    what = f"📦 {esc(product_name)} × {topup.intent_quantity}\n" if product_name else ""
+    again = "bấm mua lại món này" if product_name else "bấm 💰 Nạp tiền"
+    return (
+        f"⌛ <b>Mã thanh toán đã hết hạn</b> (quá {TOPUP_VALID_MIN} phút)\n\n"
+        f"{what}💰 {vnd(topup.amount)} · nội dung <code>{topup.code}</code>\n\n"
+        f"Chưa chuyển khoản: {again} để lấy mã mới.\n"
+        "Lỡ chuyển rồi: tiền vẫn được cộng vào ví, bạn dùng số dư để mua (bot không tự gửi hàng cho mã đã hết hạn)."
     )
 
 
@@ -1123,7 +1138,7 @@ def topup_outcome(topup: Topup) -> str:
         if by == "user":
             return "❌ <b>Khách tự huỷ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
         if by == "expired":
-            return "⌛ <b>Hết hạn 24 giờ</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
+            return f"⌛ <b>Hết hạn {TOPUP_VALID_MIN} phút</b> · lỡ tiền vẫn về thì bot vẫn cộng vào ví (không tự mua)"
         return "❌ <b>Admin đã huỷ</b>"
     return "⏳ Đang chờ"
 

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.api_server import create_app
-from store_bot.bot import StoreBot
+from store_bot.bot import TOPUP_EXPIRE_SEC, StoreBot
 from store_bot.config import BankAccount, ConfigError, Settings, load_settings
 from store_bot.db import StoreError, StoreRepository, unit_price
 from store_bot.fulfill import Fulfiller
@@ -1133,6 +1133,22 @@ def test_pressing_qr_again_reuses_code_and_old_codes_expire(fatcat, repo):
     assert len(repo.expire_topups(-1)) == 1
     assert repo.pending_topups() == []
     assert repo.get_topup(pending[0].id).status == "cancelled"
+
+
+def test_qr_says_valid_5_minutes_and_expired_code_tells_customer(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gem = products[49]
+    store.handle_update(_click(BUYER, f"bq:{gem.id}:1"))
+    assert any("Mã có hiệu lực <b>5 phút</b>" in caption for _, caption in telegram.photos)
+    assert TOPUP_EXPIRE_SEC == 5 * 60
+
+    (topup_id,) = repo.expire_topups(-1)
+    store.on_topup_expired(repo.get_topup(topup_id))
+    note = [h for h in telegram.texts_to(BUYER) if "đã hết hạn" in h]
+    assert len(note) == 1
+    assert repo.get_topup(topup_id).code in note[0]
+    assert "tiền vẫn được cộng vào ví" in note[0]
+    assert msg.topup_outcome(repo.get_topup(topup_id)).startswith("⌛ <b>Hết hạn 5 phút</b>")
 
 
 @pytest.mark.parametrize("name,expected", [

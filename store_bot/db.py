@@ -168,7 +168,7 @@ ADDED_COLUMNS = {
         # Thanh toán QR cho một đơn (mua thẳng không cần nạp ví trước): tiền vào là bot tự mua món này.
         "intent_product_id": "INTEGER",
         "intent_quantity": "INTEGER",
-        # Giá 1 món lúc tạo QR: tiền về (trong 24 giờ mã còn hiệu lực) thì bán đúng giá này dù giá đã tăng.
+        # Giá 1 món lúc tạo QR: tiền về (trong 5 phút mã còn hiệu lực) thì bán đúng giá này dù giá đã tăng.
         "intent_unit_price": "INTEGER",
     },
 }
@@ -930,7 +930,7 @@ class StoreRepository:
             already_used = bank_ref and conn.execute(
                 "SELECT 1 FROM topups WHERE bank_ref = ?", (bank_ref,)
             ).fetchone()
-            # Khách tự huỷ / mã quá 24 giờ mà tiền vẫn về: vẫn cộng vào ví, nhưng bỏ ý định mua (khách có thể đã
+            # Khách tự huỷ / mã quá 5 phút mà tiền vẫn về: vẫn cộng vào ví, nhưng bỏ ý định mua (khách có thể đã
             # chọn món khác). Mã admin huỷ thì không tự cộng.
             revived = row["status"] == "cancelled" and row["resolved_by"] in ("user", "expired")
             if (row["status"] != "pending" and not revived) or already_used:

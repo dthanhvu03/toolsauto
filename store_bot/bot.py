@@ -41,8 +41,8 @@ BROADCAST_DELAY_SEC = 0.05  # ~20 tin/giây, dưới giới hạn 30 tin/giây c
 MARKUP_DAYS = 30  # xem trước dòng tăng giá theo số món bán trong 30 ngày qua
 CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
 WAITING_FUNDS_CHECK_SEC = 30  # có đơn chờ ví: đọc số dư FatCat mỗi 30 giây (GET, không trừ tiền)
-TOPUP_REUSE_SEC = 24 * 3600  # bấm QR lại cùng món / cùng số tiền trong 24 giờ → dùng lại mã cũ
-TOPUP_EXPIRE_SEC = 24 * 3600  # mã nạp chờ quá 24 giờ tự huỷ
+TOPUP_REUSE_SEC = msg.TOPUP_VALID_MIN * 60  # bấm QR lại cùng món / cùng số tiền khi mã còn hạn → dùng lại mã cũ
+TOPUP_EXPIRE_SEC = msg.TOPUP_VALID_MIN * 60  # mã nạp tự huỷ sau 5 phút (chủ bot chọn 13/11: khách trả thường < 5 phút)
 WAITING_REFUND_SEC = 6 * 3600  # đơn chờ ví quá 6 giờ (admin chưa nạp) → tự hoàn về ví khách
 MAX_TOPUP_VND = 50_000_000
 SEND_RETRY_SEC = 2
@@ -966,6 +966,18 @@ class StoreBot:
         self.on_topup_credited(topup, balance)  # sửa tin «Yêu cầu nạp» của mọi admin: ghi «đã cộng», bỏ nút
         return "Đã cộng tiền."
 
+    def on_topup_expired(self, topup: Topup | None) -> None:
+        """Mã nạp vừa tự huỷ vì quá hạn: sửa tin admin + báo khách lấy mã mới (lỡ chuyển rồi vẫn được cộng ví)."""
+        if topup is None:
+            return
+        self.close_topup_notice(topup)
+        product = self.repo.get_product(topup.intent_product_id) if topup.intent_product_id else None
+        try:
+            self.tg.send_message(topup.user_id, msg.topup_expired(topup, product.name if product else None),
+                                 keyboard([button("🏠 Trang chủ", "home")]))
+        except Exception:
+            logger.exception("[Store] báo khách mã nạp %s hết hạn lỗi", topup.id)
+
     def on_topup_credited(self, topup: Topup, balance: int) -> None:
         """Tiền nạp vừa được cộng (admin bấm ✅ hoặc SePay). Nạp để mua một đơn thì tự mua luôn."""
         self.close_topup_notice(topup)
@@ -1442,9 +1454,9 @@ def run_background(bot: StoreBot, stop: threading.Event) -> None:
         try:
             expired = bot.repo.expire_topups(TOPUP_EXPIRE_SEC)
             for topup_id in expired:
-                bot.close_topup_notice(bot.repo.get_topup(topup_id))
+                bot.on_topup_expired(bot.repo.get_topup(topup_id))
             if expired:
-                logger.info("[Store] huỷ %s mã nạp quá 24 giờ", len(expired))
+                logger.info("[Store] huỷ %s mã nạp quá %s phút", len(expired), msg.TOPUP_VALID_MIN)
         except Exception:
             logger.exception("[Store] huỷ mã nạp quá hạn lỗi")
         if bot.fulfiller.client is not None:
