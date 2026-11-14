@@ -1,3 +1,126 @@
+## Phiên 2026-11-14 (threads-fingerprint-review) — Claude Code đo vân tay trình duyệt sau bản vá session.py của Antigravity
+- Đo thật (Playwright 1.58, Chromium 145.0.7632.6, server cục bộ, profile tạm — KHÔNG gọi Meta, KHÔNG đụng profile thật).
+  Script + số liệu: scratchpad phiên c96ba8d3 (fp_probe.py, fp_out.json).
+- KẾT LUẬN: bản vá CHƯA xoá hết «HeadlessChrome». Worker (headless=True = binary chromium_headless_shell) chỉ đổi chuỗi UA;
+  `sec-ch-ua` / `sec-ch-ua-full-version-list` (gửi mọi request HTTPS) và `navigator.userAgentData.brands` vẫn
+  «HeadlessChrome». UA mới ghi `Chrome/145.0.7632.6` (đủ số) trong khi Chrome thật / phiên đăng nhập tay ghi `Chrome/145.0.0.0`.
+  Lệch thêm so với phiên đăng nhập: thiếu header Accept-Language, plugins 0 (thật 5), languages [en-US] (thật [en-US,en]),
+  Notification «denied» nhưng permissions «prompt» (dấu headless kinh điển), window.chrome = {runtime:{}} (thật:
+  loadTimes,csi,app; runtime undefined), navigator.webdriver undefined + own-property (thật: false trên prototype).
+- Cửa sổ đăng nhập tay (app/scripts/login_browser.py) chạy KHÔNG có --disable-blink-features=AutomationControlled
+  → navigator.webdriver = TRUE lúc chủ bot đăng nhập.
+- ĐÃ VÁ (chủ bot: «em vá và nâng cấp code»): session.py — headless mở `channel="chromium"` (Chromium đầy đủ, chế độ
+  headless mới; lỗi → dự phòng headless shell + log warning), UA `Chrome/<major>.0.0.0` (`_reduced_user_agent`), BỎ 2 init
+  script giả webdriver / window.chrome; login_browser.py thêm `--disable-blink-features=AutomationControlled`.
+- Proof đo lại (fp_after.txt): worker headless = headful = cửa sổ đăng nhập ở MỌI mục (UA, sec-ch-ua, full-version-list,
+  brands, webdriver=false, window.chrome loadTimes/csi/app, plugins 5, languages, Accept-Language, Notification, Worker);
+  không còn «HeadlessChrome» ở đâu. tests/test_session_fingerprint.py 6 test mới; Threads + session 121 passed;
+  1 hỏng có sẵn (test_metrics_checker_… — thiếu app/features/facebook/pages/reels, không liên quan); ruff sạch.
+- Cần: `pm2 restart Threads_Growth`. Lần đăng nhập tay tiếp theo sẽ có webdriver=false. Theo dõi RAM (Chromium đầy đủ
+  nặng hơn headless shell) và log «không mở được Chromium đầy đủ».
+
+## Phiên 2026-11-14 (threads-safeguards-review) — Claude Code soát 4 biện pháp của Antigravity + vá (chủ bot: «em vá cho anh»)
+- Soát (trước khi vá): @us28qt quét cho CẢ NHÓM 48 lượt tìm / vòng, 60 phút / vòng, 24/24 (≈ 1.150 lượt / ngày) — chia AI
+  Store cho @anlinh không giảm tải quét; KHÔNG có giờ nghỉ đêm (7 ngày: 27 reply 00–03h VN; 5 DM 23:54–00:00 VN 13/11);
+  session.py mỗi lần mở headless khởi thêm 1 Chromium chỉ để đọc version; test safeguards đọc config thật chốt cứng 20/3.
+- ĐÃ VÁ:
+  1. Giờ nghỉ `growth.quiet_hours` (mặc định «00:30-06:30» VN): worker không mở trình duyệt (không quét / reply / đăng /
+     DM). `worker.in_quiet_hours`, `WorkerConfig.quiet_hours`.
+  2. Mỗi tài khoản tự quét từ khoá bot của MÌNH (@anlinh quét AI Store); tối đa `growth.max_searches_per_scan` (mặc định 10)
+     lượt tìm / tài khoản / vòng, bốc ngẫu nhiên. runtime_settings `growth.scan_interval_min` 60 → 120.
+  3. session.py: `_chromium_version` đọc 1 lần / tiến trình, đóng trong finally.
+  4. Prompt no_link: bám 1 chi tiết của bài, cấm câu mở sáo / bịa đã mua, không lặp từ đệm cố định; `clean_plain_reply`
+     bỏ @nhắc tên, cắt ≤ 160 ký tự; bỏ xong còn trơ → quay về reply có link.
+  5. Test safeguards chỉ giữ trần (≤ 30 / ≤ 4) để ramp-up không làm hỏng test.
+- Proof: 6 test mới (giờ nghỉ, worker nghỉ đêm không mở trình duyệt, quét theo tài khoản + giới hạn lượt, no_link bỏ @ /
+  cắt dài / quay về có link); Threads + psych + login 134 passed; ruff sạch. Cần: `pm2 restart Threads_Growth`.
+- Lộ trình tăng nhịp @us28qt (chưa đặt lịch tự động, sửa tay file vai): 14–17/11 20·3/giờ → 18/11 25·4 → 22/11 30·4, giữ 30
+  hết 12.12, không quay lại 35; mỗi lần chỉ tăng reply HOẶC DM; có checkpoint → 15/ngày 5 ngày.
+- Chưa làm: stub `window.chrome` của Antigravity giữ nguyên (không mở rộng giả vân tay).
+## Phiên 2026-11-14 (threads-safeguards) — Triển khai 4 biện pháp giữ tài khoản sau checkpoint (chủ bot duyệt)
+- ĐÃ LÀM 4 MỤC:
+  1. `app/adapters/common/session.py`: Bỏ khai cứng «Chrome 120» (`default_ua`), để Chromium tự khai đúng phiên bản thật (Chrome 145+), đồng bộ tuyệt đối với phiên đăng nhập thật của chủ bot.
+  2. `storage/db/config/threads_growth_accounts.json` & `dm_agent.py`: Giảm nhịp an toàn cho @us28qt: reply 20/ngày, 3/giờ; tin nhắn riêng DM giảm từ 40 → 15/ngày, 4/giờ.
+  3. `evaluator.py`, `runner.py`, `worker.py`: ~1/3 reply hữu cơ chỉ trò chuyện tự nhiên (`[no_link]`), không gắn link; chỉ gắn link khi khách hỏi tìm link/chỗ mua hoặc khi chủ động tiếp thị. Worker bỏ qua cưỡng ép gắn link đối với các reply trò chuyện này.
+  4. `storage/db/config/threads_growth_accounts.json`: @anlinh đã làm ấm xong, gánh toàn bộ AI Store (`bots: ["ai_store"]`); @us28qt chỉ phụ trách Cashbot (`bots: ["cashbot"]`), giảm tải đáng kể.
+- Proof: 98 tests threads passed; ruff sạch.
+- Cần: `pm2 restart Threads_Growth`.
+
+## Phiên 2026-11-14 (threads-relogin) — @us28qt checkpoint 09:40Z, đăng nhập lại + sửa lỗi kẹt Playwright
+- @us28qt bị checkpoint (challengepicker) → tự tắt. Chủ bot đăng nhập lại qua cửa sổ Chromium (`session.start_login`,
+  WSLg) → LOGIN_OK, ACTIVE.
+- LỖI CÓ SẴN đã sửa: `GrowthBrowser.__enter__` gặp checkpoint sau khi mở trình duyệt → không đóng (``__exit__`` không
+  chạy) → Playwright kẹt vòng lặp trong luồng → mọi lần mở sau «Sync API inside the asyncio loop» → @anlinh (phiên tốt)
+  và @us28qt (vừa đăng nhập) bị tự tắt oan. Sửa: đóng trong ``__enter__`` khi lỗi. Test mới; Threads 120 passed; ruff sạch.
+- Chủ bot restart; bật lại cả 2 tài khoản + mark ACTIVE. Worker mở @us28qt thành công (DM + quét).
+- Checkpoint xảy ra ~9 giờ sau 5 DM Requests + 35 reply/ngày — chưa rõ nguyên nhân; đề xuất giảm nhịp (reply ~20/ngày,
+  DM ≤ 15/ngày) — CHỜ chủ bot.
+
+## Phiên 2026-11-13 (threads-dm) — PLAN-171 AI agent tin nhắn riêng Threads (chủ bot giao toàn quyền inbox)
+- Web Threads có `/messages` + `/messages/requests` (Requests phải Accept). Agent mỗi 10 phút đọc Requests rồi Inbox, chỉ
+  trả lời người tự nhắn tới; hạn 40 tin / ngày, 8 / giờ, 6 / cuộc / ngày. Handoff (khiếu nại, bảo hành, thanh toán, sỉ,
+  đòi người thật, khách gửi username nhận Canva) → Telegram «🙋 Khách cần anh xử lý» + link cuộc, agent im 24 giờ.
+- Chạy thử không gửi: 5 khách xin Canva đang chờ ở Requests sẽ được hướng dẫn `?start=canva`. Chi tiết + proof: PLAN-171.
+- Bật us28qt `"dm": true`; chủ bot đã restart. Lần 1 gửi hụt (nút Accept) → đã sửa + DM chạy đầu vòng; lần 2 (17:00Z)
+  5/5 khách xin Canva đã nhận tin, kiểm chỉ đọc: đã sang Inbox. Next: theo dõi khách vào Cashbot mã `canva` + tin handoff.
+- Chủ bot cần: gửi slot Canva khi có tin handoff (agent đã kiểm username trong Cashbot: đã vào bot / đã tạo link chưa).
+
+## Phiên 2026-11-13 (cashbot-growth) — Chiến dịch kéo khách Cashbot tới Tết (chủ bot: «hi vọng nhiều khách»)
+- Số thật: 51 khách (TG 30 + Zalo 21), 10 có đơn, 15 tạo link ≥ 2 ngày; nguồn: tự vào 39, threads_cb_* 11, canva 1.
+  Mời bạn: 4 mã, 0 lượt mời. Threads Cashbot 281 reply / 7 ngày → ~1–2% ra khách có mã.
+- Kho bài cạn: mỗi vòng quét ~438 bài, nhận 0–1; 3 ngày 847 bị loại (đa số «chào hàng» = người bán). 13/11 chỉ 4 reply.
+- LỖI ĐÃ SỬA: worker `link_for` lúc đăng đổi zalo.me → t.me (4/4 reply «· Zalo» 7 ngày qua) → ZALO_SHARE không có tác dụng.
+  `evaluator.link_for` giữ reply có CASHBOT_ZALO_URL. Proof: test mới, tests Threads 82 passed, ruff sạch.
+  Cần: `pm2 restart Threads_Growth`.
+- ĐÃ LÀM (chủ bot: «chuẩn bị tới cuối năm»): (1) từ khoá growth.keywords_cashbot → người mua + Tết (sắm tết shopee, đồ tết
+  mua ở đâu, quà tết shopee, 12.12 mua gì, black friday shopee, có nên mua shopee, review giúp shopee…); bản cũ ở scratchpad
+  keywords_cashbot.before-20261113.txt. (2) entry_notice holding / available kèm dòng rủ «/moiban» (invite_pct khi
+  referral bật). Proof: test mới; cashback 1224 passed (+ test_b9 hỏng sẵn).
+- PHÁT HIỆN: báo mã (sale_relay → voucher.subscribers = MỌI khách từng tạo link) gửi ~9 tin / khách / ngày (11/11 ~25),
+  3305 tin từ 31/10 tới 34 khách; link dùng sub_id AUTOSALE → khách mua qua đó không được hoàn. Nghi làm khách tắt
+  thông báo / quen mua không qua link mình. CHỜ chủ bot chọn mức giới hạn (đề xuất tối đa 3 tin / ngày, gộp).
+- Lịch nhắc sale: đã duyệt 27/11 BF tối, 12.12 tối + trưa; CHƯA duyệt 25/12 tối, 1/1 tối. Tin start-v1 chưa gửi.
+
+## Phiên 2026-11-13 (cashback-risk) — Rà rủi ro rút tiền Cashbot + cảnh báo một người nhiều tài khoản (chủ bot giao)
+- Đính chính: MỌI yêu cầu rút đều cần tài khoản VERIFIED mới qua bước duyệt chi / đang chuyển (payout_conditions
+  `bank_verified`, wallet.advance money_out) — không chỉ tài khoản mới đổi. Admin có QR VietQR điền sẵn ở bước Đang chuyển.
+- Mới: `payouts.same_name_users` — khách khác từng khai tài khoản KHÁC số nhưng cùng tên chủ TK → màn chi tiết yêu cầu rút
+  hiện «🔎 Cùng tên chủ TK, khác số TK: N khách (ID…)». Chỉ hiển thị, không chặn.
+- Proof: test mới; test cashback + zalo + store + bot_users 1322 passed + 1 hỏng sẵn (test_b9); ruff sạch.
+  Cần: `systemctl restart cashback-bot cashback-zalo`.
+- Chờ chủ bot: bật xác minh 2 bước Telegram admin; chọn ngày giữ 7 hay 15.
+- ĐÃ LÀM trang chủ gọn (chủ bot: «càng gọn càng tốt»): 11 → 7 nút, 2 nút / hàng (Ví · Đơn hàng · Deal · Mã giảm giá ·
+  Mời bạn · 📖 Hướng dẫn · Hỗ trợ). Cách dùng + Để được ghi nhận + Cách tính → trang 📖 Hướng dẫn (GUIDE_PAGE_KEYBOARD);
+  Danh mục deal → trong 🔥 Deal hôm nay (có sẵn nút); 🏅 Hạng → trong 👛 Ví (service._page_body wallet). Zalo dùng chung.
+  Callback cũ (u:p:tips, u:p:calc, u:dc:home, u:p:rank) vẫn chạy → tin cũ không hỏng. Proof: 3 test cập nhật + 1 mới;
+  cashback + store + bot_users 1322 passed (+ test_b9 hỏng sẵn); ruff sạch.
+
+## Phiên 2026-11-13 (store-topup-5m) — Mã nạp AI Store tự huỷ sau 5 phút (chủ bot giao trực tiếp, trước 24 giờ)
+- Số thật: 12/12 lần nạp paid trả trong ≤ 5 phút (đa số < 1 phút). `TOPUP_EXPIRE_SEC` + `TOPUP_REUSE_SEC` 24h → 5 phút
+  (store_bot/bot.py), chữ admin «Hết hạn 5 phút», log + comment db.py. Tiền về sau hạn vẫn cộng ví nhưng KHÔNG tự giao món.
+- Proof: tests/test_store_bot.py + test_store_nudge 99 passed; ruff sạch. Cần: `systemctl restart store-bot store-api`.
+- ĐÃ LÀM (chủ bot duyệt): tin QR thêm «⏳ Mã có hiệu lực 5 phút»; mã tự huỷ → `on_topup_expired` sửa tin admin + nhắn
+  khách `msg.topup_expired` (lấy mã mới; lỡ chuyển vẫn cộng ví, không tự gửi hàng). Số phút chung `msg.TOPUP_VALID_MIN`.
+  Proof: test mới; test_store_bot + nudge + bot_users 104 passed; ruff sạch.
+
+## Phiên 2026-11-13 (bots-chk) — Báo cáo 2 bot so mục tiêu 20 khách mới / bot tới CN 15/11 (chỉ đọc, all_users.report)
+- Từ T2 09/11 (giờ VN): Cashbot mới 17 (TG 10 + Zalo 7) — KHÔNG đổi từ 12/11; 8 người tạo link, 3 có đơn. Từ 12/11 15:19 VN
+  không có link nào được tạo. AI Store mới 32 (11 hôm nay; nguồn threads_ai_price 12, threads_ai_auto 8, tự vào 12) — đạt;
+  nhưng chỉ 4 người mới có đơn. Store đơn done từ T2: 7 đơn / 380.500đ (hôm nay 1 / 157.000đ).
+- `store_bot.nudge` CHƯA gửi (0 khoá nudge:start-v1). Cần chủ bot duyệt câu chữ rồi chạy `--send`.
+
+## Phiên 2026-11-13 (buffer-chk5) — Báo cáo tiến trình + Buffer (chỉ đọc log + DB, không gọi API Buffer, không sửa code)
+- WSL khởi động lại ~01:34Z; đồng hồ lệch lúc boot rồi tự chỉnh (job lúc boot ghi giờ sai). Mọi systemd + PM2 online
+  (DB_Backup stopped = cron 03:00, bình thường).
+- Buffer job DONE/FAILED: 09/11 6/0, 10/11 7/0, 11/11 6/1, 12/11 6/0, 13/11 6/2. Lỗi 13/11: #1475/#1476 «Video could not be
+  read» ngay sau boot (Buffer chỉ HEAD, chưa GET — tunnel/web chưa sẵn); #1816 tự hẹn lại OK (#1480), #1818 còn READY chờ lượt.
+- Hàng chờ: Uyển Nhi 10/10 (tới 16/11 19:30, 17 chưa hẹn); Hoa Lệ Đây 10/10 (tới 16/11 19:00, 16 chưa hẹn);
+  trnvp89 hết từ 11/11 14:00 — key e252 bị 429, cooldown tới 14/11 13:34 VN (76 video chưa hẹn chờ sẵn);
+  Sống Nhẹ hết từ 10/11 17:30 — 0 video chưa hẹn, nguồn #4 nnpt2310 + #5 nunhanthongtue quét 12/11 ra found=0 (cạn).
+- Suất 30 ngày: f8pL 923/2000, RZX2 ~101/2000 (rất thấp); cả hai dưới mức giữ 70% → bỏ quét kênh / post_statuses.
+- Threads own_posts #15 (11:45) + #16 (17:30) 13/11 vẫn failed «không thấy bài» (431 ký tự) — chưa kiểm trang thật.
+- **Next (chủ bot chọn):** nguồn mới cho Sống Nhẹ; kiểm trang @us28qt xem #15/#16 có lên không.
+
 ## Phiên 2026-11-12 (own-post-links) — Bài deal Threads dán link từng món ở dưới cùng (chủ bot chọn)
 - `content.item_links`: dưới link bot thêm «👇 Link món (copy dán vào bot ở trên để đc hoàn):» + «- <tên gọn>: <url>» từ
   deals_pool.url (s.shopee.vn). Thân bài rút còn ≤ 280 ký tự (prompt) để cả bài ≤ 470; prompt dặn copy link dán bot, đừng mua thẳng.

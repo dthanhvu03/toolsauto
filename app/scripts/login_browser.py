@@ -87,6 +87,8 @@ def main():
                 user_data_dir=args.profile_dir,
                 headless=False,
                 args=[
+                    # Không lộ navigator.webdriver=true lúc chủ bot đăng nhập (worker cũng chạy cờ này)
+                    "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",

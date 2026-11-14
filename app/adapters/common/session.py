@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
 from app.config import (
     PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
@@ -24,6 +23,43 @@ class SessionStatus:
     EXPIRED = "expired"
     MISSING_PROFILE = "missing_profile"
     NEEDS_LOGIN = "needs_login"
+
+
+_CHROMIUM_VERSION: str | None = None
+
+# Headless dùng bản Chromium đầy đủ (chế độ headless mới) — cùng binary với cửa sổ đăng nhập tay, nên plugins,
+# languages, Accept-Language, window.chrome, Client Hints (sec-ch-ua) khớp phiên đăng nhập. Bản headless shell mặc
+# định của Playwright gửi sec-ch-ua «HeadlessChrome», plugins 0, không có Accept-Language.
+HEADLESS_CHANNEL = "chromium"
+
+
+def _reduced_user_agent(version: str) -> str:
+    """UA kiểu Chrome thật (UA reduction): chỉ giữ số major, ví dụ ``Chrome/145.0.0.0``."""
+    major = version.split(".", 1)[0]
+    return (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/{major}.0.0.0 Safari/537.36"
+    )
+
+
+def _chromium_version(pw: Playwright) -> str | None:
+    """Phiên bản Chromium của Playwright — mở thử một lần / tiến trình rồi nhớ (trước: mỗi lần mở trình duyệt headless
+    lại khởi thêm một Chromium chỉ để đọc version). Lỗi → None (dùng UA mặc định)."""
+    global _CHROMIUM_VERSION
+    if _CHROMIUM_VERSION is None:
+        browser = None
+        try:
+            browser = pw.chromium.launch(channel=HEADLESS_CHANNEL)
+            _CHROMIUM_VERSION = browser.version
+        except Exception as exc:
+            logger.warning("Session: không đọc được phiên bản Chromium: %s", exc)
+        finally:
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+    return _CHROMIUM_VERSION
 
 
 class PlatformSessionManager:
@@ -139,12 +175,6 @@ class PlatformSessionManager:
             )
 
         vp = viewport or {"width": 1280, "height": 720}
-        default_ua = (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            if sys.platform.startswith("linux")
-            else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        ua = user_agent or default_ua
         args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-infobars",
@@ -169,19 +199,35 @@ class PlatformSessionManager:
                 "%s: launch_persistent headless=%s profile=%s",
                 prefix, headless, profile_path,
             )
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir=profile_path,
-                headless=headless,
-                viewport=vp,
-                user_agent=ua,
-                args=args,
-            )
+            launch_kwargs = {
+                "user_data_dir": profile_path,
+                "headless": headless,
+                "viewport": vp,
+                "args": args,
+            }
+            if user_agent:
+                launch_kwargs["user_agent"] = user_agent
+            elif headless:
+                # Headless mới vẫn ghi «HeadlessChrome» trong chuỗi UA (Client Hints thì sạch) → khai UA Chrome thật.
+                ver = _chromium_version(pw)
+                if ver:
+                    launch_kwargs["user_agent"] = _reduced_user_agent(ver)
+
+            # Không chèn script giả navigator.webdriver / window.chrome: cờ AutomationControlled đã cho
+            # webdriver=false như Chrome thật, Chromium đầy đủ có sẵn window.chrome thật (giả tay lại thành dấu vết).
+            if headless:
+                try:
+                    context = pw.chromium.launch_persistent_context(channel=HEADLESS_CHANNEL, **launch_kwargs)
+                except Exception as exc:
+                    logger.warning(
+                        "%s: không mở được Chromium đầy đủ ở chế độ headless (%s) — dùng headless shell.",
+                        prefix, exc,
+                    )
+                    context = pw.chromium.launch_persistent_context(**launch_kwargs)
+            else:
+                context = pw.chromium.launch_persistent_context(**launch_kwargs)
             page = context.pages[0] if context.pages else context.new_page()
             page.set_default_timeout(PLAYWRIGHT_DEFAULT_TIMEOUT_MS)
-            try:
-                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
-            except Exception:
-                pass
             return pw, context, page
         except Exception as e:
             logger.error(
