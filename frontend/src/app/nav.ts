@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Database,
   Clapperboard,
+  Coins,
   Download,
   Film,
   Home,
@@ -70,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/app/go/compliance", label: "Từ khoá cấm", icon: ShieldAlert },
       { to: "/app/go/threads-growth", label: "Threads kéo khách", icon: MessageCircle },
       { to: "/app/go/bot-users", label: "Khách các bot", icon: Users },
+      { to: "/cashback", label: "Cashback", icon: Coins, external: true },
     ],
   },
   {

@@ -154,6 +154,7 @@
             ('Từ khoá cấm', '/app/go/compliance', 'shield', p.startswith('/compliance')),
             ('Threads kéo khách', '/app/go/threads-growth', 'chat', False),
             ('Khách các bot', '/app/go/bot-users', 'users', False),
+            ('Cashback', '/cashback', 'coin', p.startswith('/cashback')),
           ]),
           ('Hệ thống', [
             ('Nhật ký', '/app/logs', 'log', p.startswith('/app/logs')),
@@ -161,7 +162,6 @@
             ('Panel hệ thống', '/syspanel', 'server', p.startswith('/syspanel')),
             ('Dữ liệu (DocType)', '/app/go/doctype', 'layers', False),
             ('Cơ sở dữ liệu', '/database', 'db', p.startswith('/database')),
-            ('Cashback', '/cashback', 'coin', p.startswith('/cashback')),
           ]),
         ] %}
         {% for section, items in sections %}
