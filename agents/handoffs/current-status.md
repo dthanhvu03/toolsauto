@@ -1,3 +1,19 @@
+## Phiên 2026-11-15 (threads-report-nav) — Báo cáo kéo khách Threads + đưa Cashback vào menu giao diện mới
+- UI: Cashback trước chỉ có ở sidebar Jinja (nhóm Hệ thống) — menu React (nav.ts) không có → phải bấm «Classic».
+  Đã thêm vào nav.ts (external /cashback, icon Coins) cạnh «Khách các bot»; Jinja app.html dời cùng chỗ. Build frontend OK
+  (tsc + vite → app/static/admin); bundle có link; template parse OK. Chưa xem tận mắt (server 8000 cần đăng nhập).
+- Báo cáo (chỉ đọc DB): 76 khách từ Threads từ 06/11, 41 khách 08–15/11 (AI Store 37, Cashbot 4); 10 khách hoạt động
+  (AI Store 6 đơn ≈ 215.600đ, Cashbot 4 gửi link). Reply 7 ngày: us28qt 143 (Cashbot 106), anlinh 25.
+- LỖI ĐO (backend, chưa sửa — báo Anti): reply @anlinh dùng chung mã threads_ai_auto / threads_ai_price với @us28qt →
+  khách từ @anlinh bị tính cho @us28qt (by_account anlinh = 0). Bài riêng 7 ngày: 3 đăng / 15 failed — cần soát có báo oan không.
+- ĐÃ SỬA (chủ bot: «em làm luôn»): mã nguồn theo tài khoản — `config.account_code`: @us28qt giữ mã cũ, tài khoản khác
+  thêm đuôi `_<tài khoản>` (threads_ai_auto_anlinh…); code_map gán đúng tài khoản. Worker gắn mã tài khoản đang đăng cho
+  reply (`link_for(..., account)`, đổi cả link viết sẵn lúc quét), trả lời lại (`write_followup(account=)`) và bài riêng
+  (`write_own_post(account=)`). DM giữ mã chung (agent DM chỉ chạy @us28qt). 4 file growth + test (vượt 3 file — chủ bot giao).
+- Proof: 4 test mới (mã / link_for / report tách @anlinh / mọi mã qua bộ lọc [a-z0-9_]{1,32} của 2 bot); Threads + psych +
+  session 136 passed; ruff sạch. Số thật không đổi (76 khách, @us28qt 76) — khách @anlinh trước 15/11 không tách lại được.
+- Cần: `pm2 restart Threads_Growth`. Next: chủ bot xem menu mới; vài ngày sau xem by_account @anlinh.
+
 ## Phiên 2026-11-14 (threads-fingerprint-review) — Claude Code đo vân tay trình duyệt sau bản vá session.py của Antigravity
 - Đo thật (Playwright 1.58, Chromium 145.0.7632.6, server cục bộ, profile tạm — KHÔNG gọi Meta, KHÔNG đụng profile thật).
   Script + số liệu: scratchpad phiên c96ba8d3 (fp_probe.py, fp_out.json).
