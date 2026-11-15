@@ -18,7 +18,9 @@ from app.features.psych_kb.prompting import guidance_block
 from app.features.threads.growth.config import (
     CASHBOT_ZALO_NAME,
     CASHBOT_ZALO_URL,
+    DEFAULT_ACCOUNT,
     ZALO_SHARE,
+    variant_url,
     load_profiles,
     ABVariant,
     BotGrowthProfile,
@@ -150,18 +152,20 @@ def with_link(reply: str, tracking_url: str, handle: str) -> str:
     return f"{text.rstrip(' ,.')} {tracking_url}"
 
 
-def link_for(reply: str, bot: str, variant: str) -> str:
-    """with_link theo bot + biến thể của một dòng growth_posts (reply đang chờ đăng).
+def link_for(reply: str, bot: str, variant: str, account: str = DEFAULT_ACCOUNT) -> str:
+    """with_link theo bot + biến thể của một dòng growth_posts (reply đang chờ đăng), mã nguồn của tài khoản đăng
+    (``account_code``: link viết sẵn lúc quét mang mã @us28qt → đổi sang mã tài khoản thật sự đăng).
     Reply đã dẫn về bot Zalo (Cashbot, ZALO_SHARE) giữ nguyên: trước đây worker đổi zalo.me thành link Telegram ngay
     lúc đăng → 7 ngày tới 13/11 không reply nào có link Zalo dù 4 reply được chọn kênh Zalo."""
     if CASHBOT_ZALO_URL in (reply or ""):
         return reply
     try:
-        profile = load_profiles()[TargetBot(bot)]
-        cfg = profile.variants[ABVariant(variant)]
+        target, v = TargetBot(bot), ABVariant(variant)
+        profile = load_profiles()[target]
+        url = variant_url(target, v, account)
     except (KeyError, ValueError):
         return reply
-    return with_link(reply, cfg.tracking_url, profile.handle)
+    return with_link(reply, url, profile.handle)
 
 
 EXAMPLE_DAYS = 7

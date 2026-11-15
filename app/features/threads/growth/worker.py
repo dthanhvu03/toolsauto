@@ -311,7 +311,7 @@ class GrowthWorker:
                 # Reply viết trước 12/11 nằm hàng chờ chưa có link: gắn link đúng mã nguồn trước khi đăng.
                 # 14/11: Reply chỉ trò chuyện (no_link) thì không gắn link.
                 if "no_link" not in (post.get("ai_analysis") or ""):
-                    linked = link_for(text, post["target_bot"], post["variant"])
+                    linked = link_for(text, post["target_bot"], post["variant"], account)
                     if linked != text:
                         self.runner.storage.update_status(post["id"], "approved", actual_reply=linked)
                         text = linked
@@ -373,7 +373,8 @@ class GrowthWorker:
         if not slot:
             return
         storage = self.runner.storage
-        draft = asyncio.run(content.write_own_post(self.now(), storage.own_post_refs(self.now() - timedelta(days=3))))
+        draft = asyncio.run(content.write_own_post(self.now(), storage.own_post_refs(self.now() - timedelta(days=3)),
+                                                   account=account))
         if draft is None:
             self.own_retry_at[account] = self.now() + OWN_POST_RETRY  # AI lỗi / hết deal mới → thử lại trong khung
             logger.info("growth: bài riêng khung %s chưa viết được — thử lại sau", slot)
@@ -430,7 +431,8 @@ class GrowthWorker:
                     if storage.followup_seen(c.thread_id):
                         continue
                     our = target.get("actual_reply") or target["suggested_reply"]
-                    verdict, text = _run_async(content.write_followup(TargetBot(target["target_bot"]), our, c.content))
+                    verdict, text = _run_async(content.write_followup(TargetBot(target["target_bot"]), our, c.content,
+                                                                           account=account))
                     if verdict == "error":
                         ai_down = True  # AI lỗi: để lần sau (không đánh dấu đã kiểm reply này)
                         break

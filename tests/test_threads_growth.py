@@ -823,7 +823,7 @@ def test_worker_followups_answer_skip_and_cap(make_worker, runner, monkeypatch):
     fb = FakeBrowser()
     fb.comments = {"https://r/MINE": [q("C1", "lan", "bot gì vậy b"), q("C2", "mai", "cảm ơn"), q("C3", "an", "dùng sao")]}
 
-    async def _followup(bot, our, comment):
+    async def _followup(bot, our, comment, account=None):
         return ("skip", None) if comment == "cảm ơn" else ("answer", f"trả lời: {comment}")
 
     monkeypatch.setattr(content, "write_followup", _followup)
@@ -852,7 +852,7 @@ def test_worker_followup_ai_down_retries_later(make_worker, runner, monkeypatch)
     fb = FakeBrowser()
     fb.comments = {"https://r/MINE": [ScannedPost("C1", "https://x/C1", "lan", "bot gì", "")]}
 
-    async def _down(bot, our, comment):
+    async def _down(bot, our, comment, account=None):
         return "error", None
 
     monkeypatch.setattr(content, "write_followup", _down)
@@ -1516,3 +1516,58 @@ def test_no_link_con_tro_thi_quay_ve_reply_co_link(monkeypatch):
     text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
         "đồ tết mua ở đâu", TargetBot.CASHBOT, ABVariant.VARIANT_A, channel="telegram", include_link=False))
     assert "no_link" not in analysis and "t.me/" in text
+
+
+# 15/11: mỗi tài khoản một mã nguồn — trước đó reply @anlinh dùng chung mã @us28qt, khách @anlinh bị tính cho @us28qt.
+def test_account_codes_keep_us28qt_and_suffix_other_accounts():
+    from app.features.threads.growth import config as gc
+
+    assert gc.account_code("threads_ai_auto", "us28qt") == "threads_ai_auto"
+    assert gc.account_code("threads_ai_auto", "anlinh") == "threads_ai_auto_anlinh"
+    assert gc.variant_url(gc.TargetBot.AI_STORE, gc.ABVariant.VARIANT_B, "anlinh") == (
+        "https://t.me/aipass_shop_bot?start=threads_ai_price_anlinh")
+    assert gc.channel_code(gc.TargetBot.CASHBOT, "conv", "anlinh") == "threads_cb_conv_anlinh"
+    codes = gc.code_map()
+    assert codes["threads_ai_auto"] == (gc.TargetBot.AI_STORE, gc.ABVariant.VARIANT_A, "us28qt")
+    assert codes["threads_ai_price_anlinh"] == (gc.TargetBot.AI_STORE, gc.ABVariant.VARIANT_B, "anlinh")
+    assert codes["threads_cb_post_anlinh"] == (gc.TargetBot.CASHBOT, None, "anlinh")
+    assert codes["threads_ai_bio_anlinh"] == (gc.TargetBot.AI_STORE, None, "anlinh")
+    assert gc.code_channel("threads_ai_auto_anlinh") == "reply A"
+    assert gc.code_channel("threads_cb_conv_anlinh") == "trả lời lại"
+
+
+def test_link_for_rewrites_scan_time_link_to_posting_account():
+    queued = "lấy acc ở https://t.me/aipass_shop_bot?start=threads_ai_auto nha"
+    assert evaluator.link_for(queued, "ai_store", "A", "anlinh") == (
+        "lấy acc ở https://t.me/aipass_shop_bot?start=threads_ai_auto_anlinh nha")
+    assert evaluator.link_for(queued, "ai_store", "A", "us28qt") == queued
+    assert evaluator.link_for(queued, "ai_store", "A") == queued
+
+
+def test_conversions_count_anlinh_customers_for_anlinh(tmp_path):
+    import sqlite3
+    from app.features.threads.growth import conversions
+
+    db = tmp_path / "store.sqlite"
+    with sqlite3.connect(db) as c:
+        c.executescript(
+            "CREATE TABLE state(key TEXT PRIMARY KEY, value TEXT);"
+            "CREATE TABLE users(user_id INTEGER, username TEXT, created_at TEXT, last_seen_at TEXT);"
+            "CREATE TABLE topups(user_id INTEGER, credited INTEGER, status TEXT);"
+            "CREATE TABLE orders(user_id INTEGER, total INTEGER, refunded INTEGER);"
+            "INSERT INTO users VALUES (1,'a','2026-11-15T01:00:00+00:00',NULL),(2,'b','2026-11-15T01:00:00+00:00',NULL);"
+            "INSERT INTO state VALUES ('src:1','threads_ai_auto_anlinh'),('src:2','threads_ai_auto');"
+        )
+    rep = conversions.report(cashback_path=tmp_path / "none.sqlite", store_path=db)
+    assert rep["by_account"]["anlinh"]["ai_store"]["customers"] == 1
+    assert rep["by_account"]["us28qt"]["ai_store"]["customers"] == 1
+    assert rep["by_variant"]["ai_store"]["A"]["customers"] == 2
+
+
+def test_every_start_code_passes_bot_filter():
+    """Hai bot chỉ ghi nguồn khi mã khớp [a-z0-9_]{1,32} (cashback_bot.service.start_source, store_bot)."""
+    import re
+    from app.features.threads.growth import config as gc
+
+    bad = [c for c in gc.code_map() if not re.fullmatch(r"[a-z0-9_]{1,32}", c)]
+    assert bad == []

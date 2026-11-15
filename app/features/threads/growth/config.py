@@ -189,12 +189,28 @@ def account_for_profile(profile_path: str) -> str:
     return DEFAULT_ACCOUNT
 
 
-def channel_code(bot: TargetBot, channel: str) -> str:
-    return _CHANNEL_PREFIX[bot] + channel
+def account_code(code: str, account: str = DEFAULT_ACCOUNT) -> str:
+    """Mã ``?start=`` của một tài khoản: @us28qt giữ mã cũ (khách cũ vẫn đúng tài khoản), tài khoản khác thêm đuôi
+    ``_<tài khoản>`` — ``threads_ai_auto_anlinh``. Trước 15/11 reply @anlinh dùng chung mã @us28qt → khách @anlinh kéo
+    về bị tính cho @us28qt."""
+    return code if account == DEFAULT_ACCOUNT else f"{code}_{account}"
 
 
-def channel_url(bot: TargetBot, channel: str) -> str:
-    return f"https://t.me/{_STATIC[bot][1]}?start={channel_code(bot, channel)}"
+def bot_url(bot: TargetBot, code: str) -> str:
+    return f"https://t.me/{_STATIC[bot][1]}?start={code}"
+
+
+def variant_url(bot: TargetBot, variant: ABVariant, account: str = DEFAULT_ACCOUNT) -> str:
+    """Link reply A/B của một tài khoản."""
+    return bot_url(bot, account_code(_STATIC[bot][2][variant][0], account))
+
+
+def channel_code(bot: TargetBot, channel: str, account: str = DEFAULT_ACCOUNT) -> str:
+    return account_code(_CHANNEL_PREFIX[bot] + channel, account)
+
+
+def channel_url(bot: TargetBot, channel: str, account: str = DEFAULT_ACCOUNT) -> str:
+    return bot_url(bot, channel_code(bot, channel, account))
 
 
 def bio_code(bot: TargetBot, account: str) -> str:
@@ -209,17 +225,20 @@ def bio_url(bot: TargetBot, account: str) -> str:
 def code_map() -> Dict[str, tuple]:
     """Mã ``?start=`` → (bot, biến thể, tài khoản). Biến thể None với mã kênh (bài riêng / trả lời lại / bio).
 
-    Mã cũ (reply A/B, kênh chung) chỉ @us28qt từng dùng → gán ``DEFAULT_ACCOUNT``; mã bio riêng mang tài khoản.
+    Mã không đuôi (reply A/B, kênh chung) → ``DEFAULT_ACCOUNT``; mã có đuôi ``_<tài khoản>`` (``account_code``) và mã
+    bio riêng → đúng tài khoản đó.
     """
-    out: Dict[str, tuple] = {
-        code: (bot, v, DEFAULT_ACCOUNT)
-        for bot, (_, _, variants) in _STATIC.items()
-        for v, (code, _) in variants.items()
-    }
-    for bot in _STATIC:
+    out: Dict[str, tuple] = {}
+    for bot, (_, _, variants) in _STATIC.items():
+        for acc in ACCOUNTS:
+            for v, (code, _) in variants.items():
+                out[account_code(code, acc)] = (bot, v, acc)
         for ch in CHANNELS:
             out[channel_code(bot, ch)] = (bot, None, DEFAULT_ACCOUNT)
         for acc in ACCOUNTS:
+            out[channel_code(bot, "post", acc)] = (bot, None, acc)
+            out[channel_code(bot, "conv", acc)] = (bot, None, acc)
+            out[channel_code(bot, "dm", acc)] = (bot, None, acc)
             out[bio_code(bot, acc)] = (bot, None, acc)
     return out
 

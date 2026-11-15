@@ -24,7 +24,7 @@ from cashback_bot.messages import BUY_RULE, CART_RULE, ITEM_RULE
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.features.psych_kb.prompting import guidance_block
-from app.features.threads.growth.config import TargetBot, channel_url, load_profiles
+from app.features.threads.growth.config import DEFAULT_ACCOUNT, TargetBot, channel_url, load_profiles
 from app.features.threads.growth.conversions import cashback_db
 from app.features.threads.growth.evaluator import _TME_TOKEN, clean_reply
 
@@ -260,10 +260,11 @@ class OwnPostDraft:
     ref: str  # item id các món / mã dịp sale — tránh đăng lặp
 
 
-async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional[Path] = None) -> Optional[OwnPostDraft]:
+async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional[Path] = None,
+                         account: str = DEFAULT_ACCOUNT) -> Optional[OwnPostDraft]:
     """Bài riêng cho vòng này: có dịp sale lớn sắp tới thì xen bài nhắc sale (1 bài / ngày), còn lại là bài deal."""
     profile = load_profiles()[TargetBot.CASHBOT]
-    link = channel_url(TargetBot.CASHBOT, "post")
+    link = channel_url(TargetBot.CASHBOT, "post", account)
     today = now.astimezone(ICT).date()
     event = next_sale(now)
     sale_ref = f"sale:{event.day.isoformat()}:{today.isoformat()}" if event else ""
@@ -291,13 +292,14 @@ _SAFE_NOTE = {
 }
 
 
-async def write_followup(bot: TargetBot, our_reply: str, comment: str) -> tuple[str, Optional[str]]:
+async def write_followup(bot: TargetBot, our_reply: str, comment: str,
+                         account: str = DEFAULT_ACCOUNT) -> tuple[str, Optional[str]]:
     """Trả lời người vừa reply mình → ``("answer", câu)`` · ``("skip", None)`` không cần trả lời (cảm ơn, chê, spam…)
     · ``("error", None)`` AI lỗi — để lần sau thử lại, không đánh dấu đã xử lý."""
     if _NOT_WORTH.match(comment or "") or len((comment or "").strip()) < 2:
         return "skip", None
     profile = load_profiles()[bot]
-    link = channel_url(bot, "conv")
+    link = channel_url(bot, "conv", account)
     kb = guidance_block(comment, "threads", k=2)  # PLAN-170: gợi ý tâm lý theo đúng câu họ nói
     if kb:
         logger.info("growth.followup kb: %s", ", ".join(kb.ids))
