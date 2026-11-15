@@ -188,7 +188,10 @@ class StoreBot:
                     self.show_product(chat_id, None, user, int(payload[4:]))
                 else:
                     self.send_welcome(chat_id, user)
-                    self.show_home(chat_id, None, user)
+                    if is_new:  # PLAN-172 T1: khách mới vào thẳng danh sách món (trước: trang chủ «Số dư 0đ», 46/76 bỏ đi)
+                        self.show_shop(chat_id, None)
+                    else:
+                        self.show_home(chat_id, None, user)
                 return
             if command == "/support":
                 self._clear_await(user.user_id)

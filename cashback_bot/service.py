@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from cashback_bot import admin_tiktok
+from cashback_bot import admin_tiktok, chat_ai
 from cashback_bot.admin.handlers import tamly
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
@@ -22,6 +22,7 @@ from cashback_bot import deals, membership, order_notify, payouts, policy_snapsh
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
+    GUIDE_KEYBOARD,
     CLOSED,
     CLOSED_ALERT,
     DIEUKIEN,
@@ -144,6 +145,8 @@ class CashbackService:
         self.tiktok_runner: Callable[[Callable[[], None]], object] = self._tiktok_pool.submit
         self.after_deferred: Callable[[], object] | None = None
         self.tamly_generate: Callable[[str], tuple] | None = None  # PLAN-170: test thay AI giả; None = AI thật
+        self.chat_generate: Callable[[str], tuple] | None = None  # PLAN-172 T2: test thay AI giả; None = 9Router
+        self.chat_ai_enabled = False  # chỉ tiến trình bot thật (poller / zalo_bot) bật — test không gọi 9Router thật
         # Báo giảm giá món khách từng xem (price_watch): cùng khoá AddLiveTag với báo giá. Chỉ bot Telegram chạy lượt.
         self.price_history = PriceHistoryClient(settings.api_key)
         self.wallet = Wallet(repo)
@@ -728,6 +731,8 @@ class CashbackService:
             if is_shopee_food_link(stripped):
                 return self._food_link(update_id, telegram_user_id, stripped)
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
+            if self._chat_ai_ready(telegram_user_id, stripped, moment):
+                return self._chat_ai(update_id, telegram_user_id, stripped, moment)
             return self._invalid_link(stripped)
         gate = self.desk.terms_gate(telegram_user_id, moment)
         if gate is not None:
@@ -897,6 +902,40 @@ class CashbackService:
              "at": moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}))
         self.tiktok_runner(lambda: self._tiktok_deliver(update_id, telegram_user_id, url, sub_id, moment))
         return BotReply(TIKTOK_WORKING)
+
+    def _chat_ai_ready(self, user_id: int, text: str, moment: datetime) -> bool:
+        """PLAN-172 T2: tin chữ có nội dung, không dáng link, AI chưa tắt, khách chưa nhận câu AI trong COOLDOWN."""
+        if not self.chat_ai_enabled or not chat_ai.worth_asking(text) or self.repo.get_state(chat_ai.OFF_KEY):
+            return False
+        last = self.repo.get_state(chat_ai.LAST_PREFIX + str(user_id))
+        if last and moment - datetime.fromisoformat(last) < chat_ai.COOLDOWN:
+            return False
+        self.repo.set_state(chat_ai.LAST_PREFIX + str(user_id), moment.isoformat())
+        return True
+
+    def _chat_ai(self, update_id: int | None, user_id: int, text: str, moment: datetime) -> BotReply:
+        """AI trả lời ở luồng nền (chung pool TikTok); câu trả lời đi qua hàng đợi tin như /tamly. Không lưu nội dung."""
+        key = f"chat_ai:{user_id}:{update_id if update_id is not None else moment.strftime('%Y%m%dT%H%M%S%f')}"
+        self.tiktok_runner(lambda: self._chat_ai_deliver(user_id, text, key))
+        return BotReply(chat_ai.WORKING)
+
+    def _chat_ai_deliver(self, user_id: int, text: str, key: str) -> None:
+        try:
+            wallet_open = bool(self.wallet.settings().enabled)
+        except Exception:
+            wallet_open = False
+        answer = chat_ai.answer(text, wallet_open, generate=self.chat_generate)
+        reply = BotReply(answer, inline_keyboard=GUIDE_KEYBOARD) if answer else self._invalid_link(text)
+        markup = reply.markup()
+        with self.repo.connect() as conn:
+            enqueue_event(conn, event_key=key, event_type="CHAT_AI_ANSWER", chat_id=user_id, message_html=reply.text,
+                          audience="customer", category="chat_ai", source_ref="chat_ai",
+                          reply_markup_json=json.dumps(markup, ensure_ascii=False) if markup else None)
+        if self.after_deferred is not None:
+            try:
+                self.after_deferred()
+            except Exception:
+                logger.exception("[Cashback] gửi trả lời chat AI ngay lỗi; vòng sau sẽ gửi")
 
     def _tamly(self, admin_id: int, question: str, moment: datetime) -> BotReply:
         """PLAN-170 ``/tamly``: không câu hỏi → danh sách chủ đề; có → AI trả lời ở luồng nền (dùng chung pool link

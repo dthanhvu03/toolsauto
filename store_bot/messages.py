@@ -158,7 +158,7 @@ def home(shop_name: str, user: User, closed: str | None = None) -> str:
         f"🏪 <b>{esc(shop_name)}</b>\n\n{banner}"
         f"Xin chào {esc(user.first_name or user.label)}!\n"
         f"💼 Số dư: <b>{vnd(user.balance)}</b>\n\n"
-        "Chọn 🛒 Mua hàng để xem sản phẩm. Thanh toán trừ thẳng vào số dư, hàng giao ngay sau khi mua."
+        "Chọn 🛒 Mua hàng để xem sản phẩm. Không cần nạp trước: chọn món, quét QR là bot gửi hàng ngay."
     )
 
 
@@ -173,7 +173,8 @@ def shop_list(products: list[Product], closed: str | None = None) -> str:
     if not products:
         return "🛒 Shop chưa có sản phẩm nào đang bán."
     banner = f"{closed}\n\n" if closed else ""
-    return f"🛒 <b>Sản phẩm</b>\n\n{banner}Chọn một sản phẩm để xem và mua:"
+    return (f"🛒 <b>Sản phẩm</b>\n\n{banner}Không cần nạp trước: chọn món → quét QR → bot gửi hàng ngay.\n\n"
+            "Chọn một sản phẩm để xem và mua:")
 
 
 # Ký hiệu bảo hành trong tên món FatCat → câu khách đọc hiểu. Không khớp ký hiệu nào thì không hiện dòng bảo hành.

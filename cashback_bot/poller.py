@@ -97,6 +97,7 @@ def main() -> None:
         logger.warning("[Cashback] %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
     service = CashbackService(settings, repo, client, admin_notifier=admin_notifier)
     service.after_deferred = lambda: admin_notifier.flush_pending(limit=5)
+    service.chat_ai_enabled = True  # PLAN-172 T2: tin chữ của khách → AI trả lời
     resumed = service.resume_tiktok_jobs(zalo=False)
     if resumed:
         logger.warning("[Cashback] làm tiếp %s link TikTok dở dang lúc dừng bot", resumed)

@@ -1,3 +1,52 @@
+## Phiên 2026-11-15 (growth-ops) — Chủ bot giao Claude Code toàn quyền vận hành Cashbot + AI Pass Store (+9Router)
+- Quyết định: ADR-067 (ngoại lệ vai trò; tiền / Shopee / FatCat /api/buy / restart vẫn qua chủ bot). Kế hoạch PLAN-172 đến 12/12.
+- Số gốc (chỉ đọc DB): 153 khách, dùng thật 7 ngày 24 → mục tiêu 60 vào 12/12. Store: khách Threads 76 → có đơn 6 (7%),
+  46/76 rời bot trong 10 phút. Cashbot: tự vào dùng 76%, từ Threads 23%; 25 tin chữ bị từ chối «invalid_link»; mời bạn 0 lượt.
+- ĐÃ LÀM T1 (Store): khách mới /start vào thẳng danh sách món + câu «Không cần nạp trước: chọn món → quét QR → nhận hàng»
+  (trước: trang chủ «Số dư 0đ · trừ thẳng vào số dư»). store_bot/bot.py + messages.py.
+- ĐÃ LÀM T2 (Cashbot): tin chữ → 9Router trả lời ở luồng nền qua hàng đợi chung TG + Zalo (cashback_bot/chat_ai.py,
+  service.py; bật ở poller.py / zalo_bot.py). AI lỗi / rác → câu mẫu cũ; 1 câu / khách / 45s; tắt: bot_state `chat_ai:off`.
+- Proof: 1354 passed (cashback + store + bot_users + psych_kb), bỏ 1 test hỏng sẵn theo giờ thật (test_b9_…); ruff sạch;
+  thử thật 9Router 4 câu đúng, rác → SKIP, ~12s/câu.
+- Có sẵn, không cần làm: nhắc sale Black Friday 27/11 + 12/12 đã duyệt; link_nudge đang bật.
+- Cần chủ bot: `sudo systemctl restart store-bot cashback-bot cashback-zalo`.
+- Next: báo cáo sáng 8h (funnel vào repo) → 22/11 đo T1/T2 so với số gốc trong PLAN-172 → T3 nhánh «vào chưa tạo link».
+
+## Phiên 2026-11-15 (web-app) — Threads / Cashback / Khách các bot như web app + Cashback bỏ giao diện «hang động»
+- PWA: app/static/admin-manifest.json (id /app, start_url /app/go/threads-growth, standalone, shortcuts 3 trang);
+  thẻ manifest + apple-mobile-web-app ở frontend/index.html, layouts/app.html, layouts/app_light.html. Manifest Cụm
+  Buffer (/manifest.json, SePay không liên quan) giữ nguyên.
+- Thanh tab đáy (điện thoại): Threads · Cashback · Khách · Menu — AppShell.tsx, app.html (Classic), app_light.html.
+- Threads: điện thoại chia 3 phần (Tổng quan / Duyệt / Khách & TK), tab dính dưới header, nhớ phần đang xem (localStorage);
+  lg giữ bố cục cũ. Trước: hàng chờ 31 bài đẩy khách / tài khoản xuống màn 15–21.
+- Khách các bot: điện thoại — thẻ mỗi bot (4 số) + danh sách khách dạng dòng thẻ; md+ giữ bảng.
+- Cashback (chủ bot: «bỏ classic hang động»): khung mới layouts/app_light.html giống AppShell (sidebar trắng, Geist,
+  slate / indigo); 5 trang cashback_*.html extends app_light; biến --color-* định nghĩa lại sáng → template, cashback_style,
+  Chart.js không đổi logic. .cb-row xuống dòng ở mọi màn (trước bóp nhãn cả trên desktop).
+- Proof: đo lại 32 trang 390px overflow 0; Cashback 4 trang mobile overflow 0, không lỗi 500; ảnh mobile + desktop
+  (scratchpad c96ba8d3/sec, light/). Chưa thử trang /cashback/links/<id> (không tìm được link mẫu qua giao diện).
+- Chưa commit. Phần React cần tải lại trang; đăng xuất (phiên trước) cần `pm2 restart Web_Dashboard`.
+
+## Phiên 2026-11-15 (mobile) — Tối ưu điện thoại cho mọi trang dashboard
+- Đo thật (chủ bot cho phép tạo phiên đăng nhập local): 33 trang (19 React + 14 Classic) ở 390px, chỉ GET.
+  Script scratchpad c96ba8d3/mobile_probe.py; ảnh mobile/ + mobile2/.
+- ĐÃ SỬA: (1) cashback_style.html @media ≤640px: .cb-table cuộn ngang trong khung, .cb-row xuống dòng (nhãn ≥10rem) —
+  trước dòng «Link giao tới khách» bị bóp 1 ký tự / dòng; (2) React: overflow-x-auto cho BotFunnel, DoctypeListPage,
+  BotUsersPage; ô chọn page Nguồn video min-w-0 max-w-full (tràn 21px); (3) buffer_cluster.css: hàng nút lọc max-width
+  100% (tràn 28px), ?v=20261115a; (4) components/ui tabs.tsx + separator.tsx: cú pháp Tailwind v4 (data-horizontal:,
+  data-active:) → Tailwind 3 — trang Telegram vỡ bố cục ở MỌI kích thước; (5) app.html: biến sidebar `sections` →
+  `nav_sections` — đè biến trang /app/settings/classic → 500 (lỗi có sẵn).
+- Proof: đo lại 33/33 trang overflow 0px; ảnh chụp kiểm bằng mắt; tsc + build OK.
+- Còn nhỏ: /app/settings/classic ô chọn Whisper dài hơn thẻ (trang cũ, có bản React thay).
+- Chưa commit. Cần `pm2 restart Web_Dashboard` cho phần đăng xuất (phiên trước); phần mobile không cần restart.
+## Phiên 2026-11-15 (logout-tailscale) — Sửa đăng xuất + soát truy cập qua Tailscale
+- Đăng xuất lỗi: menu React là link GET /logout nhưng server chỉ có POST; /logout không public → phiên hết hạn bị 401,
+  nút Classic im. Sửa: auth/router.py thêm GET /logout (xoá cookie, 303 → /login), main.py public_exact thêm /logout,
+  app.html handleLogout luôn về /login. Proof: tests/test_logout.py 3 passed; ruff sạch. Cần: `pm2 restart Web_Dashboard`.
+- Tailscale: tailnet chỉ có máy này (LAPTOP-T2HF25CD 100.102.93.11, không peer nào khác). Funnel
+  https://laptop-t2hf25cd.tail15ebd5.ts.net → 127.0.0.1:8091 (store-api, webhook SePay) — KHÔNG phải dashboard, không đổi.
+  Dashboard nghe 0.0.0.0:8000 → máy khác vào tailnet cùng tài khoản rồi mở http://100.102.93.11:8000.
+
 ## Phiên 2026-11-15 (threads-report-nav) — Báo cáo kéo khách Threads + đưa Cashback vào menu giao diện mới
 - UI: Cashback trước chỉ có ở sidebar Jinja (nhóm Hệ thống) — menu React (nav.ts) không có → phải bấm «Classic».
   Đã thêm vào nav.ts (external /cashback, icon Coins) cạnh «Khách các bot»; Jinja app.html dời cùng chỗ. Build frontend OK

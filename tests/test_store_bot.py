@@ -1555,3 +1555,16 @@ def test_cleanup_state_removes_only_stale_keys(fatcat, repo):
     assert "topup_msg:424242" not in left and f"topup_msg:{pending.id}" in left
     assert "announced:1" not in left and "announced:2" in left and "callme:5" not in left
     assert f"src:{BUYER}" in left and f"menu_sent:{BUYER}" in left
+
+
+def test_new_customer_lands_on_product_list_returning_on_home(bot, repo, product):
+    """PLAN-172 T1: khách mới (vd. từ Threads) vào thẳng danh sách món, có câu «không cần nạp trước»; khách cũ về trang chủ."""
+    store, telegram = bot
+    NEWBIE = 900_100
+    store.handle_update(_private(NEWBIE, "/start threads_ai_price"))
+    last = telegram.texts_to(NEWBIE)[-1]
+    assert "Sản phẩm" in last and "Không cần nạp trước" in last
+    assert repo.get_state(f"src:{NEWBIE}") == "threads_ai_price"
+
+    store.handle_update(_private(NEWBIE, "/start"))
+    assert "Số dư" in telegram.texts_to(NEWBIE)[-1]

@@ -479,6 +479,7 @@ def main() -> None:
                             settings.customer_notification_test_ids, channel=CHANNEL)
     # Thẻ link TikTok tạo ở luồng nền: vào hàng đợi rồi gửi ngay, không chờ hết vòng getUpdates 30 giây.
     service.after_deferred = lambda: dispatcher.flush(limit=5)
+    service.chat_ai_enabled = True  # PLAN-172 T2: tin chữ của khách → AI trả lời
     resent, apologized = channel.recover_inbox()
     resumed = service.resume_tiktok_jobs(zalo=True)
     if resent or apologized or resumed:
