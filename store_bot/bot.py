@@ -296,6 +296,12 @@ class StoreBot:
             self.show_support(chat_id, message_id)
         elif data == "callme":
             self.request_callback(chat_id, user)
+        elif data == "wake":
+            if not self.shop_status().closed:
+                self.show_shop(chat_id, message_id)
+                return "Shop đang mở, bạn đặt mua được rồi.", False
+            self.repo.add_wake(user.user_id)
+            return msg.WAKE_SAVED, True
         elif data == "noff":
             self.repo.set_notify(user.user_id, False)
             return msg.NOTIFY_OFF_DONE, True
@@ -391,8 +397,11 @@ class StoreBot:
         funds = self.repo.upstream_funds()
         rows = [[button(msg.product_button(p, self.restocking(p, funds)), f"p:{p.id}", msg.icon_id(p.name))]
                 for p in products]
+        closed = self.closed_note()
+        if closed:
+            rows.insert(0, [button(msg.WAKE_BUTTON, "wake")])
         rows.append([button("🏠 Trang chủ", "home")])
-        self._show(chat_id, message_id, msg.shop_list(products, self.closed_note()), keyboard(*rows))
+        self._show(chat_id, message_id, msg.shop_list(products, closed), keyboard(*rows))
 
     def show_product(self, chat_id: int, message_id: int | None, user: User, product_id: int) -> None:
         product = self.repo.get_product(product_id)
@@ -402,7 +411,8 @@ class StoreBot:
         closed = self.closed_note()
         if closed:  # nghỉ: xem được món, không có nút số lượng / không chờ gõ số
             self._show(chat_id, message_id, msg.product_detail(product, user.balance, closed=closed),
-                       keyboard([button("⬅️ Sản phẩm", "shop"), button("💰 Nạp tiền", "top")]))
+                       keyboard([button(msg.WAKE_BUTTON, "wake")],
+                                [button("⬅️ Sản phẩm", "shop"), button("💰 Nạp tiền", "top")]))
             return
         self.repo.mark_step(user.user_id, "product", f"{product.id}@{_now_iso()}")
         limit = self._max_quantity(product)
@@ -518,6 +528,25 @@ class StoreBot:
         """Câu báo khách nếu shop đang nghỉ (giờ nghỉ hằng ngày hoặc admin đóng tay), không thì None."""
         status = self.shop_status()
         return msg.shop_closed(status) if status.closed else None
+
+    def check_reopen(self) -> int:
+        """Vòng nền: shop vừa chuyển nghỉ → mở thì nhắn khách đã bấm «Báo tôi khi shop mở». Trả số khách đã nhắn."""
+        if self.shop_status().closed:
+            self.repo.set_state("was_closed", "1")
+            return 0
+        if not self.repo.get_state("was_closed"):
+            return 0
+        self.repo.delete_state("was_closed")
+        sent = 0
+        for user_id in self.repo.pop_wakes():
+            try:
+                self.tg.send_message(user_id, msg.WAKE_OPEN, keyboard([button("🛒 Mua hàng", "shop")]))
+                sent += 1
+            except Exception:
+                logger.warning("[Store] nhắn shop mở cho %s lỗi", user_id)
+        if sent:
+            logger.info("[Store] shop mở lại: đã nhắn %s khách chờ", sent)
+        return sent
 
     def show_hours(self, chat_id: int, message_id: int | None) -> None:
         window = hours.parse_window(self.repo.get_state("closed_hours"))
@@ -1468,6 +1497,10 @@ def run_background(bot: StoreBot, stop: threading.Event) -> None:
                 logger.info("[Store] huỷ %s mã nạp quá %s phút", len(expired), msg.TOPUP_VALID_MIN)
         except Exception:
             logger.exception("[Store] huỷ mã nạp quá hạn lỗi")
+        try:
+            bot.check_reopen()
+        except Exception:
+            logger.exception("[Store] báo khách shop mở lại lỗi")
         if bot.fulfiller.client is not None:
             try:
                 bot.retry_pending()

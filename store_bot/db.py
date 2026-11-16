@@ -417,6 +417,17 @@ class StoreRepository:
         with self._tx() as conn:
             conn.execute("INSERT OR IGNORE INTO state(key, value) VALUES (?, ?)", (f"step:{step}:{user_id}", value))
 
+    def add_wake(self, user_id: int) -> None:
+        """«🔔 Báo tôi khi shop mở» (PLAN-172): ghi khách chờ; shop mở lại thì bot nhắn rồi xoá."""
+        self.set_state(f"wake:{user_id}", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+    def pop_wakes(self) -> list[int]:
+        """Lấy và xoá mọi khách đang chờ shop mở (một giao dịch: không nhắn trùng)."""
+        with self._tx() as conn:
+            rows = conn.execute("SELECT key FROM state WHERE key >= 'wake:' AND key < 'wake;'").fetchall()
+            conn.execute("DELETE FROM state WHERE key >= 'wake:' AND key < 'wake;'")
+        return [int(r["key"][5:]) for r in rows]
+
     def source_counts(self, days: int = 7) -> list[tuple[str, int]]:
         """Khách mới theo nguồn trong `days` ngày gần nhất."""
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")

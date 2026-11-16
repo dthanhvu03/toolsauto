@@ -1580,3 +1580,29 @@ def test_funnel_steps_marked_once(bot, repo, product):
     assert repo.get_state(f"step:confirm:{BUYER}").startswith(f"{product}@")
     store.handle_update(_click(BUYER, f"p:{product}"))
     assert repo.get_state(f"step:product:{BUYER}") == first
+
+
+def test_wake_me_when_shop_reopens(bot, repo, product):
+    """PLAN-172: shop nghỉ → nút «Báo tôi khi shop mở»; mở lại (tay) → bot nhắn đúng 1 lần, xoá danh sách chờ."""
+    store, telegram = bot
+    repo.set_state("closed_manual", "1")
+    store.handle_update(_click(BUYER, "shop"))
+    assert msg.WAKE_BUTTON in str(telegram.edits[-1][3])
+    store.handle_update(_click(BUYER, "wake"))
+    assert telegram.answers[-1][0] == msg.WAKE_SAVED
+    assert store.check_reopen() == 0  # còn nghỉ: chưa nhắn
+
+    repo.delete_state("closed_manual")
+    assert store.check_reopen() == 1
+    assert "Shop đã mở lại" in telegram.texts_to(BUYER)[-1]
+    assert store.check_reopen() == 0  # không nhắn lại
+    assert repo.pop_wakes() == []
+
+
+def test_wake_button_hidden_when_open_and_low_funds_says_keep_open(bot, repo, product):
+    store, telegram = bot
+    store.handle_update(_click(BUYER, "shop"))
+    assert msg.WAKE_BUTTON not in str(telegram.edits[-1][3])
+    store.handle_update(_click(BUYER, "wake"))  # nút cũ còn trên màn: shop đang mở → về danh sách
+    assert "đặt mua được" in telegram.answers[-1][0] and repo.pop_wakes() == []
+    assert "Không cần đóng shop" in msg.admin_low_funds(1000, [])

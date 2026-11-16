@@ -67,3 +67,6 @@
 - 16/11: Store đóng tay (closed_manual) từ sau 21:28 15/11 tới ~09:30 16/11, ví FatCat 40.729đ → 35 khách mới gặp shop nghỉ
   (xem món được, không mua được) — T1 đêm đầu không đo được. Thêm đếm bước Store: state `step:product|confirm:<id>` (lần đầu),
   báo cáo sáng hiện vào → xem món → chọn số lượng → mã nạp → đơn + cảnh báo 🔴 khi shop đóng tay. Đo T1 tính lại từ 16/11 sáng.
+- 16/11: chủ bot đồng ý (1) không đóng shop khi ví FatCat thấp — đơn chờ ví (waiting_funds) đã có; tin cảnh báo ví thêm
+  «Không cần đóng shop»; (2) shop nghỉ → nút «🔔 Báo tôi khi shop mở» (danh sách món + màn món), state `wake:<id>`;
+  vòng nền `check_reopen` thấy nghỉ → mở thì nhắn 1 lần rồi xoá (cả đóng tay lẫn giờ nghỉ hằng ngày). 104 passed.

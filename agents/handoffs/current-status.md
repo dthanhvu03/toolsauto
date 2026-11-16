@@ -1,4 +1,7 @@
 ## Phiên 2026-11-16 (growth-report) — Báo cáo tăng trưởng 8h sáng
+- Sau đó (16/11): Store bị đóng tay 21:28 15/11 → ~09:30 16/11 (ví FatCat 40.729đ), 35 khách mới không mua được.
+  Làm: đếm bước Store (step:product/confirm) vào báo cáo + 🔴 cảnh báo đóng tay; nút «Báo tôi khi shop mở» + nhắn khi mở lại;
+  cảnh báo ví thấp ghi «Không cần đóng shop». Commit af5aa42 + commit wake. Cần: `sudo systemctl restart store-bot cashback-bot`.
 - 15/11 chưa làm báo cáo (chỉ ghi next) → sáng 16/11 chủ bot không nhận gì. Đã làm: cashback_bot/growth_report.py (chỉ đọc
   Cashbot + Store: chỉ số chính, hôm qua, phễu khách mới 7 ngày, T1/T2) + poller.py gọi mỗi vòng, gửi 1 lần / ngày từ 8h VN.
 - Proof: tests/test_growth_report.py 2 passed; arch guards + test có poller 368 passed (1 hỏng sẵn test_b9 giờ thật); ruff sạch.

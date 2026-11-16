@@ -162,6 +162,11 @@ def home(shop_name: str, user: User, closed: str | None = None) -> str:
     )
 
 
+WAKE_BUTTON = "🔔 Báo tôi khi shop mở"
+WAKE_SAVED = "Đã ghi! Shop mở lại là bot nhắn bạn ngay 🔔"
+WAKE_OPEN = "🟢 <b>Shop đã mở lại!</b>\nBạn đặt mua được rồi: chọn món → quét QR → bot gửi hàng ngay."
+
+
 def shop_closed(status) -> str:
     """Câu báo khách khi shop đang nghỉ (status: hours.Status đang đóng)."""
     when = f"mở lại lúc <b>{status.reopen}</b>" if status.reopen else "sẽ mở lại sớm"
@@ -1180,7 +1185,8 @@ def admin_low_funds(balance: int, products: list[Product]) -> str:
     names = "\n".join(f"• {esc(p.name)} (vốn {vnd(p.cost or 0)})" for p in products)
     return (
         f"🐱 <b>Ví FatCat còn {vnd(balance)}</b> — không đủ nhập {len(products)} món:\n"
-        f"{names}\n\nKhách vẫn đặt được; đơn sẽ chờ tới khi anh nạp. 👉 Nạp thêm ở bot FatCat."
+        f"{names}\n\nKhách vẫn đặt được; đơn sẽ chờ tới khi anh nạp. 👉 Nạp thêm ở bot FatCat.\n"
+        "ⓘ Không cần đóng shop: đóng thì khách mới vào không mua được."
     )
 
 
