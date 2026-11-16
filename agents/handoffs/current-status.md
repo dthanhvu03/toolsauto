@@ -1,3 +1,11 @@
+## Phiên 2026-11-16 (growth-report) — Báo cáo tăng trưởng 8h sáng
+- 15/11 chưa làm báo cáo (chỉ ghi next) → sáng 16/11 chủ bot không nhận gì. Đã làm: cashback_bot/growth_report.py (chỉ đọc
+  Cashbot + Store: chỉ số chính, hôm qua, phễu khách mới 7 ngày, T1/T2) + poller.py gọi mỗi vòng, gửi 1 lần / ngày từ 8h VN.
+- Proof: tests/test_growth_report.py 2 passed; arch guards + test có poller 368 passed (1 hỏng sẵn test_b9 giờ thật); ruff sạch.
+  Bản 16/11 gửi tay qua hàng đợi admin → sent 08:28.
+- Restart 15/11 00:50 VN đã đưa T1 + T2 lên. Cần: `sudo systemctl restart cashback-bot` để báo cáo tự chạy từ 17/11.
+- Ghi nhận: đơn ấm đun DODORO sub ysbSylyJ (đặt 00:06 15/11) có trên web Shopee nhưng chưa vào bot dù sync 4h chạy success.
+
 ## Phiên 2026-11-15 (growth-ops) — Chủ bot giao Claude Code toàn quyền vận hành Cashbot + AI Pass Store (+9Router)
 - Quyết định: ADR-067 (ngoại lệ vai trò; tiền / Shopee / FatCat /api/buy / restart vẫn qua chủ bot). Kế hoạch PLAN-172 đến 12/12.
 - Số gốc (chỉ đọc DB): 153 khách, dùng thật 7 ngày 24 → mục tiêu 60 vào 12/12. Store: khách Threads 76 → có đơn 6 (7%),

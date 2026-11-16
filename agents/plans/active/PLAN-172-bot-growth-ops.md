@@ -54,10 +54,12 @@
 - [ ] T6 (tuần 4) 12/12: bài ghim + đếm ngược + nhắc khách cũ.
 
 ## Hạ tầng (tuần 1)
-- [ ] Đưa funnel.py vào repo (`cashback_bot/growth_funnel.py`, chỉ đọc) + test.
-- [ ] Báo cáo sáng 8h gửi Telegram admin: chỉ số chính, phễu 2 bot, thử nghiệm đang chạy.
+- [x] Báo cáo 8h sáng (16/11): `cashback_bot/growth_report.py` (chỉ đọc 2 DB) + nối vào vòng poller; một lần / ngày
+      (bot_state `growth_report_day`), qua hàng đợi admin. Bản 16/11 gửi tay lúc 08:28 (sent). Tự chạy từ 17/11 sau restart cashback-bot.
 
 ## Nhật ký
 - 15/11: nhận quyền, đo số gốc, chọn mục tiêu, viết ADR-067.
 - 15/11: làm T1 + T2. Proof: test_store_bot (+1) / store_nudge 101 passed; test_cashback_chat_ai 6 passed; bộ cashback + store
   + bot_users + psych_kb chạy lại (xem current-status). Cần restart: `systemctl restart store-bot cashback-bot cashback-zalo`.
+- 16/11: chủ bot hỏi sao sáng không có báo cáo — 15/11 mới ghi «next», chưa làm. Làm growth_report + test (2 passed),
+  gửi bản 16/11. Số sáng 16/11: dùng thật 7 ngày 25; Store 15/11 vào 50 khách (Threads); T1 0/13 có đơn (qua đêm).
