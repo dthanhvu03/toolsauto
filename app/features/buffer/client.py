@@ -33,9 +33,9 @@ _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
 MIN_REQUEST_INTERVAL_SEC = 5.0
 # Cooldown sàn khi 429 (Buffer free hay reset chậm)
 MIN_429_COOLDOWN_SEC = 900  # 15 phút
-# Trần cooldown local. Buffer đã trả 22 giờ và 40 giờ thật; gọi sớm hơn là bị khóa tiếp.
-# Header dài hơn trần thì hết trần gọi một request, 429 lại thì ghi mốc mới.
-MAX_429_COOLDOWN_SEC = 72 * 60 * 60  # 72 giờ
+# Trần cooldown local. Buffer trả cả mốc nhiều ngày khi hết suất 30 ngày (thật: 957073s = 11 ngày);
+# gọi sớm hơn mốc đó là 429 lại. Trần chỉ chặn header vô lý, không cắt mốc thật của suất 30 ngày.
+MAX_429_COOLDOWN_SEC = 30 * 24 * 60 * 60  # 30 ngày (bằng trần hiển thị cluster_router)
 # Phần bucket còn lại giữ cho createPost/editPost. Hỏi kênh, hỏi suất, hỏi status phải dừng trước.
 POST_RESERVE_RATIO = 0.70
 # Không bị mức giữ chặn. channel_bootstrap: quét kênh lần đầu của key chưa có bảng (2 request).

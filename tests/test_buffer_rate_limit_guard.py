@@ -79,16 +79,31 @@ def test_429_retry_after_40h_is_kept(monkeypatch):
     assert client.cooldown_remaining() >= 142824 - 2
 
 
-def test_429_retry_after_caps_at_72h(monkeypatch):
+def test_429_retry_after_nhieu_ngay_giu_nguyen(monkeypatch):
+    """Hết suất 30 ngày: Buffer báo chờ 11 ngày — không cắt còn 72 giờ rồi gọi lại sớm."""
+
     def fake_post(*args, **kwargs):
-        return _response({}, status=429, headers={"Retry-After": "400000"})
+        return _response({}, status=429, headers={"Retry-After": "957073"})
+
+    monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
+    monkeypatch.setattr("app.features.buffer.client.MIN_REQUEST_INTERVAL_SEC", 0)
+    client = BufferClient("k-11d")
+    with pytest.raises(BufferError) as exc:
+        client.execute("query { account { id } }")
+    assert exc.value.retry_after == 957073
+    assert client.cooldown_remaining() >= 957073 - 2
+
+
+def test_429_retry_after_caps_at_30_days(monkeypatch):
+    def fake_post(*args, **kwargs):
+        return _response({}, status=429, headers={"Retry-After": "9999999"})
 
     monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
     monkeypatch.setattr("app.features.buffer.client.MIN_REQUEST_INTERVAL_SEC", 0)
     client = BufferClient("k-cap")
     with pytest.raises(BufferError) as exc:
         client.execute("query { account { id } }")
-    assert MAX_429_COOLDOWN_SEC == 72 * 3600
+    assert MAX_429_COOLDOWN_SEC == 30 * 24 * 3600
     assert exc.value.retry_after == MAX_429_COOLDOWN_SEC
     assert client.cooldown_remaining() <= MAX_429_COOLDOWN_SEC
 
