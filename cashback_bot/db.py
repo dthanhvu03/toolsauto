@@ -1510,13 +1510,21 @@ class TrackingRepository:
                 (status, next_retry_at, error_kind[:40], attempts, outbound_id),
             )
 
-    def enqueue_admin_event(self, event_key: str, event_type: str, chat_id: int, message_html: str) -> bool:
+    def enqueue_admin_event(
+        self,
+        event_key: str,
+        event_type: str,
+        chat_id: int,
+        message_html: str,
+        reply_markup_json: str | None = None,
+    ) -> bool:
         """Tin vào hàng đợi chung. Loại tin gửi khách có sẵn (ví, chi trả, hỗ trợ) được gắn audience=customer."""
         category = CUSTOMER_EVENT_TYPES.get(event_type)
         with self.connect() as conn:
             return enqueue_event(
                 conn, event_key=event_key, event_type=event_type, chat_id=chat_id, message_html=message_html,
                 audience="customer" if category else "admin", category=category,
+                reply_markup_json=reply_markup_json,
             )
 
     def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5, now: str | None = None,

@@ -51,8 +51,10 @@
       chung ngân sách 1 tin / 7 ngày, 19:00–21:30, nhường lượt sale, tôn trọng /thongbao. Chạy theo cờ link_nudge_enabled (đang bật).
       Ghi chú cũ: Dùng lại `engagement.py` (đã có LINK_NUDGE cho link chưa
       mua, đang bật; nhắc sale Black Friday 27/11 tối + 12/12 đã được chủ bot duyệt từ 27/10) — chỉ thiếu nhánh «vào chưa tạo link».
-- [ ] T4 (tuần 2) Store → Cashbot: sau đơn done, mời dùng Cashbot.
-- [ ] T5 (tuần 3) Mời bạn: tìm vì sao 0 lượt; khách vừa nhận tiền → đề nghị chia sẻ kèm ảnh.
+- [x] T4 (16/11, Cursor) Store → Cashbot: sau đơn done, mời dùng Cashbot (`store_bot/cashbot_invite.py`,
+      mã `store_xsell`, 1 lần/khách; CLI `--send` cho hàng đợi). Đo: khách Store nhận tin → tạo link Cashbot (src store_xsell).
+- [x] T5 một phần (16/11, Cursor): chẩn đoán 0 lượt — referral bật, 4 mã tạo, 0 gắn; tin ví chỉ có chữ `/moiban`.
+      Vá: tin «tiền vào ví» thêm nút `u:p:invite`. Chưa làm: ảnh chia sẻ / broadcast INVITE_ANNOUNCE.
 - [ ] T6 (tuần 4) 12/12: bài ghim + đếm ngược + nhắc khách cũ.
 
 ## Hạ tầng (tuần 1)
@@ -75,3 +77,7 @@
 - 16/11 09:31: nhắn 1 lần khách vào Store lúc shop đóng tay (15/11 21:28 → 16/11 09:30), chưa mua, chưa tắt báo: 33 khách →
   32 nhận, 1 đã chặn bot (đánh dấu blocked). Có nút 🔕. Đánh dấu state `reopen_note_1115:<id>`. Đo: số đơn của 32 khách này tới 18/11.
 - 16/11: AI Cashbot chưa trả lời câu nào (chưa khách nào gõ chữ từ khi bật). Làm T3 (START_NUDGE) — cashback 1230 passed.
+- 16/11 (Cursor, chủ bot giao T4 + T5 nếu còn giờ; Claude tạm không đụng cashback/store): T4 `cashbot_invite` + hook
+  `after_sale`; T5 nút mời trên tin tiền vào ví. Proof: test_store_cashbot_invite 7 passed + test nút ví; ruff sạch.
+- 16/11 ~11:45 (toàn quyền): restart store-bot + cashback-bot + cashback-zalo; `--send` **10/10 ok, 0 chặn**; hàng đợi 0.
+  Baseline src=`store_xsell` = 0 (chờ khách bấm). Chưa commit.

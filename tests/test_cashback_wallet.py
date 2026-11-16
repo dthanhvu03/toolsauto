@@ -680,6 +680,24 @@ class TestPaidBasisWording:
         assert "/moiban" not in entry_notice("pending", "Áo", 5_000, None, 7, invite_pct=10), "đơn mới: chưa rủ"
         assert "/moiban" not in entry_notice("cancelled", "Áo", 5_000, None, 7, invite_pct=10)
 
+    def test_tien_vao_vi_kem_nut_lay_link_moi_ban(self, tmp_path):
+        """PLAN-172 T5: tin «tiền vào ví» có nút u:p:invite (trước chỉ chữ /moiban → 0 lượt gắn)."""
+        bot = _bot(tmp_path, referral_enabled=True)
+        _financially_ready(bot)
+        bot.wallet.set_enabled(True)
+        bot.wallet.set_hold_days(0)
+        sub = _link(bot)
+        _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z", approved=True)
+        bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+        with bot.repo.connect() as conn:
+            row = conn.execute(
+                "SELECT message_html, reply_markup_json FROM admin_notifications "
+                "WHERE event_type = 'WALLET_ENTRY' AND message_html LIKE '💰%' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        assert row is not None and "/moiban" in row[0]
+        markup = json.loads(row[1])
+        assert markup["inline_keyboard"][0][0]["callback_data"] == "u:p:invite"
+
     def test_refresh_passes_link_estimate_to_customer(self, tmp_path):
         bot = _bot(tmp_path)
         _financially_ready(bot)

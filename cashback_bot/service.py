@@ -502,6 +502,13 @@ class CashbackService:
                 continue
             if item.cashback_vnd <= 0 and item.status != "cancelled":
                 continue
+            # PLAN-172 T5: tiền vừa vào ví → nút lấy link mời (trước chỉ có dòng chữ /moiban → 0 lượt gắn mã).
+            invite_markup = None
+            if item.status == "available" and self.settings.referral_enabled:
+                invite_markup = json.dumps(
+                    {"inline_keyboard": [[{"text": "🤝 Lấy link mời bạn", "callback_data": "u:p:invite"}]]},
+                    ensure_ascii=False,
+                )
             self.repo.enqueue_admin_event(
                 event_key=f"wallet:{item.conversion_id}:{item.status}",
                 event_type="WALLET_ENTRY",
@@ -511,6 +518,7 @@ class CashbackService:
                     item.estimated_vnd,
                     invite_pct=referral.SHARE_BPS // 100 if self.settings.referral_enabled else None,
                 ),
+                reply_markup_json=invite_markup,
             )
 
     def _referral_sync(self, moment: datetime) -> None:

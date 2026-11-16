@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import requests
 
 from cashback_bot import vietqr
-from store_bot import hours
+from store_bot import cashbot_invite, hours
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.config import ConfigError, Settings, default_dotenv, load_settings
@@ -681,6 +681,15 @@ class StoreBot:
         if product and product.upstream_id is None and product.stock == 0:
             self.notify_admins(msg.admin_sold_out(product),
                                 keyboard([button("➕ Nhập kho", f"a:st:{product.id}")]))
+        # PLAN-172 T4: đơn bot vừa giao hàng → mời Cashbot một lần / khách (lỗi gửi không làm hỏng after_sale).
+        if order.items and order.source == "bot":
+            try:
+                cashbot_invite.send_after_sale(
+                    self.repo, self.tg, order.user_id, source=order.source,
+                    username=self.settings.cashbot_username,
+                )
+            except Exception:
+                logger.exception("[Store] cashbot_invite đơn %s lỗi", order.id)
 
     def send_items(self, chat_id: int, order: Order) -> None:
         """Gửi hàng; Telegram lỗi (mạng / 429) thì thử lại một lần, vẫn lỗi thì báo admin. Hàng luôn còn ở 🧾 Đơn hàng."""

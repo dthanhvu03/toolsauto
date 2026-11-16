@@ -1,3 +1,34 @@
+## Phiên 2026-11-16 (cursor-t4-t5) — Chủ bot giao Cursor toàn quyền T4/T5
+- T4: `store_bot/cashbot_invite.py` — sau đơn bot done (`after_sale`) gửi 1 tin mời Cashbot (`?start=store_xsell`), 1 lần/khách;
+  tắt `cashbot_invite:off`. `STORE_CASHBOT_USERNAME` (mặc định zt_shopee_bot).
+- T5 (một phần): referral bật, 4 mã, 0 gắn; vá tin «tiền vào ví» thêm nút `u:p:invite`. Chưa: ảnh / INVITE_ANNOUNCE.
+- Proof: test_store_cashbot_invite 7 passed; test nút ví passed; ruff sạch. Chưa commit.
+- ĐÃ BẬT (toàn quyền 16/11 ~11:45): `systemctl restart store-bot cashback-bot cashback-zalo` (active).
+  Backfill `--send`: **10/10 gửi ok, 0 chặn**; hàng đợi còn 0; state `cashbot_invite:v1:*` = 10.
+- Báo cáo 15:47: **0** src=`store_xsell`, **0** khách Cashbot mới, **0** tạo link hôm nay, referrals vẫn 0.
+  Đơn Store #20 (14:11, Huy, Gemini 6M, nạp SePay `topup:27`) **trượt T4** vì `store-api` chưa restart (chạy từ 13/11).
+  Đã restart store-api 15:49 + gửi bù 1 tin cho 835695716 (ok). Tổng đã mời: **11**.
+- Next: đo src=`store_xsell`; commit khi chủ bot bảo.
+
+## Phiên 2026-11-16 (buffer-chk6) — Báo cáo Buffer (chỉ đọc DB + log, không gọi API Buffer, không sửa code)
+- PM2 Maintenance + Web_Dashboard online. Job Buffer DONE/FAILED: 12/11 6/0, 13/11 6/2 (#1475/#1476 lúc boot, đã báo), 14/11 6/0,
+  15/11 6/0, 16/11 2/0 (tới 10:39). Không lỗi mới từ 13/11.
+- Uyển Nhi 10/10 hẹn tới 19/11 15:30, 48 video chưa hẹn; Hoa Lệ Đây 10/10 tới 19/11 14:00, 35 chưa hẹn — đủ bài.
+- trnvp89 hết bài từ 11/11 14:00: key e252 bị 429 lại 14/11 13:37 ngay khi hết cooldown → khoá tiếp tới 17/11 13:37 VN; 76 video chờ.
+- Sống Nhẹ hết từ 10/11 17:30: nguồn #4 nnpt2310 + #5 nunhanthongtue quét 15/11 vẫn found=0, 0 video chưa hẹn.
+- buffer_cooldown.json còn 2 key khác: 8d70 tới 16/11 14:15, 37e8 tới 22/11 15:46 (chưa map được tài khoản — không đọc key).
+- Vì sao 429 (chủ bot hỏi): bản vá 23/10 (PLAN-061/068/072) vẫn chạy đúng — từ đó key ZVsP (tài khoản #3, trnvp89) chỉ ~190 lượt
+  gọi trong log. Nhưng suất 30 ngày của key này là 1.000 (2 key kia 2.000) và đã còn 0/1000; Buffer trả retry_after cố định
+  → mở lại 19/11 15:24 VN. Trần cooldown 72h (PLAN-061) làm bot thử lại sớm 11/11, 14/11, 17/11 — mỗi lần tốn 1 lượt 429, vô hại.
+  Phần ~800 lượt còn lại không thấy trong log Maintenance / Web_Dashboard từ 23/10 (nghi: bão 429 trước bản vá, test e2e dùng key
+  thật, hoặc công cụ khác dùng chung key) — chưa xác minh được nếu không gọi Buffer.
+- ĐÃ SỬA (chủ bot: «em sửa cho anh»): app/features/buffer/client.py `MAX_429_COOLDOWN_SEC` 72 giờ → 30 ngày (bằng trần hiển thị
+  cluster_router) — key chờ đúng mốc Buffer báo, không gọi lại sớm. Test: thay test trần 72h bằng 2 test (11 ngày giữ nguyên;
+  trần 30 ngày). Proof (chặn mạng, `unshare -n`): test_buffer_* 390 passed; 7 hỏng do netns chặn cả Postgres 127.0.0.1
+  (OperationalError → 500), không liên quan; ruff sạch. Chưa commit. Cần: `pm2 restart Maintenance`.
+- Next: 17/11 13:37 key ZVsP còn 1 lần 429 (cooldown cũ trong file) → bản mới ghi mốc ~19/11 15:24; 19/11 sau 15:24 xem
+  trnvp89 hẹn lại được chưa; nguồn mới cho Sống Nhẹ.
+
 ## Phiên 2026-11-16 (growth-ops ngày 2) — trạng thái cuối phiên
 - Đang chạy (store-bot 09:29, cashback-bot 09:36 đã restart sau commit cuối, log sạch): T1 Store vào thẳng danh sách món,
   T2 Cashbot AI trả lời tin chữ, T3 nhắc khách vào chưa tạo link (START_NUDGE, 19:00–21:30, tối nay 3 khách),

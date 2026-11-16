@@ -52,6 +52,8 @@ class Settings:
     sync_seconds: int = 180
     # Đăng "HÀNG MỚI VỀ" khi một món FatCat tăng ít nhất chừng này (hoặc từ hết hàng có lại).
     restock_announce_min: int = 5
+    # PLAN-172 T4: username bot hoàn tiền để mời sau đơn done (không @).
+    cashbot_username: str = "zt_shopee_bot"
 
 
 def default_dotenv() -> Path:
@@ -130,4 +132,6 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         fatcat_discount_bps=_bounded_int(env, "FATCAT_DISCOUNT_BPS", 200, 0, 5_000),
         sync_seconds=_bounded_int(env, "STORE_SYNC_SECONDS", 180, 60, 3600),
         restock_announce_min=_bounded_int(env, "STORE_RESTOCK_ANNOUNCE_MIN", 5, 1, 10_000),
+        cashbot_username=(env.get("STORE_CASHBOT_USERNAME") or "zt_shopee_bot").strip().lstrip("@")
+        or "zt_shopee_bot",
     )
