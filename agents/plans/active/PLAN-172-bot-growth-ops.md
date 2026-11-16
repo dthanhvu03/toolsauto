@@ -70,3 +70,5 @@
 - 16/11: chủ bot đồng ý (1) không đóng shop khi ví FatCat thấp — đơn chờ ví (waiting_funds) đã có; tin cảnh báo ví thêm
   «Không cần đóng shop»; (2) shop nghỉ → nút «🔔 Báo tôi khi shop mở» (danh sách món + màn món), state `wake:<id>`;
   vòng nền `check_reopen` thấy nghỉ → mở thì nhắn 1 lần rồi xoá (cả đóng tay lẫn giờ nghỉ hằng ngày). 104 passed.
+- 16/11 09:31: nhắn 1 lần khách vào Store lúc shop đóng tay (15/11 21:28 → 16/11 09:30), chưa mua, chưa tắt báo: 33 khách →
+  32 nhận, 1 đã chặn bot (đánh dấu blocked). Có nút 🔕. Đánh dấu state `reopen_note_1115:<id>`. Đo: số đơn của 32 khách này tới 18/11.
