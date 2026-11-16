@@ -5,7 +5,7 @@
 - Proof: test_store_cashbot_invite + test_cashback_invite_nudge 11 passed; ruff sạch.
 - ĐÃ GỬI (~16:02): T4 nudge **11/11** ok; T5 invite_nudge **4/4 sent**; start-v1 **19 sent / 1 failed 403**.
   Restart store-bot + store-api + cashback-bot + cashback-zalo.
-- Next: vài giờ–1 ngày đo `store_xsell`, link mới, referrals; commit + push.
+- Commit+push: `2bfeecd`. Next: vài giờ–1 ngày đo `store_xsell`, link mới, referrals.
 
 ## Phiên 2026-11-16 (cursor-t4-t5) — Chủ bot giao Cursor toàn quyền T4/T5
 - T4: `store_bot/cashbot_invite.py` — sau đơn bot done (`after_sale`) gửi 1 tin mời Cashbot (`?start=store_xsell`), 1 lần/khách;
