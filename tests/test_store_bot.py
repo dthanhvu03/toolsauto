@@ -1568,3 +1568,15 @@ def test_new_customer_lands_on_product_list_returning_on_home(bot, repo, product
 
     store.handle_update(_private(NEWBIE, "/start"))
     assert "Số dư" in telegram.texts_to(NEWBIE)[-1]
+
+
+def test_funnel_steps_marked_once(bot, repo, product):
+    """PLAN-172: lần đầu xem món / chọn số lượng ghi vào state step:* (đếm phễu), lần sau không ghi đè."""
+    store, telegram = bot
+    store.handle_update(_private(BUYER, f"/start buy_{product}"))
+    first = repo.get_state(f"step:product:{BUYER}")
+    assert first and first.startswith(f"{product}@")
+    store.handle_update(_click(BUYER, f"q:{product}:1"))
+    assert repo.get_state(f"step:confirm:{BUYER}").startswith(f"{product}@")
+    store.handle_update(_click(BUYER, f"p:{product}"))
+    assert repo.get_state(f"step:product:{BUYER}") == first

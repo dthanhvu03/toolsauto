@@ -52,6 +52,11 @@ def _store(path: Path, since_day: datetime, until_day: datetime, since_week: dat
             "revenue_y": one("SELECT COALESCE(SUM(total),0) FROM orders WHERE status='done' AND refunded=0 "
                              "AND created_at >= ? AND created_at < ?", _iso(since_day), _iso(until_day)),
             "new_w": one("SELECT COUNT(*) FROM users WHERE created_at >= ?", _iso(since_week)),
+            "product_w": one("SELECT COUNT(*) FROM state WHERE key IN (SELECT 'step:product:' || user_id FROM users "
+                             "WHERE created_at >= ?)", _iso(since_week)),
+            "confirm_w": one("SELECT COUNT(*) FROM state WHERE key IN (SELECT 'step:confirm:' || user_id FROM users "
+                             "WHERE created_at >= ?)", _iso(since_week)),
+            "closed": one("SELECT COUNT(*) FROM state WHERE key = 'closed_manual' AND value = '1'"),
             "topup_w": one(f"SELECT COUNT(DISTINCT user_id) FROM topups WHERE user_id IN ({new_ids})", _iso(since_week)),
             "order_w": one(f"SELECT COUNT(DISTINCT user_id) FROM orders WHERE status='done' AND user_id IN ({new_ids})",
                            _iso(since_week)),
@@ -103,7 +108,8 @@ def build(now: datetime | None = None, cashback_path: Path | None = None, store_
         f"• AI Store: {st['new_y']} khách mới · {st['orders_y']} đơn · {_vnd(st['revenue_y'])}",
         f"• Cashbot: {cb['new_y']} khách mới · {cb['links_y']} link",
         "", "<b>Khách mới 7 ngày đi tới đâu</b>",
-        f"• AI Store: {st['new_w']} vào → {st['topup_w']} tạo mã nạp ({_pct(st['topup_w'], st['new_w'])}) → "
+        f"• AI Store: {st['new_w']} vào → {st['product_w']} xem món → {st['confirm_w']} chọn số lượng → "
+        f"{st['topup_w']} tạo mã nạp ({_pct(st['topup_w'], st['new_w'])}) → "
         f"{st['order_w']} có đơn ({_pct(st['order_w'], st['new_w'])})",
         f"• Cashbot: {cb['new_w']} vào → {cb['link_w']} tạo link ({_pct(cb['link_w'], cb['new_w'])}) → "
         f"{cb['order_w']} có đơn ({_pct(cb['order_w'], cb['new_w'])})",
@@ -112,6 +118,8 @@ def build(now: datetime | None = None, cashback_path: Path | None = None, store_
         f"({_pct(st['t1_buy'], st['t1_new'])}, gốc {T1_BASELINE})",
         f"• T2 Cashbot AI trả lời tin chữ: hôm qua {cb['ai_y']} câu",
     ]
+    if st["closed"]:
+        lines.insert(1, "\n🔴 <b>AI Store đang ĐÓNG TAY</b>: khách xem được món nhưng không mua được. Mở ở ⚙️ Quản lý shop → Giờ nghỉ.")
     if rep.errors:
         lines += ["", "⚠️ " + "; ".join(rep.errors)]
     return "\n".join(lines)

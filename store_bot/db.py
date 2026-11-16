@@ -412,6 +412,11 @@ class StoreRepository:
             cur = conn.execute("INSERT OR IGNORE INTO state(key, value) VALUES (?, ?)", (f"src:{user_id}", code))
             return cur.rowcount == 1
 
+    def mark_step(self, user_id: int, step: str, value: str) -> None:
+        """PLAN-172: lần đầu khách tới một bước (product = xem món, confirm = chọn số lượng) — đếm phễu, chỉ ghi lần đầu."""
+        with self._tx() as conn:
+            conn.execute("INSERT OR IGNORE INTO state(key, value) VALUES (?, ?)", (f"step:{step}:{user_id}", value))
+
     def source_counts(self, days: int = 7) -> list[tuple[str, int]]:
         """Khách mới theo nguồn trong `days` ngày gần nhất."""
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")

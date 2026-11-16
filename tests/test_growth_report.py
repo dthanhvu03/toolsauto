@@ -34,6 +34,8 @@ def _dbs(tmp_path):
         INSERT INTO users VALUES (10, 'x', 'X', 0, '2026-11-16T02:00:00+00:00', NULL),
                                  (11, 'y', 'Y', 0, '2026-11-16T02:10:00+00:00', NULL);
         INSERT INTO topups VALUES (10, 'paid', '2026-11-16T02:05:00+00:00');
+        INSERT INTO state VALUES ('step:product:10', '1@x'), ('step:product:11', '1@x'), ('step:confirm:10', '1@x'),
+                                 ('closed_manual', '1');
         INSERT INTO orders VALUES (1, 10, 'done', 21000, 0, '2026-11-16T02:06:00+00:00');
         """)
     return cb, st
@@ -46,7 +48,8 @@ def test_build_counts(tmp_path):
     assert "Khách dùng thật 7 ngày: <b>2</b>" in text  # 1 Cashbot (link) + 1 Store (đơn)
     assert "AI Store: 2 khách mới · 1 đơn · 21.000đ" in text
     assert "Cashbot: 1 khách mới · 1 link" in text
-    assert "AI Store: 2 vào → 1 tạo mã nạp (50%) → 1 có đơn (50%)" in text
+    assert "AI Store: 2 vào → 2 xem món → 1 chọn số lượng → 1 tạo mã nạp (50%) → 1 có đơn (50%)" in text
+    assert "ĐÓNG TAY" in text
     assert "Cashbot: 1 vào → 1 tạo link (100%) → 1 có đơn (100%)" in text
     assert "có đơn 1/2 (50%" in text and "hôm qua 1 câu" in text
 

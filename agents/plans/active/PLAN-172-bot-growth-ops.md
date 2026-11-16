@@ -63,3 +63,7 @@
   + bot_users + psych_kb chạy lại (xem current-status). Cần restart: `systemctl restart store-bot cashback-bot cashback-zalo`.
 - 16/11: chủ bot hỏi sao sáng không có báo cáo — 15/11 mới ghi «next», chưa làm. Làm growth_report + test (2 passed),
   gửi bản 16/11. Số sáng 16/11: dùng thật 7 ngày 25; Store 15/11 vào 50 khách (Threads); T1 0/13 có đơn (qua đêm).
+- 16/11: đơn DODORO (ysbSylyJ) về bot 08:39 — Shopee trả chậm ~32h, không phải lỗi sync.
+- 16/11: Store đóng tay (closed_manual) từ sau 21:28 15/11 tới ~09:30 16/11, ví FatCat 40.729đ → 35 khách mới gặp shop nghỉ
+  (xem món được, không mua được) — T1 đêm đầu không đo được. Thêm đếm bước Store: state `step:product|confirm:<id>` (lần đầu),
+  báo cáo sáng hiện vào → xem món → chọn số lượng → mã nạp → đơn + cảnh báo 🔴 khi shop đóng tay. Đo T1 tính lại từ 16/11 sáng.

@@ -50,6 +50,10 @@ RETRY_BUDGET_SEC = 60  # mỗi vòng nền gọi lại FatCat tối đa ~60 giâ
 CLEANUP_EVERY_SEC = 3600
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def button(text: str, data: str, icon_id: str | None = None) -> dict:
     """icon_id: logo hãng (custom_emoji_id) hiện trước chữ trên nút."""
     result = {"text": text, "callback_data": data}
@@ -400,6 +404,7 @@ class StoreBot:
             self._show(chat_id, message_id, msg.product_detail(product, user.balance, closed=closed),
                        keyboard([button("⬅️ Sản phẩm", "shop"), button("💰 Nạp tiền", "top")]))
             return
+        self.repo.mark_step(user.user_id, "product", f"{product.id}@{_now_iso()}")
         limit = self._max_quantity(product)
         quick = [button(str(q), f"q:{product.id}:{q}") for q in QUICK_QUANTITIES if q <= limit]
         rows = [quick]
@@ -425,6 +430,7 @@ class StoreBot:
             self._show(chat_id, message_id, f"Mỗi lần mua được 1–{limit} món.",
                        keyboard([button("⬅️ Quay lại", f"p:{product.id}")]))
             return
+        self.repo.mark_step(user.user_id, "confirm", f"{product.id}@{_now_iso()}")
         nonce = secrets.token_hex(4)
         missing = product.price * quantity - user.balance
         if missing <= 0:
