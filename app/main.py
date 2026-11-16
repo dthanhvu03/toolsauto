@@ -111,6 +111,7 @@ async def cookie_auth_middleware(request: Request, call_next):
         "/health/json",
         "/health/ui",
         "/health/gemini/cookie-sync",
+        "/logout",  # chỉ xoá cookie — phiên hết hạn vẫn đăng xuất được (trước bị 401, nút bấm không làm gì)
         "/manifest.json",
         "/sw.js",
     }

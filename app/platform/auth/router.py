@@ -77,10 +77,7 @@ async def login_api(request: Request, username: str = Form(...), password: str =
         status_code=401
     )
 
-@router.post("/logout")
-async def logout(request: Request):
-    """Clear session cookie and redirect"""
-    response = JSONResponse({"ok": True, "redirect": "/login"})
+def _clear_session(request: Request, response):
     response.delete_cookie(
         key="session_token",
         path="/",
@@ -89,3 +86,15 @@ async def logout(request: Request):
         secure=True if request.url.scheme == "https" else False
     )
     return response
+
+
+@router.get("/logout")
+async def logout_link(request: Request):
+    """Nút Đăng xuất của giao diện mới là link thường (GET) — trước chỉ có POST nên bấm ra lỗi."""
+    return _clear_session(request, RedirectResponse(url="/login", status_code=303))
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """Clear session cookie and redirect"""
+    return _clear_session(request, JSONResponse({"ok": True, "redirect": "/login"}))
