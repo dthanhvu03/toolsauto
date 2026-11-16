@@ -1,3 +1,12 @@
+## Phiên 2026-11-16 (growth-ops ngày 2) — trạng thái cuối phiên
+- Đang chạy (store-bot 09:29, cashback-bot 09:36 đã restart sau commit cuối, log sạch): T1 Store vào thẳng danh sách món,
+  T2 Cashbot AI trả lời tin chữ, T3 nhắc khách vào chưa tạo link (START_NUDGE, 19:00–21:30, tối nay 3 khách),
+  đếm bước Store (step:product/confirm), nút «Báo tôi khi shop mở», báo cáo 8h sáng (🔴 khi shop đóng tay).
+- Đã gửi tay 1 lần: «shop đã mở lại» cho 32 khách vào lúc shop đóng tay 15/11 tối (1 chặn bot).
+- Chưa có: AI Cashbot chưa trả lời câu nào (chưa khách gõ chữ).
+- Next: 17/11 8h đọc báo cáo (số bước Store đầu tiên); 18/11 đếm đơn của 32 khách được nhắn; 22/11 đo T1/T2/T3 so với
+  gốc PLAN-172; T4 Store → Cashbot sau đơn done; T5 tìm vì sao mời bạn 0 lượt.
+
 ## Phiên 2026-11-16 (growth-report) — Báo cáo tăng trưởng 8h sáng
 - Sau đó (16/11): Store bị đóng tay 21:28 15/11 → ~09:30 16/11 (ví FatCat 40.729đ), 35 khách mới không mua được.
   Làm: đếm bước Store (step:product/confirm) vào báo cáo + 🔴 cảnh báo đóng tay; nút «Báo tôi khi shop mở» + nhắn khi mở lại;
