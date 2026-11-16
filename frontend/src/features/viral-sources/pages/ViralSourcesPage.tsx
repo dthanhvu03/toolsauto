@@ -33,7 +33,7 @@ export function ViralSourcesPage() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <select className={selectClass} value={page} onChange={(e) => setPage(e.target.value)} required>
+        <select className={`${selectClass} min-w-0 max-w-full`} value={page} onChange={(e) => setPage(e.target.value)} required>
           <option value="">Chọn page</option>
           {q.pages.map((p) => (
             <option key={p.id} value={p.id}>

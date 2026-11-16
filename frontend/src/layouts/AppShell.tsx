@@ -1,8 +1,21 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Menu, X, LogOut } from "lucide-react";
+import { Coins, Menu, MessageCircle, Users, X, LogOut } from "lucide-react";
 import { useState } from "react";
 import { NAV_GROUPS } from "@/app/nav";
 import { cn } from "@/shared/lib/cn";
+
+/** Điện thoại: 3 trang chủ bot hay xem + nút Menu, luôn ở đáy màn như app. */
+const TAB_BAR = [
+  { to: "/app/go/threads-growth", label: "Threads", icon: MessageCircle, external: false },
+  { to: "/cashback", label: "Cashback", icon: Coins, external: true },
+  { to: "/app/go/bot-users", label: "Khách", icon: Users, external: false },
+] as const;
+
+const tabClass = (active: boolean) =>
+  cn(
+    "flex flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-[11px] font-medium transition-colors",
+    active ? "text-indigo-700" : "text-slate-500 active:text-slate-900"
+  );
 
 export function AppShell() {
   const [open, setOpen] = useState(false);
@@ -97,10 +110,38 @@ export function AppShell() {
           </button>
           <div className="text-sm font-medium text-slate-500">Admin</div>
         </header>
-        <main className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6">
+        <main className="min-h-[calc(100vh-3.5rem)] p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           <Outlet />
         </main>
       </div>
+
+      <nav
+        aria-label="Trang chính"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      >
+        {TAB_BAR.map((t) => {
+          const Icon = t.icon;
+          const inner = (active: boolean) => (
+            <>
+              <Icon className={cn("size-6", active ? "stroke-[2.25]" : "stroke-[1.75]")} />
+              {t.label}
+            </>
+          );
+          return t.external ? (
+            <a key={t.to} href={t.to} className={cn(tabClass(false), "h-14")}>
+              {inner(false)}
+            </a>
+          ) : (
+            <NavLink key={t.to} to={t.to} className={({ isActive }) => cn(tabClass(isActive), "h-14")}>
+              {({ isActive }) => inner(isActive)}
+            </NavLink>
+          );
+        })}
+        <button type="button" onClick={() => setOpen(true)} className={cn(tabClass(open), "h-14")}>
+          <Menu className="size-6 stroke-[1.75]" />
+          Menu
+        </button>
+      </nav>
     </div>
   );
 }

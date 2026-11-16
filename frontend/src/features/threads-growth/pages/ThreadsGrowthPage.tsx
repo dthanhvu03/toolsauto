@@ -21,6 +21,20 @@ const TABS: { key: GrowthStatus; label: string; hint: string }[] = [
 
 type BotFilter = "all" | "cashbot" | "ai_store";
 
+/** Điện thoại: trang chia 3 phần (tab dính trên đầu) thay vì một trang dài ~20 màn. Màn rộng (lg) hiện tất cả. */
+type Section = "overview" | "queue" | "people";
+const SECTION_KEY = "threads-growth.section";
+
+function loadSection(): Section {
+  try {
+    const v = localStorage.getItem(SECTION_KEY);
+    if (v === "overview" || v === "queue" || v === "people") return v;
+  } catch {
+    /* trình duyệt chặn bộ nhớ — dùng mặc định */
+  }
+  return "overview";
+}
+
 export function ThreadsGrowthPage() {
   const ov = useQuery({ queryKey: ["growth", "overview"], queryFn: api.fetchOverview, refetchInterval: 15_000 });
   const own = useQuery({ queryKey: ["growth", "own-posts"], queryFn: api.fetchOwnPosts, refetchInterval: 30_000 });
@@ -29,6 +43,17 @@ export function ThreadsGrowthPage() {
   const [bot, setBot] = useState<BotFilter>("all");
   const [account, setAccount] = useState("all");
   const accounts = ov.data?.accounts ?? [];
+  const [section, setSectionState] = useState<Section>(loadSection);
+  const setSection = (s: Section) => {
+    setSectionState(s);
+    try {
+      localStorage.setItem(SECTION_KEY, s);
+    } catch {
+      /* bỏ qua */
+    }
+    window.scrollTo({ top: 0 });
+  };
+  const onlyOn = (s: Section) => (section === s ? "" : "max-lg:hidden");
 
   const counts = ov.data?.counts;
   // Mặc định: có việc cần duyệt thì mở «Cần duyệt», không thì xem «Đã đăng».
@@ -45,8 +70,38 @@ export function ThreadsGrowthPage() {
         actions={<ScreenSettingsButton screen="threads-growth" />}
       />
 
+      <nav
+        aria-label="Phần của trang"
+        className="sticky top-14 z-20 -mx-4 grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur lg:hidden"
+      >
+        {(
+          [
+            { key: "overview", label: "Tổng quan", n: 0 },
+            { key: "queue", label: "Duyệt", n: counts?.pending ?? 0 },
+            { key: "people", label: "Khách & TK", n: ov.data?.customers.last_24h ?? 0 },
+          ] as const
+        ).map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => setSection(o.key)}
+            aria-current={section === o.key ? "page" : undefined}
+            className={cn(
+              "flex min-h-10 items-center justify-center gap-1 rounded-xl text-sm font-medium transition-colors",
+              section === o.key ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-slate-200",
+            )}
+          >
+            {o.label}
+            {o.n ? (
+              <span className={cn("rounded-full px-1.5 text-xs", section === o.key ? "bg-white/20" : "bg-slate-100")}>{o.n}</span>
+            ) : null}
+          </button>
+        ))}
+      </nav>
+
       {ov.isError && <p className="text-sm text-red-600">{(ov.error as Error).message}</p>}
       {ov.isLoading && <p className="text-sm text-slate-500">Đang tải…</p>}
+      <div className={cn("flex flex-col gap-4", onlyOn("overview"))}>
       {ov.data && <ControlBar ov={ov.data} own={own.data?.items ?? []} />}
       {ov.data && accounts.length > 1 && (
         <div className="flex flex-wrap items-center gap-1 text-xs">
@@ -67,9 +122,10 @@ export function ThreadsGrowthPage() {
         </div>
       )}
       {ov.data && <BotFunnel ov={ov.data} account={account} />}
+      </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <main className="flex min-w-0 flex-col gap-3">
+        <main className={cn("flex min-w-0 flex-col gap-3", onlyOn("queue"))}>
           <div className="flex flex-wrap items-end gap-2 border-b border-slate-200">
             {TABS.map((t) => {
               const n = counts?.[t.key as keyof Overview["counts"]];
@@ -121,7 +177,7 @@ export function ThreadsGrowthPage() {
           ))}
         </main>
 
-        <aside className="flex flex-col gap-4">
+        <aside className={cn("flex flex-col gap-4", onlyOn("people"))}>
           {ov.data && <RecentCustomers rep={ov.data.customers} />}
           <AccountsPanel accounts={accounts} />
           <Followups items={fu.data?.items ?? []} />

@@ -1676,6 +1676,8 @@ body.mode-2d .bottom-bar {
 
   .filter-pills-group {
     overflow-x: auto;
+    max-width: 100%;
+    min-width: 0;
     scrollbar-width: none;
     -ms-overflow-style: none;
     padding-bottom: 2px;

@@ -63,6 +63,7 @@ export function BotFunnel({ ov, account }: { ov: Overview; account: string }) {
             </div>
 
             {all ? (
+              <div className="overflow-x-auto">
               <table className="mt-3 w-full text-xs text-slate-600">
                 <thead className="text-left text-slate-400">
                   <tr>
@@ -85,6 +86,7 @@ export function BotFunnel({ ov, account }: { ov: Overview; account: string }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <p className="mt-3 text-xs text-slate-500">
                 Khách tính theo mã link của tài khoản này (link bio riêng; mã reply cũ tính cho @us28qt). Lỗi đăng:{" "}

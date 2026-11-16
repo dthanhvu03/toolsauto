@@ -27,4 +27,18 @@
             border-bottom: 1px dashed var(--color-border); }
   .cb-row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cb-note { font-size: 11px; color: var(--color-ash); }
+  /* Giá trị dài (vd «24 giờ: tạo lỗi 0 · chưa giao 0 · kẹt…») xuống dòng thay vì bóp nhãn còn 1 chữ / dòng. */
+  .cb-row { flex-wrap: wrap; row-gap: .15rem; }
+  .cb-row > :first-child { flex: 1 1 10rem; }
+  .cb-row span:last-child:not(:first-child) { white-space: normal; margin-left: auto; text-align: right; }
+  /* Điện thoại: bảng cuộn ngang trong khung (không đẩy cả trang tràn), thẻ và ô gọn hơn. */
+  @media (max-width: 640px) {
+    .cb-card { padding: .9rem; }
+    .cb-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; font-size: 12px; }
+    .cb-table th, .cb-table td { padding: .4rem .45rem; }
+    .cb-table th { white-space: nowrap; }
+    .cb-table td { min-width: 4.5rem; }
+    .cb-table td:first-child { min-width: 8.5rem; }
+    .cb-tabs a { padding: .35rem .6rem; font-size: 13px; }
+  }
 </style>

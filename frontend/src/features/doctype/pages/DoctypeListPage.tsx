@@ -23,6 +23,7 @@ export function DoctypeListPage() {
           {rows.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-400">Chưa có DocType nào. Bấm «Tạo DocType» — ví dụ «Thư viện hook», «Kiểu caption».</p>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
@@ -59,6 +60,7 @@ export function DoctypeListPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </QueryBody>
       </Panel>

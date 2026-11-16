@@ -33,6 +33,27 @@ function SummaryTable({ bots, total, days }: { bots: BotSummary[]; total: BotSum
   ];
   return (
     <Panel>
+      {/* Điện thoại: mỗi bot một thẻ, số to dễ đọc — bảng 6 cột bị cắt cột «Có đơn». */}
+      <ul className="divide-y divide-slate-100 md:hidden">
+        {[...bots, total].map((s) => (
+          <li key={s.bot} className={cn("px-4 py-3", s.bot === "all" && "bg-slate-50")}>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              {s.bot === "all" ? null : <span className={cn("h-2 w-2 rounded-full", DOT[s.bot as BotKey])} />}
+              {s.bot === "all" ? "Tổng" : s.label}
+              <span className="ml-auto text-lg tabular-nums text-slate-900">{s.total}</span>
+            </div>
+            <dl className="mt-2 grid grid-cols-4 gap-2 text-center">
+              {cols.slice(1).map(([key, label]) => (
+                <div key={key} className="rounded-lg bg-white px-1 py-1.5 ring-1 ring-slate-100">
+                  <dd className="text-base font-semibold tabular-nums text-slate-800">{s[key] as number}</dd>
+                  <dt className="text-[10px] leading-tight text-slate-500">{label}</dt>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs text-slate-500">
           <tr>
@@ -60,6 +81,7 @@ function SummaryTable({ bots, total, days }: { bots: BotSummary[]; total: BotSum
           ))}
         </tbody>
       </table>
+      </div>
       <p className="px-4 py-2 text-[11px] text-slate-400">
         Đang dùng: Cashbot = có tạo link · AI Store = có đơn hoặc nạp tiền. Có đơn: Cashbot = đơn sàn ghi nhận (không tính huỷ) · AI Store = đơn đã giao.
         Một người dùng nhiều bot được đếm ở mỗi bot.
@@ -132,7 +154,34 @@ function Sources({ sources }: { sources: Record<BotKey, { source: string; count:
 function PeopleTable({ people, matched }: { people: Person[]; matched: number }) {
   return (
     <Panel>
-      <div className="overflow-x-auto">
+      {/* Điện thoại: mỗi khách một dòng thẻ (tên · bot · nguồn · lần dùng) thay bảng 7 cột phải kéo ngang. */}
+      <ul className="divide-y divide-slate-100 md:hidden">
+        {people.map((p) => (
+          <li key={`${p.bot}-${p.user_id}`} className="flex items-start gap-3 px-4 py-2.5">
+            <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", p.active ? "bg-emerald-500" : "bg-slate-300")} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                {p.bot === "ai_store" ? (
+                  <span className="truncate font-medium text-slate-800">{p.name}</span>
+                ) : (
+                  <a href={`/cashback/users/${p.user_id}`} className="truncate font-medium text-indigo-700">{p.name}</a>
+                )}
+                <span className="shrink-0 text-xs tabular-nums text-slate-500">
+                  {p.bot === "ai_store" ? `${p.orders} đơn` : `${p.uses} link · ${p.orders} đơn`}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+                <span>{SHORT[p.bot]}</span>
+                <span>· {sourceLabel(p.source)}</span>
+                <span>· vào {when(p.joined_at)}</span>
+                {p.last_used_at ? <span>· dùng {when(p.last_used_at)}</span> : null}
+                {p.bot === "ai_store" && (p.spent || p.balance) ? <span>· chi {vnd(p.spent ?? 0)} · ví {vnd(p.balance ?? 0)}</span> : null}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
             <tr>
@@ -218,7 +267,7 @@ export function BotUsersPage() {
                   {label}
                 </button>
               ))}
-              <div className="ml-auto flex gap-2">
+              <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
                 <SearchField placeholder="Tên, @username, ID hoặc mã nguồn" value={typed} onChange={setTyped} onSubmit={() => setQ(typed)} />
               </div>
             </div>
