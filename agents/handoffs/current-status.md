@@ -1,14 +1,17 @@
+## Phiên 2026-11-16 (cursor-money-ops) — Toàn quyền ép chuyển đổi 2 bot
+- Chẩn đoán chiều: T4 lần 1 (11 tin) → 0 `store_xsell`; invite-v1 đã gửi hết 33 người tạo link mà referrals vẫn 0.
+- ĐÃ LÀM: copy T4 ngắn hơn + CLI `--nudge` (nhắc 1 lần); `cashback_bot/invite_nudge.py` (khách có tiền ví → nút mời);
+  gửi `announce:start-v1` cho khách vào bot chưa tạo link.
+- Proof: test_store_cashbot_invite + test_cashback_invite_nudge 11 passed; ruff sạch.
+- ĐÃ GỬI (~16:02): T4 nudge **11/11** ok; T5 invite_nudge **4/4 sent**; start-v1 **19 sent / 1 failed 403**.
+  Restart store-bot + store-api + cashback-bot + cashback-zalo.
+- Next: vài giờ–1 ngày đo `store_xsell`, link mới, referrals; commit + push.
+
 ## Phiên 2026-11-16 (cursor-t4-t5) — Chủ bot giao Cursor toàn quyền T4/T5
 - T4: `store_bot/cashbot_invite.py` — sau đơn bot done (`after_sale`) gửi 1 tin mời Cashbot (`?start=store_xsell`), 1 lần/khách;
   tắt `cashbot_invite:off`. `STORE_CASHBOT_USERNAME` (mặc định zt_shopee_bot).
-- T5 (một phần): referral bật, 4 mã, 0 gắn; vá tin «tiền vào ví» thêm nút `u:p:invite`. Chưa: ảnh / INVITE_ANNOUNCE.
-- Proof: test_store_cashbot_invite 7 passed; test nút ví passed; ruff sạch. Chưa commit.
-- ĐÃ BẬT (toàn quyền 16/11 ~11:45): `systemctl restart store-bot cashback-bot cashback-zalo` (active).
-  Backfill `--send`: **10/10 gửi ok, 0 chặn**; hàng đợi còn 0; state `cashbot_invite:v1:*` = 10.
-- Báo cáo 15:47: **0** src=`store_xsell`, **0** khách Cashbot mới, **0** tạo link hôm nay, referrals vẫn 0.
-  Đơn Store #20 (14:11, Huy, Gemini 6M, nạp SePay `topup:27`) **trượt T4** vì `store-api` chưa restart (chạy từ 13/11).
-  Đã restart store-api 15:49 + gửi bù 1 tin cho 835695716 (ok). Tổng đã mời: **11**.
-- Next: đo src=`store_xsell`; commit khi chủ bot bảo.
+- T5 (một phần): referral bật, 4 mã, 0 gắn; vá tin «tiền vào ví» thêm nút `u:p:invite`.
+- ĐÃ BẬT (~11:45): restart store/cashback; backfill 10/10; báo cáo 15:47 vẫn 0 bấm; đơn #20 trượt vì store-api cũ → restart + bù → tổng mời 11.
 
 ## Phiên 2026-11-16 (buffer-chk6) — Báo cáo Buffer (chỉ đọc DB + log, không gọi API Buffer, không sửa code)
 - PM2 Maintenance + Web_Dashboard online. Job Buffer DONE/FAILED: 12/11 6/0, 13/11 6/2 (#1475/#1476 lúc boot, đã báo), 14/11 6/0,

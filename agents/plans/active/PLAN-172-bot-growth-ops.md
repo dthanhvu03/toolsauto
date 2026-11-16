@@ -80,4 +80,6 @@
 - 16/11 (Cursor, chủ bot giao T4 + T5 nếu còn giờ; Claude tạm không đụng cashback/store): T4 `cashbot_invite` + hook
   `after_sale`; T5 nút mời trên tin tiền vào ví. Proof: test_store_cashbot_invite 7 passed + test nút ví; ruff sạch.
 - 16/11 ~11:45 (toàn quyền): restart store-bot + cashback-bot + cashback-zalo; `--send` **10/10 ok, 0 chặn**; hàng đợi 0.
-  Baseline src=`store_xsell` = 0 (chờ khách bấm). Chưa commit.
+  Baseline src=`store_xsell` = 0 (chờ khách bấm).
+- 16/11 ~16:00 (toàn quyền ép tiền): copy T4 ngắn + `--nudge` (11/11 gửi); invite_nudge ví (4/4 sent); start-v1 (19 sent / 1×403).
+  invite-v1 trước đó đã phủ 33 người tạo link — T5 bổ sung nhắc lúc có tiền ví.

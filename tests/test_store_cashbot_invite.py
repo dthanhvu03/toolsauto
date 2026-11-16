@@ -98,8 +98,9 @@ def test_send_one_lan_va_co_link_store_xsell(tmp_path):
     assert cashbot_invite.send_one(repo, tg, BUYER) == "ok"
     assert len(tg.broadcasts) == 1
     _uid, html, markup = tg.broadcasts[0]
-    assert "hoàn tiền" in html.lower() or "Hoàn" in html
+    assert "hoàn" in html.lower() and "Shopee" in html
     assert markup["inline_keyboard"][0][0]["url"] == "https://t.me/zt_shopee_bot?start=store_xsell"
+    assert "Xem hoàn" in markup["inline_keyboard"][0][0]["text"]
     assert cashbot_invite.send_one(repo, tg, BUYER) == "skipped"
     assert len(tg.broadcasts) == 1
 
@@ -138,3 +139,26 @@ def test_tat_bang_state_off(tmp_path):
     repo.set_state(cashbot_invite.OFF_KEY, "1")
     tg = FakeTelegram()
     assert cashbot_invite.send_one(repo, tg, BUYER) == "skipped"
+
+
+def test_nudge_sau_khi_moi_va_chua_vao_cashbot(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(cashbot_invite, "_already_on_cashbot", lambda: set())
+    monkeypatch.setattr(cashbot_invite, "_used_store_xsell", lambda: set())
+    tg = FakeTelegram()
+    assert cashbot_invite.send_one(repo, tg, BUYER) == "ok"
+    # chưa đủ 48h
+    assert cashbot_invite.nudge_targets(repo, NOW) == []
+    assert cashbot_invite.nudge_targets(repo, NOW, ignore_age=True) == [BUYER]
+    assert cashbot_invite.send_nudge_one(repo, tg, BUYER) == "ok"
+    assert "Nhắc nhẹ" in tg.broadcasts[1][1]
+    assert cashbot_invite.send_nudge_one(repo, tg, BUYER) == "skipped"
+    assert cashbot_invite.nudge_targets(repo, NOW, ignore_age=True) == []
+
+
+def test_nudge_bo_khach_da_tao_link(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(cashbot_invite, "_already_on_cashbot", lambda: {BUYER})
+    monkeypatch.setattr(cashbot_invite, "_used_store_xsell", lambda: set())
+    repo.set_state(cashbot_invite.state_key(BUYER), NOW.isoformat())
+    assert cashbot_invite.nudge_targets(repo, NOW, ignore_age=True) == []
