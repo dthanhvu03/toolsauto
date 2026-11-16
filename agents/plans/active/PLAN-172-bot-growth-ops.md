@@ -47,7 +47,9 @@
       AI lỗi / SKIP → câu mẫu cũ. 1 câu AI / khách / 45 giây. Tắt nhanh: bot_state `chat_ai:off`. Không lưu nội dung tin.
       Bật chỉ trong poller.py / zalo_bot.py (`chat_ai_enabled`). Thử thật 9Router 4 câu: đúng, không bịa, rác → SKIP (~12s/câu).
       Đo 22/11: khách bị invalid_link (chữ) có tạo link trong 24h không (gốc: đa số đi luôn).
-- [ ] T3 (tuần 2) Nhắc 1 lần sau 24h cho khách vào mà chưa làm gì. Dùng lại `engagement.py` (đã có LINK_NUDGE cho link chưa
+- [x] T3 (16/11) Cashbot nhắc khách vào 24–72h chưa tạo link: `engagement.send_start_nudges` (START_NUDGE), cả đời 1 lần,
+      chung ngân sách 1 tin / 7 ngày, 19:00–21:30, nhường lượt sale, tôn trọng /thongbao. Chạy theo cờ link_nudge_enabled (đang bật).
+      Ghi chú cũ: Dùng lại `engagement.py` (đã có LINK_NUDGE cho link chưa
       mua, đang bật; nhắc sale Black Friday 27/11 tối + 12/12 đã được chủ bot duyệt từ 27/10) — chỉ thiếu nhánh «vào chưa tạo link».
 - [ ] T4 (tuần 2) Store → Cashbot: sau đơn done, mời dùng Cashbot.
 - [ ] T5 (tuần 3) Mời bạn: tìm vì sao 0 lượt; khách vừa nhận tiền → đề nghị chia sẻ kèm ảnh.
@@ -72,3 +74,4 @@
   vòng nền `check_reopen` thấy nghỉ → mở thì nhắn 1 lần rồi xoá (cả đóng tay lẫn giờ nghỉ hằng ngày). 104 passed.
 - 16/11 09:31: nhắn 1 lần khách vào Store lúc shop đóng tay (15/11 21:28 → 16/11 09:30), chưa mua, chưa tắt báo: 33 khách →
   32 nhận, 1 đã chặn bot (đánh dấu blocked). Có nút 🔕. Đánh dấu state `reopen_note_1115:<id>`. Đo: số đơn của 32 khách này tới 18/11.
+- 16/11: AI Cashbot chưa trả lời câu nào (chưa khách nào gõ chữ từ khi bật). Làm T3 (START_NUDGE) — cashback 1230 passed.

@@ -206,3 +206,37 @@ def test_man_admin_bat_nhac_link_va_zalo_gui_link_rieng(tmp_path):
     [message] = messages
     assert "Áo Polo Nam" in message.text and "Bấm link này để mua" in message.text, "Zalo: thẻ và link chung một tin"
     assert message.text.index("Bấm link này để mua") < message.text.index("https://s.shopee.vn/x")
+
+
+def _start_nudges(bot):
+    return _rows(bot, "SELECT chat_id, message_html FROM admin_notifications WHERE event_type = 'START_NUDGE'")
+
+
+def test_nhac_khach_vao_chua_tao_link_mot_lan(tmp_path):
+    """PLAN-172 T3: OTHER vào bot 30 giờ trước, chưa tạo link → 1 tin (khung 19:00–21:30), cả đời 1 lần; USER có link → không."""
+    bot, admin = _ready(tmp_path)
+    bot.repo.set_state(engagement.NUDGE_KEY, "1")
+    evening = datetime(2026, 11, 20, 13, 0, tzinfo=timezone.utc)  # 20:00 VN
+    bot.handle_text(OTHER, "other", "/start", update_id=5, now=NOW)
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE telegram_users SET created_at = ?", ("2026-11-19T07:00:00Z",))
+    engagement.send_start_nudges(bot.repo, evening.replace(hour=5))  # 12:00 VN: ngoài khung
+    assert _start_nudges(bot) == []
+    engagement.tick(bot.repo, admin, evening)
+    ((chat, text),) = _start_nudges(bot)
+    assert chat == OTHER and "Sao chép liên kết" in text and "giỏ" in text and SALE_REMINDER_FOOTER in text
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE telegram_users SET created_at = ? WHERE telegram_user_id = ?", ("2026-11-26T07:00:00Z", OTHER))
+    engagement.send_start_nudges(bot.repo, datetime(2026, 11, 27, 13, 0, tzinfo=timezone.utc))
+    assert len(_start_nudges(bot)) == 1, "mỗi khách chỉ 1 lần"
+
+
+def test_khong_nhac_khach_moi_khi_tat_nhac(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.repo.set_state(engagement.NUDGE_KEY, "1")
+    bot.handle_text(OTHER, "other", "/start", update_id=5, now=NOW)
+    _callback(bot, OTHER, "u:n:t:reminders")
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE telegram_users SET created_at = ?", ("2026-11-19T07:00:00Z",))
+    engagement.send_start_nudges(bot.repo, datetime(2026, 11, 20, 13, 0, tzinfo=timezone.utc))
+    assert _start_nudges(bot) == []

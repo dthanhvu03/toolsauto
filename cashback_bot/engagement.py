@@ -23,7 +23,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from cashback_bot import sale_calendar
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import BUY_BUTTON, TIKTOK_BUY_BUTTON, link_nudge, sale_reminder
+from cashback_bot.messages import BUY_BUTTON, GUIDE_KEYBOARD, TIKTOK_BUY_BUTTON, link_nudge, sale_reminder, start_nudge
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.sale_calendar import Slot
 
@@ -103,6 +103,7 @@ def recipients(conn: sqlite3.Connection) -> list[int]:
 def tick(repo: TrackingRepository, admin_notifier, now: datetime) -> None:
     if nudge_enabled(repo):
         send_nudges(repo, now)
+        send_start_nudges(repo, now)
     if not enabled(repo):
         return
     for slot in sale_calendar.upcoming(now, days=3):
@@ -156,7 +157,7 @@ def nudge_candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Ro
           AND l.created_at = (SELECT MAX(created_at) FROM link_requests x
                               WHERE x.telegram_user_id = l.telegram_user_id AND x.link_status = 'created')
           AND NOT EXISTS (SELECT 1 FROM shopee_conversions c WHERE c.matched_link_id = l.id)
-          AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.event_type IN ('LINK_NUDGE', 'PRICE_DROP')
+          AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.event_type IN ('LINK_NUDGE', 'PRICE_DROP', 'START_NUDGE')
                           AND n.chat_id = l.telegram_user_id AND n.created_at >= ?)
         ORDER BY l.created_at LIMIT ?
         """,
@@ -170,7 +171,7 @@ def nudge_candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Ro
 def recently_nudged(conn: sqlite3.Connection, user: int, now: datetime) -> bool:
     """Khách đã nhận tin nhắc link hay báo giảm giá trong 7 ngày: hai loại dùng chung ngân sách 1 tin / 7 ngày."""
     return conn.execute(
-        "SELECT 1 FROM admin_notifications WHERE event_type IN ('LINK_NUDGE', 'PRICE_DROP') AND chat_id = ? "
+        "SELECT 1 FROM admin_notifications WHERE event_type IN ('LINK_NUDGE', 'PRICE_DROP', 'START_NUDGE') AND chat_id = ? "
         "AND created_at >= ?", (user, _stamp(now - NUDGE_GAP))).fetchone() is not None
 
 
@@ -199,3 +200,42 @@ def send_nudges(repo: TrackingRepository, now: datetime) -> int:
                 reply_markup_json=json.dumps(markup, ensure_ascii=False), source_ref=f"link:{row['id']}", now=stamp,
             )
     return len(rows)
+
+
+def start_nudge_candidates(conn: sqlite3.Connection, now: datetime) -> list[int]:
+    """PLAN-172 T3: khách vào bot 24–72 giờ trước mà chưa tạo link nào; mỗi khách tối đa 1 lần (cả đời), chung ngân sách
+    1 tin / 7 ngày với nhắc link + báo giảm giá; tôn trọng /thongbao và chặn bot như mọi tin khách."""
+    newest, oldest = _stamp(now - NUDGE_AGE[0]), _stamp(now - NUDGE_AGE[1])
+    rows = conn.execute(
+        """
+        SELECT u.telegram_user_id FROM telegram_users u
+        WHERE u.created_at <= ? AND u.created_at >= ?
+          AND NOT EXISTS (SELECT 1 FROM link_requests l WHERE l.telegram_user_id = u.telegram_user_id
+                          AND l.link_status = 'created')
+          AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.chat_id = u.telegram_user_id
+                          AND (n.event_type = 'START_NUDGE'
+                               OR (n.event_type IN ('LINK_NUDGE', 'PRICE_DROP') AND n.created_at >= ?)))
+        ORDER BY u.created_at LIMIT ?
+        """,
+        (newest, oldest, _stamp(now - NUDGE_GAP), NUDGE_LIMIT),
+    ).fetchall()
+    cfg = NotifyConfig(True)
+    return [int(r[0]) for r in rows
+            if customer_block_reason(conn, {"category": CATEGORY, "chat_id": r[0]}, cfg, now) is None]
+
+
+def send_start_nudges(repo: TrackingRepository, now: datetime) -> int:
+    local = now.astimezone(sale_calendar.ICT).time()
+    if not NUDGE_HOURS[0] <= local <= NUDGE_HOURS[1] or near_sale(repo, now):
+        return 0
+    stamp = _stamp(now)
+    markup = {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row] for row in GUIDE_KEYBOARD]}
+    with repo.connect() as conn:
+        users = start_nudge_candidates(conn, now)
+        for user in users:
+            enqueue_event(
+                conn, event_key=f"start_nudge:{user}", event_type="START_NUDGE", chat_id=user,
+                message_html=start_nudge(), audience="customer", category=CATEGORY,
+                reply_markup_json=json.dumps(markup, ensure_ascii=False), source_ref="start_nudge", now=stamp,
+            )
+    return len(users)

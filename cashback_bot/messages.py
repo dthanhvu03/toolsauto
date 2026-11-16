@@ -1181,6 +1181,17 @@ def link_nudge(product_name: str, tiktok: bool = False) -> str:
     )
 
 
+def start_nudge() -> str:
+    """PLAN-172 T3: khách vào bot mà chưa thử link nào. Một lần duy nhất; chỉ dẫn cách làm, kèm lưu ý giỏ hàng."""
+    return (
+        "👋 Bạn vào bot hôm trước mà chưa thử món nào nè.\n"
+        "Thử ngay 1 món đang định mua: app Shopee → <b>Chia sẻ</b> → <b>Sao chép liên kết</b> → dán vào đây. "
+        "Bot báo hoàn bao nhiêu liền, không mất phí 😎\n"
+        f"{CART_RULE}\n\n"
+        f"{SALE_REMINDER_FOOTER}"
+    )
+
+
 def come_back_line(order: str) -> str:
     return COME_BACK[sum(map(ord, order)) % len(COME_BACK)]
 
