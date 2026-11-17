@@ -126,6 +126,11 @@ class AICaptionPipeline:
         self.base_url = default_router_url
         self.api_key = ""
         self.default_model = "gemini-3.5-flash"  # 2.0 da shut down (kiem 2026-09-07) — ADR-014
+        # Gateway phụ (17/11): Xingchi primary + 9Router local fallback — không bỏ hẳn một bên.
+        self.fallback_enabled = False
+        self.fallback_base_url = ""
+        self.fallback_api_key = ""
+        self.fallback_model = ""
         
         # Tracking states
         self.last_latency_ms = 0
@@ -158,6 +163,11 @@ class AICaptionPipeline:
             base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
             default_model = str(data.get("default_model", "gemini-3.5-flash"))
+            fb = data.get("fallback") if isinstance(data.get("fallback"), dict) else {}
+            fb_enabled = bool(fb.get("enabled", False))
+            fb_base = str(fb.get("base_url") or "")
+            fb_key = str(fb.get("api_key") or "")
+            fb_model = str(fb.get("default_model") or "")
             # Guard: iflow models need 9Router credentials; keep disabled if blank key + iflow
             if enabled and default_model.startswith("if/") and not api_key:
                 logger.warning(
@@ -172,6 +182,11 @@ class AICaptionPipeline:
                 if api_key and not api_key.endswith("••••••••"):
                     self.api_key = api_key
                 self.default_model = default_model
+                self.fallback_enabled = fb_enabled and bool(fb_base)
+                self.fallback_base_url = fb_base
+                if fb_key and not fb_key.endswith("••••••••"):
+                    self.fallback_api_key = fb_key
+                self.fallback_model = fb_model or default_model
                 
             return True
         except Exception:
@@ -253,111 +268,150 @@ class AICaptionPipeline:
             logger.error("JSON Error parsing output: %s", e)
             return None
 
-    def _call_9router(self, prompt: str, image_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str], FailReason]:
+    def _gateway_targets(self) -> List[Tuple[str, str, str, str]]:
+        """Danh sách gateway theo thứ tự: primary rồi fallback. Mỗi phần tử: (label, base_url, api_key, model)."""
         with self._config_lock:
-            temp_model = self.default_model
-            temp_api_key = self.api_key
-            temp_base_url = self.base_url
+            primary = (
+                "xingchi" if any(m in (self.base_url or "").lower() for m in _XINGCHI_HOST_MARKERS) else "9router",
+                self.base_url,
+                self.api_key,
+                self.default_model,
+            )
+            targets = [primary]
+            if self.fallback_enabled and self.fallback_base_url:
+                targets.append((
+                    "xingchi" if any(m in (self.fallback_base_url or "").lower() for m in _XINGCHI_HOST_MARKERS) else "9router",
+                    self.fallback_base_url,
+                    self.fallback_api_key or self.api_key,
+                    self.fallback_model or self.default_model,
+                ))
+        return targets
 
-        has_image = bool(image_path and os.path.exists(image_path))
-        if not self._check_vision_compatibility(temp_model, has_image):
-            return None, temp_model, FailReason.VISION_NOT_SUPPORTED
-            
-        messages = [{"role": "user", "content": []}]
-        
-        # 9Router OpenAI format: Text first, then images
-        messages[0]["content"].append({"type": "text", "text": prompt})
-        
-        if has_image:
-            b64_img = self._prepare_image(image_path)
-            if b64_img:
-                messages[0]["content"].append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{b64_img}"
-                    }
-                })
-
-        url = temp_base_url.rstrip("/") + "/chat/completions"
-        headers = _router_headers(temp_api_key, temp_base_url)
-        
+    def _post_chat_completions(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        messages: list,
+    ) -> Tuple[Optional[str], Optional[str], FailReason]:
+        url = base_url.rstrip("/") + "/chat/completions"
+        headers = _router_headers(api_key, base_url)
         payload = {
-            "model": temp_model,
+            "model": model,
             "messages": messages,
-            "max_tokens": 4096,  # Reasoning models need extra budget for thinking tokens
+            "max_tokens": 4096,
             "temperature": 0.5,
             "stream": False,
         }
-
         try:
-            # Short connect timeout so dead localhost:20128 fails fast on Windows.
             resp = requests.post(url, headers=headers, json=payload, timeout=(5.0, 90.0))
-            
             if resp.status_code == 200:
                 data = resp.json()
                 raw_out = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                actual_model = data.get("model", temp_model)
+                actual_model = data.get("model", model)
                 return raw_out, actual_model, FailReason.NONE
-            elif resp.status_code == 429:
-                return None, temp_model, FailReason.RATE_LIMITED
-            elif resp.status_code in [401, 403]:
-                return None, temp_model, FailReason.AUTH_ERROR
-            else:
-                # Surface iflow / provider credential errors clearly
-                body_preview = (resp.text or "")[:300]
-                if "iflow" in body_preview.lower() or "no active credentials" in body_preview.lower():
-                    logger.error("9Router provider auth unavailable (status=%s)", resp.status_code)
-                    return None, temp_model, FailReason.AUTH_ERROR
-                logger.error("Server API returned %s: %s", resp.status_code, body_preview[:200])
-                return None, temp_model, FailReason.TEMPORARY_NETWORK
+            if resp.status_code == 429:
+                return None, model, FailReason.RATE_LIMITED
+            if resp.status_code in [401, 403]:
+                return None, model, FailReason.AUTH_ERROR
+            body_preview = (resp.text or "")[:300]
+            if "iflow" in body_preview.lower() or "no active credentials" in body_preview.lower():
+                logger.error("Gateway auth unavailable (status=%s)", resp.status_code)
+                return None, model, FailReason.AUTH_ERROR
+            logger.error("Server API returned %s: %s", resp.status_code, body_preview[:200])
+            return None, model, FailReason.TEMPORARY_NETWORK
         except requests.Timeout:
-            return None, temp_model, FailReason.TIMEOUT
+            return None, model, FailReason.TIMEOUT
         except Exception as e:
             logger.error("Request generation error: %s", e)
-            return None, temp_model, FailReason.TEMPORARY_NETWORK
+            return None, model, FailReason.TEMPORARY_NETWORK
 
-    async def _call_9router_async(self, prompt: str) -> Tuple[Optional[str], Optional[str], FailReason]:
-        with self._config_lock:
-            temp_model = self.default_model
-            temp_api_key = self.api_key
-            temp_base_url = self.base_url
-
-        url = temp_base_url.rstrip("/") + "/chat/completions"
-        headers = _router_headers(temp_api_key, temp_base_url)
+    async def _post_chat_completions_async(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        prompt: str,
+    ) -> Tuple[Optional[str], Optional[str], FailReason]:
+        url = base_url.rstrip("/") + "/chat/completions"
+        headers = _router_headers(api_key, base_url)
         payload = {
-            "model": temp_model,
+            "model": model,
             "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
             "max_tokens": 4096,
             "temperature": 0.5,
             "stream": False,
         }
-
         try:
             timeout = httpx.Timeout(90.0, connect=5.0)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
-
             if resp.status_code == 200:
                 data = resp.json()
                 raw_out = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                actual_model = data.get("model", temp_model)
+                actual_model = data.get("model", model)
                 return raw_out, actual_model, FailReason.NONE
             if resp.status_code == 429:
-                return None, temp_model, FailReason.RATE_LIMITED
+                return None, model, FailReason.RATE_LIMITED
             if resp.status_code in [401, 403]:
-                return None, temp_model, FailReason.AUTH_ERROR
-
+                return None, model, FailReason.AUTH_ERROR
             body_preview = (resp.text or "")[:300]
             if "iflow" in body_preview.lower() or "no active credentials" in body_preview.lower():
-                logger.error("9Router provider auth unavailable (status=%s)", resp.status_code)
-                return None, temp_model, FailReason.AUTH_ERROR
+                logger.error("Gateway auth unavailable (status=%s)", resp.status_code)
+                return None, model, FailReason.AUTH_ERROR
             logger.error("Server API returned %s: %s", resp.status_code, body_preview[:200])
-            return None, temp_model, FailReason.TEMPORARY_NETWORK
+            return None, model, FailReason.TEMPORARY_NETWORK
         except httpx.TimeoutException:
-            return None, temp_model, FailReason.TIMEOUT
+            return None, model, FailReason.TIMEOUT
         except Exception as e:
             logger.error("Async request generation error: %s", e)
-            return None, temp_model, FailReason.TEMPORARY_NETWORK
+            return None, model, FailReason.TEMPORARY_NETWORK
+
+    def _call_9router(self, prompt: str, image_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str], FailReason]:
+        """Gọi gateway OpenAI-compatible: primary rồi fallback (Xingchi → 9Router local)."""
+        targets = self._gateway_targets()
+        has_image = bool(image_path and os.path.exists(image_path))
+        last_model = targets[0][3] if targets else self.default_model
+        last_fail = FailReason.TEMPORARY_NETWORK
+
+        for idx, (label, base_url, api_key, model) in enumerate(targets):
+            if has_image and not self._check_vision_compatibility(model, True):
+                last_model, last_fail = model, FailReason.VISION_NOT_SUPPORTED
+                continue
+            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            if has_image:
+                b64_img = self._prepare_image(image_path)
+                if b64_img:
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
+                    })
+            raw, actual, fail = self._post_chat_completions(base_url, api_key, model, messages)
+            if fail == FailReason.NONE:
+                if idx > 0:
+                    logger.warning("[AI] primary fail → dùng fallback %s model=%s", label, actual or model)
+                return raw, actual, fail
+            last_model, last_fail = actual or model, fail
+            if idx + 1 < len(targets):
+                logger.warning(
+                    "[AI] %s fail (%s); thử gateway tiếp theo", label, fail.value
+                )
+        return None, last_model, last_fail
+
+    async def _call_9router_async(self, prompt: str) -> Tuple[Optional[str], Optional[str], FailReason]:
+        targets = self._gateway_targets()
+        last_model = targets[0][3] if targets else self.default_model
+        last_fail = FailReason.TEMPORARY_NETWORK
+        for idx, (label, base_url, api_key, model) in enumerate(targets):
+            raw, actual, fail = await self._post_chat_completions_async(base_url, api_key, model, prompt)
+            if fail == FailReason.NONE:
+                if idx > 0:
+                    logger.warning("[AI] primary fail → dùng fallback %s model=%s", label, actual or model)
+                return raw, actual, fail
+            last_model, last_fail = actual or model, fail
+            if idx + 1 < len(targets):
+                logger.warning("[AI] %s fail (%s); thử gateway tiếp theo", label, fail.value)
+        return None, last_model, last_fail
 
     def generate_caption(self, prompt: str, image_path: Optional[str] = None) -> Tuple[Optional[CaptionPayload], dict]:
         """Generate caption JSON with 9Router → Native Gemini Vision fallback (PLAN-025).
