@@ -1296,6 +1296,37 @@ def test_own_post_found_although_profile_says_can_reply_false():
     assert b._own_post_in_payloads(text) == "https://www.threads.com/@us28qt/post/OWN1"
 
 
+def test_own_post_match_tolerates_newline_and_url_rewrite():
+    """17/11: Threads đổi xuống dòng / rút link → khớp theo dòng đầu, không cần nguyên văn 30 ký tự đầu."""
+    from app.features.threads.growth.browser import GrowthBrowser
+
+    drafted = (
+        "2 món này bot check chạm đáy 30 ngày nè\n"
+        "- Sơ mi bigsize Banamo: 109.650đ\n"
+        "https://t.me/zt_shopee_bot?start=threads_cb_post"
+    )
+    on_threads = "2 món này bot check chạm đáy 30 ngày nè - Sơ mi bigsize Banamo: 109.650đ https://t.me/zt_shopee_bot"
+    b = GrowthBrowser.__new__(GrowthBrowser)
+    assert b._content_matches_own(on_threads, drafted)
+    assert not b._content_matches_own("bài hoàn toàn khác chủ đề sale", drafted)
+
+
+def test_failed_own_post_slot_can_retry(tmp_path):
+    """17/11: slot failed không khóa khung; save lại ghi đè → posted."""
+    from app.features.threads.growth.storage import GrowthStorage
+    from datetime import datetime, timezone
+
+    s = GrowthStorage(db_path=tmp_path / "own.sqlite")
+    slot = "2026-11-17 11:45"
+    s.save_own_post(slot, "deal", "deal:1", "text fail", "failed", error="Không thấy ô soạn bài")
+    assert not s.own_post_slot_done(slot)
+    assert s.own_post_refs(datetime(2026, 11, 1, tzinfo=timezone.utc)) == set()
+    sid = s.save_own_post(slot, "deal", "deal:1", "text ok", "posted", post_url="https://p/1")
+    assert sid and s.own_post_slot_done(slot)
+    assert s.own_post_refs(datetime(2026, 11, 1, tzinfo=timezone.utc)) == {"deal:1"}
+    assert s.list_own_posts(1)[0]["status"] == "posted" and s.list_own_posts(1)[0]["error_message"] is None
+
+
 def test_reply_reports_deleted_post_when_threads_redirects_home():
     """Bài gốc bị xoá: Threads chuyển về trang chủ → báo rõ «đã bị xoá», không phải «không thấy nút Trả lời»."""
     from app.features.threads.growth.browser import GrowthBrowser

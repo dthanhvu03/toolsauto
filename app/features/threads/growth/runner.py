@@ -115,7 +115,8 @@ class GrowthRunner:
             r"(xin link|cho mình link|link ở|mua ở đâu|chỗ nào|ai biết|xin chỗ|có link|gửi link|ib link|xin app|xin bot|dùng bot|dùng app)",
             post.content, re.IGNORECASE,
         ))
-        include_link = True if asks_link else (random.random() >= 0.33)
+        # 16/11: ~15% reply chỉ trò chuyện (trước ~33%) — ưu tiên CTA có link khi đang cần đổ khách từ Threads.
+        include_link = True if asks_link else (random.random() >= 0.15)
 
         suggested_reply, analysis = await GrowthEvaluator.generate_reply(
             content=post.content,

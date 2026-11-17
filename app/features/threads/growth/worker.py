@@ -63,12 +63,21 @@ OWN_POST_RETRY = timedelta(minutes=15)   # AI lỗi → thử lại trong khung
 REWRITE_EVERY = timedelta(minutes=30)    # thử cho AI viết lại bài đang dùng câu mẫu
 # 06/11: Playwright treo ngay sau khi mở trình duyệt (16 phút không một dòng log, mọi lệnh đều có timeout 60s) — PM2 không
 # biết để restart. Mọi vòng lặp của worker đều đi qua ``sleep`` → hẹn giờ lại ở đó; quá WATCHDOG_SEC không sleep = treo.
-WATCHDOG_SEC = 20 * 60
+# 17/11: quét 2 acc + AI đọc bài thường >20 phút → watchdog 20' cắt giữa vòng. Nới 40'.
+WATCHDOG_SEC = 40 * 60
 
 
 def _hung(signum, frame) -> None:  # noqa: ARG001
     logger.error("growth: worker không tiến triển %s phút — thoát để PM2 khởi động lại", WATCHDOG_SEC // 60)
     os._exit(3)
+
+
+def poke_watchdog() -> None:
+    """Gia hạn chống treo giữa các bước dài (AI ingest / đăng) — không sleep."""
+    try:
+        signal.alarm(WATCHDOG_SEC)
+    except Exception:
+        pass
 
 
 def watchdog_sleep(seconds: float) -> None:
@@ -248,6 +257,7 @@ class GrowthWorker:
     def ingest(self, items: List[tuple[ScannedPost, TargetBot]], cfg: WorkerConfig, report: CycleReport) -> None:
         async def _all():
             for post, kw_bot in items:
+                poke_watchdog()  # mỗi bài AI có thể 10–20s; nhiều bài → vượt watchdog cũ 20'
                 bot = GrowthEvaluator.classify_target_bot(post.content) or kw_bot
                 pid = await self.runner.ingest_scanned_post(
                     post, forced_bot=bot, auto_post_min=cfg.auto_post_min_relevance
@@ -379,6 +389,7 @@ class GrowthWorker:
             self.own_retry_at[account] = self.now() + OWN_POST_RETRY  # AI lỗi / hết deal mới → thử lại trong khung
             logger.info("growth: bài riêng khung %s chưa viết được — thử lại sau", slot)
             return
+        poke_watchdog()
         try:
             with self.browser_factory(profile_path) as browser:
                 url = browser.create_post(draft.text)
@@ -529,6 +540,9 @@ class GrowthWorker:
                 if roles[current].dm:
                     self.dm_inbox(profile, report, account=current)
             current = next(iter(ready))
+            # 16/11: đăng hàng chờ TRƯỚC khi quét — quét+AI đọc bài thường 10–20 phút; để approved ngồi thì mất khách.
+            for current, profile in ready.items():
+                self.post_queue(profile, report, account=current, role=roles[current])
             if due:
                 self.last_scan = self.now()
                 # 14/11: mỗi tài khoản tự quét từ khoá bot của mình (trước: tài khoản đầu quét cho cả nhóm).
@@ -537,7 +551,7 @@ class GrowthWorker:
             self.rewrite_fallbacks(cfg, report)
             for current, profile in ready.items():
                 role = roles[current]
-                self.post_queue(profile, report, account=current, role=role)
+                self.post_queue(profile, report, account=current, role=role)  # bài vừa auto trong vòng quét
                 if role.own_posts and role.serves(TargetBot.CASHBOT):  # bài riêng hiện chỉ có deal / sale Cashbot
                     self.post_own(profile, cfg, report, account=current)
                 self.followups(profile, cfg, report, account=current)

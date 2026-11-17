@@ -31,9 +31,9 @@ from app.features.threads.growth.config import (
 
 # Tín hiệu phân loại. Tránh từ quá chung (vd "tài khoản" khớp cả "tài khoản ngân hàng").
 SHOPEE_SIGNALS = (
-    "shopee", "săn sale", "mã giảm giá", "áp mã", "voucher", "hoàn tiền",
-    "tiktok shop", "lazada", "đặt đơn", "phí ship", "giỏ hàng", "sale 11/11",
-    "sale 12/12", "sale lương về",
+    "shopee", "shopeepay", "săn sale", "săn deal", "mã giảm giá", "áp mã", "voucher",
+    "hoàn tiền", "hoàn xu", "tiktok shop", "lazada", "đặt đơn", "phí ship", "giỏ hàng",
+    "sale 11/11", "sale 12/12", "sale lương về",
 )
 AI_SIGNALS = (
     "chatgpt", "chat gpt", "claude", "canva", "capcut", "midjourney", "elsa speak",
@@ -256,8 +256,13 @@ Trả về DUY NHẤT một JSON (tiếng Việt, ngắn gọn), không giải t
  "angle": "...",                // nên nói gì để giúp đúng nhu cầu đó (một câu)
  "buy_score": 0-100}}           // khả năng người này bấm thử {profile.handle} vì nó giải quyết đúng nhu cầu của họ
 
-Chấm buy_score khắt khe: người bán / quảng cáo ≤ 10; khoe đơn hoặc chia sẻ chung chung 20–40; đang hỏi hoặc đang gặp đúng
-vấn đề mà {profile.name} giải quyết 70–100. Không đoán bừa: bài không liên quan → dưới 20.
+Chấm buy_score (khắt với người bán, rộng với đúng tệp {profile.name}):
+- người bán / chào hàng / affiliate / quảng cáo ≤ 10
+- bài lệch hoàn toàn khỏi Shopee/sale/voucher/AI tools → dưới 20
+- khoe đơn / tâm sự mua sắm chung, chưa rõ nhu cầu bot → 35–50
+- đang nói đúng tệp (Shopee/sale/voucher/hoàn tiền/giỏ hàng hoặc ChatGPT/Claude/Canva/CapCut…) dù chưa hỏi cách → 55–75
+- đang hỏi / than phiền / gặp đúng vấn đề mà bot giải quyết → 75–100
+Không đoán bừa; ưu tiên 55+ khi bài đúng tệp để đừng bỏ khách tiềm năng.
 """
         try:
             raw, meta = await AIUseCases.generate_text_async(prompt, purpose=AIPurpose.THREADS_REPLY)
@@ -340,6 +345,7 @@ Văn phong — viết y như người thật trên Threads:
 - Giọng nói chuyện, xưng t / mình, gọi b / bà / ông tuỳ bài. Viết thường cũng được, không cần chấm câu cuối.
 - Teencode vừa phải như người Việt hay gõ: ko, đc, j, nha, á, nè, ủa, trời ơi, đù, xỉu, thật sự. Tối đa 1 emoji (vd 🥲 😭 🤣), có thể không dùng.
 - Trả lời đúng nội dung bài trước (đồng cảm / góp ý / trả lời câu hỏi), rồi mới nhắc {"bot bên Zalo" if zalo else "bot bên tele"} (bằng link) như kinh nghiệm cá nhân.
+- Link phải nằm trong câu hành động rõ («b thử», «b vô», «b check», «qua đây») — đừng chỉ thả url cuối câu không gắn ý.
 - KHÔNG viết như quảng cáo: không «hời phết», «tha hồ», «đỉnh chóp», «đừng bỏ lỡ», không liệt kê ưu đãi, không dấu chấm than liên tục.
 - KHÔNG dùng chữ «VietQR» — nói tiền hoàn «về tài khoản» / «về thẳng tài khoản ngân hàng»; mua acc thì nói «chuyển khoản».
 - KHÔNG hứa bảo hành, giá, % giảm, thời gian giao hay món hàng nào ngoài đúng «Ý chính» ở trên. Không bịa dịp / sự kiện (Tết, sale…) nếu bài không nhắc.

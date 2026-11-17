@@ -41,7 +41,7 @@ _POST_LABEL_XPATH = (
     "normalize-space(.)='Post' or normalize-space(.)='Đăng'"
     " or .//*[local-name()='svg'][@aria-label='Reply' or @aria-label='Trả lời']"
 )
-OWN_POST_LOOKUPS = 3  # số lần đọc lại trang cá nhân tìm bài riêng vừa đăng (mỗi lần cách 3–4 s)
+OWN_POST_LOOKUPS = 6  # 17/11: bài feed chậm / XHR trễ — thử lại nhiều hơn trước khi kết luận fail
 
 DIALOG_POST_SELECTORS = (
     'div[role="dialog"] div[role="button"]:has-text("Post")',
@@ -311,6 +311,117 @@ class GrowthBrowser:
                 found.setdefault(p.thread_id, p)
         return list(found.values())
 
+    def _dismiss_blocking_ui(self) -> None:
+        """Đóng overlay / cookie / hộp thoại chắn nút New thread (14–16/11: ``__fb-light-mode`` chặn click)."""
+        pg = self.page
+        for sel in (
+            '[aria-label="Close"]',
+            '[aria-label="Đóng"]',
+            'div[role="dialog"] [aria-label="Close"]',
+            'div[role="dialog"] [aria-label="Đóng"]',
+        ):
+            try:
+                loc = pg.locator(sel).first
+                if loc.count() and loc.is_visible():
+                    loc.click(timeout=2000, force=True)
+                    self._pause(0.4, 0.8)
+            except Exception:
+                pass
+        try:
+            pg.keyboard.press("Escape")
+            self._pause(0.3, 0.6)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _own_text_needles(text: str) -> list[str]:
+        """Chuỗi ngắn để khớp bài vừa đăng — tránh lệch vì Threads đổi xuống dòng / rút URL.
+
+        Ưu tiên dòng đầu (không URL), rồi 24 ký tự đầu toàn bài đã gộp khoảng trắng.
+        """
+        raw = (text or "").strip()
+        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        first = next((ln for ln in lines if not re.search(r"https?://|t\.me/|s\.shopee", ln, re.I)), lines[0] if lines else "")
+        first = re.sub(r"https?://\S+|t\.me/\S+", "", first).strip()
+        collapsed = " ".join(raw.split())
+        needles: list[str] = []
+        for cand in (first[:28], collapsed[:24], first[:18]):
+            cand = " ".join(cand.split()).strip()
+            if len(cand) >= 10 and cand not in needles:
+                needles.append(cand)
+        return needles
+
+    def _content_matches_own(self, content: str, text: str) -> bool:
+        hay = " ".join((content or "").split())
+        if not hay:
+            return False
+        return any(n.lower() in hay.lower() or hay.lower().startswith(n.lower()) for n in self._own_text_needles(text))
+
+    def _wait_composer_box(self, timeout_s: float = 8.0):
+        """Chờ hộp soạn (dialog + textbox) xuất hiện sau khi bấm New thread."""
+        pg = self.page
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            dialog = pg.locator('div[role="dialog"]:has(div[role="textbox"][contenteditable="true"])').last
+            box = dialog.locator('div[role="textbox"][contenteditable="true"]').first
+            if dialog.count() and box.count() and box.is_visible():
+                return dialog, box
+            box = pg.locator('div[role="dialog"] div[role="textbox"][contenteditable="true"]').last
+            if box.count() and box.is_visible():
+                return pg.locator('div[role="dialog"]').last, box
+            self._pause(0.4, 0.7)
+        return None, None
+
+    def _open_composer(self):
+        """Mở hộp soạn bài mới → locator ô textbox. Thử New thread (force) rồi «What’s new?»."""
+        pg = self.page
+        self._dismiss_blocking_ui()
+        opener = pg.locator('[aria-label="New thread"]').first
+        opened = False
+        if opener.count() and opener.is_visible():
+            try:
+                opener.click(timeout=8000)
+                opened = True
+            except Exception:
+                try:
+                    opener.click(timeout=8000, force=True)
+                    opened = True
+                except Exception:
+                    opened = False
+        if not opened:
+            prompt = pg.get_by_text(COMPOSER_PROMPT_RE).first
+            if prompt.count():
+                try:
+                    prompt.click(timeout=8000)
+                    opened = True
+                except Exception:
+                    prompt.click(timeout=8000, force=True)
+                    opened = True
+        if not opened:
+            for sel in (
+                'div[role="button"]:has-text("New thread")',
+                'div[role="button"]:has-text("What’s new?")',
+                'div[role="button"]:has-text("What\'s new?")',
+                'svg[aria-label="New thread"]',
+            ):
+                cand = pg.locator(sel).first
+                if cand.count() and cand.is_visible():
+                    try:
+                        cand.click(timeout=5000, force=True)
+                        opened = True
+                        break
+                    except Exception:
+                        continue
+        if not opened:
+            raise RuntimeError("Không thấy nút soạn bài (New thread / What’s new?)")
+        dialog, box = self._wait_composer_box(10.0)
+        if box is not None:
+            return dialog, box
+        box = pg.locator('div[role="textbox"][contenteditable="true"]').last
+        if box.count() and box.is_visible():
+            return pg.locator("body"), box
+        raise RuntimeError("Không thấy ô soạn bài")
+
     def create_post(self, text: str, dry_run: bool = False) -> Optional[str]:
         """Đăng bài mới trên tường. Trả link bài nếu tìm thấy, None nếu đăng được mà không rõ link.
 
@@ -329,31 +440,41 @@ class GrowthBrowser:
         pg.goto(f"{THREADS_HOST}/", wait_until="domcontentloaded", timeout=60000)
         self._pause(3.0, 5.0)
         self._check_session()
-        opener = pg.locator('[aria-label="New thread"]').first
-        if opener.count() and opener.is_visible():
-            opener.click(timeout=15000)
-        else:
-            prompt = pg.get_by_text(COMPOSER_PROMPT_RE).first
-            if not prompt.count():
-                raise RuntimeError("Không thấy nút soạn bài (New thread / What’s new?)")
-            prompt.click(timeout=15000)
-        self._pause(1.5, 2.5)
-        dialog = pg.locator('div[role="dialog"]:has(div[role="textbox"][contenteditable="true"])').last
-        box = dialog.locator('div[role="textbox"][contenteditable="true"]').first
-        if not box.count():
-            raise RuntimeError("Không thấy ô soạn bài")
-        box.click()
+        try:
+            dialog, box = self._open_composer()
+        except RuntimeError:
+            # 17/11: overlay / feed chậm — reload 1 lần rồi mở lại
+            self._dismiss_blocking_ui()
+            pg.goto(f"{THREADS_HOST}/", wait_until="domcontentloaded", timeout=60000)
+            self._pause(3.0, 5.0)
+            self._check_session()
+            dialog, box = self._open_composer()
+        box.click(force=True)
         for i, line in enumerate(text.split("\n")):
             if i:
                 pg.keyboard.press("Enter")
             if line:
                 pg.keyboard.type(line, delay=random.randint(12, 35))
         self._pause(1.0, 2.0)
-        head = text.strip().split("\n")[0][:20]
-        if head and head not in " ".join((box.inner_text() or "").split()):
-            pg.keyboard.press("Escape")
-            raise RuntimeError("Gõ nội dung không vào ô soạn")
+        head = (text.strip().split("\n")[0] or "")[:20]
+        typed = " ".join((box.inner_text() or "").split())
+        if head and head not in typed:
+            # Dự phòng: gõ lại bằng insert_text (một số layout nuốt keyboard.type)
+            try:
+                box.fill("")
+            except Exception:
+                pg.keyboard.press("Control+A")
+                pg.keyboard.press("Backspace")
+            box.click(force=True)
+            pg.keyboard.insert_text(text)
+            self._pause(0.8, 1.2)
+            typed = " ".join((box.inner_text() or "").split())
+            if head and head not in typed:
+                pg.keyboard.press("Escape")
+                raise RuntimeError("Gõ nội dung không vào ô soạn")
         buttons = dialog.get_by_role("button", name=POST_BUTTON_RE)
+        if not buttons.count():
+            buttons = pg.get_by_role("button", name=POST_BUTTON_RE)
         if not buttons.count():
             raise RuntimeError("Không thấy nút Post trong hộp soạn")
         button = buttons.last
@@ -366,9 +487,12 @@ class GrowthBrowser:
             pg.keyboard.press("Escape")
             return None
         self._payloads.clear()
-        button.click(timeout=10000)
+        try:
+            button.click(timeout=10000)
+        except Exception:
+            button.click(timeout=10000, force=True)
 
-        deadline = time.time() + 30
+        deadline = time.time() + 45
         url: Optional[str] = None
         confirmed = False
         while time.time() < deadline:
@@ -393,10 +517,9 @@ class GrowthBrowser:
         me = self.own_handle()
         if not me:
             return None
-        prefix = " ".join(text.split())[:30]
         for payload in list(self._payloads):
             for p in posts_from_payload(payload, "", keep_closed=True):
-                if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
+                if p.author.lower() == me and self._content_matches_own(p.content, text):
                     return p.post_url
         return None
 
@@ -405,20 +528,18 @@ class GrowthBrowser:
         me = self.own_handle()
         if not me:
             return None
-        prefix = " ".join(text.split())[:30]
 
         def lookup() -> Optional[str]:
             for payload in [*self._payloads, *self._embedded_payloads(wide=True)]:
                 for p in posts_from_payload(payload, "", keep_closed=True):
-                    if p.author.lower() == me and " ".join(p.content.split()).startswith(prefix):
+                    if p.author.lower() == me and self._content_matches_own(p.content, text):
                         return p.post_url
-            # Dự phòng DOM (12/11 20:15: bài đã lên trang mà JSON trang đăng nhập không có): chữ bài trên trang.
             try:
                 rows = self.page.evaluate(_DOM_EXTRACT_JS)
             except Exception:
                 rows = []
             for p in posts_from_dom_rows(rows or [], ""):
-                if p.author.lower() == me and prefix in " ".join(p.content.split()):
+                if p.author.lower() == me and self._content_matches_own(p.content, text):
                     return p.post_url
             return None
 
@@ -430,8 +551,13 @@ class GrowthBrowser:
             self.page.goto(f"{THREADS_HOST}/@{me}", wait_until="domcontentloaded", timeout=60000)
         except Exception:
             return None
-        for _ in range(OWN_POST_LOOKUPS):  # bài có thể tải sau vài giây (XHR) — thử lại thay vì kết luận ngay
+        for i in range(OWN_POST_LOOKUPS):
             self._pause(3.0, 4.0)
+            if i and i % 2 == 0:
+                try:
+                    self.page.mouse.wheel(0, random.randint(400, 900))
+                except Exception:
+                    pass
             url = lookup()
             if url:
                 return url

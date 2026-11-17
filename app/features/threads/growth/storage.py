@@ -377,25 +377,41 @@ class GrowthStorage:
 
     # ── bài riêng (PLAN-159) ───────────────────────────────────
     def own_post_slot_done(self, slot: str) -> bool:
+        """Chỉ bài ``posted`` mới khóa khung — ``failed`` được thử lại trong OWN_POST_WINDOW (17/11)."""
         with self._connection() as conn:
-            return conn.execute("SELECT 1 FROM own_posts WHERE slot = ?", (slot,)).fetchone() is not None
+            return conn.execute(
+                "SELECT 1 FROM own_posts WHERE slot = ? AND status = 'posted'", (slot,)
+            ).fetchone() is not None
 
     def own_post_refs(self, since: datetime) -> set[str]:
-        """Món / dịp đã đăng (hoặc đã thử) gần đây — không lặp lại."""
+        """Món / dịp đã đăng thành công gần đây — không lặp lại (failed không chiếm ref)."""
         with self._connection() as conn:
             rows = conn.execute(
-                "SELECT ref FROM own_posts WHERE created_at >= ?", (since.astimezone(timezone.utc).isoformat(),)
+                "SELECT ref FROM own_posts WHERE created_at >= ? AND status = 'posted'",
+                (since.astimezone(timezone.utc).isoformat(),),
             ).fetchall()
         return {part for (ref,) in rows for part in str(ref).split(",") if part}
 
     def save_own_post(self, slot: str, kind: str, ref: str, text: str, status: str,
                       post_url: Optional[str] = None, error: Optional[str] = None,
                       account: str = DEFAULT_ACCOUNT) -> int:
+        """Ghi bài riêng theo ``slot``. Slot đã ``posted`` → bỏ. Slot ``failed`` → ghi đè khi thử lại."""
+        now = datetime.now(timezone.utc).isoformat()
         with self._connection() as conn:
+            row = conn.execute("SELECT id, status FROM own_posts WHERE slot = ?", (slot,)).fetchone()
+            if row and row["status"] == "posted":
+                return 0
+            if row:
+                conn.execute(
+                    "UPDATE own_posts SET kind=?, ref=?, text=?, status=?, post_url=?, error_message=?, "
+                    "created_at=?, account=? WHERE slot=?",
+                    (kind, ref, text, status, post_url, error, now, account, slot),
+                )
+                return int(row["id"])
             cur = conn.execute(
-                "INSERT OR IGNORE INTO own_posts (slot, kind, ref, text, status, post_url, error_message, created_at, "
+                "INSERT INTO own_posts (slot, kind, ref, text, status, post_url, error_message, created_at, "
                 "account) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (slot, kind, ref, text, status, post_url, error, datetime.now(timezone.utc).isoformat(), account),
+                (slot, kind, ref, text, status, post_url, error, now, account),
             )
             return cur.lastrowid if cur.rowcount else 0
 

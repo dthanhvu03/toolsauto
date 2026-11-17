@@ -1,3 +1,12 @@
+## Phiên 2026-11-16 (cursor-threads-pull) — Đổ khách từ Threads (content/reply)
+- Chẩn đoán: anlinh hết quota Store 12/ngày (đang kéo khách tốt); Cashbot kẹt vì buy_score 40–45 < auto_post_min 60 → pending mãi;
+  ZALO_SHARE 50% làm reply Cashbot lệch Zalo (khó đo); own_posts fail (overlay chắn New thread); quét AI trước → approved ngồi 10–20 phút.
+- ĐÃ LÀM: buy_score đúng tệp → 55–75; `auto_post_min` 60→50; ZALO_SHARE 0.5→0.25; no_link 33%→15%; anlinh 12→16/ngày + 4/giờ;
+  sửa `create_post` (dismiss overlay + force click); đăng hàng chờ TRƯỚC khi quét; promote pending Cashbot.
+- Proof: test_threads_growth 93 passed; live reply Cashbot #2300 có `t.me/zt_shopee_bot?start=threads_cb_*`;
+  Threads_Growth restarted (online). Own_posts slot tối 20:15 sẽ thử lại với composer mới.
+- Next: đo khách mới nguồn `threads_*` / `threads_ai_*` 24–48h; xem own_post 20:15; còn approved Store 2319–2321 + Cashbot 2221 sẽ đăng tiếp khi còn suất.
+
 ## Phiên 2026-11-16 (cursor-money-ops) — Toàn quyền ép chuyển đổi 2 bot
 - Chẩn đoán chiều: T4 lần 1 (11 tin) → 0 `store_xsell`; invite-v1 đã gửi hết 33 người tạo link mà referrals vẫn 0.
 - ĐÃ LÀM: copy T4 ngắn hơn + CLI `--nudge` (nhắc 1 lần); `cashback_bot/invite_nudge.py` (khách có tiền ví → nút mời);

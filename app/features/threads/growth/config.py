@@ -56,7 +56,7 @@ class BotGrowthProfile:
 # về Zalo để so (link Zalo không mang mã nguồn → đo bằng reply có «zalo.me» so với khách Zalo mới theo ngày).
 CASHBOT_ZALO_URL = "https://zalo.me/2175525805361761559"
 CASHBOT_ZALO_NAME = "bot Zalo «Bot Săn Hoàn Tiền»"
-ZALO_SHARE = 0.5
+ZALO_SHARE = 0.25  # 16/11: ưu tiên Telegram + mã ?start= để đo/kéo khách; Zalo còn ~1/4
 
 # Phần cố định: (tên bot, handle, {biến thể: (mã start, tên biến thể)}).
 _STATIC = {
