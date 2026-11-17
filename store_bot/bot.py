@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import requests
 
 from cashback_bot import vietqr
-from store_bot import cashbot_invite, hours
+from store_bot import cashbot_invite, chat_ai, hours
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.config import ConfigError, Settings, default_dotenv, load_settings
@@ -96,6 +96,9 @@ class StoreBot:
         self._broadcast_lock = threading.Lock()
         self._funds_checked = 0.0
         self._retry_cursor = 0  # id đơn gọi lại gần nhất: vòng sau đi tiếp từ đây, không đơn nào bị bỏ đói
+        # Chat AI: tắt mặc định (test); main() bật. generate=None → AIUseCases (Xingchi + 9Router fallback).
+        self.chat_ai_enabled = False
+        self.chat_generate = None
         self.load_icons()
 
     # ---------- tiện ích ----------
@@ -241,7 +244,52 @@ class StoreBot:
             if text and not text.startswith("/"):
                 self._on_input(chat_id, user, pending, text)
                 return
+        if text and not text.startswith("/") and self._chat_ai_ready(user.user_id, text):
+            self._chat_ai(chat_id, user, text)
+            return
         self.show_home(chat_id, None, user)
+
+    def _chat_ai_ready(self, user_id: int, text: str) -> bool:
+        """Tin chữ có nội dung, AI bật, chưa tắt tay, khách chưa nhận câu AI trong COOLDOWN."""
+        if not self.chat_ai_enabled or not chat_ai.worth_asking(text) or self.repo.get_state(chat_ai.OFF_KEY):
+            return False
+        last = self.repo.get_state(chat_ai.LAST_PREFIX + str(user_id))
+        if last:
+            try:
+                if datetime.now(timezone.utc) - datetime.fromisoformat(last) < chat_ai.COOLDOWN:
+                    return False
+            except ValueError:
+                pass
+        self.repo.set_state(chat_ai.LAST_PREFIX + str(user_id), datetime.now(timezone.utc).isoformat())
+        return True
+
+    def _chat_ai(self, chat_id: int, user: User, text: str) -> None:
+        """Gửi WORKING ngay; AI chạy luồng fulfill để vòng poll không đứng."""
+        self.tg.send_message(chat_id, chat_ai.WORKING, keyboard([button("🛒 Mua sản phẩm", "shop"),
+                                                                  button("🏠 Trang chủ", "home")]))
+        self.executor.submit(self._chat_ai_deliver, chat_id, user, text)
+
+    def _chat_ai_deliver(self, chat_id: int, user: User, text: str) -> None:
+        try:
+            catalog = [p.name for p in self.repo.list_products()[:12]]
+        except Exception:
+            catalog = []
+        try:
+            closed = self.closed_note()
+        except Exception:
+            closed = None
+        answer = chat_ai.answer(
+            text,
+            shop_name=self.settings.shop_name,
+            catalog=catalog,
+            closed_note=closed,
+            generate=self.chat_generate,
+        )
+        if answer:
+            self.tg.send_message(chat_id, answer, keyboard([button("🛒 Mua sản phẩm", "shop"),
+                                                            button("🏠 Trang chủ", "home")]))
+        else:
+            self.show_home(chat_id, None, self.repo.get_user(user.user_id) or user)
 
     def _on_callback(self, query: dict) -> None:
         sender = query.get("from") or {}
@@ -1571,6 +1619,8 @@ def main() -> None:
     client = FatCatClient(settings.fatcat_api_url, settings.fatcat_api_key) if settings.fatcat_api_key else None
     bot = StoreBot(settings, repo, telegram, me["username"],
                    fulfiller=Fulfiller(repo, client, settings.fatcat_discount_bps))
+    bot.chat_ai_enabled = True  # Xingchi primary + 9Router fallback (pipeline)
     threading.Thread(target=run_background, args=(bot, threading.Event()), name="store-bg", daemon=True).start()
-    logger.info("store bot @%s sẵn sàng (nguồn FatCat: %s)", me["username"], "bật" if client else "tắt")
+    logger.info("store bot @%s sẵn sàng (nguồn FatCat: %s, chat_ai: bật)", me["username"],
+                "bật" if client else "tắt")
     run_forever(bot, repo, telegram)
