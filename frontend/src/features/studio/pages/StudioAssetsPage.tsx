@@ -46,7 +46,7 @@ export function StudioAssetsPage() {
             key={k.key}
             type="button"
             onClick={() => setKind(k.key)}
-            className={cn("rounded-full border px-3 py-1.5 text-sm", kind === k.key ? "border-indigo-300 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600")}
+            className={cn("min-h-11 rounded-full border px-3 py-1.5 text-sm md:min-h-0", kind === k.key ? "border-indigo-300 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600")}
           >
             {k.label}
           </button>
@@ -56,7 +56,7 @@ export function StudioAssetsPage() {
         {items.length === 0 ? (
           <p className="mt-8 text-center text-sm text-slate-400">Chưa có nguyên liệu.</p>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {items.map((a) => (
               <Panel key={a.id}>
                 <div className="aspect-video bg-slate-100">

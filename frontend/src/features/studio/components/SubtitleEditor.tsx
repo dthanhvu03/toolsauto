@@ -46,7 +46,7 @@ export function SubtitleEditor({
                   {mmss(line.start)}–{mmss(line.end)}
                 </span>
                 <input
-                  className={`h-8 flex-1 rounded-lg border px-2 text-sm ${value.trim() ? "border-slate-200" : "border-red-200 bg-red-50 line-through"}`}
+                  className={`h-11 min-w-0 flex-1 rounded-lg border px-2 text-base md:h-8 md:text-sm ${value.trim() ? "border-slate-200" : "border-red-200 bg-red-50 line-through"}`}
                   value={value}
                   disabled={disabled || !sub.enabled}
                   placeholder="(bỏ câu này)"

@@ -1,0 +1,117 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "path": "/app/settings",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/threads-growth",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/bot-users",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/database",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/syspanel",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/settings",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/threads-growth",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/bot-users",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/database",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/syspanel",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/settings",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/threads-growth",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/bot-users",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/database",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/syspanel",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/settings",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/threads-growth",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/bot-users",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/database",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/syspanel",
+      "horizontal_overflow": false
+    }
+  ],
+  "mutations_mocked": [
+    {
+      "path": "/api/settings/sections/general",
+      "method": "PATCH",
+      "body": "{\"DISPLAY_NAME\":\"ToolsAuto mới\"}"
+    }
+  ],
+  "page_errors": [],
+  "unknown_requests": [],
+  "settings_jump": true,
+  "unsaved_above_navigation": true,
+  "database_preview": true,
+  "sql_not_run": true
+}

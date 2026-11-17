@@ -95,7 +95,7 @@ function DailyChart({ days }: { days: ({ day: string } & Record<BotKey, number>)
   const max = Math.max(1, ...rows.map((d) => BOTS.reduce((n, b) => n + d[b], 0)));
   return (
     <Panel className="p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-800">Khách mới theo ngày · {rows.length} ngày</h2>
         <div className="flex gap-3 text-[11px] text-slate-500">
           {BOTS.map((b) => <span key={b} className="inline-flex items-center gap-1"><span className={cn("h-2 w-2 rounded-sm", DOT[b])} />{SHORT[b]}</span>)}

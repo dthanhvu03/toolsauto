@@ -87,3 +87,28 @@
     @apply font-sans;
   }
 }
+
+/* Mobile controls stay readable without triggering browser zoom on focus. */
+@media (max-width: 1023px) {
+  button:not([role="switch"]):not([role="checkbox"]):not([role="radio"]) {
+    min-height: 44px;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]),
+  select, textarea {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]), select {
+    min-height: 44px;
+  }
+}
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

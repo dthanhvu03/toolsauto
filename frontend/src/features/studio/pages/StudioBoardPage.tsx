@@ -64,7 +64,7 @@ export function StudioBoardPage() {
             type="button"
             onClick={() => setCol(c.key)}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium",
+              "min-h-11 shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium md:min-h-0",
               c.key === col ? "border-indigo-300 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600"
             )}
           >
@@ -77,7 +77,7 @@ export function StudioBoardPage() {
         {items.length === 0 ? (
           <p className="mt-8 text-center text-sm text-slate-400">Không có video nào ở «{column.label}».</p>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {items.map((p) => (
               <ProjectCard
                 key={p.id}

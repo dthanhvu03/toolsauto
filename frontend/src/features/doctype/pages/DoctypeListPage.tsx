@@ -24,7 +24,14 @@ export function DoctypeListPage() {
             <p className="p-6 text-center text-sm text-slate-400">Chưa có DocType nào. Bấm «Tạo DocType» — ví dụ «Thư viện hook», «Kiểu caption».</p>
           ) : (
             <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <ul aria-label="Danh sách DocType" className="divide-y divide-slate-100 md:hidden">
+              {rows.map((d) => <li key={d.name} className="p-4">
+                {d.is_child ? <span className="block font-medium text-slate-700">{d.label} · bảng con</span> : <Link to={`/app/go/doc/${d.name}`} className="inline-flex min-h-11 items-center font-medium text-indigo-700">{d.label}</Link>}
+                <p className="mt-1 break-words font-mono text-xs text-slate-400 [overflow-wrap:anywhere]">{d.name} · {d.fields.length} trường · {d.records ?? 0} bản ghi</p>
+                <Link to={`/app/go/doctype/${d.name}`} className="mt-2 inline-flex min-h-11 items-center text-sm text-slate-600 underline">Sửa định nghĩa</Link>
+              </li>)}
+            </ul>
+            <table className="hidden w-full text-left text-sm md:table">
               <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-3 py-2">DocType</th>

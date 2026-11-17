@@ -18,11 +18,11 @@ export const DEFAULT_TECHNIQUES: Techniques = {
 const box = "flex min-w-0 flex-col gap-1 rounded-lg border px-2.5 py-2 text-sm";
 const on = "border-indigo-200 bg-indigo-50/60";
 const off = "border-slate-200 bg-white";
-const field = "h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs";
+const field = "h-11 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-base md:h-8 md:text-xs";
 
 function Check({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className={cn("flex items-center gap-1.5 font-medium", disabled ? "text-slate-400" : "text-slate-800")}>
+    <label className={cn("flex min-h-11 items-center gap-1.5 font-medium md:min-h-0", disabled ? "text-slate-400" : "text-slate-800")}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>

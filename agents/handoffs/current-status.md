@@ -1,3 +1,16 @@
+## Phiên 2026-11-17 (Codex) — PLAN-175 UI/UX ưu tiên điện thoại, Execution Verified
+- Chủ bot giao toàn quyền tái cấu trúc toàn bộ giao diện theo từng đợt; điện thoại là thiết bị sử dụng chính.
+- PLAN-175 / TASK-061: hoàn thành lượt nền tảng mobile qua Phase 1–6: SPA, Studio/video, vận hành/tăng trưởng, Xe Tết control, Cashback và layout Jinja dùng chung. Menu bot Telegram/Zalo đã rà soát, chưa cần đổi trong lượt này.
+- Thay đổi chính: drawer có quản lý focus/Escape, thanh điều hướng dưới, thẻ dữ liệu trên điện thoại, vùng chạm lớn, trường nhập dễ dùng, xử lý chữ dài và thông báo không bị che. Vá lỗi nguồn viral bị khóa thao tác sau mutation hoàn tất; giữ nguyên hợp đồng API/nghiệp vụ.
+- Proof: 112 lượt trang × viewport 320/390/768/1440, không tràn ngang document, page_errors=[]; 147 related tests passed in 23.94s; frontend và overlay build PASS (output /tmp); Jinja parse PASS 57 templates.
+- Chi tiết lệnh/output, fixture, giới hạn và cách chạy lại: reports/ui175/README.md. Self-review theo review-agent: No findings; chưa thay thế review độc lập.
+- Chưa nghiệm thu điện thoại thật/iOS Safari, phiên đăng nhập/API và dữ liệu thật, HTMX/CDN thực tế, overlay runtime; các trang Jinja còn lại mới kế thừa nền tảng chung. Không coi toàn bộ audit repo hoặc production đã sạch.
+- Chủ bot yêu cầu triển khai tiếp: đã deploy static vào `app/static/admin` lúc 14:53:19 UTC, backup `/tmp/toolsauto-ui175-backup-20261117T145319Z`; giữ asset cũ, thay index atomically. Chưa commit/push; không cần restart. Hai bản vá test audit riêng được giữ nguyên.
+- Live proof `reports/ui175/deployment.json`: login + 5 GET HTTP 200; 7 asset hash khớp staging; HTTPS tailnet 8443 shell hash khớp, TLS certificate verified. Tổng quan authenticated dữ liệu thật read-only tại 320/390/768/1440 không overflow, page_errors=[]. PM2 Web_Dashboard online, restarts vẫn 4.
+- URL quản trị `https://laptop-t2hf25cd.tail15ebd5.ts.net:8443/app` cần Tailscale; public DNS trỏ Funnel nên probe trực tiếp 8443 qua public DNS lỗi TLS, probe tailnet IP với đúng TLS hostname PASS. Cổng 443 phục vụ Store; không đổi cấu hình mạng.
+- Chủ bot đã yêu cầu commit/push riêng lượt UI này lên `feat/xe-tet`; fetch trước commit xác nhận HEAD=origin. Hai test patches audit để ngoài commit; source, bundle và proof đi cùng nhau.
+- **Execution Done. Cần Claude Code verify + handoff.** Review độc lập và nghiệm thu thực tế còn pending; chưa Done/archive.
+
 ## Phien 2026-11-17 (Codex) — Shopee FB/IG voucher research only
 - Owner requested research and testing of supplied Bot San Sale links; no feature implementation or new PLAN approval implied.
 - 11:13 VN: unauthenticated GET FB and IG both 301 -> 200 HTML; same shop/item 209134167/15862874216, different utm_source an_17357470550 / an_17317620047. Bare-link controls retain affiliate source but lack signed Meta fields.

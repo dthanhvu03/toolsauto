@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "path": "/cashback/users",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 320,
+      "path": "/app/logs",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 390,
+      "path": "/cashback/users",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 390,
+      "path": "/app/logs",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 768,
+      "path": "/cashback/users",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 768,
+      "path": "/app/logs",
+      "horizontal_overflow": false,
+      "drawer_checked": true
+    },
+    {
+      "width": 1440,
+      "path": "/cashback/users",
+      "horizontal_overflow": false,
+      "drawer_checked": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/logs",
+      "horizontal_overflow": false,
+      "drawer_checked": false
+    }
+  ],
+  "page_errors": [],
+  "jinja_rendered": true,
+  "tailwind_compiled_locally": true,
+  "api_mocked": true,
+  "cashback_details": true,
+  "logs_tabs": true
+}

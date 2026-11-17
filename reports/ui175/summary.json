@@ -1,0 +1,31 @@
+{
+  "checks": {
+    "phase1": {
+      "route_viewport_checks": 8,
+      "page_errors": []
+    },
+    "phase2": {
+      "route_viewport_checks": 12,
+      "page_errors": []
+    },
+    "phase3": {
+      "route_viewport_checks": 20,
+      "page_errors": []
+    },
+    "phase4": {
+      "route_viewport_checks": 4,
+      "page_errors": []
+    },
+    "phase56": {
+      "route_viewport_checks": 8,
+      "page_errors": []
+    },
+    "remaining": {
+      "route_viewport_checks": 60,
+      "page_errors": []
+    }
+  },
+  "total_route_viewport_checks": 112,
+  "data": "fixtures only",
+  "production_api_calls": 0
+}

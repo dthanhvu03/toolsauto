@@ -42,7 +42,7 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
   const needChannel = !brand && !channelId;
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-slate-300 bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <input
           ref={input}
           type="file"
@@ -50,12 +50,13 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
           className="hidden"
           onChange={(e) => setName(e.target.files?.[0]?.name ?? "")}
         />
-        <button type="button" className="h-9 max-w-xs truncate rounded-lg border border-slate-200 px-3 text-sm" onClick={() => input.current?.click()}>
+        <button type="button" className="h-11 min-w-0 max-w-full truncate rounded-lg border border-slate-200 px-3 text-sm sm:max-w-xs md:h-9" onClick={() => input.current?.click()}>
           {name || (brand ? "Chọn logo / intro / nhạc…" : "Chọn video…")}
         </button>
         {!brand ? (
           <select
             className={selectClass}
+            aria-label="Kênh đăng video"
             value={channelId}
             onChange={(e) => setChannelId(e.target.value === "manual" ? "manual" : e.target.value ? Number(e.target.value) : "")}
           >
@@ -82,15 +83,16 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
       </div>
       {!brand ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
-          <label className="flex items-center gap-1.5">
+          <label className="flex min-h-11 items-center gap-1.5 md:min-h-0">
             <input type="radio" checked={!collected} onChange={() => setCollected(false)} /> Video của tôi
           </label>
-          <label className="flex items-center gap-1.5">
+          <label className="flex min-h-11 items-center gap-1.5 md:min-h-0">
             <input type="radio" checked={collected} onChange={() => setCollected(true)} /> Video sưu tầm
           </label>
           {collected ? (
             <input
-              className="h-8 w-44 rounded-lg border border-slate-200 px-2 text-sm"
+              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 px-2 text-base sm:w-44 md:h-8 md:text-sm"
+              aria-label="Nguồn video sưu tầm"
               placeholder="Nguồn: @kênh gốc"
               value={credit}
               onChange={(e) => setCredit(e.target.value)}
@@ -98,7 +100,12 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
           ) : null}
         </div>
       ) : null}
-      {!brand ? <TechniquePicker value={techniques} onChange={setTechniques} collected={collected} /> : null}
+      {!brand ? (
+        <details className="rounded-lg border border-slate-100 px-3">
+          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-slate-700">Kỹ thuật dựng video · chạm để chỉnh</summary>
+          <div className="pb-3"><TechniquePicker value={techniques} onChange={setTechniques} collected={collected} /></div>
+        </details>
+      ) : null}
       {needChannel && channels.length === 0 ? (
         <p className="text-xs text-amber-700">
           Chưa có kênh Buffer nào — chọn «Đăng tay», hoặc thêm kênh ở{" "}

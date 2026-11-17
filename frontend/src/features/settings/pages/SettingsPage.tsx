@@ -211,6 +211,13 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean }) {
         </div>
       ) : null}
 
+      <label className="mb-4 flex flex-col gap-1 text-sm font-medium text-slate-700 lg:hidden">
+        Đến nhóm cài đặt
+        <select className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-base" value={activeSection ?? ""} onChange={(e) => scrollTo(e.target.value)}>
+          <option value="" disabled>Chọn nhóm…</option>
+          {ctl.sectionOrder.map((id) => <option key={id} value={id}>{sectionLabels[id] ?? id} · {sectionCounts[id]}</option>)}
+        </select>
+      </label>
       <div className={embedded ? "flex max-w-6xl" : "mx-auto flex max-w-6xl"}>
         <SettingsSectionNav
           sectionOrder={ctl.sectionOrder}
@@ -267,6 +274,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean }) {
       </div>
 
       <SettingsUnsavedBar
+        embedded={embedded}
         visible={ctl.isDirty}
         onDiscard={() => {
           if (!window.confirm("Discard all unsaved changes?")) return;

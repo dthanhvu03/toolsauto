@@ -3,8 +3,8 @@ import type { Asset, ProjectSpec } from "../types/studio.types";
 function Volume({ label, value, onChange, disabled }: { label: string; value: number; onChange: (v: number) => void; disabled: boolean }) {
   return (
     <label className="flex items-center gap-3 text-sm">
-      <span className="w-32 shrink-0 text-slate-600">{label}</span>
-      <input type="range" min={0} max={2} step={0.05} value={value} disabled={disabled} className="flex-1" onChange={(e) => onChange(Number(e.target.value))} />
+      <span className="w-24 shrink-0 text-slate-600 sm:w-32">{label}</span>
+      <input type="range" min={0} max={2} step={0.05} value={value} disabled={disabled} className="min-w-0 flex-1" onChange={(e) => onChange(Number(e.target.value))} />
       <span className="w-10 text-right text-xs tabular-nums text-slate-500">{Math.round(value * 100)}%</span>
     </label>
   );
@@ -45,7 +45,7 @@ export function TextAudioPanel({
       <label className="flex items-center gap-3 text-sm">
         <span className="w-32 shrink-0 text-slate-600">Tông màu (LUT)</span>
         <select
-          className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-base md:h-9 md:text-sm"
           value={spec.canvas.lut ?? ""}
           disabled={disabled}
           onChange={(e) => onChange({ ...spec, canvas: { ...spec.canvas, lut: e.target.value || null } })}
@@ -62,7 +62,7 @@ export function TextAudioPanel({
       {luts.length === 0 ? <p className="-mt-2 text-[11px] text-slate-400">Bỏ file .cube vào storage/media/luts/ để có tông màu.</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <input
-          className="h-9 min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 text-sm"
+          className="h-11 min-w-0 basis-full flex-1 rounded-lg border border-slate-200 px-3 text-base sm:basis-auto md:h-9 md:text-sm"
           placeholder="Chữ hook đầu video (để trống = không có)"
           value={hook?.text ?? ""}
           disabled={disabled}
@@ -74,7 +74,7 @@ export function TextAudioPanel({
             type="number"
             min={1}
             step={0.5}
-            className="h-9 w-16 rounded-lg border border-slate-200 px-2 text-sm"
+            className="h-11 w-20 rounded-lg border border-slate-200 px-2 text-base md:h-9 md:text-sm"
             value={hook?.end ?? 3}
             disabled={disabled || !hook}
             onChange={(e) => setHook(hook?.text ?? "", Number(e.target.value))}

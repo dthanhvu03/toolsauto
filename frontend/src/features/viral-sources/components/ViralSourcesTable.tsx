@@ -26,7 +26,32 @@ export function ViralSourcesTable({
   onSetPage: (id: number, target_page: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
+    <>
+    <ul aria-label="Các nguồn video" className="divide-y divide-slate-100 md:hidden">
+      {!items.length ? <li className="p-6 text-center text-sm text-slate-500">Không có nguồn</li> : items.map((s) => (
+        <li key={s.id} className="space-y-3 p-4 [overflow-wrap:anywhere]">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-semibold">{s.platform} · #{s.id}</span>
+            <span className={s.enabled ? "text-emerald-700" : "text-slate-500"}>{s.enabled ? "Đang bật" : "Đã tắt"}</span>
+          </div>
+          <a href={channelHref(s)} target="_blank" rel="noreferrer" className="block break-words text-sm font-medium text-indigo-700 underline">{s.handle ? `@${s.handle}` : s.url}</a>
+          <label className="flex flex-col gap-1 text-xs text-slate-500">
+            Page đích
+            <select className={`${selectClass} w-full`} value={s.target_pages[0] ?? ""} disabled={busyId === s.id} onChange={(e) => onSetPage(s.id, e.target.value)}>
+              <option value="">Chưa chọn</option>
+              {pages.map((p) => <option key={p.id} value={p.id}>{p.name}{p.slots ? ` · ${p.slots}` : ""}</option>)}
+            </select>
+          </label>
+          <p className="text-xs text-slate-500">Quét cuối: {formatAgo(s.last_scanned_at)} · Tìm thấy: {s.last_found ?? "—"}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={ghostBtnClass} disabled={busyId === s.id} onClick={() => onToggle(s.id)}>{s.enabled ? "Tắt" : "Bật"}</button>
+            <button type="button" className={ghostBtnClass} disabled={busyId === s.id} onClick={() => onScan(s.id)}>Quét</button>
+            <button type="button" className={dangerBtnClass} disabled={busyId === s.id} onClick={() => { if (window.confirm(`Xóa nguồn #${s.id}?`)) onDelete(s.id); }}>Xóa</button>
+          </div>
+        </li>
+      ))}
+    </ul>
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[800px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
@@ -100,5 +125,6 @@ export function ViralSourcesTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

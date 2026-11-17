@@ -6,7 +6,28 @@ export function ChannelTable({ channels }: { channels: ChannelOps[] }) {
   const active = channels.filter((c) => c.scheduled || c.ready_waiting || c.posted_7d);
   const idle = channels.length - active.length;
   return (
-    <div className="overflow-x-auto">
+    <div>
+      <ul aria-label="Tình trạng các kênh" className="divide-y divide-slate-100 md:hidden">
+        {active.map((c) => {
+          const empty = c.scheduled === 0 && c.ready_waiting === 0;
+          const low = !empty && c.scheduled <= 2 && c.ready_waiting === 0;
+          return <li key={c.id} className="min-w-0 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="min-w-0 break-words font-semibold text-slate-900 [overflow-wrap:anywhere]">{c.name}</h3>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${empty ? "bg-red-50 text-red-700" : low ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+                {empty ? "Hết bài" : low ? "Sắp hết bài" : "Còn bài"}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+              <div><dt className="text-xs text-slate-500">Đã hẹn</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{c.scheduled}</dd></div>
+              <div><dt className="text-xs text-slate-500">Kho chờ</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{c.ready_waiting}</dd></div>
+              <div><dt className="text-xs text-slate-500">Lên 7 ngày</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{c.posted_7d}</dd></div>
+            </dl>
+            <p className="mt-3 text-xs text-slate-500">Bài kế tiếp: <span className="font-medium text-slate-700">{c.next_at ? formatTs(c.next_at) : "Chưa có lịch"}</span></p>
+          </li>;
+        })}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[560px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
@@ -35,6 +56,8 @@ export function ChannelTable({ channels }: { channels: ChannelOps[] }) {
           })}
         </tbody>
       </table>
+      </div>
+      {!active.length ? <p className="px-4 py-8 text-center text-sm text-slate-500">Chưa có kênh hoạt động trong 7 ngày qua.</p> : null}
       {idle ? <p className="px-3 py-2 text-[11px] text-slate-400">{idle} kênh không hoạt động 7 ngày qua (ẩn).</p> : null}
     </div>
   );

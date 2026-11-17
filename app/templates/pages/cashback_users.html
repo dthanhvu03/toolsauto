@@ -29,7 +29,30 @@
   <button class="px-4 py-2 rounded text-sm font-semibold border border-[var(--color-torch-border)] text-[var(--color-torch)]">Lọc</button>
 </form>
 
-<div class="cb-card overflow-x-auto">
+<ul aria-label="Khách Cashback" class="space-y-3 md:hidden">
+  {% for c in people %}
+  <li class="cb-card" style="overflow-wrap:anywhere">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <a href="/cashback/users/{{ c.user_id }}" class="text-[var(--color-torch)] font-semibold">{{ c.label }}</a>
+      <span class="cb-pill">{{ segments[c.segment] }}</span>
+    </div>
+    <p class="cb-note mt-1">{{ 'Zalo' if c.channel == 'zalo' else 'Telegram' }} · {{ c.user_id }}</p>
+    <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+      {% for label, value in [('Đơn', c.orders), ('Phần khách', vnd(c.cashback)), ('Ví', vnd(c.wallet)), ('Biên ước tính', vnd(c.margin))] %}
+      <div><dt class="cb-sub">{{ label }}</dt><dd class="font-semibold">{{ value }}</dd></div>
+      {% endfor %}
+    </dl>
+    <details class="mt-3">
+      <summary class="flex min-h-11 cursor-pointer items-center text-sm font-medium">Chi tiết hoạt động & tiền</summary>
+      {% for label, value in [('Vào', when(c.joined)), ('Dùng gần nhất', when(c.last_active)), ('Link', c.links), ('Click', c.clicks), ('Huỷ', c.cancelled), ('GMV', vnd(c.gmv)), ('Hoa hồng ròng', vnd(c.net)), ('Chờ chuyển', vnd(c.requested))] %}
+      <div class="cb-row"><span>{{ label }}</span><span>{{ value }}</span></div>
+      {% endfor %}
+    </details>
+    {% if c.flags %}<div class="mt-2">{% for flag in c.flags %}<span class="cb-pill cb-bad">{{ flag }}</span> {% endfor %}</div>{% endif %}
+  </li>
+  {% else %}<li class="cb-card cb-sub">Không có khách khớp bộ lọc.</li>{% endfor %}
+</ul>
+<div class="cb-card hidden overflow-x-auto md:block">
   <table class="cb-table">
     <tr>
       <th>Khách</th><th>Nhóm</th><th>Vào</th><th>Dùng gần nhất</th>

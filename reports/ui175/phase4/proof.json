@@ -1,0 +1,36 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "horizontal_overflow": false,
+      "all_settings_expanded": true,
+      "dock_targets_44px": true
+    },
+    {
+      "width": 390,
+      "horizontal_overflow": false,
+      "all_settings_expanded": true,
+      "dock_targets_44px": true
+    },
+    {
+      "width": 768,
+      "horizontal_overflow": false,
+      "all_settings_expanded": true,
+      "dock_targets_44px": true
+    },
+    {
+      "width": 1440,
+      "horizontal_overflow": false,
+      "all_settings_expanded": true,
+      "dock_targets_44px": true
+    }
+  ],
+  "page_errors": [],
+  "mutations_mocked": [
+    {
+      "action": "pause",
+      "paused": true
+    }
+  ],
+  "live_server_not_used": true
+}

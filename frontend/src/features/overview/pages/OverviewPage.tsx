@@ -37,11 +37,11 @@ export function OverviewPage() {
       >
         {d ? (
           <>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 [overflow-wrap:anywhere] lg:grid-cols-4">
               <StatCard
                 label="Bài đã hẹn"
                 value={String(scheduled)}
-                hint={empty.length ? `Hết bài: ${empty.map((c) => c.name).join(", ")}` : "mọi kênh còn bài"}
+                hint={empty.length ? `${empty.length} kênh hết bài · xem bên dưới` : "mọi kênh còn bài"}
                 tone={empty.length ? "bad" : "ok"}
               />
               <StatCard label="Kho chờ lên Buffer" value={String(waiting)} hint="video READY chưa hẹn giờ" />
@@ -59,7 +59,11 @@ export function OverviewPage() {
               />
             </div>
 
-            <Panel className="mt-4">
+            <div className="mt-6 flex items-center justify-between gap-3">
+              <h2 className="font-semibold text-slate-900">Tình trạng các kênh</h2>
+              <span className="text-xs text-slate-500">{d.channels.length} kênh</span>
+            </div>
+            <Panel className="mt-3">
               <ChannelTable channels={d.channels} />
             </Panel>
 
@@ -72,9 +76,9 @@ export function OverviewPage() {
                   {d.failed_jobs.latest.map((j) => (
                     <li key={j.id} className="flex flex-wrap gap-x-3 py-1.5">
                       <span className="font-mono text-xs text-slate-400">#{j.id}</span>
-                      <span className="font-medium">{j.channel || "—"}</span>
+                      <span className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">{j.channel || "—"}</span>
                       <span className="text-xs text-slate-400">{formatTs(j.finished_at)}</span>
-                      <span className="basis-full truncate text-xs text-red-700" title={j.error}>
+                      <span className="basis-full break-words text-sm text-red-700 [overflow-wrap:anywhere]" title={j.error}>
                         {j.error || "—"}
                       </span>
                     </li>

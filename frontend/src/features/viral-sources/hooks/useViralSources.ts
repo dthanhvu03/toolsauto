@@ -30,10 +30,10 @@ export function useViralSources() {
     ...query,
     msg,
     adding: addMut.isPending,
-    busyId: (toggleMut.variables as number | undefined) ??
-      (scanMut.variables as number | undefined) ??
-      (delMut.variables as number | undefined) ??
-      null,
+    busyId: toggleMut.isPending ? toggleMut.variables :
+      scanMut.isPending ? scanMut.variables :
+      delMut.isPending ? delMut.variables :
+      pageMut.isPending ? pageMut.variables.id : null,
     pages: query.data?.pages ?? [],
     add: (url: string, target_page?: string) => addMut.mutate({ url, target_page }),
     setPage: (id: number, target_page: string) => pageMut.mutate({ id, target_page }),

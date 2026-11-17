@@ -51,6 +51,7 @@
     body { background: var(--color-bg); color: var(--color-ink); font-family: 'Geist', 'Inter', system-ui, sans-serif; }
   </style>
   {% block head_extra %}{% endblock %}
+  {% include "fragments/mobile_ui_styles.html" %}
 </head>
 
 {% set cur = request.url.path %}
@@ -103,7 +104,7 @@
   <aside id="nav" class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0">
     <div class="flex h-14 items-center justify-between border-b border-slate-200 px-4">
       <div class="font-semibold tracking-tight">Auto Publisher</div>
-      <button type="button" class="lg:hidden" onclick="closeNav()" aria-label="Đóng menu">{{ svg('x', 'size-5 text-slate-500') }}</button>
+      <button type="button" class="lg:hidden inline-flex size-11 items-center justify-center" onclick="closeNav()" aria-label="Đóng menu">{{ svg('x', 'size-5 text-slate-500') }}</button>
     </div>
     <nav class="flex-1 overflow-y-auto p-3 text-sm">
       {% for label, items in nav_groups %}
@@ -133,10 +134,10 @@
 
   <div class="lg:pl-64">
     <header class="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur">
-      <button type="button" class="lg:hidden" onclick="openNav()" aria-label="Mở menu">{{ svg('menu') }}</button>
-      <div class="text-sm font-medium text-slate-500">Admin</div>
+      <button type="button" class="lg:hidden inline-flex size-11 items-center justify-center" onclick="openNav()" aria-label="Mở menu">{{ svg('menu') }}</button>
+      <div class="text-sm font-medium text-slate-500">ToolsAuto</div>
     </header>
-    <main class="min-h-[calc(100vh-3.5rem)] p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+    <main class="min-h-[calc(100vh-3.5rem)] p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6">
       <div class="mx-auto flex max-w-6xl flex-col gap-4">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div class="min-w-0">
@@ -152,27 +153,23 @@
   </div>
 
   <nav aria-label="Trang chính" class="fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-    {% for name, href, icon in [('Threads', '/app/go/threads-growth', 'chat'), ('Cashback', '/cashback', 'coin'), ('Khách', '/app/go/bot-users', 'users')] %}
-    {% set active = cur.startswith(href) %}
+    {% for name, href, icon in [('Tổng quan', '/app', 'home'), ('Threads', '/app/go/threads-growth', 'chat'), ('Cashback', '/cashback', 'coin'), ('Khách', '/app/go/bot-users', 'users')] %}
+    {% set active = cur == '/app' if href == '/app' else cur.startswith(href) %}
     <a href="{{ href }}" {% if active %}aria-current="page"{% endif %}
-      class="flex h-14 flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-[11px] font-medium {{ 'text-indigo-700' if active else 'text-slate-500' }}">
+      class="flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-[11px] font-medium {{ 'text-indigo-700' if active else 'text-slate-500' }}">
       {{ svg(icon, 'size-6', '2.25' if active else '1.75') }}
       {{ name }}
     </a>
     {% endfor %}
-    <button type="button" onclick="openNav()" class="flex h-14 flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-[11px] font-medium text-slate-500">
+    <button type="button" onclick="openNav()" class="flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-[11px] font-medium text-slate-500">
       {{ svg('menu', 'size-6', '1.75') }}
       Menu
     </button>
   </nav>
 
-  <script>
-    const nav = document.getElementById('nav');
-    const navOverlay = document.getElementById('navOverlay');
-    function openNav() { nav.classList.remove('-translate-x-full'); navOverlay.classList.remove('hidden'); }
-    function closeNav() { nav.classList.add('-translate-x-full'); navOverlay.classList.add('hidden'); }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
-  </script>
+  {% with mobile_nav_id='nav', mobile_overlay_id='navOverlay', mobile_open_function='openNav', mobile_close_function='closeNav' %}
+  {% include "fragments/mobile_nav_script.html" %}
+  {% endwith %}
   {% block script_extra %}{% endblock %}
 </body>
 </html>

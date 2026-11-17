@@ -1,0 +1,91 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "path": "/app/go/studio",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/viral",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/viral-sources",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/studio",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/viral",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/viral-sources",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/studio",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/viral",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/viral-sources",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/studio",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/viral",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/viral-sources",
+      "horizontal_overflow": false
+    }
+  ],
+  "mutations_mocked": [
+    {
+      "path": "/studio/api/projects/11/approve",
+      "method": "POST",
+      "body": "{}"
+    },
+    {
+      "path": "/api/admin/viral/21/process",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/api/admin/viral-sources/31/scan",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/api/admin/viral-sources/31/page",
+      "method": "POST",
+      "body": "{\"target_page\":\"\"}"
+    }
+  ],
+  "page_errors": [],
+  "unknown_requests": [],
+  "toast_above_nav": true,
+  "delete_cancel_preserved": true,
+  "empty_states": true
+}

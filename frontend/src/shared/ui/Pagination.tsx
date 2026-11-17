@@ -12,7 +12,7 @@ export function Pagination({
       <button
         type="button"
         disabled={page <= 1}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40"
+        className="min-h-11 rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40 md:min-h-8"
         onClick={() => onPageChange(Math.max(1, page - 1))}
       >
         Trước
@@ -23,7 +23,7 @@ export function Pagination({
       <button
         type="button"
         disabled={page >= totalPages}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40"
+        className="min-h-11 rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40 md:min-h-8"
         onClick={() => onPageChange(page + 1)}
       >
         Sau

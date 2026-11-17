@@ -27,6 +27,9 @@
             border-bottom: 1px dashed var(--color-border); }
   .cb-row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cb-note { font-size: 11px; color: var(--color-ash); }
+  .cb-card { overflow-wrap: anywhere; }
+  .cb-tabs a { display:inline-flex; min-height:44px; align-items:center; }
+  .cb-card input, .cb-card select { max-width:100%; min-width:0; }
   /* Giá trị dài (vd «24 giờ: tạo lỗi 0 · chưa giao 0 · kẹt…») xuống dòng thay vì bóp nhãn còn 1 chữ / dòng. */
   .cb-row { flex-wrap: wrap; row-gap: .15rem; }
   .cb-row > :first-child { flex: 1 1 10rem; }

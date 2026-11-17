@@ -1,0 +1,15 @@
+<style>
+  :where(button, a, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--color-torch, #4f46e5); outline-offset: 3px;
+  }
+  @media (max-width: 1023px) {
+    main { min-width: 0; }
+    button:not([role="switch"]), summary { min-height: 44px; }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]), select, textarea {
+      min-width: 0; max-width: 100%; font-size: 16px;
+    }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]), select { min-height: 44px; }
+    #sidebar a.nav-item, #nav nav a { min-height: 44px; }
+    #sidebar, #nav { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  }
+</style>

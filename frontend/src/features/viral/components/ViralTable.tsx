@@ -22,7 +22,32 @@ export function ViralTable({
   onAction: (id: number, action: ViralRowAction) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
+    <>
+    <ul aria-label="Video trong kho" className="divide-y divide-slate-100 md:hidden">
+      {!items.length ? <li className="p-6 text-center text-sm text-slate-500">Không có material</li> : items.map((it) => (
+        <li key={it.id} className="space-y-3 p-4 [overflow-wrap:anywhere]">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="font-mono text-slate-500">#{it.id}{it.is_mega ? " · MEGA" : ""}</span>
+            <span className="rounded bg-slate-100 px-2 py-1 font-semibold">{it.status}</span>
+          </div>
+          <a href={it.url} target="_blank" rel="noreferrer" className="block break-words text-sm text-indigo-700 underline">{it.url}</a>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div><dt className="text-xs text-slate-500">Tài khoản</dt><dd>{it.account_name || "—"}</dd></div>
+            <div><dt className="text-xs text-slate-500">Lượt xem</dt><dd>{(it.views ?? 0).toLocaleString()}</dd></div>
+            <div className="col-span-2"><dt className="text-xs text-slate-500">Lượt đăng</dt><dd>{it.job_id ? `#${it.job_id} ${it.job_status || ""}` : "—"}</dd></div>
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            {actionsFor(it.status).map((a) => (
+              <button key={a.key} type="button" className={a.danger ? dangerBtnClass : ghostBtnClass} disabled={busyId === it.id} onClick={() => {
+                if (a.key === "delete" && !window.confirm(`Xóa material #${it.id}?`)) return;
+                onAction(it.id, a.key);
+              }}>{a.label}</button>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[800px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
@@ -86,5 +111,6 @@ export function ViralTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

@@ -16,6 +16,7 @@ export function SearchField({
       <input
         className={inputClass}
         placeholder={placeholder}
+        aria-label={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {

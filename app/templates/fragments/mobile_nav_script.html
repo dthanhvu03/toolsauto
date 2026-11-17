@@ -1,0 +1,41 @@
+<script>
+(() => {
+  const panel = document.getElementById('{{ mobile_nav_id }}');
+  const overlay = document.getElementById('{{ mobile_overlay_id }}');
+  if (!panel || !overlay) return;
+  const desktop = matchMedia('(min-width: 1024px)');
+  let opened = false, previousFocus, previousOverflow;
+  const focusable = () => [...panel.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')]
+    .filter(el => el.getClientRects().length);
+  function close(restore = true) {
+    panel.classList.add('-translate-x-full'); overlay.classList.add('hidden');
+    if (opened) document.body.style.overflow = previousOverflow;
+    opened = false;
+    panel.inert = !desktop.matches;
+    panel.removeAttribute('role'); panel.removeAttribute('aria-modal'); panel.removeAttribute('aria-label');
+    if (restore && previousFocus?.isConnected) previousFocus.focus();
+  }
+  function open() {
+    if (desktop.matches || opened) return;
+    previousFocus = document.activeElement; previousOverflow = document.body.style.overflow;
+    opened = true; panel.inert = false;
+    panel.classList.remove('-translate-x-full'); overlay.classList.remove('hidden');
+    panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Menu ToolsAuto');
+    document.body.style.overflow = 'hidden'; focusable()[0]?.focus();
+  }
+  window['{{ mobile_open_function }}'] = open;
+  window['{{ mobile_close_function }}'] = () => close();
+  document.addEventListener('keydown', e => {
+    if (!opened) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Tab') {
+      const items = focusable(), first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  });
+  panel.querySelectorAll('a[href]').forEach(a => a.addEventListener('click', () => { if (!desktop.matches) close(false); }));
+  desktop.addEventListener('change', () => close(false));
+  close(false);
+})();
+</script>

@@ -2,15 +2,15 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Điều khiển Xe Tết</title>
 <link rel="stylesheet" href="/fonts/fonts.css">
 <style>
   :root { --bg:#fbf6ee; --card:#fff; --ink:#3a2418; --muted:#8a6f5e; --red:#b3261e; --gold:#e8b04a; --line:#ecdcc8; --soft:#fff7ea; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 "Be Vietnam Pro", system-ui, "Segoe UI", sans-serif; padding-bottom:84px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 "Be Vietnam Pro", system-ui, "Segoe UI", sans-serif; padding-bottom:calc(96px + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
   /* cuộn tới nút nào cũng chừa chỗ cho thanh ghim đáy — nút không bị thanh che mất */
-  html { scroll-padding-bottom:96px; }
+  html { scroll-padding-bottom:calc(108px + env(safe-area-inset-bottom)); }
   /* thanh điều khiển nhanh ghim đáy màn hình: lúc live không phải cuộn tìm nút */
   #dock { position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex; gap:6px;
     padding:8px 10px calc(8px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line);
@@ -20,7 +20,7 @@
     padding:7px 4px; font-size:20px; line-height:1; }
   #dock button small { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   /* lời báo của server (bị từ chối / lỗi) hiện ngay đầu màn hình, không nằm cuối trang */
-  #notice { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:11; max-width:min(92vw,520px);
+  #notice { position:fixed; top:calc(10px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:11; max-width:min(92vw,520px);
     padding:10px 14px; border-radius:10px; background:#b3261e; color:#fff; font-size:14px; display:none;
     box-shadow:0 6px 18px rgba(0,0,0,.18); }
   #notice.show { display:block; }
@@ -39,7 +39,11 @@
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   input[type=text], input[type=number], input[type=search] { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
   input[type=number] { flex:0 0 96px; }
-  button { padding:9px 13px; border:1px solid var(--line); border-radius:10px; background:var(--soft); font:inherit; cursor:pointer; color:inherit; }
+  button { min-height:44px; padding:9px 13px; border:1px solid var(--line); border-radius:10px; background:var(--soft); font:inherit; cursor:pointer; color:inherit; touch-action:manipulation; }
+  select { min-height:44px; max-width:100%; }
+  input[type=range] { min-width:0; min-height:44px; }
+  :is(button,input,select,summary):focus-visible { outline:2px solid var(--red); outline-offset:3px; }
+  main > * { min-width:0; }
   button:hover { border-color:var(--gold); }
   button:disabled { opacity:.45; cursor:not-allowed; }
   a { text-decoration:none; }
@@ -47,7 +51,7 @@
   button.on { background:var(--gold); border-color:var(--gold); font-weight:600; }
   .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; }
   .stat { background:var(--soft); border-radius:10px; padding:8px 10px; }
-  .stat b { display:block; font-size:18px; white-space:nowrap; }
+  .stat b { display:block; font-size:18px; }
   .stat span { color:var(--muted); font-size:12px; }
   .track { height:10px; margin-top:10px; background:var(--soft); border-radius:999px; overflow:hidden; }
   .track i { display:block; height:100%; width:0; background:linear-gradient(90deg, #f6b73c, #d93b2b); transition:width .5s; }
@@ -74,6 +78,7 @@
   ol.pax li.pick { cursor: pointer; }
   ol.pax li.pick:hover { background: var(--soft); outline: 1px solid var(--gold); }
   ol.pax li.focus { background: #ffd0c8; outline: 2px solid var(--red); font-weight: 700; }
+  @media (max-width:480px) { ol.pax { columns:1; } ol.pax li.pick { min-height:44px; padding:10px 6px; } }
   details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
   /* xếp theo tần suất dùng khi live (anh 03/11): khối «Đang live» trên cùng, cài đặt gập lại phía dưới */
   .wide { grid-column: 1 / -1; }

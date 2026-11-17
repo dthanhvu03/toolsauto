@@ -1,0 +1,107 @@
+{
+  "deployed_at_utc": "2026-11-17T14:53:19.205265+00:00",
+  "backup": "/tmp/toolsauto-ui175-backup-20261117T145319Z",
+  "staging": "/tmp/toolsauto-ui175-deploy-dist",
+  "live": "/home/vu/toolsauto/app/static/admin",
+  "backup_verified_files": 9,
+  "stage_files_verified": 9,
+  "old_assets_retained": true,
+  "index_sha256": "1d8fd449a1b43d719f6fcc7eba821fb5b45fa2e15ad08babf61fdeef98cfcd78",
+  "restart_performed": false,
+  "login_status": 200,
+  "http_checks": [
+    {
+      "path": "/app",
+      "status": 200
+    },
+    {
+      "path": "/app/go/studio",
+      "status": 200
+    },
+    {
+      "path": "/cashback/users",
+      "status": 200
+    },
+    {
+      "path": "/app/logs",
+      "status": 200
+    },
+    {
+      "path": "/health",
+      "status": 200
+    }
+  ],
+  "asset_checks": [
+    {
+      "name": "geist-latin-ext-wght-normal-DC-KSUi6.woff2",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "index-CL9ibZ50.css",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "geist-vietnamese-wght-normal-6IgcOCM7.woff2",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "geist-cyrillic-ext-wght-normal-DjL33-gN.woff2",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "geist-latin-wght-normal-BgDaEnEv.woff2",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "index-Ccd_ML3y.js",
+      "status": 200,
+      "sha256_match": true
+    },
+    {
+      "name": "geist-cyrillic-wght-normal-BEAKL7Jp.woff2",
+      "status": 200,
+      "sha256_match": true
+    }
+  ],
+  "tailnet_https_shell": {
+    "status": 200,
+    "sha256_match": true,
+    "tls_certificate_verified": true,
+    "address": "100.102.93.11",
+    "note": "Public DNS resolves Funnel; direct public-DNS 8443 handshake failed. Tailnet address succeeds with original TLS hostname."
+  },
+  "live_browser": {
+    "route": "/app",
+    "api": "/api/admin/overview",
+    "api_status": [
+      200
+    ],
+    "data": "authenticated live read-only",
+    "checks": [
+      {
+        "width": 320,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 390,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 768,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 1440,
+        "horizontal_overflow": false
+      }
+    ],
+    "page_errors": [],
+    "blocked_requests": []
+  },
+  "verification": "PASS"
+}

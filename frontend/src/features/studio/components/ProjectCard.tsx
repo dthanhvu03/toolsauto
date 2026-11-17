@@ -52,15 +52,15 @@ export function ProjectCard({
           {manual ? (
             <span className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-800">Đăng tay</span>
           ) : (
-            <span className="font-semibold text-slate-800">{p.channel}</span>
+            <span className="min-w-0 break-words font-semibold text-slate-800 [overflow-wrap:anywhere]">{p.channel}</span>
           )}
-          <span className="font-mono text-slate-400">#{p.id}</span>
+          <span className="ml-2 shrink-0 font-mono text-slate-400">#{p.id}</span>
         </div>
         {p.parent_project_id ? (
           <span className="w-fit rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700">Biến thể của #{p.parent_project_id}</span>
         ) : null}
         <TechTags tags={p.tags ?? []} />
-        <p className="line-clamp-3 text-xs text-slate-600">
+        <p className="line-clamp-3 break-words text-sm text-slate-600 [overflow-wrap:anywhere] md:text-xs">
           {p.status === "FAILED" ? <span className="text-red-700">{p.error}</span> : p.caption || <i className="text-slate-400">Chưa có caption</i>}
         </p>
         {p.status === "REVIEW" ? (

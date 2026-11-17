@@ -19,11 +19,11 @@ export function Toast({ text, seq, raised = false }: { text: string; seq: number
     <button
       type="button"
       onClick={() => setShown(false)}
-      className={`fixed ${raised ? "bottom-4 sm:bottom-32" : "bottom-4"} left-1/2 z-[60] w-[min(92vw,32rem)] -translate-x-1/2 rounded-xl px-4 py-3 text-left text-sm font-medium shadow-lg ${
+      className={`fixed ${raised ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] lg:bottom-32" : "bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-4"} left-1/2 z-[60] w-[min(92vw,32rem)] -translate-x-1/2 break-words rounded-xl px-4 py-3 text-left text-sm font-medium shadow-lg [overflow-wrap:anywhere] ${
         bad ? "bg-red-600 text-white" : "bg-slate-900 text-white"
       }`}
     >
-      {text}
+      <span role="status">{text}</span>
     </button>,
     document.body
   );

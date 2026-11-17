@@ -9,7 +9,7 @@ import type { Overview, OwnPost } from "../api/threadsGrowthApi";
 function Meter({ label, used, max }: { label: string; used: number; max: number }) {
   const ratio = max ? Math.min(used / max, 1) : 0;
   return (
-    <div className="min-w-[9rem] flex-1">
+    <div className="min-w-0 flex-1">
       <div className="flex items-baseline justify-between text-xs text-slate-500">
         <span>{label}</span>
         <span>
@@ -83,7 +83,7 @@ export function ControlBar({ ov, own }: { ov: Overview; own: OwnPost[] }) {
           <LogIn className="h-3.5 w-3.5" /> Đăng nhập lại
         </button>
 
-        <div className="flex min-w-[18rem] flex-1 gap-4">
+        <div className="flex w-full min-w-0 flex-auto gap-4 sm:w-auto sm:flex-1">
           <Meter label="Reply 24 giờ" used={ov.quota.posted_last_day} max={ov.limits.max_replies_per_day} />
           <Meter label="Reply 1 giờ" used={ov.quota.posted_last_hour} max={ov.limits.max_replies_per_hour} />
         </div>

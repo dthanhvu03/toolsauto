@@ -1,0 +1,67 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "path": "/app",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/app/go/jobs",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "menu_escape": true,
+      "menu_navigation": true
+    },
+    {
+      "width": 390,
+      "path": "/app",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/app/go/jobs",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "menu_escape": true,
+      "menu_navigation": true
+    },
+    {
+      "width": 768,
+      "path": "/app",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/app/go/jobs",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "menu_escape": true,
+      "menu_navigation": true
+    },
+    {
+      "width": 1440,
+      "path": "/app",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/app/go/jobs",
+      "horizontal_overflow": false
+    },
+    {
+      "empty_and_error_states": true,
+      "pagination_above_navigation": true
+    }
+  ],
+  "page_errors": [],
+  "api_mocked": true,
+  "external_requests": 0,
+  "resize_modal_closed": true
+}

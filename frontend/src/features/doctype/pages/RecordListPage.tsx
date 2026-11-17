@@ -50,7 +50,17 @@ export function RecordListPage() {
       </div>
       <Panel className="mt-3 overflow-x-auto">
         <QueryBody isLoading={q.isLoading} isError={q.isError} loadingText="Đang tải…" errorText="Không tải được bản ghi">
-          <table className="w-full min-w-[560px] text-left text-sm">
+          <ul aria-label="Danh sách bản ghi" className="divide-y divide-slate-100 md:hidden">
+            {(q.data?.records ?? []).map((r) => <li key={r.name}>
+              <button type="button" className="w-full space-y-1 px-4 py-3 text-left" onClick={() => nav(`/app/go/doc/${doctype}/${encodeURIComponent(r.name)}`)}>
+                <span className="block break-words font-medium text-indigo-700 [overflow-wrap:anywhere]">{r.title ?? r.name}</span>
+                <span className="block text-xs text-slate-500">{formatTs(r.modified_at)}</span>
+                {cols.slice(0, 2).map((c) => <span key={c.fieldname} className="mr-3 inline-block max-w-full truncate text-xs text-slate-600">{c.label}: {formatValue(c, r.data[c.fieldname])}</span>)}
+              </button>
+            </li>)}
+            {!q.data?.records?.length ? <li className="p-6 text-center text-sm text-slate-400">Chưa có bản ghi</li> : null}
+          </ul>
+          <table className="hidden w-full min-w-[560px] text-left text-sm md:table">
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-3 py-2">Tên</th>

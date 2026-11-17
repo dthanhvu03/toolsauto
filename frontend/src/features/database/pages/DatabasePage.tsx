@@ -37,7 +37,15 @@ export function DatabasePage() {
             <p className="px-4 py-8 text-center text-sm text-slate-400">Không có bảng khớp</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[400px] text-left text-sm">
+              <ul aria-label="Danh sách bảng" className="divide-y divide-slate-100 md:hidden">
+                {ctl.tables.map((t) => <li key={t.name}>
+                  <button type="button" onClick={() => ctl.setTable(t.name)} aria-pressed={ctl.table === t.name} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left ${ctl.table === t.name ? "bg-indigo-50" : ""}`}>
+                    <span className="min-w-0 break-words font-mono text-sm [overflow-wrap:anywhere]">{t.name}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-slate-500">{t.count.toLocaleString()} dòng</span>
+                  </button>
+                </li>)}
+              </ul>
+              <table className="hidden w-full min-w-[400px] text-left text-sm md:table">
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2">Bảng</th>
@@ -49,9 +57,8 @@ export function DatabasePage() {
                     <tr
                       key={t.name}
                       className={`cursor-pointer hover:bg-slate-50/80 ${ctl.table === t.name ? "bg-indigo-50" : ""}`}
-                      onClick={() => ctl.setTable(t.name)}
                     >
-                      <td className="px-3 py-2 font-mono text-xs">{t.name}</td>
+                      <td className="font-mono text-xs"><button type="button" className="w-full px-3 py-2 text-left" aria-pressed={ctl.table === t.name} onClick={() => ctl.setTable(t.name)}>{t.name}</button></td>
                       <td className="px-3 py-2 text-right tabular-nums">{t.count}</td>
                     </tr>
                   ))}
@@ -105,6 +112,7 @@ export function DatabasePage() {
         <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">SQL console</div>
         <div className="space-y-2 p-4">
           <textarea
+            aria-label="Câu lệnh SQL"
             className="min-h-[6rem] w-full rounded-lg border border-slate-200 p-2 font-mono text-xs"
             value={ctl.sql}
             onChange={(e) => ctl.setSql(e.target.value)}
