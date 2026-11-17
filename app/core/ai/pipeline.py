@@ -21,6 +21,23 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Xingchi (api.xingchiapi.com) chỉ cho phép client coding (Cursor / Claude Code…) — curl/SDK thuần → 403 client_not_allowed.
+_XINGCHI_HOST_MARKERS = ("xingchiapi.com",)
+
+
+def _router_headers(api_key: str, base_url: str = "") -> dict:
+    """Header gọi OpenAI-compatible gateway; Xingchi cần User-Agent giống Cursor."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    host = (base_url or "").lower()
+    if any(m in host for m in _XINGCHI_HOST_MARKERS):
+        headers["User-Agent"] = "Cursor/1.0"
+        headers["X-Cursor-Client-Version"] = "1.0.0"
+    return headers
+
+
 class CircuitState(Enum):
     CLOSED = "CLOSED"
     OPEN = "OPEN"
@@ -163,10 +180,7 @@ class AICaptionPipeline:
     def test_connection(self, temp_base_url: str, temp_api_key: str, temp_model: str) -> dict:
         start_time = time.perf_counter()
         url = temp_base_url.rstrip("/") + "/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {temp_api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = _router_headers(temp_api_key, temp_base_url)
         payload = {
             "model": temp_model,
             "messages": [{"role": "user", "content": "ping"}],
@@ -265,10 +279,7 @@ class AICaptionPipeline:
                 })
 
         url = temp_base_url.rstrip("/") + "/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {temp_api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = _router_headers(temp_api_key, temp_base_url)
         
         payload = {
             "model": temp_model,
@@ -312,10 +323,7 @@ class AICaptionPipeline:
             temp_base_url = self.base_url
 
         url = temp_base_url.rstrip("/") + "/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {temp_api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = _router_headers(temp_api_key, temp_base_url)
         payload = {
             "model": temp_model,
             "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
