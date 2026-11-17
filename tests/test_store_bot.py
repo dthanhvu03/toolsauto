@@ -1505,9 +1505,10 @@ def test_closed_shop_blocks_buying_but_keeps_browse_topup_and_paid_qr(fatcat, re
     store.handle_update(_click(BUYER, "ta:50000"))  # nạp ví vẫn được
     assert any(t.amount == 50_000 for t in repo.pending_topups())
 
+    broadcasts_before_sync = list(telegram.broadcasts)
     fake.rows[0]["stock"] = 100
     store.sync_upstream()
-    assert telegram.texts_to("@kenh") == [] and telegram.broadcasts == []  # nghỉ: không báo hàng mới
+    assert telegram.texts_to("@kenh") == [] and telegram.broadcasts == broadcasts_before_sync  # nghỉ: không báo hàng mới
 
 
 def test_api_closed_returns_503_but_replays_existing_order(api, repo, product):
