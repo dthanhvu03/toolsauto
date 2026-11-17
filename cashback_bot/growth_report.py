@@ -15,7 +15,7 @@ from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from cashback_bot import all_users
+from cashback_bot import all_users, growth_funnel
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def build(now: datetime | None = None, cashback_path: Path | None = None, store_
         "", f"<b>Hôm qua {yesterday.strftime('%d/%m')}</b>",
         f"• AI Store: {st['new_y']} khách mới · {st['orders_y']} đơn · {_vnd(st['revenue_y'])}",
         f"• Cashbot: {cb['new_y']} khách mới · {cb['links_y']} link",
-        "", "<b>Khách mới 7 ngày đi tới đâu</b>",
+        "", f"<b>Khách mới từ {week.strftime('%d/%m')} 00:00 (VN) đi tới đâu</b>",
         f"• AI Store: {st['new_w']} vào → {st['product_w']} xem món → {st['confirm_w']} chọn số lượng → "
         f"{st['topup_w']} tạo mã nạp ({_pct(st['topup_w'], st['new_w'])}) → "
         f"{st['order_w']} có đơn ({_pct(st['order_w'], st['new_w'])})",
@@ -122,6 +122,10 @@ def build(now: datetime | None = None, cashback_path: Path | None = None, store_
         lines.insert(1, "\n🔴 <b>AI Store đang ĐÓNG TAY</b>: khách xem được món nhưng không mua được. Mở ở ⚙️ Quản lý shop → Giờ nghỉ.")
     if rep.errors:
         lines += ["", "⚠️ " + "; ".join(rep.errors)]
+    funnel = growth_funnel.report(moment, cashback_path=cb_path, store_path=st_path)
+    addition = growth_funnel.summary(funnel)
+    if len("\n".join(lines)) + len(addition) + 2 <= 4000:
+        lines += ["", addition]
     return "\n".join(lines)
 
 
