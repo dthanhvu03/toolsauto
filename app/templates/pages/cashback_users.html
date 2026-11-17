@@ -2,7 +2,7 @@
 
 {% block title %}Cashback · Khách hàng{% endblock %}
 {% block page_title %}Cashback · Khách hàng{% endblock %}
-{% block page_subtitle %}{{ people | length }} / {{ total }} khách. Biên = hoa hồng ròng − phần khách − dự phòng thuế / phí, tạm tính.{% endblock %}
+{% block page_subtitle %}{{ filtered_total | default(people | length) }} / {{ total }} khách theo bộ lọc · trang {{ page | default(1) }}/{{ total_pages | default(1) }}. Biên = hoa hồng ròng − phần khách − dự phòng thuế / phí, tạm tính.{% endblock %}
 
 {% block head_extra %}{% include "fragments/cashback_style.html" %}{% endblock %}
 
@@ -17,6 +17,7 @@
 
 <form method="get" action="/cashback/users" class="cb-card flex flex-wrap items-center gap-3 mb-4">
   <input type="hidden" name="segment" value="{{ segment }}">
+  <input type="hidden" name="page" value="1">
   <input name="q" value="{{ q }}" placeholder="Tìm tên hoặc ID" class="px-3 py-2 rounded border border-[var(--color-border)] bg-transparent text-sm">
   <select name="channel" class="px-3 py-2 rounded border border-[var(--color-border)] bg-transparent text-sm">
     <option value="">Mọi kênh</option>
@@ -28,6 +29,17 @@
   </select>
   <button class="px-4 py-2 rounded text-sm font-semibold border border-[var(--color-torch-border)] text-[var(--color-torch)]">Lọc</button>
 </form>
+
+{% if total_pages | default(1) > 1 %}
+<nav aria-label="Phân trang khách Cashback" class="mb-4 flex items-center justify-between gap-3" data-pagination>
+  <span class="cb-note">{{ (page - 1) * per_page + 1 }}–{{ [page * per_page, filtered_total] | min }} / {{ filtered_total }}</span>
+  <div class="flex gap-2">
+    {% if page > 1 %}<a class="cb-page" href="?{{ request.url.include_query_params(page=page - 1).query }}" aria-label="Trang trước">← Trước</a>{% endif %}
+    <span class="cb-page cb-page-current" aria-current="page">{{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}<a class="cb-page" href="?{{ request.url.include_query_params(page=page + 1).query }}" aria-label="Trang sau">Sau →</a>{% endif %}
+  </div>
+</nav>
+{% endif %}
 
 <ul aria-label="Khách Cashback" class="space-y-3 md:hidden">
   {% for c in people %}

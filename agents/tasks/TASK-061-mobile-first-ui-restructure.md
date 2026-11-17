@@ -48,6 +48,9 @@ Execution Done. Cần Claude Code verify + handoff.
 Đã deploy static ngày 17/11 lúc 14:53:19 UTC, không restart. `reports/ui175/deployment.json`: backup 9 files verified; login và 5 GET 200; 7 asset hash match; HTTPS tailnet 8443 shell 200/hash match/TLS verified; live read-only Tổng quan browser 4 widths PASS, page_errors=[]. PM2 Web_Dashboard online, restarts vẫn 4. Chưa commit/push. Điện thoại cần Tailscale để vào cổng 8443; nghiệm thu thiết bị thật và review độc lập còn pending.
 
 ## Status History
+
+Follow-up 2026-11-17: owner requested customer pagination and CEO/COO scope beyond Buffer. Added bot/Cashback pagination and read-only executive summary; see PLAN-175 follow-up scope and `reports/ui175/followup/README.md`. 41 related tests passed; relative pagination link recheck 28 passed; frontend build and four-width fixture PASS. Deployed bundle and restarted only Web_Dashboard (4 -> 5); authenticated six GETs 200, four sources available, eight live viewport checks without overflow/JS errors. Pending Xe Tết metrics, physical phone and independent verification; not Done/archive.
+
 | Date | Status | Note |
 |---|---|---|
 | 2026-11-17 | New | Chủ bot giao toàn quyền tái cấu trúc UI, nhấn mạnh sử dụng điện thoại |

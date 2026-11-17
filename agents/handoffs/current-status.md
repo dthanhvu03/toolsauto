@@ -1,3 +1,12 @@
+## Phiên 2026-11-17 (Codex) — PLAN-175 follow-up điều hành và phân trang, deployed
+- Owner góp ý danh sách thiếu phân trang, Tổng quan mới chỉ có Buffer; tiếp tục theo ủy quyền UI toàn chương trình.
+- Khách các bot: 25/trang + lọc/tìm kiếm về trang đầu; Cashback 50/trang, link query tương đối giữ bộ lọc khi qua proxy. Tổng hợp/chart độc lập trang; backend vẫn đọc tập khách đầy đủ trước khi cắt response.
+- Điều hành: kết quả riêng Cashback/Store, hàng việc Studio/Threads, tăng trưởng từng bot, tiến trình PM2/systemd, và Buffer riêng. Không cộng gộp tiền khác định nghĩa; nguồn lỗi báo unavailable. Backup dừng theo lịch không làm sai cảnh báo/tỷ lệ online.
+- Proof `reports/ui175/followup/README.md`: 41 test passed; sau chỉnh link Cashback 28 passed; Ruff/diff check PASS; build 1,871 modules PASS; fixture 320/390/768/1440 PASS, page_errors=[]. Còn bundle warning 597.64 kB, TemplateResponse warning và SQL-test coroutine warning có sẵn.
+- Đã deploy bundle, backup 11 files `/tmp/toolsauto-ceo-ui-backup-20261117-followup`, giữ asset cũ. Restart riêng Web_Dashboard 4 -> 5, online. `live-proof.json`: login và các GET lõi 200; bot users 25/25, Cashback 50/50; 4 nguồn có dữ liệu, errors=[]; 8 route×viewport không tràn/lỗi JS. Không thay worker/bot hoặc dữ liệu.
+- Pending: Xe Tết metrics, trend kỳ so sánh, physical phone/iOS Safari và independent review. Tailnet HTTPS/API đã xác minh login 200, executive 200, TLS hợp lệ. Hai patches audit test vẫn giữ riêng; chuẩn bị commit/push đúng scope UI theo ủy quyền trước.
+- **Execution Done. Cần Claude Code verify + handoff.** Chưa Done/archive.
+
 ## Phiên 2026-11-17 (Codex) — PLAN-175 UI/UX ưu tiên điện thoại, Execution Verified
 - Chủ bot giao toàn quyền tái cấu trúc toàn bộ giao diện theo từng đợt; điện thoại là thiết bị sử dụng chính.
 - PLAN-175 / TASK-061: hoàn thành lượt nền tảng mobile qua Phase 1–6: SPA, Studio/video, vận hành/tăng trưởng, Xe Tết control, Cashback và layout Jinja dùng chung. Menu bot Telegram/Zalo đã rà soát, chưa cần đổi trong lượt này.

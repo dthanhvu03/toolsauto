@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -175,6 +176,25 @@ def test_web_trang_tong_quan_khach_va_chi_tiet(tmp_path, monkeypatch):
         page = client.get(url)
         assert page.status_code == 200 and marker in page.text, url
     assert client.get("/cashback/users/424242").status_code == 404
+
+
+def test_web_danh_sach_khach_phan_trang_giu_bo_loc(tmp_path, monkeypatch):
+    client, path = _web(tmp_path, monkeypatch)
+    with sqlite3.connect(path) as conn:
+        conn.executemany(
+            "INSERT INTO telegram_users (telegram_user_id, username, created_at, last_seen_at) VALUES (?, ?, ?, ?)",
+            [(uid, f"user{uid}", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z") for uid in range(1000, 1051)],
+        )
+
+    response = client.get("/cashback/users?q=user10&channel=telegram&sort=new&page=2")
+    assert response.status_code == 200
+    assert "51 / 52 khách theo bộ lọc · trang 2/2" in response.text
+    assert "aria-label=\"Phân trang khách Cashback\"" in response.text
+    assert "q=user10&amp;channel=telegram&amp;sort=new&amp;page=1" in response.text
+    assert 'href="?q=user10&amp;channel=telegram&amp;sort=new&amp;page=1"' in response.text
+
+    clamped = client.get("/cashback/users?q=user10&channel=telegram&sort=new&page=99")
+    assert "51 / 52 khách theo bộ lọc · trang 2/2" in clamped.text
 
 
 def test_web_chi_doc_db(tmp_path, monkeypatch):

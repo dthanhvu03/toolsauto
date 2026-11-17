@@ -20,6 +20,7 @@ router = APIRouter(prefix="/cashback", tags=["cashback"])
 ROOT = Path(__file__).resolve().parents[3]
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 SORTS = {"margin": "Biên", "orders": "Đơn", "wallet": "Ví", "recent": "Gần đây", "new": "Mới vào"}
+USERS_PER_PAGE = 50
 
 
 def _db_path() -> str:
@@ -67,7 +68,14 @@ def overview_page(request: Request, period: str = "30d"):
 
 
 @router.get("/users", response_class=HTMLResponse)
-def users_page(request: Request, q: str = "", channel: str = "", segment: str = "", sort: str = "margin"):
+def users_page(
+    request: Request,
+    q: str = "",
+    channel: str = "",
+    segment: str = "",
+    sort: str = "margin",
+    page: int = 1,
+):
     now = datetime.now(timezone.utc)
     with insights.open_readonly(_db_path()) as conn:
         people = insights.customers(conn, now)
@@ -79,9 +87,14 @@ def users_page(request: Request, q: str = "", channel: str = "", segment: str = 
         and (not needle or needle in c.label.lower() or needle in str(c.user_id))
     ]
     chosen = insights.sort_customers(chosen, sort if sort in SORTS else "margin")
+    filtered_total = len(chosen)
+    total_pages = max(1, (filtered_total + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
+    page = min(max(1, page), total_pages)
+    start = (page - 1) * USERS_PER_PAGE
     return templates.TemplateResponse("pages/cashback_users.html", _context(
-        request, people=chosen, total=len(people), counts=counts, q=q, channel=channel, segment=segment, sort=sort,
-        sorts=SORTS, active_tab="cashback",
+        request, people=chosen[start : start + USERS_PER_PAGE], total=len(people), filtered_total=filtered_total,
+        page=page, per_page=USERS_PER_PAGE, total_pages=total_pages, counts=counts, q=q, channel=channel,
+        segment=segment, sort=sort, sorts=SORTS, active_tab="cashback",
     ))
 
 

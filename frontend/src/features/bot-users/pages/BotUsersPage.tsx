@@ -5,6 +5,7 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { SearchField } from "@/shared/ui/SearchField";
+import { Pagination } from "@/shared/ui/Pagination";
 import { fetchBotUsers, type BotKey, type BotSummary, type Person } from "../api/botUsersApi";
 
 const BOTS: BotKey[] = ["cashbot_tg", "cashbot_zalo", "ai_store"];
@@ -151,7 +152,7 @@ function Sources({ sources }: { sources: Record<BotKey, { source: string; count:
   );
 }
 
-function PeopleTable({ people, matched }: { people: Person[]; matched: number }) {
+function PeopleTable({ people }: { people: Person[] }) {
   return (
     <Panel>
       {/* Điện thoại: mỗi khách một dòng thẻ (tên · bot · nguồn · lần dùng) thay bảng 7 cột phải kéo ngang. */}
@@ -224,7 +225,6 @@ function PeopleTable({ people, matched }: { people: Person[]; matched: number })
         </table>
       </div>
       {!people.length && <p className="p-6 text-center text-sm text-slate-500">Không có khách khớp.</p>}
-      {matched > people.length && <p className="px-4 py-2 text-xs text-slate-400">Hiện {people.length}/{matched} khách — gõ tên hoặc ID để lọc.</p>}
     </Panel>
   );
 }
@@ -233,9 +233,10 @@ export function BotUsersPage() {
   const [typed, setTyped] = useState("");
   const [q, setQ] = useState("");
   const [bot, setBot] = useState<"" | BotKey>("");
+  const [page, setPage] = useState(1);
   const rep = useQuery({
-    queryKey: ["bot-users", q, bot],
-    queryFn: () => fetchBotUsers(q, bot),
+    queryKey: ["bot-users", q, bot, page],
+    queryFn: () => fetchBotUsers(q, bot, page),
     refetchInterval: 60_000,
     placeholderData: keepPreviousData,
   });
@@ -262,16 +263,21 @@ export function BotUsersPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="mr-2 text-sm font-semibold text-slate-800">Danh sách khách</h2>
               {([["", "Tất cả"], ...BOTS.map((b) => [b, SHORT[b]])] as [string, string][]).map(([key, label]) => (
-                <button key={key || "all"} type="button" onClick={() => setBot(key as "" | BotKey)}
+                <button key={key || "all"} type="button" onClick={() => { setBot(key as "" | BotKey); setPage(1); }}
                   className={cn("rounded-full px-2.5 py-1 text-xs", bot === key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
                   {label}
                 </button>
               ))}
               <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
-                <SearchField placeholder="Tên, @username, ID hoặc mã nguồn" value={typed} onChange={setTyped} onSubmit={() => setQ(typed)} />
+                <SearchField placeholder="Tên, @username, ID hoặc mã nguồn" value={typed} onChange={setTyped} onSubmit={() => { setQ(typed); setPage(1); }} />
               </div>
             </div>
-            <PeopleTable people={d.people} matched={d.matched} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500" aria-live="polite">{d.matched ? `${(d.page - 1) * d.per_page + 1}–${Math.min(d.page * d.per_page, d.matched)}` : "0"} / {d.matched} khách khớp</p>
+              <Pagination page={d.page} totalPages={d.total_pages} onPageChange={setPage} disabled={rep.isFetching} />
+            </div>
+            <PeopleTable people={d.people} />
+            <Pagination page={d.page} totalPages={d.total_pages} onPageChange={setPage} disabled={rep.isFetching} />
           </>
         ) : null}
       </QueryBody>

@@ -2,16 +2,18 @@ export function Pagination({
   page,
   totalPages,
   onPageChange,
+  disabled = false,
 }: {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="mt-3 flex items-center justify-end gap-2">
       <button
         type="button"
-        disabled={page <= 1}
+        disabled={disabled || page <= 1}
         className="min-h-11 rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40 md:min-h-8"
         onClick={() => onPageChange(Math.max(1, page - 1))}
       >
@@ -22,7 +24,7 @@ export function Pagination({
       </span>
       <button
         type="button"
-        disabled={page >= totalPages}
+        disabled={disabled || page >= totalPages}
         className="min-h-11 rounded-lg border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40 md:min-h-8"
         onClick={() => onPageChange(page + 1)}
       >

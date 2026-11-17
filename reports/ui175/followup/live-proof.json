@@ -1,0 +1,83 @@
+{
+  "checked_at": "2026-11-17T16:37:36.166847+00:00",
+  "http": {
+    "/health": 200,
+    "/app": 200,
+    "/cashback/users?page=1": 200,
+    "/api/admin/executive": 200,
+    "/api/admin/processes": 200,
+    "/bot-users/api/report?summary_only=true": 200
+  },
+  "widths": [
+    {
+      "path": "/app",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "path": "/app",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "path": "/app",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "path": "/app",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "path": "/app/go/bot-users",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "path": "/app/go/bot-users",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "path": "/app/go/bot-users",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "path": "/app/go/bot-users",
+      "width": 1440,
+      "overflow": false
+    }
+  ],
+  "page_errors": [],
+  "blocked_requests": [],
+  "login_status": 200,
+  "executive_sources": {
+    "cashback": true,
+    "store": true,
+    "studio": true,
+    "threads": true
+  },
+  "executive_errors": [],
+  "bot_customer_page": {
+    "returned": 25,
+    "page": 1,
+    "per_page": 25
+  },
+  "index_sha256": "16d9e82ec86189b7bc2ce32cb2a540ba88351cf86e77d426137ed45c2c735b3b",
+  "cashback_customer_page": {
+    "returned": 50,
+    "max_per_page": 50
+  },
+  "dashboard": {
+    "status": "online",
+    "restarts": 5
+  },
+  "tailnet": {
+    "login": 200,
+    "executive": 200,
+    "tls_verified": true
+  },
+  "status": "PASS"
+}

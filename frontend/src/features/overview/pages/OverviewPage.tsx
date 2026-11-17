@@ -8,9 +8,23 @@ import { ChannelTable } from "../components/ChannelTable";
 import { QuickLink } from "../components/QuickLink";
 import { StatCard } from "../components/StatCard";
 import { useOverview } from "../hooks/useOverview";
+import { useQuery } from "@tanstack/react-query";
+import { fetchBotUsers } from "@/features/bot-users/api/botUsersApi";
+import { fetchProcesses } from "@/features/syspanel/api/syspanelApi";
+import { ExecutivePanels } from "../components/ExecutivePanels";
 
 export function OverviewPage() {
   const q = useOverview();
+  const growth = useQuery({
+    queryKey: ["bot-users-summary"],
+    queryFn: () => fetchBotUsers("", "", 1, 25, true),
+    refetchInterval: 60_000,
+  });
+  const runtime = useQuery({
+    queryKey: ["admin-processes"],
+    queryFn: fetchProcesses,
+    refetchInterval: 30_000,
+  });
   // Bản build mới nhưng web chưa restart → API còn trả dạng cũ (không có `channels`).
   const stale = !!q.data && !Array.isArray(q.data.channels);
   const d = stale ? undefined : q.data;
@@ -24,19 +38,64 @@ export function OverviewPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
-        actions={<ScreenSettingsButton screen="overview" />} title="Tổng quan" subtitle="Video → Buffer: kênh nào còn bài, cái gì đang lỗi" />
+        actions={<ScreenSettingsButton screen="overview" />} title="Điều hành hệ thống" subtitle="Dịch vụ đang chạy · tăng trưởng khách · vận hành nội dung" />
+      <ExecutivePanels />
+            <section aria-labelledby="runtime-heading" className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 id="runtime-heading" className="font-semibold text-slate-900">Sức khỏe dịch vụ</h2>
+                <a href="/app/go/syspanel" className="text-sm font-medium text-indigo-700">Chi tiết</a>
+              </div>
+              {runtime.data?.error ? <p className="text-sm text-amber-800">Chưa lấy được trạng thái tiến trình: {runtime.data.error}</p> : null}
+              {runtime.isError ? <p className="text-sm text-amber-800">Không tải được trạng thái dịch vụ.</p> : null}
+              {runtime.data ? (() => {
+                const services = [...runtime.data.apps, ...(runtime.data.services ?? [])];
+                const monitored = services.filter((service) => !(service.name === "DB_Backup" && service.status === "stopped"));
+                const running = monitored.filter((service) => service.status === "online").length;
+                const down = monitored.filter((service) => service.status !== "online");
+                return <Panel className="p-4">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className={`text-2xl font-semibold tabular-nums ${down.length ? "text-amber-800" : "text-emerald-800"}`}>
+                      {running}/{monitored.length}
+                    </span>
+                    <span className="text-sm text-slate-600">dịch vụ online · sao lưu DB dừng theo lịch là bình thường</span>
+                    {down.length ? <span className="text-sm text-amber-800">Cần xem: {down.map((service) => service.label || service.name).join(", ")}</span> : null}
+                  </div>
+                  {runtime.data.services_error ? <p className="mt-2 text-xs text-amber-800">Bot/systemd: {runtime.data.services_error}</p> : null}
+                  {!services.length ? <p className="text-sm text-slate-500">Chưa có dữ liệu tiến trình.</p> : null}
+                </Panel>;
+              })() : <Panel className="p-4 text-sm text-slate-500">{runtime.isLoading ? "Đang đọc trạng thái dịch vụ…" : "Trạng thái dịch vụ chưa khả dụng."}</Panel>}
+            </section>
+
+            <section aria-labelledby="growth-heading" className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 id="growth-heading" className="font-semibold text-slate-900">Tăng trưởng theo bot</h2>
+                <a href="/app/go/bot-users" className="text-sm font-medium text-indigo-700">Khách các bot</a>
+              </div>
+              {growth.isError ? <Panel className="p-4 text-sm text-amber-800">Không tải được báo cáo Cashbot / AI Pass Store.</Panel> : null}
+              {growth.data?.errors.map((error) => <p key={error} className="mb-2 text-sm text-amber-800">{error}</p>)}
+              {growth.data ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {growth.data.bots.map((bot) => <Panel key={bot.bot} className="min-w-0 p-4">
+                  <h3 className="font-semibold text-slate-900">{bot.label}</h3>
+                  {bot.available === false ? <p className="mt-3 text-sm text-amber-800">Chưa đọc được dữ liệu bot này.</p> : <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
+                    <div><dt className="text-xs text-slate-500">Tổng khách</dt><dd className="mt-0.5 font-semibold tabular-nums">{bot.total.toLocaleString("vi-VN")}</dd></div>
+                    <div><dt className="text-xs text-slate-500">Mới 7 ngày</dt><dd className="mt-0.5 font-semibold tabular-nums">{bot.new_7d.toLocaleString("vi-VN")}</dd></div>
+                    <div><dt className="text-xs text-slate-500">Hoạt động 7 ngày</dt><dd className="mt-0.5 font-semibold tabular-nums">{bot.active_7d.toLocaleString("vi-VN")}</dd></div>
+                    <div><dt className="text-xs text-slate-500">Có đơn</dt><dd className="mt-0.5 font-semibold tabular-nums">{bot.buyers.toLocaleString("vi-VN")}</dd></div>
+                  </dl>}
+                </Panel>)}
+                <p className="sm:col-span-2 xl:col-span-3 text-xs text-slate-500">Mỗi bot đếm khách riêng; một người dùng nhiều bot xuất hiện ở từng bot. «Có đơn» theo định nghĩa riêng của Cashbot và AI Pass Store.</p>
+              </div> : <Panel className="p-4 text-sm text-slate-500">{growth.isLoading ? "Đang tổng hợp khách các bot…" : "Báo cáo tăng trưởng chưa khả dụng."}</Panel>}
+            </section>
+
       <QueryBody
         isLoading={q.isLoading}
         isError={q.isError || (!q.isLoading && !d)}
-        loadingText="Đang tải tổng quan…"
-        errorText={
-          stale
-            ? "Giao diện đã cập nhật nhưng web chưa khởi động lại: chạy pm2 restart Web_Dashboard."
-            : "Không tải được /api/admin/overview. Kiểm tra đăng nhập / FastAPI."
-        }
+        loadingText="Đang tải vận hành Buffer…"
+        errorText={stale ? "API Buffer chưa tương thích bản giao diện." : "Không tải được vận hành Buffer. Các khối khác vẫn hoạt động độc lập."}
       >
         {d ? (
-          <>
+            <section aria-labelledby="buffer-heading" className="mt-6">
+              <h2 id="buffer-heading" className="font-semibold text-slate-900">Vận hành nội dung · Buffer</h2>
             <div className="mt-5 grid grid-cols-2 gap-3 [overflow-wrap:anywhere] lg:grid-cols-4">
               <StatCard
                 label="Bài đã hẹn"
@@ -103,7 +162,7 @@ export function OverviewPage() {
                 </div>
               </a>
             </div>
-          </>
+            </section>
         ) : null}
       </QueryBody>
     </div>

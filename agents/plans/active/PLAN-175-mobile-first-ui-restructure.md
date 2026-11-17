@@ -124,6 +124,27 @@ Mobile foundation pass đã execute và verify. Chưa đánh dấu toàn chươn
 
 Execution Done. Cần Claude Code verify + handoff.
 
+## Follow-up scope — CEO overview and paginated customer lists
+- Owner feedback: «danh sách không phân trang gì hết» and current overview is Buffer-only, insufficient for COO/CEO.
+- Overview: combine Buffer operations with existing read-only bot growth summary and read-only process/service snapshot. Distinguish per-bot registrations from unique people; don't invent a merged money/revenue KPI.
+- Bot user list: API page/per_page pagination (25 default) with filters/search retained; report summaries and charts stay independent of the current page.
+- Cashback customer list: server-rendered pagination, 50/page, preserve search/channel/segment/sort across page links.
+- Audit other primary operational lists for existing pagination and avoid unbounded detail views in this scope. No changes to business/financial processing.
+- Verification: pagination endpoint/filter tests, responsive mobile browser proof, backend read-only report and process source contracts; build and related tests.
+- Coverage expansion before deployment: add `/api/admin/executive` for grouped Studio status/task counts, Threads reply counts (SQLite read-only, no runner startup) and separate Cashback/Store financial summaries. Reuse `insights.money` and Store `stats` through a read-only repository; preserve their period/financial definitions and exclude Store admins using configured IDs. Each source can fail independently, reported unavailable instead of zero. Scheduled DB backup stopped is expected, not an incident.
+
+### Follow-up execution proof — 2026-11-17
+- Proof and reproduction: `reports/ui175/followup/README.md`, `check.py`, `proof.json`, `live_check.py`, `live-proof.json`.
+- Backend: 41 passed in 17.63s for bot users, Cashback insights, executive API and admin lists. After relative pagination links, Cashback 28 passed in 7.12s. Ruff PASS; diff check PASS.
+- Frontend: TypeScript/Vite PASS, 1,871 modules, 7.36s; JS 597.64 kB with existing bundle warning. Fixture 320/390/768/1440 PASS; page 2/search reset and unavailable-source isolation PASS; page_errors=[].
+- Read-only source tests reject SQLite DELETE, do not create missing DBs, exclude configured Store admins and isolate unavailable sources. Live authenticated reads returned 25 bot-user rows and 50 Cashback rows on page 1. Pagination slices full source aggregates; it is not SQL-level pagination.
+- Jobs, warehouse, Logs, compliance keywords and DocType records already paginated. Missing customer lists now have 25/page (bot users) and 50/page (Cashback), filters retained. Cashback page links are query-relative for reverse-proxy safety. Scheduled backup stopped is excluded from online denominator.
+- Owner's deployment authorization covers the dashboard increment. Backup 11 files at `/tmp/toolsauto-ceo-ui-backup-20261117-followup`; copied 9-file staging, retained old assets, atomically replaced index, verified temporary source absent/destination present and hashes matched.
+- Restarted only Web_Dashboard to load API, restarts 4 -> 5; authenticated login and core GETs HTTP 200, executive errors=[] and all four sources available. Live overview + bot users across four widths: no overflow, page_errors=[], blocked_requests=[]. Authenticated tailnet login and executive GET both HTTP 200 with verified TLS.
+- Xe Tết metrics, comparable-period growth trends, physical phone/iOS and independent sign-off remain pending. Do not mark whole-system CEO coverage complete.
+
+Execution Done. Cần Claude Code verify + handoff.
+
 ## Deployment — owner authorized 2026-11-17
 - Chủ bot yêu cầu trực tiếp: «em trien khai cho anh luon di».
 - Runtime xác nhận: Web_Dashboard cwd `/home/vu/toolsauto`, HTTP 8000; frontend đọc `app/static/admin/index.html` mỗi request. Xe Tết control trả FileResponse trực tiếp; Jinja đọc template từ checkout.

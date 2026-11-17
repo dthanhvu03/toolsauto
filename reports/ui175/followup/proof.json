@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "bot_next_page": 2,
+  "search_resets_page": true,
+  "summary_only_requested": true,
+  "buffer_failure_isolated": true,
+  "missing_bot_not_shown_as_zero": true,
+  "scheduled_backup_not_alerted": true,
+  "page_errors": []
+}

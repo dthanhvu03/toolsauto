@@ -10,6 +10,7 @@ export type BotSummary = {
   new_7d: number;
   active_7d: number;
   buyers: number;
+  available?: boolean;
 };
 
 export type Person = {
@@ -35,9 +36,12 @@ export type BotUsersReport = {
   days: ({ day: string } & Record<BotKey, number>)[];
   sources: Record<BotKey, { source: string; count: number }[]>;
   matched: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
   people: Person[];
   errors: string[];
 };
 
-export const fetchBotUsers = (q: string, bot: string) =>
-  getJson<BotUsersReport>(`/bot-users/api/report?q=${encodeURIComponent(q)}&bot=${encodeURIComponent(bot)}`);
+export const fetchBotUsers = (q: string, bot: string, page = 1, perPage = 25, summaryOnly = false) =>
+  getJson<BotUsersReport>(`/bot-users/api/report?q=${encodeURIComponent(q)}&bot=${encodeURIComponent(bot)}&page=${page}&per_page=${perPage}&summary_only=${summaryOnly}`);

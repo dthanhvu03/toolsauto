@@ -86,6 +86,26 @@ def test_api_report(tmp_path, monkeypatch):
     assert [b["bot"] for b in body["bots"]] == list(all_users.BOTS)
     assert body["matched"] == 1 and body["people"][0]["user_id"] == STORE_BUYER
     assert len(body["days"]) == all_users.DAYS and "ai_store" in body["days"][0]
+    assert body["page"] == 1 and body["total_pages"] == 1 and body["per_page"] == 25
+
+
+def test_api_report_paginates_filtered_people_and_supports_summary_only(tmp_path, monkeypatch):
+    bot = _cashback(tmp_path)
+    monkeypatch.setenv("CASHBACK_DB_PATH", str(bot.repo.path))
+    monkeypatch.setenv("STORE_DB_PATH", str(_store(tmp_path, datetime.now(timezone.utc))))
+    app = FastAPI()
+    app.include_router(bot_users_router)
+    client = TestClient(app)
+
+    first = client.get("/bot-users/api/report", params={"bot": "ai_store", "per_page": 1}).json()
+    second = client.get("/bot-users/api/report", params={"bot": "ai_store", "per_page": 1, "page": 2}).json()
+    assert first["matched"] == second["matched"] == 2
+    assert (first["page"], first["total_pages"], len(first["people"])) == (1, 2, 1)
+    assert (second["page"], second["total_pages"], len(second["people"])) == (2, 2, 1)
+
+    summary = client.get("/bot-users/api/report", params={"summary_only": "true"}).json()
+    assert summary["people"] == [] and summary["matched"] == 4
+    assert summary["total"]["total"] == sum(bot_row["total"] for bot_row in summary["bots"])
 
 
 def test_lenh_users_admin(tmp_path, monkeypatch):
