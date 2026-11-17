@@ -196,6 +196,10 @@ class ZaloChannel:
         self.api = api
         self.admin_notifier = admin_notifier
 
+    def _render(self, reply: BotReply):
+        """render Zalo kèm username Telegram để điều phối voucher Meta (PLAN-174)."""
+        return render(reply, bot_username=self.service.settings.bot_username)
+
     def handle(self, update: dict, now: datetime | None = None) -> None:
         moment = now or datetime.now(timezone.utc)
         message = update.get("message") or {}
@@ -239,10 +243,10 @@ class ZaloChannel:
             logger.exception("[Cashback] zalo xử lý tin inbox=%s thất bại", row["id"])
             reply = BotReply(ERROR_REPLY)
             self._notify_failed(update_id, internal)
-        messages, _menu = render(reply)
+        messages, _menu = self._render(reply)
         if is_new:
             welcome = with_tiktok(WELCOME) if self.service.tiktok_open() else WELCOME
-            messages = render(BotReply(welcome))[0] + messages
+            messages = self._render(BotReply(welcome))[0] + messages
             self._capacity_check()
         # Câu trả lời không có danh sách (gõ nhầm số, tin chat…) thì giữ danh sách trước: gõ lại số đúng vẫn chạy.
         if choices := menu_choices(reply):
@@ -256,7 +260,7 @@ class ZaloChannel:
         except Exception:
             logger.exception("[Cashback] zalo inbox=%s không ghi được trạng thái lỗi", inbox_id)
         try:
-            for message in render(BotReply(ERROR_REPLY))[0]:
+            for message in self._render(BotReply(ERROR_REPLY))[0]:
                 self.api.send_message(external, message.text, message.payload_styles())
         except (TelegramDeliveryError, requests.RequestException) as exc:
             logger.error("[Cashback] zalo inbox=%s không gửi được tin báo lỗi: %s", inbox_id, error_brief(exc))
@@ -370,7 +374,7 @@ class ZaloChannel:
                 self.store.finish(inbox_id, "retry", 0, "interrupted")
                 resent += 1
             elif row["received_at"] >= _stamp(moment - INTERRUPTED_APOLOGY_WITHIN):
-                self.store.save_reply(inbox_id, render(BotReply(INTERRUPTED_REPLY))[0])
+                self.store.save_reply(inbox_id, self._render(BotReply(INTERRUPTED_REPLY))[0])
                 self.store.finish(inbox_id, "retry", 0, "interrupted")
                 apologized += 1
             else:
@@ -397,9 +401,10 @@ class ZaloChannel:
 class ZaloSender:
     """Bộ gửi cho Dispatcher(channel='zalo'): nhận chat_id âm + HTML + bàn phím Telegram, gửi thành tin Zalo."""
 
-    def __init__(self, api: ZaloApi, store: ZaloStore):
+    def __init__(self, api: ZaloApi, store: ZaloStore, bot_username: str = "zt_shopee_bot"):
         self.api = api
         self.store = store
+        self.bot_username = bot_username
 
     def send_message(self, chat_id: int, html_text: str, reply_markup: dict | None = None,
                      disable_notification: bool = False) -> None:
@@ -415,7 +420,7 @@ class ZaloSender:
         # Nhãn nút link đi theo để Zalo dẫn link đúng nghĩa («🎟 Lưu mã…» không phải «Bấm link này để mua»).
         reply = BotReply(html_text, button_url=link["url"] if link else None,
                          button_label=link.get("text") if link else None, inline_keyboard=tuple(keyboard) or None)
-        messages, menu = render(reply)
+        messages, menu = render(reply, bot_username=self.bot_username)
         for index, message in enumerate(messages):
             try:
                 self.api.send_message(external, message.text, message.payload_styles())
@@ -475,8 +480,10 @@ def main() -> None:
     store = ZaloStore(repo)
     channel = ZaloChannel(service, store, api, admin_notifier)
     # Tin admin do bot Telegram gửi; tiến trình này chỉ gửi tin khách Zalo (chat_id âm).
-    dispatcher = Dispatcher(repo, ZaloSender(api, store), False, None, settings.customer_notifications_enabled,
-                            settings.customer_notification_test_ids, channel=CHANNEL)
+    dispatcher = Dispatcher(
+        repo, ZaloSender(api, store, settings.bot_username), False, None,
+        settings.customer_notifications_enabled, settings.customer_notification_test_ids, channel=CHANNEL,
+    )
     # Thẻ link TikTok tạo ở luồng nền: vào hàng đợi rồi gửi ngay, không chờ hết vòng getUpdates 30 giây.
     service.after_deferred = lambda: dispatcher.flush(limit=5)
     service.chat_ai_enabled = True  # PLAN-172 T2: tin chữ của khách → AI trả lời
