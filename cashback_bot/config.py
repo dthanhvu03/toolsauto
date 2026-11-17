@@ -89,6 +89,12 @@ class Settings:
     referral_enabled: bool = False
     # Tên bot Telegram cho link mời t.me/<tên>?start=ref_<mã>.
     bot_username: str = "zt_shopee_bot"
+    # PLAN-174: AffiPad ký Meta FB/IG. Mặc định tắt nếu thiếu key/tool.
+    affipad_api_key: str | None = None
+    affipad_tool_id: str | None = None
+    affipad_fb_voucher_enabled: bool = False
+    # rotate = xen kẽ fb_reels/ig_reels mỗi link; hoặc khóa một kênh: fb_reels | ig_reels.
+    affipad_tracking_preset: str = "rotate"
 
 
 def _flag(raw: str | None) -> bool:
@@ -202,7 +208,20 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         membership_enabled=_flag(env.get("CASHBACK_MEMBERSHIP_ENABLED")),
         referral_enabled=_flag(env.get("CASHBACK_REFERRAL_ENABLED")),
         bot_username=(env.get("CASHBACK_BOT_USERNAME") or "").strip().lstrip("@") or "zt_shopee_bot",
+        affipad_api_key=(env.get("AFFIPAD_API_KEY") or "").strip() or None,
+        affipad_tool_id=(env.get("AFFIPAD_TOOL_ID") or "").strip() or None,
+        affipad_fb_voucher_enabled=_flag(env.get("AFFIPAD_FB_VOUCHER_ENABLED")),
+        affipad_tracking_preset=_affipad_preset(env.get("AFFIPAD_TRACKING_PRESET")),
     )
+
+
+def _affipad_preset(raw: str | None) -> str:
+    value = (raw or "rotate").strip().lower()
+    aliases = {"fb": "fb_reels", "ig": "ig_reels", "auto": "rotate", "alt": "rotate"}
+    value = aliases.get(value, value)
+    if value not in {"rotate", "fb_reels", "ig_reels"}:
+        raise ConfigError(["AFFIPAD_TRACKING_PRESET"])
+    return value
 
 
 def _bounded_int(env: dict[str, str], key: str, default: int, low: int, high: int) -> int:

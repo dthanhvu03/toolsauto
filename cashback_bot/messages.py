@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from cashback_bot.affipad import is_meta_signed, meta_channel
 from cashback_bot.money import format_vnd
 from cashback_bot.money_flow import IN_WALLET, OWED_BACK, PAID_OUT, RESERVED, WAIT_SHOPEE
 
@@ -358,6 +359,21 @@ def source_text(text: str, conversion_id: str | None) -> str:
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
+# PLAN-174: link đã ký Meta — nhắc giống bot voucher FB/IG (chủ bot 17/11).
+FB_VOUCHER_LEAD = "✅ Link kèm voucher FB — bấm <b>🛒 Mua trên Shopee</b> ngay để nhận."
+IG_VOUCHER_LEAD = "✅ Link kèm voucher IG — bấm <b>🛒 Mua trên Shopee</b> ngay để nhận."
+FB_VOUCHER_HINT = (
+    "⚠️ <b>Lưu ý voucher FB/IG</b>\n"
+    "• Không thấy voucher: món có thể bị lọc hoặc hết lượt. Thêm lượt ~0h / 9h / 15h / 20h mỗi ngày.\n"
+    "• Mã có thể về trễ 30–40 giây.\n"
+    "• Link hết hạn nhanh — dùng ngay. Đừng gửi lại cùng món liên tiếp để săn voucher."
+)
+# Chặn farm: cùng khách gửi lại đúng món vừa tạo link (khi AffiPad bật).
+SAME_ITEM_VOUCHER = (
+    "⚠️ <b>Bạn vừa tạo link món này rồi</b>\n"
+    "Gửi lại liên tiếp không tạo voucher mới. Dùng nút Mua bên dưới (link lần trước).\n"
+    "Muốn thử voucher kênh khác / món khác thì gửi <b>link món khác</b> trước, rồi quay lại."
+)
 # Chủ bot 2026-11-03: món đã nằm trong giỏ trước khi bấm link thì sàn không tính hoa hồng → nhắc ngay trên thẻ link.
 # 12/11: Telegram không đổi được cỡ chữ → khung trích dẫn (ô nền có vạch trái) + ⚠️ để khách để ý; 🛒 cũ lẫn với nút Mua.
 # Zalo bỏ khung, giữ chữ đậm. Giữ một dòng (test đếm dòng thẻ).
@@ -373,6 +389,11 @@ ITEM_RULE = "• Mua đúng món trong link. Không bấm sang quảng cáo, liv
 # Voucher: nhận số thấp hơn mà không biết vì sao thì khách tưởng bị bớt (2026-10-27).
 VOUCHER_RULE = "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
 TIKTOK_VOUCHER_RULE = "• Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
+# PLAN-174: trang 🛡️ khi thẻ có link Meta.
+FB_VOUCHER_RULE = (
+    "• Voucher FB/IG: hết lượt / món bị lọc thì không hiện. Thêm lượt ~0h / 9h / 15h / 20h. "
+    "Mã có thể về trễ 30–40s. Link ngắn hạn — dùng ngay; đừng gửi lại cùng món liên tiếp để săn voucher."
+)
 # AddLiveTag gắn cờ isCapped: phần Shopee trả đã chạm trần mỗi lần thanh toán (tài khoản chủ bot: checkout_cap 40.000đ
 # trong dữ liệu đơn). Gộp món khác / mua 2 cái cùng lần thanh toán thì phần Shopee không tăng. Không ghi số: trần đổi
 # theo tài khoản và thời gian (chủ bot duyệt 2026-10-27).
@@ -507,6 +528,11 @@ def rate_limited_reply(cooldown_sec: int) -> BotReply:
     )
 
 
+def same_item_voucher_reply(affiliate_url: str | None) -> BotReply:
+    """Khách gửi lại đúng món vừa tạo (AffiPad bật) — không tạo chữ ký mới, giữ nút Mua link cũ."""
+    return BotReply(SAME_ITEM_VOUCHER, button_url=affiliate_url if affiliate_url else None)
+
+
 # Nhãn khuyến mãi shop gắn ở đầu tên («[MUA 2 TẶNG 1]», «【DAILY】»): bỏ khi hiện tên món cho khách.
 PROMO_TAG = re.compile(r"^\s*(?:[\[【(][^\]】)]{0,40}[\]】)]\s*)+")
 
@@ -527,8 +553,8 @@ def buyer_name(name: str) -> str:
 EXTRA_NOTE = " · <i>có thể cao hơn</i>"
 
 
-def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
-    flags = ("2" if v12 else "") + ("t" if tiktok else "") + ("c" if capped else "")
+def _tip_data(v12: bool, tiktok: bool, capped: bool, fb: bool = False) -> str:
+    flags = ("2" if v12 else "") + ("t" if tiktok else "") + ("c" if capped else "") + ("f" if fb else "")
     return f"{TIP}:{flags}" if flags else TIP
 
 
@@ -536,10 +562,17 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
                  tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
                  rank_line: str | None = None, xtra: bool = False) -> BotReply:
     """Thẻ link: tên, giá tham khảo, số hoàn, nhắc xoá món trong giỏ (khi có hoàn), lời bấm nút ngay trên nút.
-    Lưu ý khác ở nút 🛡️ (tip_reply)."""
+    Link Meta (PLAN-174): hiện lưu ý voucher FB trên thẻ. Lưu ý khác ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
+    fb = (not tiktok) and is_meta_signed(affiliate_url)
     amount = (f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>" + (EXTRA_NOTE if extra_vnd > 0 else "")
               if cashback_vnd > 0 else "💰 Món này hiện không có tiền hoàn.")
+    if tiktok:
+        buy_line = TIKTOK_BUY_HINT
+    elif fb:
+        buy_line = IG_VOUCHER_LEAD if meta_channel(affiliate_url) == "ig" else FB_VOUCHER_LEAD
+    else:
+        buy_line = BUY_HINT
     lines = [
         f"🛍️ <b>{safe_name}</b>" + (" · 🎵 TikTok Shop" if tiktok else ""),
         f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
@@ -547,9 +580,11 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         *([rank_line] if rank_line and cashback_vnd > 0 else []),
         *([XTRA_HINT] if xtra and cashback_vnd > 0 else []),
         *([CART_HINT] if cashback_vnd > 0 else []),
-        TIKTOK_BUY_HINT if tiktok else BUY_HINT,
+        buy_line,
+        *([FB_VOUCHER_HINT] if fb else []),
     ]
-    keyboard = (((TIP_LABEL, _tip_data(v12, tiktok, capped and cashback_vnd > 0)),),) if cashback_vnd > 0 else None
+    tip = _tip_data(v12, tiktok, capped and cashback_vnd > 0, fb and cashback_vnd > 0)
+    keyboard = (((TIP_LABEL, tip),),) if cashback_vnd > 0 else None
     return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=keyboard,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
 
@@ -561,6 +596,7 @@ def tip_reply(data: str) -> BotReply:
     note = (_NOTE_TIKTOK_V12 if tiktok else _NOTE_V12) if "2" in flags else (_NOTE_TIKTOK_V11 if tiktok else _NOTE_V11)
     lines = ["🛡️ <b>Lưu ý trước khi mua</b>", "", BUY_RULE, CART_RULE, ITEM_RULE,
              TIKTOK_VOUCHER_RULE if tiktok else VOUCHER_RULE]
+    lines += [FB_VOUCHER_RULE] if ("f" in flags and not tiktok) else []
     lines += [CAPPED_RULE] if "c" in flags else []
     lines += [ORDER_DELAY_RULE, "", TIKTOK_TRUST_LINE if tiktok else TRUST_LINE, "", f"ⓘ <i>{note}</i>"]
     return BotReply("\n".join(lines))

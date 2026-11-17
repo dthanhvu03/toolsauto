@@ -1,0 +1,729 @@
+{
+  "checked_at": "2026-11-17T06:36:06.012429+00:00",
+  "own": "17315920094",
+  "product": "https://shopee.vn/product/15106804/44509378029",
+  "trials": [
+    {
+      "label": "convert_short",
+      "affiliateId": "17315920094",
+      "aff_match": true,
+      "shopId": "15106804",
+      "itemId": "44509378029",
+      "returned": {
+        "host": "s.afp.ad",
+        "path": "/nVxbd28qpCeDBrP1SarhgA",
+        "has_meta": false,
+        "meta": [],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "like_competitor": false,
+      "hops": [
+        {
+          "status": 302,
+          "host": "s.afp.ad",
+          "path": "/nVxbd28qpCeDBrP1SarhgA",
+          "has_meta": false,
+          "meta": [],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 301,
+          "host": "shopee.vn",
+          "path": "/universal-link/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17356640097"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17356640097"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "convert_long",
+      "affiliateId": "17315920094",
+      "aff_match": true,
+      "shopId": "15106804",
+      "itemId": "44509378029",
+      "returned": {
+        "host": "s.afp.ad",
+        "path": "/_oywkbEfOsVceebmjs3-xw",
+        "has_meta": false,
+        "meta": [],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "like_competitor": false,
+      "hops": [
+        {
+          "status": 302,
+          "host": "s.afp.ad",
+          "path": "/_oywkbEfOsVceebmjs3-xw",
+          "has_meta": false,
+          "meta": [],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 301,
+          "host": "shopee.vn",
+          "path": "/universal-link/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17356640097"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17356640097"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "trackingOnly_an_redir",
+      "affiliateId": "",
+      "aff_match": false,
+      "shopId": "",
+      "itemId": "",
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/an_redir",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": true,
+        "aff": [
+          "17315920094"
+        ],
+        "sub": [
+          "ZKu7eQ91"
+        ]
+      },
+      "like_competitor": true,
+      "hops": [
+        {
+          "status": 301,
+          "host": "s.shopee.vn",
+          "path": "/an_redir",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": true,
+          "is_an_redir": true,
+          "aff": [
+            "17315920094"
+          ],
+          "sub": [
+            "ZKu7eQ91"
+          ],
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "trackingOnly_an_redir_shortFlag",
+      "affiliateId": "",
+      "aff_match": false,
+      "shopId": "",
+      "itemId": "",
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/an_redir",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": true,
+        "aff": [
+          "17315920094"
+        ],
+        "sub": [
+          "ZKu7eQ91"
+        ]
+      },
+      "like_competitor": true,
+      "hops": [
+        {
+          "status": 301,
+          "host": "s.shopee.vn",
+          "path": "/an_redir",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": true,
+          "is_an_redir": true,
+          "aff": [
+            "17315920094"
+          ],
+          "sub": [
+            "ZKu7eQ91"
+          ],
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "convert_short_resolveRedirect",
+      "affiliateId": "17315920094",
+      "aff_match": true,
+      "shopId": "15106804",
+      "itemId": "44509378029",
+      "returned": {
+        "host": "shopee.vn",
+        "path": "/universal-link/opaanlp/15106804/44509378029",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "like_competitor": false,
+      "hops": [
+        {
+          "status": 301,
+          "host": "shopee.vn",
+          "path": "/universal-link/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "trackingOnly_on_bridge_short",
+      "affiliateId": "",
+      "aff_match": false,
+      "shopId": "",
+      "itemId": "",
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/AAInOGcctN",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "like_competitor": true,
+      "hops": [
+        {
+          "status": 301,
+          "host": "s.shopee.vn",
+          "path": "/AAInOGcctN",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": true,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "trackingOnly_on_bridge_short_shortFlag",
+      "affiliateId": "",
+      "aff_match": false,
+      "shopId": "",
+      "itemId": "",
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/AAInOGcctN",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "like_competitor": true,
+      "hops": [
+        {
+          "status": 301,
+          "host": "s.shopee.vn",
+          "path": "/AAInOGcctN",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": true,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": null,
+          "item": null
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/15106804/44509378029",
+          "has_meta": true,
+          "meta": [
+            "channel_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "opaque_short": false,
+          "is_an_redir": false,
+          "aff": null,
+          "sub": null,
+          "utm": [
+            "an_17315920094"
+          ],
+          "item": [
+            "15106804",
+            "44509378029"
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "label": "convert_short",
+      "like_competitor": false,
+      "aff_match": true,
+      "returned": {
+        "host": "s.afp.ad",
+        "path": "/nVxbd28qpCeDBrP1SarhgA",
+        "has_meta": false,
+        "meta": [],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "final_utm": [
+        "an_17356640097"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "convert_long",
+      "like_competitor": false,
+      "aff_match": true,
+      "returned": {
+        "host": "s.afp.ad",
+        "path": "/_oywkbEfOsVceebmjs3-xw",
+        "has_meta": false,
+        "meta": [],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "final_utm": [
+        "an_17356640097"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "trackingOnly_an_redir",
+      "like_competitor": true,
+      "aff_match": false,
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/an_redir",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": true,
+        "aff": [
+          "17315920094"
+        ],
+        "sub": [
+          "ZKu7eQ91"
+        ]
+      },
+      "final_utm": [
+        "an_17315920094"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "trackingOnly_an_redir_shortFlag",
+      "like_competitor": true,
+      "aff_match": false,
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/an_redir",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": true,
+        "aff": [
+          "17315920094"
+        ],
+        "sub": [
+          "ZKu7eQ91"
+        ]
+      },
+      "final_utm": [
+        "an_17315920094"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "convert_short_resolveRedirect",
+      "like_competitor": false,
+      "aff_match": true,
+      "returned": {
+        "host": "shopee.vn",
+        "path": "/universal-link/opaanlp/15106804/44509378029",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": false,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "final_utm": [
+        "an_17315920094"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "trackingOnly_on_bridge_short",
+      "like_competitor": true,
+      "aff_match": false,
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/AAInOGcctN",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "final_utm": [
+        "an_17315920094"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    },
+    {
+      "label": "trackingOnly_on_bridge_short_shortFlag",
+      "like_competitor": true,
+      "aff_match": false,
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/AAInOGcctN",
+        "has_meta": true,
+        "meta": [
+          "channel_type",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "opaque_short": true,
+        "is_an_redir": false,
+        "aff": null,
+        "sub": null
+      },
+      "final_utm": [
+        "an_17315920094"
+      ],
+      "final_item": [
+        "15106804",
+        "44509378029"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "checked_at": "2026-11-17T05:56:42.848596+00:00",
+  "input_url": "https://s.shopee.vn/8VAESkkjTH",
+  "sub_id": "jx2Fo2DR",
+  "expected_affiliate_configured": true,
+  "api": [
+    {
+      "endpoint": "/v1/tools",
+      "http_status": 200,
+      "rate_headers": {},
+      "success": true
+    },
+    {
+      "endpoint": "/v1/quota",
+      "http_status": 200,
+      "rate_headers": {},
+      "success": true
+    },
+    {
+      "endpoint": "/v1/convert",
+      "http_status": 200,
+      "rate_headers": {},
+      "success": true
+    },
+    {
+      "endpoint": "/v1/quota",
+      "http_status": 200,
+      "rate_headers": {},
+      "success": true
+    }
+  ],
+  "tool": {
+    "id": "cmwk8ihyr00jl01o14b6bs9pf",
+    "name": "Shopee FB Voucher",
+    "slug": "fb-voucher"
+  },
+  "quota_before": {
+    "limit": 1000,
+    "used": 1,
+    "remaining": 999,
+    "overage": 0,
+    "maxOverage": 0
+  },
+  "cached": false,
+  "results": [
+    {
+      "groupName": "Single",
+      "affiliateId": "17315920094",
+      "shopId": "209134167",
+      "itemId": "15862874216",
+      "affiliate_matches_config": true,
+      "link_host": "s.afp.ad",
+      "link_path": "/MDs3pe-NjE89l3ftmbocCg",
+      "query_keys": [],
+      "explicit_sub_id_matches": null,
+      "meta_fields_present": [],
+      "hops": [
+        {
+          "status": 302,
+          "host": "s.afp.ad",
+          "path": "/MDs3pe-NjE89l3ftmbocCg",
+          "query_keys": [],
+          "sub_id_exact_match": null
+        },
+        {
+          "status": 301,
+          "host": "shopee.vn",
+          "path": "/universal-link/opaanlp/209134167/15862874216",
+          "query_keys": [
+            "__mobile__",
+            "channel_type",
+            "content_source",
+            "content_type",
+            "encrypted_payload",
+            "exp_group",
+            "fb_content_id",
+            "fbclid",
+            "gads_t_sig",
+            "mmp_pid",
+            "uls_trackid",
+            "utm_campaign",
+            "utm_content",
+            "utm_medium",
+            "utm_source",
+            "utm_term",
+            "cts",
+            "sm_sig_id"
+          ],
+          "utm_source": [
+            "an_17356640097"
+          ],
+          "utm_medium": [
+            "affiliates"
+          ],
+          "channel_type": [
+            "fb"
+          ],
+          "content_source": [
+            "fb"
+          ],
+          "content_type": [
+            "REELS"
+          ],
+          "sub_id_exact_match": null
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/209134167/15862874216",
+          "query_keys": [
+            "__mobile__",
+            "channel_type",
+            "content_source",
+            "content_type",
+            "cts",
+            "encrypted_payload",
+            "exp_group",
+            "fb_content_id",
+            "fbclid",
+            "gads_t_sig",
+            "mmp_pid",
+            "sm_sig_id",
+            "uls_trackid",
+            "utm_campaign",
+            "utm_content",
+            "utm_medium",
+            "utm_source",
+            "utm_term"
+          ],
+          "utm_source": [
+            "an_17356640097"
+          ],
+          "utm_medium": [
+            "affiliates"
+          ],
+          "channel_type": [
+            "fb"
+          ],
+          "content_source": [
+            "fb"
+          ],
+          "content_type": [
+            "REELS"
+          ],
+          "sub_id_exact_match": null
+        }
+      ]
+    }
+  ],
+  "quota_after": {
+    "limit": 1000,
+    "used": 2,
+    "remaining": 998,
+    "overage": 0,
+    "maxOverage": 0
+  },
+  "followup_attribution_check": {
+    "redirect_http_status": 302,
+    "destination_host": "shopee.vn",
+    "destination_path": "/universal-link/opaanlp/209134167/15862874216",
+    "utm_source": [
+      "an_17356640097"
+    ],
+    "expected_source": "an_17315920094",
+    "utm_source_matches_owner": false,
+    "sub_id_presence_by_field": {
+      "utm_content": true
+    },
+    "owner_affiliate_id_presence_by_field": {},
+    "tracking_bundle_present": true
+  }
+}

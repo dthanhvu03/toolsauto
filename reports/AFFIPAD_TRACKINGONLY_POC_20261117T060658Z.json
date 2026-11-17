@@ -1,0 +1,116 @@
+{
+  "checked_at": "2026-11-17T06:06:58.700127+00:00",
+  "sub_id": "HV0FcJ5N",
+  "own": "17315920094",
+  "input_is_an_redir": true,
+  "summary": [
+    {
+      "mode": "trackingOnly_an_redir",
+      "affiliateId": "",
+      "returned": {
+        "host": "s.shopee.vn",
+        "path": "/an_redir",
+        "query_keys": [
+          "affiliate_id",
+          "channel_type",
+          "content_source",
+          "content_type",
+          "cts",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "origin_link",
+          "sm_sig_id",
+          "sub_id"
+        ],
+        "meta": [
+          "channel_type",
+          "content_source",
+          "content_type",
+          "cts",
+          "encrypted_payload",
+          "fb_content_id",
+          "fbclid",
+          "sm_sig_id"
+        ],
+        "utm_source": null,
+        "has_sub": true,
+        "own_an": false,
+        "sha": "1a66ac232dc8080d"
+      },
+      "looks_like_sample": true,
+      "hops": [
+        {
+          "status": 301,
+          "host": "s.shopee.vn",
+          "path": "/an_redir",
+          "query_keys": [
+            "affiliate_id",
+            "channel_type",
+            "content_source",
+            "content_type",
+            "cts",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "origin_link",
+            "sm_sig_id",
+            "sub_id"
+          ],
+          "meta": [
+            "channel_type",
+            "content_source",
+            "content_type",
+            "cts",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "utm_source": null,
+          "has_sub": true,
+          "own_an": false,
+          "sha": "1a66ac232dc8080d"
+        },
+        {
+          "status": 200,
+          "host": "shopee.vn",
+          "path": "/opaanlp/209134167/15862874216",
+          "query_keys": [
+            "__mobile__",
+            "channel_type",
+            "content_source",
+            "content_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "mmp_pid",
+            "sm_sig_id",
+            "uls_trackid",
+            "utm_campaign",
+            "utm_content",
+            "utm_medium",
+            "utm_source",
+            "utm_term"
+          ],
+          "meta": [
+            "channel_type",
+            "content_source",
+            "content_type",
+            "encrypted_payload",
+            "fb_content_id",
+            "fbclid",
+            "sm_sig_id"
+          ],
+          "utm_source": [
+            "an_17315920094"
+          ],
+          "has_sub": true,
+          "own_an": true,
+          "sha": "f2a02e57b6261d7c"
+        }
+      ]
+    }
+  ],
+  "any_sample_format": true
+}

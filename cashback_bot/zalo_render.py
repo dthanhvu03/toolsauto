@@ -20,7 +20,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from cashback_bot.messages import BUY_BUTTON, FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
-from cashback_bot.shopee_shortener import shorten_if_an_redir
+from cashback_bot.affipad import is_meta_signed
+from cashback_bot.shopee_shortener import shorten_if_an_redir, zalo_buy_url
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
@@ -56,12 +57,17 @@ GUIDE = (
     "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
 BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:"
+# PLAN-174: Zalo không có nút URL — Meta query dài → rút is.gd; nhắc khách đừng sửa link ngắn.
+META_BUY_LEAD = "👉 Bấm link ngắn bên dưới để mua + nhận voucher (đừng sửa link):"
 TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok sẽ không được hoàn:"
 FOOD_LEAD = "👉 Link đặt món ShopeeFood (đơn Food chưa được hoàn tiền):"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
 PHRASES = (
     # Dòng dẫn + URL đã ở cuối cùng tin: bỏ câu bấm nút của Telegram.
     ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", ""),
+    # PLAN-174: lead Meta Telegram → Zalo dùng META_BUY_LEAD + link ngắn ở cuối tin.
+    ("✅ Link kèm voucher FB — bấm <b>🛒 Mua trên Shopee</b> ngay để nhận.", ""),
+    ("✅ Link kèm voucher IG — bấm <b>🛒 Mua trên Shopee</b> ngay để nhận.", ""),
     # Rà soát 2026-10-26: câu «bấm» của Telegram còn lọt sang Zalo.
     ("Bấm vào đơn để xem tiến trình.", "Gõ số của đơn để xem tiến trình."),
     ("Nếu bạn thấy chưa đúng, bấm 📩 Yêu cầu kiểm tra.", "Nếu bạn thấy chưa đúng, chọn 📩 Yêu cầu kiểm tra."),
@@ -316,10 +322,12 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         leads = {None: BUY_LEAD, BUY_BUTTON: BUY_LEAD, TIKTOK_BUY_BUTTON: TIKTOK_BUY_LEAD, FOOD_BUTTON: FOOD_LEAD}
         # Nút link khác (🎟 Lưu mã…, tin báo mã / săn sale qua hàng đợi): dẫn bằng chính nhãn nút.
         lead = leads.get(reply.button_label) or f"👉 {reply.button_label.rstrip(' ↗')}:"
+        if reply.button_label in {None, BUY_BUTTON} and is_meta_signed(reply.button_url):
+            lead = META_BUY_LEAD
         if text:
             add("\n\n")
         add(lead, bold=True)
-        add(f"\n{shorten_if_an_redir(reply.button_url, any_sub=True)}")
+        add(f"\n{zalo_buy_url(reply.button_url)}")
     choices = menu_choices(reply)
     if choices:
         add("\n\n")

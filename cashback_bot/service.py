@@ -16,7 +16,9 @@ from cashback_bot import admin_tiktok, chat_ai
 from cashback_bot.admin.handlers import tamly
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
+from cashback_bot.affipad import AffiPadClient, pick_tracking_preset
 from cashback_bot.config import Settings
+from cashback_bot.shopee_shortener import shorten_shopee_url
 from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, referral, shop_voucher, upsell, voucher, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
@@ -66,6 +68,7 @@ from cashback_bot.messages import (
     rate_limited_reply,
     render_success,
     render_success_v12,
+    same_item_voucher_reply,
     tip_reply,
     wallet_reply,
     withdraw_confirm_reply,
@@ -147,6 +150,10 @@ class CashbackService:
         self.tamly_generate: Callable[[str], tuple] | None = None  # PLAN-170: test thay AI giả; None = AI thật
         self.chat_generate: Callable[[str], tuple] | None = None  # PLAN-172 T2: test thay AI giả; None = 9Router
         self.chat_ai_enabled = False  # chỉ tiến trình bot thật (poller / zalo_bot) bật — test không gọi 9Router thật
+        # PLAN-174: ký Meta FB lên an_redir; None khi tắt / thiếu cấu hình. Test gắn client giả.
+        self.affipad: AffiPadClient | None = None
+        if settings.affipad_fb_voucher_enabled and settings.affipad_api_key and settings.affipad_tool_id:
+            self.affipad = AffiPadClient(settings.affipad_api_key, settings.affipad_tool_id)
         # Báo giảm giá món khách từng xem (price_watch): cùng khoá AddLiveTag với báo giá. Chỉ bot Telegram chạy lượt.
         self.price_history = PriceHistoryClient(settings.api_key)
         self.wallet = Wallet(repo)
@@ -775,6 +782,12 @@ class CashbackService:
         resolution = self._resolve_or_reject(update_id, telegram_user_id, target.original_url, moment)
         if resolution is None:
             return BotReply(GENERIC_FAIL)
+        # AffiPad bật: không cho gửi lại đúng món vừa tạo liên tiếp để farm chữ ký FB/IG.
+        if self.affipad is not None:
+            prev = self._last_created_same_item(telegram_user_id, quote.item_id, quote.shop_id)
+            if prev:
+                self._reject(update_id, telegram_user_id, target.original_url, "same_item_voucher")
+                return same_item_voucher_reply(prev)
         # Báo theo hoa hồng chắc chắn; phần Shopee Comm trên 2,5% chỉ ghi là có thể được thêm.
         priced = cashback_for(quote.sure_commission_vnd, resolution)
         cashback = priced.cashback_vnd
@@ -784,6 +797,20 @@ class CashbackService:
         try:
             sub_id = self._unique_sub_id()
             affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
+            # PLAN-174: bridge short → AffiPad trackingOnly (form s.shopee.vn/XXXX?Meta, hiện voucher).
+            # Bridge/AffiPad lỗi → giữ an_redir (± ký Meta nếu còn được) để khách vẫn mua.
+            if self.affipad is not None:
+                short = shorten_shopee_url(quote.product_url, sub_id=sub_id)
+                sign_input = short if short else affiliate_url
+                preset = pick_tracking_preset(self.settings.affipad_tracking_preset, salt=sub_id)
+                signed = self.affipad.sign_tracking_only(sign_input, preset=preset)
+                if signed:
+                    affiliate_url = signed
+                else:
+                    logger.warning(
+                        "[Cashback] AffiPad sign fail item=%s preset=%s short=%s; dùng an_redir",
+                        quote.item_id, preset, bool(short),
+                    )
         except (ValueError, ProductDataError):
             logger.error("[Cashback] build link failed item=%s", quote.item_id)
             self._reject(update_id, telegram_user_id, target.original_url, "link_build_failed")
@@ -1187,6 +1214,27 @@ class CashbackService:
                 ).fetchone() is not None
         except sqlite3.Error:
             return False
+
+    def _last_created_same_item(self, telegram_user_id: int, item_id: int | None, shop_id: int | None) -> str | None:
+        """Affiliate URL link created gần nhất nếu đúng cùng item (+ shop khi có). Không khớp → None."""
+        if item_id is None:
+            return None
+        try:
+            with self.repo.connect() as conn:
+                row = conn.execute(
+                    "SELECT item_id, shop_id, affiliate_url FROM link_requests "
+                    "WHERE telegram_user_id = ? AND link_status = 'created' AND platform = 'shopee' "
+                    "ORDER BY id DESC LIMIT 1",
+                    (telegram_user_id,),
+                ).fetchone()
+        except sqlite3.Error:
+            return None
+        if row is None or row["item_id"] != item_id:
+            return None
+        if shop_id is not None and row["shop_id"] is not None and row["shop_id"] != shop_id:
+            return None
+        url = (row["affiliate_url"] or "").strip()
+        return url or None
 
     def _reject(self, update_id: int | None, telegram_user_id: int, original_url: str, reason: str) -> None:
         try:

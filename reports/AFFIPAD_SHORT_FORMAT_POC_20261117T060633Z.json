@@ -1,0 +1,475 @@
+{
+  "checked_at": "2026-11-17T06:06:36.536008+00:00",
+  "goal": "produce s.shopee.vn short WITH Meta query like Bot San Sale sample",
+  "product": "https://shopee.vn/product/209134167/15862874216",
+  "own_affiliate_id": "17315920094",
+  "sub_ids_used": [
+    "R2DlLlaf",
+    "A2SR6Jbr",
+    "cvUNzSCI"
+  ],
+  "tool": {
+    "id_prefix": "cmwk8ihy",
+    "name": "Shopee FB Voucher",
+    "slug": "fb-voucher"
+  },
+  "quota_before": {
+    "plan": "free",
+    "quota": {
+      "limit": 1000,
+      "used": 2,
+      "remaining": 998,
+      "overage": 0,
+      "maxOverage": 0
+    },
+    "billingCycleStart": "2026-11-17T04:45:49.678Z"
+  },
+  "quota_after": {
+    "plan": "free",
+    "quota": {
+      "limit": 1000,
+      "used": 5,
+      "remaining": 995,
+      "overage": 0,
+      "maxOverage": 0
+    },
+    "billingCycleStart": "2026-11-17T04:45:49.678Z"
+  },
+  "trials": [
+    {
+      "label": "convert_long_no_short",
+      "http": 200,
+      "success": true,
+      "api_error": null,
+      "results": [
+        {
+          "affiliateId": "17315920094",
+          "affiliate_matches_own": true,
+          "shopId": "209134167",
+          "itemId": "15862874216",
+          "returned_link": {
+            "host": "s.afp.ad",
+            "path": "/fvCsTgDSlYGZxNsmv752rA",
+            "query_keys": [],
+            "meta_present": [],
+            "utm_source": null,
+            "utm_medium": null,
+            "channel_type": null,
+            "content_type": null,
+            "has_sub_id_exact": false,
+            "own_an_source": false,
+            "url_sha256": "2371db1fda3e6654"
+          },
+          "looks_like_sample_short": false,
+          "hops": [
+            {
+              "status": 302,
+              "host": "s.afp.ad",
+              "path": "/fvCsTgDSlYGZxNsmv752rA",
+              "query_keys": [],
+              "meta_present": [],
+              "utm_source": null,
+              "utm_medium": null,
+              "channel_type": null,
+              "content_type": null,
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "2371db1fda3e6654"
+            },
+            {
+              "status": 301,
+              "host": "shopee.vn",
+              "path": "/universal-link/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": true,
+              "own_an_source": false,
+              "url_sha256": "4c44f4aa7b803cc8"
+            },
+            {
+              "status": 200,
+              "host": "shopee.vn",
+              "path": "/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": true,
+              "own_an_source": false,
+              "url_sha256": "152d958361304394"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "convert_short_true",
+      "http": 200,
+      "success": true,
+      "api_error": null,
+      "results": [
+        {
+          "affiliateId": "17315920094",
+          "affiliate_matches_own": true,
+          "shopId": "209134167",
+          "itemId": "15862874216",
+          "returned_link": {
+            "host": "s.afp.ad",
+            "path": "/StJgi5_nl1Zxw1C30lPmPg",
+            "query_keys": [],
+            "meta_present": [],
+            "utm_source": null,
+            "utm_medium": null,
+            "channel_type": null,
+            "content_type": null,
+            "has_sub_id_exact": false,
+            "own_an_source": false,
+            "url_sha256": "333728f582acb546"
+          },
+          "looks_like_sample_short": false,
+          "hops": [
+            {
+              "status": 302,
+              "host": "s.afp.ad",
+              "path": "/StJgi5_nl1Zxw1C30lPmPg",
+              "query_keys": [],
+              "meta_present": [],
+              "utm_source": null,
+              "utm_medium": null,
+              "channel_type": null,
+              "content_type": null,
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "333728f582acb546"
+            },
+            {
+              "status": 301,
+              "host": "shopee.vn",
+              "path": "/universal-link/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "dc91fc28e08ee2f6"
+            },
+            {
+              "status": 200,
+              "host": "shopee.vn",
+              "path": "/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "2514dc610578eecf"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "convert_short_v2",
+      "http": 200,
+      "success": true,
+      "results": [
+        {
+          "affiliateId": "17315920094",
+          "affiliate_matches_own": true,
+          "returned_link": {
+            "host": "s.afp.ad",
+            "path": "/EKEf2D0dKRAC2sUVbwmhRg",
+            "query_keys": [],
+            "meta_present": [],
+            "utm_source": null,
+            "utm_medium": null,
+            "channel_type": null,
+            "content_type": null,
+            "has_sub_id_exact": false,
+            "own_an_source": false,
+            "url_sha256": "6d110ef50539c2d3"
+          },
+          "looks_like_sample_short": false,
+          "hops": [
+            {
+              "status": 302,
+              "host": "s.afp.ad",
+              "path": "/EKEf2D0dKRAC2sUVbwmhRg",
+              "query_keys": [],
+              "meta_present": [],
+              "utm_source": null,
+              "utm_medium": null,
+              "channel_type": null,
+              "content_type": null,
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "6d110ef50539c2d3"
+            },
+            {
+              "status": 301,
+              "host": "shopee.vn",
+              "path": "/universal-link/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "0d5860d947aa3ec9"
+            },
+            {
+              "status": 200,
+              "host": "shopee.vn",
+              "path": "/opaanlp/209134167/15862874216",
+              "query_keys": [
+                "__mobile__",
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "exp_group",
+                "fb_content_id",
+                "fbclid",
+                "gads_t_sig",
+                "mmp_pid",
+                "sm_sig_id",
+                "uls_trackid",
+                "utm_campaign",
+                "utm_content",
+                "utm_medium",
+                "utm_source",
+                "utm_term"
+              ],
+              "meta_present": [
+                "channel_type",
+                "content_source",
+                "content_type",
+                "cts",
+                "encrypted_payload",
+                "fb_content_id",
+                "fbclid",
+                "sm_sig_id"
+              ],
+              "utm_source": [
+                "an_17356640097"
+              ],
+              "utm_medium": [
+                "affiliates"
+              ],
+              "channel_type": [
+                "fb"
+              ],
+              "content_type": [
+                "REELS"
+              ],
+              "has_sub_id_exact": false,
+              "own_an_source": false,
+              "url_sha256": "51f414f592058459"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "verdict": {
+    "any_exact_sample_format": false,
+    "any_meta_after_redirect": true,
+    "any_own_an_source_on_destination": false,
+    "any_exact_sub_id_on_destination": true
+  }
+}

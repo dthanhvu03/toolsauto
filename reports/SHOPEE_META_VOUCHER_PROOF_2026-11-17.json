@@ -1,0 +1,110 @@
+{
+  "checked_at": "2026-11-17T04:13:13.287098+00:00",
+  "method": "unauthenticated GET, manual redirects, no Shopee API/account/checkout",
+  "samples": [
+    {
+      "label": "fb",
+      "input_base": "https://s.shopee.vn/5LDXTRkPcG",
+      "input_sha256": "b1622491574f65d259818b3bac603ae06e27a30bbcce3fe5ca787ebb1285db40",
+      "cts_utc": "2026-11-17T04:11:21+00:00",
+      "input_query_keys": [
+        "fb_content_id",
+        "encrypted_payload",
+        "fbclid",
+        "cts",
+        "channel_type",
+        "content_source",
+        "content_type",
+        "sm_sig_id"
+      ],
+      "statuses": [
+        301,
+        200
+      ],
+      "destination_host": "shopee.vn",
+      "destination_path": "/opaanlp/209134167/15862874216",
+      "tracking": {
+        "utm_source": [
+          "an_17357470550"
+        ],
+        "utm_medium": [
+          "affiliates"
+        ]
+      },
+      "preserved_fields": {
+        "fb_content_id": true,
+        "encrypted_payload": true,
+        "fbclid": true,
+        "channel_type": true,
+        "content_source": true,
+        "content_type": true,
+        "sm_sig_id": true
+      },
+      "bare_control": {
+        "status": 301,
+        "destination_path": "/opaanlp/209134167/15862874216",
+        "tracking": {
+          "utm_source": [
+            "an_17357470550"
+          ],
+          "utm_medium": [
+            "affiliates"
+          ]
+        },
+        "signed_fields_present": []
+      }
+    },
+    {
+      "label": "ig",
+      "input_base": "https://s.shopee.vn/6VPUrMXBoM",
+      "input_sha256": "76d81870d3ae0fa1d225cc8eec4f58fd7e7eddc07c89c0822db8434381cfeee8",
+      "cts_utc": "2026-11-17T04:08:02+00:00",
+      "input_query_keys": [
+        "fb_content_id",
+        "encrypted_payload",
+        "fbclid",
+        "cts",
+        "channel_type",
+        "content_source",
+        "content_type",
+        "sm_sig_id"
+      ],
+      "statuses": [
+        301,
+        200
+      ],
+      "destination_host": "shopee.vn",
+      "destination_path": "/product/209134167/15862874216",
+      "tracking": {
+        "utm_source": [
+          "an_17317620047"
+        ],
+        "utm_medium": [
+          "affiliates"
+        ]
+      },
+      "preserved_fields": {
+        "fb_content_id": true,
+        "encrypted_payload": true,
+        "fbclid": true,
+        "channel_type": true,
+        "content_source": true,
+        "content_type": true,
+        "sm_sig_id": true
+      },
+      "bare_control": {
+        "status": 301,
+        "destination_path": "/opaanlp/209134167/15862874216",
+        "tracking": {
+          "utm_source": [
+            "an_17317620047"
+          ],
+          "utm_medium": [
+            "affiliates"
+          ]
+        },
+        "signed_fields_present": []
+      }
+    }
+  ]
+}
