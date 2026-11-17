@@ -235,7 +235,7 @@ def test_service_skips_affipad_when_disabled(tmp_path):
     assert bot.affipad is None
 
 
-def test_zalo_buy_url_shortens_meta(monkeypatch):
+def test_zalo_buy_url_keeps_meta_no_third_party(monkeypatch):
     meta = (
         "https://s.shopee.vn/AAInOGcctN?fb_content_id=x&encrypted_payload="
         + ("y" * 80)
@@ -243,11 +243,7 @@ def test_zalo_buy_url_shortens_meta(monkeypatch):
         + ("z" * 80)
         + "&channel_type=fb"
     )
-    monkeypatch.setattr(
-        "cashback_bot.shopee_shortener.public_shorten",
-        lambda url, timeout=3.0: "https://is.gd/abc123",
-    )
-    assert zalo_buy_url(meta) == "https://is.gd/abc123"
+    assert zalo_buy_url(meta) == meta
     plain = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fp&affiliate_id=1&sub_id=Ab12Cd34"
     monkeypatch.setattr(
         "cashback_bot.shopee_shortener.shorten_if_an_redir",
@@ -256,16 +252,15 @@ def test_zalo_buy_url_shortens_meta(monkeypatch):
     assert zalo_buy_url(plain) == "https://s.shopee.vn/shortPlain"
 
 
-def test_zalo_render_uses_short_meta_link(monkeypatch):
+def test_zalo_render_keeps_full_meta_link():
     meta = (
         "https://s.shopee.vn/AAInOGcctN?fb_content_id=x&encrypted_payload="
         + ("y" * 80)
         + "&sm_sig_id=z&channel_type=ig"
     )
-    monkeypatch.setattr("cashback_bot.zalo_render.zalo_buy_url", lambda url: "https://is.gd/zalo1")
     messages_out, _menu = render(_render_card("Áo", 210_000, 10_000, meta))
     text = messages_out[0].text
     assert META_BUY_LEAD in text
-    assert "https://is.gd/zalo1" in text
-    assert "encrypted_payload" not in text
-    assert "sm_sig_id" not in text
+    assert "s.shopee.vn/AAInOGcctN" in text
+    assert "sm_sig_id=z" in text
+    assert "is.gd" not in text

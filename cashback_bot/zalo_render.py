@@ -57,8 +57,8 @@ GUIDE = (
     "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
 BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:"
-# PLAN-174: Zalo không có nút URL — Meta query dài → rút is.gd; nhắc khách đừng sửa link ngắn.
-META_BUY_LEAD = "👉 Bấm link ngắn bên dưới để mua + nhận voucher (đừng sửa link):"
+# PLAN-174: Zalo không có nút URL — phải dán full Meta (Shopee khóa shortener bên thứ 3 như is.gd).
+META_BUY_LEAD = "👉 Bấm link bên dưới để mua + nhận voucher (link dài là bình thường — đừng cắt/sửa):"
 TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok sẽ không được hoàn:"
 FOOD_LEAD = "👉 Link đặt món ShopeeFood (đơn Food chưa được hoàn tiền):"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.

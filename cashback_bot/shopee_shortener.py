@@ -22,18 +22,13 @@ logger = logging.getLogger(__name__)
 
 MAX_CACHE_SIZE = 5000
 _CACHE: dict[tuple[str, str], str] = {}
-_PUBLIC_CACHE: dict[str, str] = {}
 _LAST_BRIDGE_FAIL: float = 0.0
-_LAST_PUBLIC_FAIL: float = 0.0
 FAIL_COOLDOWN_SEC = 30.0  # Circuit breaker: nếu bridge lỗi/tắt, không chờ timeout mà fallback ngay trong 30s
 # Gọi bridge lần lượt: relay mở link bằng 4 luồng, bridge (một phiên trình duyệt) phải xếp hàng thì link thứ 4 chờ cả
 # 3 link trước, hết timeout dù bridge không lỗi. Thời gian chờ khoá không tính vào timeout.
 _BRIDGE_LOCK = threading.Lock()
 # Đo thật 2026-10-31: bridge trả mỗi link 2,1–4,5 s tuỳ tải, nâng lên 6.0s để không timeout hụt
 DEFAULT_TIMEOUT = 6.0
-# Zalo không có nút URL: Meta query ~1KB. Rút qua is.gd (302 về đúng URL Meta), chỉ để hiện cho khách.
-PUBLIC_SHORT_TIMEOUT = 3.0
-ZALO_META_INLINE_MAX = 120
 
 
 def get_bridge_host() -> str:
@@ -143,43 +138,15 @@ def shorten_if_an_redir(url: str, timeout: float = DEFAULT_TIMEOUT, any_sub: boo
     return url
 
 
-def public_shorten(url: str, timeout: float = PUBLIC_SHORT_TIMEOUT) -> Optional[str]:
-    """Rút URL công khai qua is.gd (302 về đúng đích, giữ query Meta). Lỗi / pytest → None."""
-    global _LAST_PUBLIC_FAIL
-
-    target = (url or "").strip()
-    if not target.startswith(("http://", "https://")):
-        return None
-    if target in _PUBLIC_CACHE:
-        return _PUBLIC_CACHE[target]
-    if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("ZALO_SHORTEN_LIVE"):
-        return None
-    if time.time() - _LAST_PUBLIC_FAIL < FAIL_COOLDOWN_SEC:
-        return None
-
-    endpoint = "https://is.gd/create.php?" + urllib.parse.urlencode({"format": "simple", "url": target})
-    try:
-        req = urllib.request.Request(endpoint, headers={"User-Agent": "CashbackBot/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            short = (resp.read().decode("utf-8", errors="replace") or "").strip()
-        if short.startswith("https://is.gd/") or short.startswith("http://is.gd/"):
-            if len(_PUBLIC_CACHE) >= MAX_CACHE_SIZE:
-                _PUBLIC_CACHE.pop(next(iter(_PUBLIC_CACHE)))
-            _PUBLIC_CACHE[target] = short
-            _LAST_PUBLIC_FAIL = 0.0
-            return short
-        logger.warning("[ShopeeShortener] is.gd trả không phải short: %s", short[:80])
-    except Exception as exc:
-        _LAST_PUBLIC_FAIL = time.time()
-        logger.warning("[ShopeeShortener] is.gd lỗi: %s", type(exc).__name__)
-    return None
-
-
 def zalo_buy_url(url: str, timeout: float = DEFAULT_TIMEOUT) -> str:
-    """URL hiện trên Zalo: an_redir → bridge short; Meta dài → is.gd (giữ đích); lỗi → URL gốc."""
+    """URL hiện trên Zalo: an_redir → bridge short.
+
+    Meta đã ký: giữ nguyên ``s.shopee.vn/XXXX?Meta…`` — không qua shortener bên thứ ba
+    (chủ bot 17/11: is.gd bị Shopee khóa / mất voucher).
+    """
     target = (url or "").strip()
     if not target:
         return target
-    if is_meta_signed(target) and len(target) > ZALO_META_INLINE_MAX:
-        return public_shorten(target) or target
+    if is_meta_signed(target):
+        return target
     return shorten_if_an_redir(target, timeout=timeout, any_sub=True)
