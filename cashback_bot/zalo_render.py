@@ -20,15 +20,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from cashback_bot.affipad import is_meta_signed
-from cashback_bot.messages import (
-    BUY_BUTTON,
-    FB_VOUCHER_HINT,
-    FOOD_BUTTON,
-    HUONGDAN,
-    TIKTOK_BUY_BUTTON,
-    BotReply,
-    with_tiktok,
-)
+from cashback_bot.messages import BUY_BUTTON, FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
 from cashback_bot.shopee_shortener import shorten_if_an_redir, zalo_buy_url
 
 MAX_LEN = 2000
@@ -65,12 +57,9 @@ GUIDE = (
     "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
 BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:"
-# PLAN-174: Zalo không có nút URL; Meta query dài làm khách sợ; Shopee khóa shortener bên thứ 3.
-# Điều phối sang Telegram (có nút 🛒, giấu URL). Chủ bot 17/11.
-META_BUY_LEAD = (
-    "📲 Voucher FB/IG: mở Telegram bot bên dưới → dán lại link món này → bấm nút 🛒 Mua "
-    "(Telegram giấu link dài, dễ bấm hơn Zalo):"
-)
+# PLAN-174: Zalo không có nút URL — dán full Meta (Shopee khóa is.gd). Chủ bot 17/11: giữ link dài,
+# không đẩy sang Telegram (nhiều khách sợ tải app).
+META_BUY_LEAD = "👉 Bấm link bên dưới để mua + nhận voucher (link dài là bình thường — đừng cắt/sửa):"
 TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok sẽ không được hoàn:"
 FOOD_LEAD = "👉 Link đặt món ShopeeFood (đơn Food chưa được hoàn tiền):"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
@@ -205,20 +194,11 @@ class _Flatten(HTMLParser):
             self.link_text.append(data)
 
 
-# Hint Meta trên thẻ Telegram → Zalo ngắn + nhắc qua Tele (không nhét vào PHRASES vì chuỗi ghép nhiều literal).
-_ZALO_FB_HINT = (
-    "⚠️ Voucher FB/IG: hết lượt / món bị lọc thì không hiện. Thêm lượt ~0h / 9h / 15h / 20h. "
-    "Mở Telegram bot bên dưới để bấm nút Mua."
-)
-
-
 def zalo_wording(html_text: str) -> str:
     """Đổi câu chữ kiểu Telegram sang Zalo: «Gõ /hotro» → «Gõ hotro», «tại /hotro» → «bằng cách gõ hotro»."""
     text = html_text or ""
     for old, new in PHRASES:
         text = text.replace(old, new)
-    if FB_VOUCHER_HINT in text:
-        text = text.replace(FB_VOUCHER_HINT, _ZALO_FB_HINT)
     text = _VERB_CMD.sub(lambda m: f"{'Gõ' if m.group(1)[0].isupper() else 'gõ'} <b>{COMMANDS[m.group(2)]}</b>", text)
     text = _PREP_CMD.sub(lambda m: f"bằng cách gõ <b>{COMMANDS[m.group(1)]}</b>", text)
     text = _SEE_CMD.sub(lambda m: f"xem bằng cách gõ <b>{COMMANDS[m.group(1)]}</b>", text)
@@ -318,9 +298,10 @@ def _footnotes(body: str) -> bool:
 def render(reply: BotReply, *, bot_username: str = "zt_shopee_bot") -> tuple[list[ZaloMessage], tuple[str, ...]]:
     """BotReply → (các tin Zalo, callback theo số 1..n). Tin rỗng (chỉ toast) thì gửi nội dung toast.
 
-    Có nút Mua: thẻ báo giá + link mua cuối tin. Link Meta (voucher FB/IG): không dán URL dài —
-    điều phối sang ``t.me/<bot>`` (Telegram có nút 🛒).
+    Có nút Mua: thẻ báo giá + link mua cuối tin. Meta voucher: dán full ``s.shopee.vn/…?Meta``
+    (không shortener bên thứ 3; không bắt buộc qua Telegram). ``bot_username`` giữ tương thích caller.
     """
+    _ = bot_username  # caller Zalo vẫn truyền; không dùng sau khi bỏ điều phối Tele
     # Telegram hiện toast thành popup; Zalo không có popup nên đặt toast lên đầu tin.
     body = f"{reply.toast}\n\n{reply.text}" if reply.text and reply.toast else reply.text or reply.toast or ""
     # Màn bật / tắt: Telegram liệt kê ✅/⬜ trong nội dung lẫn trên nút; Zalo đã có danh sách số nên bỏ dòng lặp.
@@ -333,7 +314,6 @@ def render(reply: BotReply, *, bot_username: str = "zt_shopee_bot") -> tuple[lis
         body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
     text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip(), footnotes=_footnotes(body))
     text = text.rstrip("\n")  # đoạn trích dẫn cuối tin để lại dòng trống thừa (không có style ở đây)
-    tele = f"https://t.me/{(bot_username or 'zt_shopee_bot').strip().lstrip('@')}"
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -345,14 +325,12 @@ def render(reply: BotReply, *, bot_username: str = "zt_shopee_bot") -> tuple[lis
         leads = {None: BUY_LEAD, BUY_BUTTON: BUY_LEAD, TIKTOK_BUY_BUTTON: TIKTOK_BUY_LEAD, FOOD_BUTTON: FOOD_LEAD}
         # Nút link khác (🎟 Lưu mã…, tin báo mã / săn sale qua hàng đợi): dẫn bằng chính nhãn nút.
         lead = leads.get(reply.button_label) or f"👉 {reply.button_label.rstrip(' ↗')}:"
-        meta_buy = reply.button_label in {None, BUY_BUTTON} and is_meta_signed(reply.button_url)
-        if meta_buy:
+        if reply.button_label in {None, BUY_BUTTON} and is_meta_signed(reply.button_url):
             lead = META_BUY_LEAD
         if text:
             add("\n\n")
         add(lead, bold=True)
-        # Meta: chỉ đưa t.me — không dán s.shopee.vn?Meta (dài + khách sợ).
-        add(f"\n{tele if meta_buy else zalo_buy_url(reply.button_url)}")
+        add(f"\n{zalo_buy_url(reply.button_url)}")
     choices = menu_choices(reply)
     if choices:
         add("\n\n")

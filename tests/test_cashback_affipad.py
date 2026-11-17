@@ -252,16 +252,16 @@ def test_zalo_buy_url_keeps_meta_no_third_party(monkeypatch):
     assert zalo_buy_url(plain) == "https://s.shopee.vn/shortPlain"
 
 
-def test_zalo_render_routes_meta_buy_to_telegram():
+def test_zalo_render_keeps_full_meta_link():
     meta = (
         "https://s.shopee.vn/AAInOGcctN?fb_content_id=x&encrypted_payload="
         + ("y" * 80)
         + "&sm_sig_id=z&channel_type=ig"
     )
-    messages_out, _menu = render(_render_card("Áo", 210_000, 10_000, meta), bot_username="zt_shopee_bot")
+    messages_out, _menu = render(_render_card("Áo", 210_000, 10_000, meta))
     text = messages_out[0].text
     assert META_BUY_LEAD in text
-    assert "https://t.me/zt_shopee_bot" in text
-    assert "sm_sig_id" not in text
-    assert "encrypted_payload" not in text
+    assert "s.shopee.vn/AAInOGcctN" in text
+    assert "sm_sig_id=z" in text
+    assert "https://t.me/" not in text
     assert "is.gd" not in text
