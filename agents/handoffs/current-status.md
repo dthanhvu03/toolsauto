@@ -1,3 +1,34 @@
+## Phien 2026-11-17 (Codex) — Shopee FB/IG voucher research only
+- Owner requested research and testing of supplied Bot San Sale links; no feature implementation or new PLAN approval implied.
+- 11:13 VN: unauthenticated GET FB and IG both 301 -> 200 HTML; same shop/item 209134167/15862874216, different utm_source an_17357470550 / an_17317620047. Bare-link controls retain affiliate source but lack signed Meta fields.
+- Public AffiPad docs describe comparable API capability; competitor vendor unknown. No provider API, Shopee account, purchase, voucher claim, sync, bot message or restart used.
+- Repo standard URL normalization strips query; cannot preserve signed Meta output through existing cleaning/rewrapping. Need own affiliate + unique Sub ID before signing in a future POC.
+- Pending proof: checkout discount/eligibility, actual order attribution and exact Sub ID/commission. HTTP 200 is not proof of these.
+- Artifacts: reports/SHOPEE_META_VOUCHER_RESEARCH_2026-11-17.md and sanitized SHOPEE_META_VOUCHER_PROOF_2026-11-17.json. No raw signatures/payloads or credentials stored there. PLAN-173 unchanged, review still pending.
+
+## Phiên 2026-11-17 (Codex, PLAN-173 / TASK-060) — Phễu theo nguồn, chỉ đọc — Execution Verified
+- Chủ bot cho phép ngoại lệ: Codex tự viết PLAN + execute backend báo cáo chỉ đọc; Anti sign-off chờ review.
+- Phạm vi: cashback_bot/growth_funnel.py mới, nối tóm tắt vào growth_report.py, tests/test_growth_funnel.py mới.
+- Không đổi luồng khách/tiền/schema/UI hay thử nghiệm PLAN-172; không gửi tin tay/restart/gọi API ngoài.
+- WIP giữ nguyên: evaluator.py, store_bot/bot.py, test_threads_growth.py, store_bot/chat_ai.py, test_store_chat_ai.py.
+- Đã làm: CLI JSON/text `python -m cashback_bot.growth_funnel --days 7 --json`; nhóm khách mới rolling 7 ngày theo
+  bot/nguồn, bước độc lập, chuyển đổi <24h chỉ trên khách đủ 24h, khách quay lại; không xuất tên/ID.
+  Nối tóm tắt (tối đa 3 nguồn) vào báo cáo sáng hiện có, giữ tick/outbox. Nhãn ghi rõ mốc cohort để tránh nhầm phễu cũ từ 00:00.
+- Proof: 6 file test (funnel/report/bot_users/chat_ai/invite) **33 passed in 5.65s**; ruff All checks passed;
+  git diff --check sạch. CLI DB thật errors=[]; SQL độc lập đối chiếu Store **99 khách / 6 có đơn / 92 đủ 24h = PASS**.
+  build báo cáo thật 1.185 ký tự, có phễu, 0.024s (17/11 10:35 VN); chỉ dựng nội dung, không gửi.
+- Snapshot: Store 99 khách mới / 6 khách có đơn, 24h 5/92 (5.4%); nguồn threads_ai_price_anlinh 55 vào / 1 có đơn,
+  24h 1/50 (2%); Cashbot TG 12 vào / 4 tạo link; Zalo 7 vào / 3 tạo link / 2 có đơn / 2 quay lại.
+  store_xsell 2 khách mới chưa tạo link nhưng chưa đủ 24h, chưa kết luận thất bại.
+- Giới hạn: step Store chỉ từ 16/11, không coi thiếu step là bỏ màn; QR tùy chọn, nguồn dùng chung không quy về từng bài.
+  Store 24h dùng lúc đặt đơn hiện đã giao, chưa có thời gian giao chuẩn; quay lại không phải D7 retention.
+- Chưa commit/push/gửi tay. Chủ bot đã restart cashback-bot **17/11 10:37:40 VN**: PID 1340047, active/running,
+  NRestarts=0; log 10:37:42–45 VN setMyCommands/Description/profile/startup OK, chưa thấy lỗi startup.
+  DB mode=ro: growth_report_day=2026-11-17; bản hôm nay sent **08:00:29 VN**, trước bản phễu mới (has_funnel=0).
+- **Execution Done. Cần Claude Code verify + handoff.** Anti sign-off pending, chưa Done/archive.
+- Next: review PLAN-173; chờ báo cáo **18/11 từ 08:00 VN** để verify delivery phần phễu mới; không reset state/gửi lặp hôm nay.
+  PLAN-172/Claude ưu tiên khảo sát điểm trước đơn đầu ở nguồn An Linh; Codex chưa thay thử nghiệm/luồng khách.
+
 ## Phiên 2026-11-16 (cursor-threads-pull) — Đổ khách từ Threads (content/reply)
 - Chẩn đoán: anlinh hết quota Store 12/ngày (đang kéo khách tốt); Cashbot kẹt vì buy_score 40–45 < auto_post_min 60 → pending mãi;
   ZALO_SHARE 50% làm reply Cashbot lệch Zalo (khó đo); own_posts fail (overlay chắn New thread); quét AI trước → approved ngồi 10–20 phút.
