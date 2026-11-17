@@ -383,12 +383,17 @@ Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
             )
             meta = meta or {}
             if reply and len(reply.strip()) > 10:
-                cleaned = "" if include_link else clean_plain_reply(reply)
+                polished, rewritten = await cls._self_check_reply(
+                    content, reply.strip(), include_link=include_link, link=link
+                )
+                cleaned = "" if include_link else clean_plain_reply(polished)
                 if len(cleaned) > 10:
                     tag = " · no_link"
                 else:  # có link, hoặc no_link bỏ url / @ xong còn trơ → reply có link như thường
-                    cleaned = with_link(reply, link, profile.handle)
+                    cleaned = with_link(polished, link, profile.handle)
                     tag = f"{' · Zalo' if zalo else ''}"
+                if rewritten:
+                    tag += " · rewrite"
                 analysis = (f"AI [{variant.value}{tag}] - "
                             f"{meta.get('provider', '?')}:{meta.get('model', '?')}"
                             + (f" · kb: {', '.join(kb.ids)}" if kb else ""))
@@ -400,3 +405,46 @@ Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
             analysis = f"Fallback rule-based: lỗi AI ({type(e).__name__}: {e})"
 
         return cls.get_fallback_reply(bot_type, variant), analysis
+
+    @staticmethod
+    async def _self_check_reply(
+        post_content: str,
+        draft: str,
+        *,
+        include_link: bool,
+        link: str,
+    ) -> Tuple[str, bool]:
+        """Agent tự chấm 1 lần: spam/quảng cáo → viết lại; OK / lỗi → giữ draft.
+
+        Trả (câu cuối, đã_rewrite?). Vẫn đi Xingchi → 9Router fallback qua AIUseCases.
+        """
+        link_rule = (
+            f"- BẮT BUỘC giữ đúng 1 lần link nguyên văn này trong câu: {link}\n"
+            if include_link else
+            "- KHÔNG gắn link, KHÔNG nhắc tên bot / app / @ ai, KHÔNG bán hàng.\n"
+        )
+        prompt = f"""KIỂM TRA REPLY THREADS. Bạn là biên tập viên chống spam.
+
+Bài gốc:
+\"\"\"{(post_content or '')[:800]}\"\"\"
+
+Reply nháp:
+\"\"\"{draft[:400]}\"\"\"
+
+Chấm: reply có giống quảng cáo / sáo / lộ AI / lệch bài không?
+{link_rule}- Giọng người Việt trên Threads, 1–2 câu, teencode vừa phải.
+- Nếu nháp đã ổn → trả về đúng một chữ: KEEP
+- Nếu cần sửa → chỉ xuất câu reply mới (không giải thích, không ngoặc kép).
+"""
+        try:
+            raw, _meta = await AIUseCases.generate_text_async(
+                prompt, purpose=AIPurpose.THREADS_REPLY
+            )
+        except Exception:
+            return draft, False
+        text = (raw or "").strip().strip('"').strip("'")
+        if not text or text.upper() == "KEEP" or len(text) < 8:
+            return draft, False
+        if text == draft:
+            return draft, False
+        return text, True

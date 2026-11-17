@@ -42,6 +42,8 @@ def fake_ai(monkeypatch):
             # Bài nhiều từ khoá của bot → điểm cao hơn (giữ thứ tự các test cũ dựa trên điểm).
             score = 99 if "voucher shopee, áp mã shopee" in prompt else 80
             return READING_JSON.replace('"buy_score": 80', f'"buy_score": {score}'), {"provider": "fake", "model": "m"}
+        if prompt.startswith("KIỂM TRA REPLY"):  # self-check: mặc định KEEP để không đổi draft trong test cũ
+            return "KEEP", {"provider": "fake", "model": "m"}
         tag = "A" if "Góc độ A" in prompt else "B"
         return f"Câu trả lời AI cho biến thể {tag} nè", {"provider": "fake", "model": "m"}
 
@@ -139,7 +141,7 @@ def test_reply_uses_ai_with_purpose(runner, fake_ai):
     post = runner.storage.get_post_by_id(pid)
     assert post["suggested_reply"].startswith("Câu trả lời AI")
     assert post["ai_analysis"].startswith("AI [")
-    assert fake_ai == ["threads_reply", "threads_reply"]  # đọc bài + viết reply (PLAN-163)
+    assert fake_ai == ["threads_reply", "threads_reply", "threads_reply"]  # đọc + viết + self-check
 
 
 def test_ai_failure_falls_back_with_reason(runner, monkeypatch):
@@ -1463,6 +1465,8 @@ def test_checkpoint_safeguards_1411(monkeypatch):
 
     # 3. no_link reply
     async def fake_ai(prompt, *, purpose="generic"):
+        if prompt.startswith("KIỂM TRA REPLY"):
+            return "KEEP", {"provider": "test", "model": "mock"}
         return "công nhận t cũng thấy mẫu đó mặc tôn dáng lắm", {"provider": "test", "model": "mock"}
 
     monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
@@ -1541,12 +1545,34 @@ def test_no_link_bo_nhac_ten_va_cat_dai():
 
 def test_no_link_con_tro_thi_quay_ve_reply_co_link(monkeypatch):
     async def fake_ai(prompt, *, purpose="generic"):
+        if prompt.startswith("KIỂM TRA REPLY"):
+            return "KEEP", {"provider": "test", "model": "mock"}
         return "https://t.me/zt_shopee_bot @zt_shopee_bot", {"provider": "test", "model": "mock"}
 
     monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
     text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
         "đồ tết mua ở đâu", TargetBot.CASHBOT, ABVariant.VARIANT_A, channel="telegram", include_link=False))
     assert "no_link" not in analysis and "t.me/" in text
+
+
+def test_self_check_rewrite_spammy_reply(monkeypatch):
+    """Agent tự chấm: nháp spam → viết lại 1 lần; tag analysis có rewrite."""
+    calls = []
+
+    async def fake_ai(prompt, *, purpose="generic"):
+        calls.append(prompt[:40])
+        if prompt.startswith("KIỂM TRA REPLY"):
+            return "ủa mình cũng hay canh deal Shopee, b thử https://t.me/zt_shopee_bot?start=threads_cb_save xem hoàn nha", {
+                "provider": "test", "model": "mock"}
+        return "🔥 HỜI PHẾT!!! ĐỪNG BỎ LỠ!!! vào bot hoàn tiền ngay!!!", {"provider": "test", "model": "mock"}
+
+    monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
+    text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
+        "Săn sale Shopee", TargetBot.CASHBOT, ABVariant.VARIANT_A, channel="telegram", include_link=True))
+    assert "rewrite" in analysis
+    assert "HỜI PHẾT" not in text
+    assert "t.me/zt_shopee_bot" in text
+    assert any(c.startswith("KIỂM TRA REPLY") for c in calls)
 
 
 # 15/11: mỗi tài khoản một mã nguồn — trước đó reply @anlinh dùng chung mã @us28qt, khách @anlinh bị tính cho @us28qt.
