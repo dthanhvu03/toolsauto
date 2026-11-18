@@ -1,0 +1,101 @@
+{
+  "deployed_at": "2026-11-18T05:09:12.703180+00:00",
+  "backup": "/tmp/toolsauto-executive-backup-20261118T050911Z",
+  "files": [
+    {
+      "path": ".vite/manifest.json",
+      "previous_sha256": "5d2fa7bfdd35290390535710450d533a50171ef0a56b5458f10ee025ba253ee9",
+      "sha256": "65ecb475f81ff00a879d3de4bc058e8172dc16ef3600c5a6c0a8580bc3a64a22"
+    },
+    {
+      "path": "assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2",
+      "previous_sha256": "2317fa4bb293c9c0b110e18315d529235c47a0ddd3338cea3d8c7955e927899e",
+      "sha256": "2317fa4bb293c9c0b110e18315d529235c47a0ddd3338cea3d8c7955e927899e"
+    },
+    {
+      "path": "assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2",
+      "previous_sha256": "6894439694946a589d157ece003086960a6a4013d74a813dab7602efdb3d8c09",
+      "sha256": "6894439694946a589d157ece003086960a6a4013d74a813dab7602efdb3d8c09"
+    },
+    {
+      "path": "assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2",
+      "previous_sha256": "824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f",
+      "sha256": "824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f"
+    },
+    {
+      "path": "assets/geist-latin-wght-normal-BgDaEnEv.woff2",
+      "previous_sha256": "19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1",
+      "sha256": "19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1"
+    },
+    {
+      "path": "assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2",
+      "previous_sha256": "8fa40e5d248247735eb97a0bd593b8852440430600d6ba01364c31fe0abc1fe1",
+      "sha256": "8fa40e5d248247735eb97a0bd593b8852440430600d6ba01364c31fe0abc1fe1"
+    },
+    {
+      "path": "assets/index-DYdiOZ1_.css",
+      "previous_sha256": null,
+      "sha256": "03ae50641f00a59d4bf3cada027785e807a04fb0884bea5a3016777e363bba4b"
+    },
+    {
+      "path": "assets/index-HuYiZsyk.js",
+      "previous_sha256": null,
+      "sha256": "88bca345e5be62ee653232ce7020b6e20e2c976204ade73d1bf05cd07df3c3db"
+    },
+    {
+      "path": "index.html",
+      "previous_sha256": "16d9e82ec86189b7bc2ce32cb2a540ba88351cf86e77d426137ed45c2c735b3b",
+      "sha256": "a786e524cd4d28f7bcc8070c686f3b20db9d7e92a98119dc5f31cbfa44e169f6"
+    }
+  ],
+  "base_commit": "649d42e4620795edad1df292a06e99acce4d9b03",
+  "processes_before": {
+    "Maintenance": {
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 3173949,
+      "status": "online",
+      "restarts": 6
+    },
+    "Studio_Heavy": {
+      "pid": 776,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 778,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 784,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 786,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 798,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 3403840,
+      "status": "online",
+      "restarts": 23
+    }
+  },
+  "atomic_index_verified": true,
+  "status": "STATIC_DEPLOYED_RESTART_PENDING"
+}

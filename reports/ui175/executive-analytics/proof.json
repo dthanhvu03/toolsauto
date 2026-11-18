@@ -1,0 +1,168 @@
+{
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "requests": [
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 30,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 30,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 30,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "normal"
+    },
+    {
+      "days": 30,
+      "mode": "normal"
+    },
+    {
+      "days": 7,
+      "mode": "empty"
+    },
+    {
+      "days": 7,
+      "mode": "zeros"
+    },
+    {
+      "days": 7,
+      "mode": "unavailable"
+    },
+    {
+      "days": 7,
+      "mode": "legacy"
+    },
+    {
+      "days": 7,
+      "mode": "http_error"
+    },
+    {
+      "days": 7,
+      "mode": "http_error"
+    },
+    {
+      "days": 7,
+      "mode": "http_error"
+    },
+    {
+      "days": 7,
+      "mode": "http_error"
+    }
+  ],
+  "page_errors": [],
+  "unexpected": [],
+  "checks": [
+    {
+      "days": 7,
+      "width": 320,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 390,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 768,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 1440,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 320,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 390,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 768,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 1440,
+      "geometry": "PASS",
+      "negative_point": "PASS"
+    },
+    {
+      "scenario": "empty",
+      "width": 320,
+      "result": "PASS"
+    },
+    {
+      "scenario": "zeros",
+      "width": 320,
+      "result": "PASS"
+    },
+    {
+      "scenario": "unavailable",
+      "width": 320,
+      "result": "PASS"
+    },
+    {
+      "scenario": "legacy",
+      "width": 320,
+      "result": "PASS"
+    },
+    {
+      "scenario": "http_error",
+      "width": 320,
+      "result": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

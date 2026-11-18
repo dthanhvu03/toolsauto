@@ -39,6 +39,13 @@ Rà soát rồi cải tiến toàn bộ UI/UX ToolsAuto theo thứ tự phase, l
 - [x] Phase 1 dashboard; Phase 2 Studio/video; Phase 3 vận hành; Phase 4 control Xe Tết; Phase 5 Cashback/native menu review; Phase 6 Jinja/shared controls và regression.
 - [x] Kiểm tra trực quan mobile/tablet/desktop, browser interactions và lưu proof.
 
+## Follow-up — executive charts and product/money visibility (2026-11-18)
+- [x] API supports read-only Store and Cashback summaries, trends, and money positions for 7/30 days.
+- [x] Store rankings use delivered quantity, net-of-refund sales, recorded cost semantics, and configured admin exclusion.
+- [x] Cashback balances and payout amounts come from `money_flow.snapshot`; Store and Cashback amounts remain separate.
+- [x] Responsive overview proof at 320/390/768/1440px; backend/frontend regression tests pass.
+- [x] Record proof and outstanding runtime acceptance in PLAN-175/current-status.
+
 ## Verification Proof
 `reports/ui175/README.md` + `summary.json`: 112 route×viewport checks PASS; frontend và overlay build PASS; 147 related regression tests passed in 23.94s; 57 Jinja templates parse PASS; git diff --check exit 0. Browser API hoàn toàn mock, không chứng minh production runtime. Còn bundle-size warnings, physical-phone/authenticated acceptance và independent sign-off.
 
@@ -57,3 +64,11 @@ Follow-up 2026-11-17: owner requested customer pagination and CEO/COO scope beyo
 | 2026-11-17 | Planned | PLAN-175 ghi roadmap theo phase; bước A bắt đầu ở dashboard SPA |
 | 2026-11-17 | In Progress | Codex thực thi theo ngoại lệ trực tiếp của chủ bot |
 | 2026-11-17 | Execution Verified | Mobile foundation pass qua 6 đợt; proof durable, chưa mark Done/archive hoặc deploy |
+
+
+## Executive analytics proof — 2026-11-18
+Read-only API and mobile charts/rankings/money positions implemented. Related tests 139 passed; final focused tests 3 passed; Ruff/diff check PASS. Frontend build PASS (1,871 modules, 606.98 kB JS); 8 period/viewport + 5 failure/empty/legacy checks PASS, no JS errors/unexpected requests. Full proof: reports/ui175/executive-analytics/README.md. No deploy/commit/push/restart; runtime and physical phone/Claude review pending.
+
+Execution Done. Cần Claude Code verify + handoff.
+
+Release authorization 2026-11-18: owner requested commit/push/restart. Static backup and 9 files verified; release and live proof follow in PLAN-175 and reports/ui175/executive-analytics/.

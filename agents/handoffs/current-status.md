@@ -1,3 +1,11 @@
+## Phiên 2026-11-18 (Codex) — PLAN-175 chart, top món và trạng thái tiền — local verified
+- Chủ bot duyệt triển khai sau khi hỏi Tổng quan thiếu chart, Store không thấy món bán nhiều và tiền ra sao.
+- Đã code API chỉ đọc 7/30 ngày + UI chart Store/Cashback, top 5 số món và lãi gộp riêng, giá vốn/chi phí đã ghi, số tiền hiện tại/lũy kế với nhãn đúng nghĩa. Cashback tổng và chart cùng kỳ lịch VN; tiền chưa xác minh không hiện thành 0.
+- Proof reports/ui175/executive-analytics/: related 139 tests passed; final analytics 3 passed; Ruff/diff check PASS; build 1,871 modules, JS 606.98 kB; 8 period×viewport + 5 trạng thái rỗng/lỗi/legacy PASS, page_errors=[], unexpected=[]. Đã xem ảnh mock mobile/desktop, subagent review không phát hiện lỗi tính nghiêm trọng.
+- Chủ bot đã duyệt commit/push/restart 18/11. Bundle mới index-HuYiZsyk.js đã copy/hash verify, backup /tmp/toolsauto-executive-backup-20261118T050911Z; đang hoàn tất commit/push và restart riêng Web_Dashboard. Ảnh fixture dùng dữ liệu giả. Còn bundle warning và TemplateResponse warning sẵn có.
+- Pending: deploy + authenticated live acceptance, điện thoại thật/iOS, Claude verify/handoff. Tổng quan hỗ trợ ưu tiên món và việc cần xử lý; chưa đủ kết luận ROI quảng cáo hoặc tiền mặt chủ bot được rút. Không thay luồng khách/tiền/schema hoặc gọi vendor.
+- **Execution Done. Cần Claude Code verify + handoff.** Chưa Done/archive.
+
 ## Phiên 2026-11-17 (Codex) — PLAN-175 follow-up điều hành và phân trang, deployed
 - Owner góp ý danh sách thiếu phân trang, Tổng quan mới chỉ có Buffer; tiếp tục theo ủy quyền UI toàn chương trình.
 - Khách các bot: 25/trang + lọc/tìm kiếm về trang đầu; Cashback 50/trang, link query tương đối giữ bộ lọc khi qua proxy. Tổng hợp/chart độc lập trang; backend vẫn đọc tập khách đầy đủ trước khi cắt response.

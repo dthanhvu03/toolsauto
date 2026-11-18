@@ -161,3 +161,31 @@ Execution Done. Cần Claude Code verify + handoff.
 - Chủ bot yêu cầu «em commit va pussh nha»; nhánh `feat/xe-tet`, remote `origin`. Fetch xác nhận HEAD và remote cùng mốc trước commit (`0 0`).
 - Commit chỉ gồm UI source, bundle đang phục vụ và proof PLAN-175; không gộp hai bản vá test audit có sẵn.
 - Staged diff check phát hiện whitespace trong 3 proof scripts mới; đã chuẩn hóa, không đổi logic. Bundle JS có 5 dòng chỉ có khoảng trắng bên trong CSS template string của dependency; giữ nguyên output Vite để khớp tên asset và SHA-256 đã deploy. Kiểm source/proof bằng `git diff --cached --check -- . ':!app/static/admin/assets/*'`.
+
+## Follow-up scope — charts, top products, and money position
+- Owner requested charts, Store best sellers, and clearer money visibility on the executive overview (2026-11-18).
+- Extend `/api/admin/executive` as a read-only endpoint with `days=7|30`; keep source failures isolated and preserve existing summary fields during transition.
+- Store: use existing `StoreRepository.cashflow` for daily (7d) or weekly (30d) buckets; revenue after refunds, cost for delivered items, gross/net profit, top five by sold quantity and gross profit, customer balance, recorded FatCat capital/used capital, and pending order/top-up counts. Exclude configured admins from customer sales and pending counts. Product gross profit is not net profit because outside expenses are not apportioned per item.
+- Cashback: use existing `insights.daily`, `insights.money`, and canonical `money_flow.snapshot`. Keep settled owner receipt, upcoming owner amount, customer waiting/wallet, reserved/paid payouts, and payout-fund headroom separate; never combine with Store money.
+- UI: 7/30 day selector, responsive SVG trend charts, Store seller/profit lists and money cards, Cashback trend and money-position cards. No chart dependency, mutation, migration, vendor calls, wallet changes, or bot messaging.
+- Verification: focused backend tests for refunds/partial orders/admin exclusion/source isolation/read-only access; frontend build and 320/390/768/1440 layout proof; no deployment unless separately requested.
+
+
+### Executive analytics execution proof — 2026-11-18
+- Scope approved directly by owner in this chat; source implemented locally, no deploy/restart/commit/push for this increment.
+- API retains existing summary fields and adds 7/30-day trends, independent Store rankings, expenses/cost and money positions. Cashback now consistently uses the same Vietnam calendar start for both summary and trend (period labels explicitly updated); wallet/settlement snapshot remains all-time/current.
+- Mobile chart: measured SVG geometry, negative values and zero line, exact values via touch/select; product cards expose sold quantity/revenue/gross profit. Unknown settlement amounts are not coerced to zero. No library/schema or money-flow mutation.
+- Related suite: 139 passed, 14 existing TemplateResponse warnings in 45.19s. Final focused analytics suite: 3 passed in 5.26s. Ruff and diff check PASS.
+- Frontend build PASS: 1,871 modules, 16.52s; JS 606.98 kB (gzip 180.11 kB), existing chunk warning. Output /tmp/toolsauto-executive-analytics-dist only.
+- Browser fixture: 8 period×viewport checks (7/30 at 320/390/768/1440) + 5 empty/zero/source error/legacy API/HTTP error scenarios; page_errors=[], unexpected=[]. Negative-point selection and chart coordinates checked. Screenshots visually reviewed.
+- Independent subagent code review: no critical calculation issue; not formal Anti/Claude acceptance. Proof and limits: reports/ui175/executive-analytics/README.md and proof.json.
+- Pending: deploy and authenticated live acceptance, real phone/iOS, Claude verify + handoff; no archive. Previous-period comparisons and ROI/CAC remain out of this increment.
+
+Execution Done. Cần Claude Code verify + handoff.
+
+
+### Executive analytics release — owner authorized 2026-11-18
+- Owner: «commit và push và restart lại cho anh». Release uses current feat/xe-tet; fetched base 649d42e matches origin (0/0).
+- Final preflight: analytics 3 passed in 7.11s, build PASS (1,871 modules, 8.82s), 13 browser fixture cases PASS.
+- Static files deployed with backup /tmp/toolsauto-executive-backup-20261118T050911Z; 9 files hash-verified, old assets retained, atomic index source absent/destination hash matched. New JS index-HuYiZsyk.js.
+- Commit/push and restart only Web_Dashboard next; authenticated live proof will be recorded after restart. No bot/worker restart or migration.
