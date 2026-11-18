@@ -288,7 +288,7 @@ _NOT_WORTH = re.compile(r"^\W*$")
 # Người sợ bấm link lạ (chủ bot 12/11): nói điều bot thật sự KHÔNG làm, để họ tự tìm bot thay vì bấm link.
 _SAFE_NOTE = {
     TargetBot.CASHBOT: "chỉ cần dán link món Shopee vào bot, tiền hoàn rút về đúng tài khoản ngân hàng của mình.",
-    TargetBot.AI_STORE: "xem giá trước rồi mới nạp, chuyển khoản qua mã QR ngân hàng, bot gửi acc tự động.",
+    TargetBot.AI_STORE: "xem giá CapCut Pro 30D trước rồi mới nạp, chuyển khoản qua mã QR ngân hàng, bot gửi acc tự động.",
 }
 
 

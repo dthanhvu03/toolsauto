@@ -69,11 +69,11 @@ _STATIC = {
         },
     ),
     TargetBot.AI_STORE: (
-        "AI Pass Store (Tài khoản AI & Tool bản quyền)",
+        "AI Pass Store (CapCut Pro 30D — hero)",
         "aipass_shop_bot",
         {
-            ABVariant.VARIANT_A: ("threads_ai_auto", "Cấp tài khoản tức thì 24/7 tự động"),
-            ABVariant.VARIANT_B: ("threads_ai_price", "Giá sỉ tiết kiệm & Bảo hành 1 đổi 1"),
+            ABVariant.VARIANT_A: ("threads_ai_auto", "CapCut Pro 30D — bot cấp acc sau QR"),
+            ABVariant.VARIANT_B: ("threads_ai_price", "CapCut Pro ~34k/tháng, giá rõ trong bot"),
         },
     ),
 }
