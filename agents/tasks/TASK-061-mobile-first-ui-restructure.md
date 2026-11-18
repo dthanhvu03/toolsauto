@@ -72,3 +72,5 @@ Read-only API and mobile charts/rankings/money positions implemented. Related te
 Execution Done. Cần Claude Code verify + handoff.
 
 Release authorization 2026-11-18: owner requested commit/push/restart. Static backup and 9 files verified; release and live proof follow in PLAN-175 and reports/ui175/executive-analytics/.
+
+Release completed 2026-11-18: code/bundle 28f6b1f pushed; Web_Dashboard restarted 6 → 7 and online. Authenticated 7/30-day APIs HTTP 200; all chart totals match; 8 live viewport checks PASS, page_errors=[]; tailnet TLS/API PASS. Other PM2 processes unchanged; four bot systemd services active. See live-proof.json. Physical phone/iOS and formal Claude review pending.

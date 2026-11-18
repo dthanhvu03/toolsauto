@@ -1,0 +1,114 @@
+{
+  "checked_at": "2026-11-18T05:15:43.475126+00:00",
+  "http": {
+    "/health": 200,
+    "/app": 200,
+    "/api/admin/overview": 200,
+    "/api/admin/processes": 200
+  },
+  "periods": {
+    "7": {
+      "http": 200,
+      "sources_available": true,
+      "errors": [],
+      "store_buckets": 7,
+      "cashback_buckets": 7,
+      "store_top_sellers": 3,
+      "store_top_profit": 3,
+      "trend_totals_match": true
+    },
+    "30": {
+      "http": 200,
+      "sources_available": true,
+      "errors": [],
+      "store_buckets": 5,
+      "cashback_buckets": 5,
+      "store_top_sellers": 5,
+      "store_top_profit": 5,
+      "trend_totals_match": true
+    }
+  },
+  "browser": [
+    {
+      "days": 7,
+      "width": 320,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 390,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 768,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 7,
+      "width": 1440,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 320,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 390,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 768,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    },
+    {
+      "days": 30,
+      "width": 1440,
+      "overflow": false,
+      "chart_geometry": "PASS"
+    }
+  ],
+  "page_errors": [],
+  "blocked_requests": [],
+  "code_commit": "28f6b1fbcc4869ce6b74b2c53e74fe7fdb84de39",
+  "login": 200,
+  "invalid_period_status": 422,
+  "asset_hashes": {
+    "assets/index-HuYiZsyk.js": "88bca345e5be62ee653232ce7020b6e20e2c976204ade73d1bf05cd07df3c3db",
+    "assets/index-DYdiOZ1_.css": "03ae50641f00a59d4bf3cada027785e807a04fb0884bea5a3016777e363bba4b",
+    "assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2": "2317fa4bb293c9c0b110e18315d529235c47a0ddd3338cea3d8c7955e927899e",
+    "assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2": "6894439694946a589d157ece003086960a6a4013d74a813dab7602efdb3d8c09",
+    "assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2": "8fa40e5d248247735eb97a0bd593b8852440430600d6ba01364c31fe0abc1fe1",
+    "assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2": "824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f",
+    "assets/geist-latin-wght-normal-BgDaEnEv.woff2": "19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1"
+  },
+  "index_sha256": "a786e524cd4d28f7bcc8070c686f3b20db9d7e92a98119dc5f31cbfa44e169f6",
+  "dashboard": {
+    "pid": 3668763,
+    "status": "online",
+    "restarts": 7
+  },
+  "other_pm2_unchanged": true,
+  "bot_services": {
+    "store-bot": "active",
+    "store-api": "active",
+    "cashback-bot": "active",
+    "cashback-zalo": "active"
+  },
+  "tailnet": {
+    "login": 200,
+    "executive_30d": 200,
+    "tls_verified": true
+  },
+  "status": "PASS"
+}

@@ -97,5 +97,13 @@
     }
   },
   "atomic_index_verified": true,
-  "status": "STATIC_DEPLOYED_RESTART_PENDING"
+  "status": "LIVE_VERIFIED",
+  "code_commit": "28f6b1fbcc4869ce6b74b2c53e74fe7fdb84de39",
+  "verified_at": "2026-11-18T05:15:43.475126+00:00",
+  "dashboard_after": {
+    "pid": 3668763,
+    "status": "online",
+    "restarts": 7
+  },
+  "live_proof": "live-proof.json"
 }

@@ -188,4 +188,9 @@ Execution Done. Cần Claude Code verify + handoff.
 - Owner: «commit và push và restart lại cho anh». Release uses current feat/xe-tet; fetched base 649d42e matches origin (0/0).
 - Final preflight: analytics 3 passed in 7.11s, build PASS (1,871 modules, 8.82s), 13 browser fixture cases PASS.
 - Static files deployed with backup /tmp/toolsauto-executive-backup-20261118T050911Z; 9 files hash-verified, old assets retained, atomic index source absent/destination hash matched. New JS index-HuYiZsyk.js.
-- Commit/push and restart only Web_Dashboard next; authenticated live proof will be recorded after restart. No bot/worker restart or migration.
+- Commit/bundle 28f6b1f pushed to origin/feat/xe-tet; restarted only Web_Dashboard (6 → 7, PID 3668763, online). No bot/worker restart or migration.
+- Authenticated live proof 18/11 12:15 VN: login/core GETs/executive 7d+30d HTTP 200, four sources available/errors=[], trend totals match summaries, invalid day 422; seven assets + index SHA match. 8 live period×viewport checks PASS, no overflow/pageerrors/blocked requests.
+- Tailnet HTTPS login/executive 30d HTTP 200, TLS verified. Other PM2 baseline unchanged; store-bot/store-api/cashback-bot/cashback-zalo active. Initial probe arrived before server ready (ECONNREFUSED); recheck after health=200 passed, no second restart.
+- Proof: reports/ui175/executive-analytics/live-proof.json and deployment.json. Physical phone/iOS + formal Claude/Anti acceptance remain pending; no archive.
+
+Execution Done. Cần Claude Code verify + handoff.

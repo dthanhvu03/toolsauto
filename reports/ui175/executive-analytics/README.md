@@ -1,6 +1,6 @@
 # PLAN-175 executive analytics — implementation proof
 
-User approved implementation on 2026-11-18 after requesting charts, Store product rankings, and money visibility. Owner authorized deploy, commit, push and dashboard restart on 2026-11-18. Static bundle is copied and hash-verified; code commit/push, Web_Dashboard restart and live acceptance follow. No schema/data change, vendor call or message is part of this release.
+User approved implementation on 2026-11-18 after requesting charts, Store product rankings, and money visibility. Owner authorized deploy, commit, push and dashboard restart on 2026-11-18. Static bundle is deployed and code commit 28f6b1f is pushed to origin/feat/xe-tet. Web_Dashboard was restarted and authenticated live checks passed. No schema/data change, vendor call or message is part of this release.
 
 ## What the overview shows
 
@@ -45,7 +45,7 @@ Read-only review by an independent subagent found no critical calculation issue.
 
 ## Remaining acceptance
 
-- Static files deployed; Web_Dashboard restart and authenticated live acceptance are pending in this snapshot.
+- Static deployment, Web_Dashboard restart and authenticated live acceptance are complete; see live-proof.json.
 - Physical phone/iOS Safari not tested; browser emulation is Chromium.
 - Existing Vite >500 kB bundle warning and Starlette TemplateResponse deprecation remain.
 - No attribution ROI/CAC, bank cash balance, complete unrecorded costs, automated advice, or Xe Tet metrics are provided. Previous-period percentage comparisons are not implemented.
@@ -56,3 +56,13 @@ Execution Done. Cần Claude Code verify + handoff.
 ## Release staging — 2026-11-18
 
 Fresh frontend build PASS (1,871 modules, 8.82s); final analytics tests 3 passed in 7.11s; 13 browser fixture cases PASS. Git fetch found HEAD and origin/feat/xe-tet both at 649d42e (0/0). Static backup /tmp/toolsauto-executive-backup-20261118T050911Z; 9 output files hash-verified, previous assets retained, index replaced atomically. New JS index-HuYiZsyk.js; index SHA-256 a786e524cd4d28f7bcc8070c686f3b20db9d7e92a98119dc5f31cbfa44e169f6
+
+## Live acceptance — 2026-11-18 12:15 VN
+
+Code/bundle commit **28f6b1f** pushed to origin/feat/xe-tet. Only Web_Dashboard restarted, restart count 6 → 7, PID 3668763, online. The first immediate login probe hit ECONNREFUSED during startup; next /health returned 200 and the complete smoke passed without another restart.
+
+Authenticated login, /health, /app, overview/process APIs and executive 7/30-day APIs all returned HTTP 200. All four executive sources available, errors=[]. Store and Cashback trend totals matched their summary values for both periods. Store displayed 3 ranked products for 7 days and 5 for 30 days. Invalid period returned 422. Seven HTTP asset hashes and served index matched the deployed build.
+
+Read-only live browser: 7/30 days × 320/390/768/1440 widths (8 checks), no overflow, chart geometry PASS, exact-point selector works; page_errors=[], blocked_requests=[]. No live screenshots, customer records or credentials saved. Authenticated tailnet HTTPS :8443 login and 30-day executive API returned 200 with valid TLS. Other PM2 PID/restart/status baselines unchanged, all four Store/Cashback systemd services active.
+
+Execution Done. Cần Claude Code verify + handoff. Physical phone/iOS and formal independent sign-off remain pending.
