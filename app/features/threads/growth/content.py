@@ -126,12 +126,19 @@ def with_buy_note(text: str) -> str:
     return text if "giỏ" in text.lower() else f"{text.rstrip()}\n{CART_NOTE}"
 
 
-_STYLE = """Văn phong — viết y như người thật trên Threads, không như quảng cáo:
-- Giọng chia sẻ cá nhân, xưng t / mình, gọi mấy bà / mn. Teencode vừa phải (ko, đc, nha, á, nè). Tối đa 2 emoji.
+_STYLE = """Văn phong — trợ lý của shop chia sẻ thông tin hữu ích, không giả làm khách hàng:
+- Giọng tự nhiên, xưng mình, gọi bạn / mn. Teencode vừa phải (ko, đc, nha, á, nè). Tối đa 2 emoji.
 - KHÔNG «hời phết», «đỉnh chóp», «đừng bỏ lỡ», không dấu chấm than liên tục, không hashtag.
 - KHÔNG dùng chữ «VietQR» — tiền hoàn nói «về tài khoản ngân hàng».
-- KHÔNG bịa số liệu ngoài những số được cho. KHÔNG lộ là AI viết.
+- KHÔNG bịa số liệu ngoài những số được cho; không bịa đã mua/dùng/test/nhận hoàn hoặc chứng thực cá nhân.
+- Không chào sản phẩm lệch nhu cầu, không hứa giá/bảo hành/kết quả ngoài dữ kiện. Nếu hỏi có phải AI thì nói thật là trợ lý tự động.
 Chỉ xuất đúng nội dung bài, không giải thích, không ngoặc kép."""
+
+
+_CONVERSATION_GOAL = (
+    "Bám chi tiết thật, nêu điều hữu ích cho người đọc; nếu hợp ngữ cảnh thì mở ra một ý dễ góp chuyện. "
+    "Không bắt buộc đặt câu hỏi và không giả trải nghiệm cá nhân."
+)
 
 
 def _deal_prompt(deals: List[Deal], link: str, handle: str, sale_line: str) -> str:
@@ -146,6 +153,7 @@ Món:
 {lines}
 
 {sale_line}
+Mục tiêu nội dung: {_CONVERSATION_GOAL}
 Cuối bài nhắc: link từng món để ở dưới cùng — copy link món dán vào bot Telegram (link bot ở dưới) để được hoàn tiền,
 đừng bấm mua thẳng.
 KHÔNG viết «{handle}» (trên Threads «@…» là gắn thẻ tài khoản Threads, không mở bot) — link bot tự gắn cuối bài.
@@ -165,6 +173,7 @@ về tài khoản ngân hàng. KHÔNG viết «{handle}» — link bot tự gắ
 
 Độ dài 4–6 dòng ngắn.
 {_LENGTH_ASK}
+Mục tiêu nội dung: {_CONVERSATION_GOAL}
 {_NOTES_ASK}
 {_STYLE}"""
 
@@ -193,10 +202,9 @@ def _is_item(line: str) -> bool:
     return line.lstrip().startswith(("-", "•")) and bool(_PRICE.search(line)) and "giỏ" not in line.lower()
 
 
-def fit_post(lines: List[str], link: str, limit: int = POST_LIMIT) -> List[str]:
-    """Bài quá 500 ký tự (Threads không đăng): (1) dòng nhắc giỏ dài → câu nhắc chuẩn ngắn; (2) bỏ dòng phụ ở giữa,
-    dài nhất trước; (3) bỏ món từ cuối, giữ ít nhất 1 món; (4) còn dài thì cắt dòng đầu. Luôn giữ dòng đầu, dòng cuối
-    (kêu gọi dán link vào bot) và lưu ý giỏ hàng."""
+def fit_post(lines: List[str], link: str, limit: int = POST_LIMIT, preserve_items: bool = False) -> List[str]:
+    """Reduce only removable body lines; preserve opening, ending, questions and mandatory cart note.
+    Product rows are removed only when no product-link footer is attached. If required content cannot fit, return []."""
     lines = list(lines)
 
     def size() -> int:
@@ -206,18 +214,22 @@ def fit_post(lines: List[str], link: str, limit: int = POST_LIMIT) -> List[str]:
         lines = [CART_NOTE if "giỏ" in x.lower() and len(x) > len(CART_NOTE) else x for x in lines]
     while size() > limit:
         middle = range(1, len(lines) - 1)
-        extra = [i for i in middle if lines[i] and "giỏ" not in lines[i].lower() and not _is_item(lines[i])]
-        items = [i for i in middle if _is_item(lines[i])]
+        extra = [
+            i for i in middle
+            if lines[i]
+            and "giỏ" not in lines[i].lower()
+            and not _is_item(lines[i])
+            and "?" not in lines[i]
+        ]
         if extra:
             del lines[max(extra, key=lambda i: len(lines[i]))]
-        elif len(items) > 1:
+            continue
+        items = [i for i in middle if _is_item(lines[i])]
+        if len(items) > 1 and not preserve_items:
             del lines[items[-1]]
-        else:
-            break
+            continue
+        return []
     lines = [x for i, x in enumerate(lines) if x or (i and lines[i - 1])]
-    over = size() - limit
-    if over > 0 and lines:
-        lines[0] = lines[0][: max(len(lines[0]) - over - 1, 20)].rstrip(" ,.") + "…"
     return lines
 
 
@@ -250,7 +262,11 @@ def clean_post(text: str, link: str, footer: Optional[List[str]] = None) -> str:
         lines.pop()
     tail = list(footer or [])
     reserve = len("\n".join(tail)) + 1 if tail else 0
-    return "\n".join(fit_post(lines, link, POST_LIMIT - reserve) + [link] + tail)
+    body = fit_post(lines, link, POST_LIMIT - reserve, preserve_items=bool(tail))
+    if not body:
+        return ""
+    result = "\n".join(body + [link] + tail)
+    return result if len(result) <= POST_LIMIT else ""
 
 
 @dataclass(frozen=True)
@@ -271,7 +287,10 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
     if event and sale_ref not in used_refs:
         text = await _ai(_sale_prompt(event, today, link, profile.handle))
         if text:
-            return OwnPostDraft("sale", clean_post(with_buy_note(text), link), sale_ref)
+            body = clean_post(with_buy_note(text), link)
+            if body:
+                return OwnPostDraft("sale", body, sale_ref)
+            logger.warning("growth.content: bỏ sale draft vì không thể rút gọn an toàn")
     fresh = [d for d in load_deals(now, deal_path) if f"deal:{d.item_id}" not in used_refs][:2]  # 3 món là quá 500 ký tự
     if not fresh:
         return None
@@ -280,6 +299,9 @@ async def write_own_post(now: datetime, used_refs: set[str], deal_path: Optional
     if not text:
         return None
     body = clean_post(with_buy_note(text), link, item_links(fresh))
+    if not body:
+        logger.warning("growth.content: bỏ deal draft vì không thể giữ thân bài và link trong giới hạn")
+        return None
     return OwnPostDraft("deal", body, ",".join(f"deal:{d.item_id}" for d in fresh))
 
 

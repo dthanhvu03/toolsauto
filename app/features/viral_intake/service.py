@@ -1004,6 +1004,37 @@ class ViralService:
                     f"'Phần {mat.part_index}/{mat.part_total}'"
                     + (" và đây là phần KẾT." if cuoi else f" và mời xem Phần {mat.part_index + 1} tiếp theo.")
                 )
+            page_niches = []
+            if mat.scraped_by_account_id and mat.target_page:
+                source_account = db.get(Account, mat.scraped_by_account_id)
+                if source_account:
+                    page_niches = (
+                        source_account.page_niches_map or {}
+                    ).get(mat.target_page, [])
+
+            recent_captions = None
+            if mat.target_page:
+                recent_rows = (
+                    db.query(ViralMaterial.ai_caption)
+                    .filter(
+                        ViralMaterial.target_page == mat.target_page,
+                        ViralMaterial.id != mat.id,
+                        ViralMaterial.ai_caption.isnot(None),
+                        func.trim(ViralMaterial.ai_caption) != "",
+                    )
+                    .order_by(
+                        func.coalesce(ViralMaterial.ai_caption_at, 0).desc(),
+                        ViralMaterial.id.desc(),
+                    )
+                    .limit(5)
+                    .all()
+                )
+                recent_captions = [
+                    str(row[0]).strip()
+                    for row in recent_rows
+                    if str(row[0] or "").strip()
+                ]
+
             if not style:
                 from app.core import settings as runtime_settings
                 style = runtime_settings.get_str("ai.caption_style", default="short", db=db) or "short"
@@ -1026,6 +1057,8 @@ class ViralService:
                     getattr(mat, "target_page", None),
                     _buffer_channels(db),
                 ),
+                page_niches=page_niches,
+                recent_captions=recent_captions,
             ) or {}
             caption = str(result.get("caption", "") or "").strip()
             if not caption:
