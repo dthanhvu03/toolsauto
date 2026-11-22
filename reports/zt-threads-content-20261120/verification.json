@@ -1,0 +1,27 @@
+{
+  "verified_at": "2026-11-20T03:17:09.522723+00:00",
+  "checks": [
+    {
+      "id": "ZT-BF-C01",
+      "chars": 245,
+      "status": "draft_not_published",
+      "copy_image_hash_dimensions_links_pass": true
+    },
+    {
+      "id": "ZT-BF-C02",
+      "chars": 255,
+      "status": "draft_not_published",
+      "copy_image_hash_dimensions_links_pass": true
+    },
+    {
+      "id": "ZT-BF-C03",
+      "chars": 296,
+      "status": "draft_not_published",
+      "copy_image_hash_dimensions_links_pass": true
+    }
+  ],
+  "all_static_checks_passed": true,
+  "visual_review": "Passed: both new graphics viewed; revised image2 headline viewed again; no text clipping, all3 image files decode. Image3 actual guide asset reused and visually verified PLAN182.",
+  "new_public_actions": 0,
+  "new_schedules": 0
+}

@@ -1,0 +1,42 @@
+{
+  "plan": "PLAN-183",
+  "created_at": "2026-11-20T03:15:13.514752+00:00",
+  "campaign": "ZT Black Friday27/11/2026",
+  "invite_expire_at": "2026-11-30T23:59:59+07:00",
+  "posts": [
+    {
+      "id": "ZT-BF-C01",
+      "angle": "Hỏi chuyện / wishlist",
+      "text": "Black Friday 27/11, mọi người đang chờ giảm món gì nhất? 🛍️\n\nThử ghi trước 3 thứ: món thật sự cần, số tiền tối đa muốn chi và giá đang thấy. Đến lúc sale, nhìn lại sẽ đỡ bị cuốn vào món “rẻ mà không cần”.\n\nĐể lại một món + ngân sách ở dưới nhé 👇",
+      "image": "01-wishlist.png",
+      "goal": "Phản hồi nêu món cần mua và ngân sách; chưa tính là khách dùng bot.",
+      "status": "draft_not_published",
+      "chars": 245,
+      "text_sha256": "8793a23beb3dfdae302111ca301708ab580e6f5151a23b46c6b214fc852bf7b1",
+      "image_sha256": "bfc6bb75b7532b3d69c09fdba1a53634b9ceebee954a6fbecd50605f4ba780b7"
+    },
+    {
+      "id": "ZT-BF-C02",
+      "angle": "Giải đáp / điều kiện mã",
+      "text": "Lưu mã Shopee xong mà thanh toán vẫn không giảm? Thử kiểm 4 chỗ này trước:\n\n• Đơn tối thiểu.\n• Mức giảm tối đa.\n• Món/shop được áp dụng.\n• Giờ dùng mã.\n\nSo tổng tiền cuối, gồm cả phí ship, rồi hãy chốt. Đừng mua thêm món không cần chỉ để đủ điều kiện mã 🛒",
+      "image": "02-doc-dieu-kien-ma.png",
+      "goal": "Câu hỏi cụ thể về cách áp mã; không hứa mã áp dụng cho mọi tài khoản.",
+      "status": "draft_not_published",
+      "chars": 255,
+      "text_sha256": "14dc3e0ff2609a417de5e70709c5f582931077f3090ff8d01fad239baa1d5c14",
+      "image_sha256": "2a5ecd75013145e226b4c6d50612a3f3c198f814ee376e1a2faf6de9afdb8b25"
+    },
+    {
+      "id": "ZT-BF-C03",
+      "angle": "Mời vào kênh",
+      "text": "Có ai muốn canh Black Friday 27/11 cùng nhau không? 🛍️\n\nMình có kênh ZT báo mã để xem mã Shopee, món tham khảo và điều kiện áp dụng:\nhttps://t.me/+02gPhoNuEjcxMmJl\n\nCó mã hợp món mình cần thì chốt, không cần mua cho bằng được nhé.\nMã có thể hết lượt/tùy tài khoản. Kênh có link tiếp thị liên kết.",
+      "image": "../zt-blackfriday-20261120/zt-blackfriday-guide.png",
+      "goal": "Người vào kênh và dùng Cashbot; tổng member chưa chứng minh đến từ bài này.",
+      "status": "draft_not_published",
+      "chars": 296,
+      "text_sha256": "de26a5e629e0de2c9e74966c4b42599c9b7736cc492a71faaf69813adb7e1876",
+      "image_sha256": "090145e1468897f303fa1060cf1ef2e7e2a1bff40254f773daa1a4c466d92316"
+    }
+  ],
+  "publication": "No new posts or schedule created. PLAN181 original and PLAN182 image reply already published separately."
+}
