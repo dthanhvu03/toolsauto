@@ -1,0 +1,76 @@
+{
+  "plan": "PLAN-179",
+  "observed_at": "2026-11-19T16:17:24.828998+00:00",
+  "strategy_started_at": "2026-11-19T16:03:51.988089+00:00",
+  "evaluate_after": "2026-11-21T16:03:51.988089+00:00",
+  "goal_progress": {
+    "availability": {
+      "business": "available",
+      "activity": "available"
+    },
+    "answered_two_way_conversations": 0,
+    "new_customers_used": 0,
+    "threads_first_touch_new_customers_used": 0,
+    "new_customers_used_per_bot": {
+      "cashbot": 0,
+      "ai_store": 0
+    },
+    "qualified_two_way_conversations": null,
+    "status": "observed_counts_not_causal_or_deduplicated"
+  },
+  "offer_context": {
+    "cashbot": {
+      "source": "cashback_bot/messages.py + cashback_bot/tiktok_url.py",
+      "purpose": "Dán link sản phẩm Shopee, nhận link mua và số hoàn dự kiến; không phải link thanh toán.",
+      "steps": "Mở sản phẩm trên Shopee → Chia sẻ → Sao chép liên kết → dán vào bot.",
+      "tiktok_scope": "Có luồng link sản phẩm TikTok Shop; chỉ nói được hỗ trợ khi link/điều kiện thực tế hợp lệ.",
+      "limits": "Hoàn là dự kiến, không hứa tiền chắc chắn; khách mua và thanh toán trên sàn."
+    },
+    "ai_store": {
+      "product": "CapCut",
+      "catalog_status": "verified_product_2",
+      "duration_days": 30,
+      "delivery": "tài khoản cấp sẵn",
+      "max_devices": 2,
+      "limits": "Chỉ dùng thông tin catalog đã xác minh; không hứa kho, giá, bảo hành, nâng chính chủ.",
+      "source": "store.products:2 name/description"
+    }
+  },
+  "readonly_evidence": {
+    "since": "2026-11-19T16:03:51.988089+00:00",
+    "until": "2026-11-19T16:17:24.828998+00:00",
+    "business": {
+      "status": "available",
+      "since": "2026-11-19T16:03:51.988089+00:00",
+      "until": "2026-11-19T16:17:24.828998+00:00",
+      "groups": [],
+      "availability": {
+        "cashbot": "available",
+        "ai_store": "available"
+      },
+      "unavailable_sources": 0
+    },
+    "activity": {
+      "status": "available",
+      "since": "2026-11-19T16:03:51.988089+00:00",
+      "until": "2026-11-19T16:17:24.828998+00:00",
+      "public_replies_sent": {
+        "cashbot": 0,
+        "ai_store": 0
+      },
+      "public_followups_sent": 0,
+      "public_answered_conversations": 0,
+      "public_support_handoffs": 0,
+      "dm_inbound_messages": 0,
+      "dm_messages_sent": 0,
+      "dm_inbound_threads_answered": 0,
+      "answered_two_way_conversations": 0,
+      "qualified_two_way_conversations": null,
+      "qualified_conversation_measurement": "qualification_not_recorded",
+      "stored_public_need_sample": {},
+      "need_sample_limit": 1000,
+      "current_held_queue_rows_unique": 24
+    }
+  },
+  "customer_or_public_actions": 0
+}

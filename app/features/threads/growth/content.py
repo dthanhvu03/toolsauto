@@ -312,6 +312,19 @@ _SAFE_NOTE = {
     TargetBot.CASHBOT: "chỉ cần dán link món Shopee vào bot, tiền hoàn rút về đúng tài khoản ngân hàng của mình.",
     TargetBot.AI_STORE: "xem giá CapCut Pro 30D trước rồi mới nạp, chuyển khoản qua mã QR ngân hàng, bot gửi acc tự động.",
 }
+_HOW_TO = {
+    TargetBot.CASHBOT: (
+        "Tiền hoàn là ước tính, được ghi vào ví trong bot rồi rút về tài khoản ngân hàng. "
+        "Cách dùng: dán link món vào bot, bấm nút Mua của bot rồi đặt; món có sẵn trong giỏ thì xoá đi, "
+        "mở lại bằng link bot rồi mới thêm giỏ."
+    ),
+    TargetBot.AI_STORE: (
+        "Chỉ giải thích gói CapCut Pro 30 ngày, tài khoản cấp sẵn; mời xem mô tả và giá hiện tại trong bot. "
+        "Cách mua: chọn món rồi xem hướng dẫn thanh toán của bot; không yêu cầu nạp ví trước để xem giá. "
+        "Không hướng dẫn dán link mua sắm, xoá giỏ hay hoàn tiền Cashbot. "
+        "Vấn đề đã thanh toán/chưa nhận hàng, hoàn tiền hoặc bảo hành cần chủ shop kiểm tra, không tự hứa kết quả."
+    ),
+}
 
 
 async def write_followup(bot: TargetBot, our_reply: str, comment: str,
@@ -325,19 +338,22 @@ async def write_followup(bot: TargetBot, our_reply: str, comment: str,
     kb = guidance_block(comment, "threads", k=2)  # PLAN-170: gợi ý tâm lý theo đúng câu họ nói
     if kb:
         logger.info("growth.followup kb: %s", ", ".join(kb.ids))
-    prompt = f"""Bạn là chủ tài khoản Threads. Bạn đã để lại reply sau dưới bài của người khác:
+    prompt = f"""Bạn là trợ lý của shop/bot quản lý tài khoản Threads. Bạn đã để lại reply sau dưới bài của người khác:
 \"\"\"{our_reply}\"\"\"
 
 Có người trả lời lại bạn:
 \"\"\"{comment}\"\"\"
 
 Nếu họ hỏi / tò mò / muốn thử về {profile.name} ({profile.handle}) — vd «bot gì», «có thật ko», «dùng sao», «uy tín ko»,
-«link đâu» — thì trả lời ngắn gọn, đúng câu hỏi, thật thà (bot đang chạy thật; tiền hoàn là ước tính, về ví trong bot rồi rút
-về tài khoản ngân hàng). Hỏi cách dùng thì nhắc: dán link món vào bot, bấm nút Mua của bot rồi đặt; món có sẵn
-trong giỏ thì xoá đi, mở lại bằng link bot rồi mới thêm giỏ. Cần link thì đưa: {link}
+«link đâu» — thì trả lời ngắn gọn, đúng câu hỏi, thật thà.
+Thông tin đúng cho bot đang nói: {_HOW_TO[bot]}
+Cần link thì đưa: {link}
 Nếu họ ngại / sợ bấm link lạ, sợ lừa đảo — KHÔNG đưa link: đồng cảm («cẩn thận vậy là đúng á»), bảo họ tự mở Telegram,
 gõ tìm {profile.handle.lstrip("@")} (viết đúng như vậy, không có @); bot không hỏi mật khẩu / mã OTP / thông tin thẻ, {_SAFE_NOTE[bot]}
 Nếu họ chỉ cảm ơn / thả cảm xúc / chê / cãi / spam / bán hàng cạnh tranh / không liên quan thì chỉ xuất đúng chữ: SKIP
+- Không bịa đã mua, đã dùng, đã test, đã nhận hoàn hoặc trải nghiệm/chứng thực cá nhân; ví dụ hệ thống không phải trải nghiệm của mình.
+- Chỉ trả lời câu hỏi trong phạm vi sản phẩm đang nói; không lồng bán món khác, không hứa giá/bảo hành/kết quả chưa có dữ kiện.
+- Nếu hỏi có phải bot/AI không thì nói thật là trợ lý tự động của shop; không giả làm người mua.
 {kb.text + chr(10) if kb else ''}
 Văn phong: 1–2 câu, tối đa 200 ký tự, như người thật nhắn qua lại, teencode vừa phải, không quảng cáo, không chữ «VietQR».
 Chỉ xuất câu trả lời (hoặc SKIP), không giải thích."""

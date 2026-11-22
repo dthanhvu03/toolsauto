@@ -1,0 +1,27 @@
+{
+  "last_notified_at": "2026-11-20T02:11:21.939064+00:00",
+  "last_review_slot_notified": "2026-11-20-06",
+  "last_review_issue_notified": {
+    "role": "content",
+    "status": "unavailable",
+    "reason": "semantic_quality_gate_failed",
+    "needs_revision": true
+  },
+  "notification_keys": [
+    "strategy:2026-11-20-06:content:semantic_quality_gate_failed",
+    "plan181:published:zt-bf26-threads-p1"
+  ],
+  "plan181": {
+    "publication_notified": true,
+    "baseline_member_count": 3,
+    "last_notified_member_count": 3,
+    "last_notified_new_bot_users": 0,
+    "last_notified_used_customers": 0
+  },
+  "plan182": {
+    "publication_notified_at": "2026-11-20T03:15:13.516818+00:00",
+    "post_url": "https://www.threads.com/@us28qt/post/Df8pynHiYfZ",
+    "kind": "own_image_continuation",
+    "business_results_claimed": false
+  }
+}

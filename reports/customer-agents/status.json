@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "plan": "PLAN-178",
+  "strategy_plan": "PLAN-179",
+  "strategy_review_path": "reports/customer-agents/strategy/latest.json",
+  "missions": {
+    "acquisition": "Tìm nhu cầu mua và câu hỏi CapCut cụ thể; trợ giúp không link.",
+    "engagement": "Trả lời inbound đúng nhu cầu; chuyển ca tiền/đơn/bảo hành cho chủ shop.",
+    "measurement": "Đo khách mới dùng thật và hội thoại theo cửa sổ 24h/7 ngày.",
+    "conversion": "Mỗi6giờ chọn tối đa2 thử nghiệm với điều kiện giữ/bỏ.",
+    "content": "Mỗi6giờ chuẩn bị2 nháp từ nhu cầu có bằng chứng, chưa tự đăng."
+  },
+  "heartbeat_at": "2026-11-20T04:25:41.672780+00:00",
+  "worker_started_at": "2026-11-20T03:07:51.305653+00:00",
+  "worker_pid": 0,
+  "phase": "stopped",
+  "error_type": null,
+  "stale_after_seconds": 180,
+  "quiet_hours_vn": "00:30-06:30",
+  "scan_interval_minutes": 120,
+  "accounts": {
+    "primary": {
+      "enabled": true,
+      "bots": [
+        "cashbot"
+      ],
+      "dm_enabled": true
+    },
+    "store": {
+      "enabled": true,
+      "bots": [
+        "ai_store"
+      ],
+      "dm_enabled": false
+    }
+  },
+  "agents": {
+    "acquisition": {
+      "state": "stopped",
+      "channel": "public_posts",
+      "last_scan_started_at": "2026-11-20T03:08:16.793848+00:00"
+    },
+    "engagement": {
+      "state": "stopped",
+      "channels": [
+        "public_inbound",
+        "dm_inbound"
+      ],
+      "dm_enabled_accounts": [
+        "primary"
+      ],
+      "last_dm_attempt_at": {
+        "primary": "2026-11-20T04:22:54.477338+00:00"
+      },
+      "last_followup_attempt_at": {
+        "primary": "2026-11-20T04:13:55.943989+00:00",
+        "store": "2026-11-20T04:13:55.952396+00:00"
+      }
+    }
+  },
+  "current_cycle": null,
+  "last_cycle": {
+    "observed_at": "2026-11-20T04:25:41.672780+00:00",
+    "counts": {
+      "scanned_posts": 0,
+      "opportunities_reviewed": 0,
+      "opportunities_blocked": 0,
+      "buyer_opportunities": 0,
+      "help_opportunities": 0,
+      "queue_replies_blocked": 24,
+      "drafts_created": 0,
+      "public_replies_sent": 0,
+      "buyer_replies_sent": 0,
+      "help_replies_sent": 0,
+      "public_send_failures": 0,
+      "dm_checks": 0,
+      "followup_pages_checked": 0,
+      "public_followups_sent": 0,
+      "dm_replies_sent": 0,
+      "handoffs": 0,
+      "dm_failures": 0,
+      "errors": 0
+    }
+  },
+  "last_activity": null,
+  "limits": [
+    "single_existing_sender",
+    "inbound_only_dm",
+    "existing_quotas_and_quiet_hours",
+    "counts_are_not_acquired_customers"
+  ],
+  "operator_stop": {
+    "plan": "PLAN-185",
+    "at": "2026-11-20T04:29:27.026343+00:00",
+    "reason": "Owner cancelled all growth agents pending a new direction",
+    "auto_resume": false
+  }
+}

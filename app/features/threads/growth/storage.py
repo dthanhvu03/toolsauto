@@ -257,7 +257,7 @@ class GrowthStorage:
                 rows = conn.execute("SELECT * FROM growth_posts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
 
-    def approved_queue(self, limit: int = 20, bots: Optional[tuple] = None) -> List[Dict[str, Any]]:
+    def approved_queue(self, limit: int = 20, bots: Optional[tuple] = None, offset: int = 0) -> List[Dict[str, Any]]:
         """Bài đã duyệt chờ đăng — điểm thành khách cao trước (theo nấc 10, PLAN-163), cùng nấc thì độ phủ cao trước, rồi cũ trước.
 
         ``bots``: chỉ bài của các bot này (vai của tài khoản đang đăng, PLAN-167); None = mọi bot.
@@ -271,8 +271,8 @@ class GrowthStorage:
         with self._connection() as conn:
             rows = conn.execute(
                 f"SELECT * FROM growth_posts WHERE {where} "
-                "ORDER BY COALESCE(relevance_score, 0) / 10 DESC, reach DESC, id ASC LIMIT ?",
-                (*args, limit),
+                "ORDER BY COALESCE(relevance_score, 0) / 10 DESC, reach DESC, id ASC LIMIT ? OFFSET ?",
+                (*args, limit, max(0, int(offset))),
             ).fetchall()
         return [dict(r) for r in rows]
 

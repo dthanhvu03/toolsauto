@@ -17,6 +17,7 @@ from app.features.threads.growth.config import (
     load_limits,
 )
 from app.features.threads.growth.evaluator import GrowthEvaluator
+from app.features.threads.growth.acquisition import qualify_opportunity, qualify_reply
 from app.features.threads.growth.scanner import ScannedPost
 from app.features.threads.growth.storage import GrowthStorage
 
@@ -73,6 +74,11 @@ class GrowthRunner:
             logger.debug("Thread %s does not match any bot target.", post.thread_id)
             return None
 
+        opportunity = qualify_opportunity(post.content, bot_type)
+        if not opportunity.eligible:
+            logger.debug("Acquisition skipped thread %s (%s)", post.thread_id, opportunity.reason)
+            return None
+
         # 2. Tính điểm liên quan
         relevance = GrowthEvaluator.calculate_relevance(post.content, bot_type)
         min_relevance = self.limits.min_relevance
@@ -88,7 +94,10 @@ class GrowthRunner:
             return None
 
         # 2c. AI đọc tâm lý / nhu cầu / câu chữ. Đọc được thì điểm = khả năng thành khách, thay điểm từ khoá.
-        reading, read_fail = await GrowthEvaluator.read_post(post.content, bot_type)
+        if opportunity.lane == "help_first":
+            reading, read_fail = await GrowthEvaluator.read_post(post.content, bot_type, lane="help_first")
+        else:
+            reading, read_fail = await GrowthEvaluator.read_post(post.content, bot_type)
         if reading is not None:
             relevance = reading.buy_score
 
@@ -116,7 +125,10 @@ class GrowthRunner:
             post.content, re.IGNORECASE,
         ))
         # 16/11: ~15% reply chỉ trò chuyện (trước ~33%) — ưu tiên CTA có link khi đang cần đổ khách từ Threads.
-        include_link = True if asks_link else (random.random() >= 0.15)
+        if bot_type == TargetBot.AI_STORE:
+            include_link = opportunity.lane == "buyer"
+        else:
+            include_link = True if asks_link else (random.random() >= 0.15)
 
         suggested_reply, analysis = await GrowthEvaluator.generate_reply(
             content=post.content,
@@ -126,6 +138,10 @@ class GrowthRunner:
             include_link=include_link,
         )
         analysis = f"{analysis} | {reading.summary()}" if reading else f"{analysis} | Đọc AI lỗi: {read_fail}"
+        analysis += f" | lane:{opportunity.lane}"
+        copy_check = qualify_reply(post.content, bot_type, suggested_reply)
+        if not copy_check.eligible:
+            analysis += f" | Agent hold: {copy_check.reason}"
 
         # 5. Lưu vào database
         auto = (
@@ -133,6 +149,7 @@ class GrowthRunner:
             and reading is not None  # AI chưa đọc được bài (lỗi / hết key) → không tự đăng theo điểm từ khoá (PLAN-163)
             and relevance >= auto_post_min
             and not analysis.startswith("Fallback")
+            and copy_check.eligible
         )
         post_id = self.storage.save_post(
             thread_id=post.thread_id,
@@ -231,8 +248,10 @@ class GrowthRunner:
         lim = self.limits
         return random.randint(lim.min_delay_sec, max(lim.min_delay_sec, lim.max_delay_sec))
 
-    def mark_posted(self, post_id: int, reply_url: Optional[str] = None, account: Optional[str] = None) -> bool:
-        return self.storage.update_status(post_id, "posted", reply_url=reply_url, account=account)
+    def mark_posted(self, post_id: int, reply_url: Optional[str] = None, account: Optional[str] = None,
+                    actual_reply: Optional[str] = None) -> bool:
+        return self.storage.update_status(post_id, "posted", reply_url=reply_url, account=account,
+                                          actual_reply=actual_reply)
 
     def mark_failed(self, post_id: int, error: str, account: Optional[str] = None) -> bool:
         return self.storage.update_status(post_id, "failed", error_message=error[:500], account=account)

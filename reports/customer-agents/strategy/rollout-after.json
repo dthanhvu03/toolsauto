@@ -1,0 +1,190 @@
+{
+  "observed_at": "2026-11-19T16:16:45.456404+00:00",
+  "pm2": {
+    "Maintenance": {
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1,
+      "unstable": 0,
+      "rss_bytes": 437633024
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0,
+      "unstable": 0,
+      "rss_bytes": 0
+    },
+    "Web_Dashboard": {
+      "pid": 3668763,
+      "status": "online",
+      "restarts": 7,
+      "unstable": 0,
+      "rss_bytes": 171368448
+    },
+    "Studio_Heavy": {
+      "pid": 776,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0,
+      "rss_bytes": 102825984
+    },
+    "Studio_Light": {
+      "pid": 778,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0,
+      "rss_bytes": 102797312
+    },
+    "VieNeu_TTS": {
+      "pid": 784,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0,
+      "rss_bytes": 1373999104
+    },
+    "shopee-mcp": {
+      "pid": 3147903,
+      "status": "online",
+      "restarts": 29,
+      "unstable": 0,
+      "rss_bytes": 3407872
+    },
+    "9Router_Gateway": {
+      "pid": 798,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0,
+      "rss_bytes": 137154560
+    },
+    "Threads_Growth": {
+      "pid": 3184112,
+      "status": "online",
+      "restarts": 27,
+      "unstable": 0,
+      "rss_bytes": 121610240
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 3186655,
+      "status": "online",
+      "restarts": 4,
+      "unstable": 0,
+      "rss_bytes": 80175104
+    }
+  },
+  "systemd": {
+    "store-bot": [
+      "MainPID=3966961",
+      "ActiveState=active"
+    ],
+    "cashback-bot": [
+      "MainPID=1456507",
+      "ActiveState=active"
+    ],
+    "cashback-zalo": [
+      "MainPID=1456511",
+      "ActiveState=active"
+    ]
+  },
+  "roles_sha256": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+  "unrelated_pm2_pid_changes": [],
+  "systemd_unchanged": true,
+  "roles_unchanged": true,
+  "growth_status": {
+    "strategy_plan": "PLAN-179",
+    "worker_pid": 3184112,
+    "heartbeat_at": "2026-11-19T16:16:14.540932+00:00",
+    "phase": "working",
+    "missions": {
+      "acquisition": "Tìm nhu cầu mua và câu hỏi CapCut cụ thể; trợ giúp không link.",
+      "engagement": "Trả lời inbound đúng nhu cầu; chuyển ca tiền/đơn/bảo hành cho chủ shop.",
+      "measurement": "Đo khách mới dùng thật và hội thoại theo cửa sổ 24h/7 ngày.",
+      "conversion": "Mỗi6giờ chọn tối đa2 thử nghiệm với điều kiện giữ/bỏ.",
+      "content": "Mỗi6giờ chuẩn bị2 nháp từ nhu cầu có bằng chứng, chưa tự đăng."
+    },
+    "scan_interval_minutes": 120,
+    "quiet_hours_vn": "00:30-06:30",
+    "accounts": {
+      "primary": {
+        "enabled": true,
+        "bots": [
+          "cashbot"
+        ],
+        "dm_enabled": true
+      },
+      "store": {
+        "enabled": true,
+        "bots": [
+          "ai_store"
+        ],
+        "dm_enabled": false
+      }
+    },
+    "current_cycle": {
+      "observed_at": "2026-11-19T16:16:14.540932+00:00",
+      "counts": {
+        "scanned_posts": 0,
+        "opportunities_reviewed": 0,
+        "opportunities_blocked": 0,
+        "buyer_opportunities": 0,
+        "help_opportunities": 0,
+        "queue_replies_blocked": 0,
+        "drafts_created": 0,
+        "public_replies_sent": 0,
+        "buyer_replies_sent": 0,
+        "help_replies_sent": 0,
+        "public_send_failures": 0,
+        "dm_checks": 1,
+        "followup_pages_checked": 0,
+        "public_followups_sent": 0,
+        "dm_replies_sent": 0,
+        "handoffs": 0,
+        "dm_failures": 0,
+        "errors": 0
+      }
+    },
+    "last_cycle": null
+  },
+  "supervisor_status": {
+    "heartbeat_at": "2026-11-19T16:17:24.211184+00:00",
+    "worker_pid": 3186655,
+    "scan_status": "unchanged",
+    "last_error_type": null,
+    "poll_seconds": 5,
+    "event_counts": {
+      "ignored": 1
+    },
+    "last_ai_started": "2026-11-18T12:43:28.296399+00:00",
+    "baseline_counts": {
+      "observed_at": "2026-11-18T12:43:16.539147+00:00",
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "product_markers": 0,
+      "confirm_markers": 0,
+      "qr_customers": 0,
+      "paid_topup_customers": 0,
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null
+    },
+    "exact_source": "threads_ai_cc18_anlinh_p1",
+    "source_db_mode": "ro",
+    "specialist_roles": [
+      "measurement",
+      "conversion",
+      "content"
+    ],
+    "customer_or_public_actions": 0,
+    "chat_delivery_interval_minutes": 15,
+    "strategy_plan": "PLAN-179",
+    "strategy_review_interval_hours": 6,
+    "strategy_review_path": "reports/customer-agents/strategy/latest.json"
+  },
+  "same_bucket_check": {
+    "status": "already_attempted",
+    "slot": "2026-11-19-18",
+    "state_unchanged": true
+  }
+}

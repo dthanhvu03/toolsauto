@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.features.psych_kb.prompting import guidance_block
+from app.features.threads.growth.acquisition import is_seller_offer, qualify_help_reply_copy, qualify_reply_copy
 from app.features.threads.growth.config import (
     CASHBOT_ZALO_NAME,
     CASHBOT_ZALO_URL,
@@ -42,12 +43,11 @@ AI_SIGNALS = (
 )
 
 
-# Bài chào hàng rõ ràng (người bán / chạy affiliate) — reply vào đó không ra khách. Lọc rẻ trước khi gọi AI (PLAN-163).
-SELLER_SIGNALS = (
-    "inbox", "ib mình", "ib em", "ib shop", "ib ngay", "link ở bio", "link trong bio", "link bio", "chốt đơn",
-    "nhận order", "nhận đơn", "giá sỉ", "giá chỉ", "nhanh tay", "mua ngay", "săn ngay", "freeship",
-    "zalo:", "liên hệ zalo", "sẵn hàng", "còn hàng", "lên đơn",
-)
+_CAPCUT_OFFER = "CapCut Pro 30 ngày, tài khoản cấp sẵn, đăng nhập tối đa 2 thiết bị; xem mô tả và giá hiện tại trong bot."
+_SAFE_FALLBACK = {
+    TargetBot.AI_STORE: "Shop có gói " + _CAPCUT_OFFER,
+    TargetBot.CASHBOT: "Bạn có thể dán link món vào bot để xem số hoàn dự kiến và điều kiện áp dụng nhé.",
+}
 
 
 @dataclass(frozen=True)
@@ -231,13 +231,24 @@ class GrowthEvaluator:
 
     @staticmethod
     def looks_like_seller(content: str) -> bool:
-        text = (content or "").lower()
-        return any(s in text for s in SELLER_SIGNALS)
+        return is_seller_offer(content)
 
     @staticmethod
-    async def read_post(content: str, bot_type: TargetBot) -> Tuple[Optional[PostReading], str]:
+    async def read_post(content: str, bot_type: TargetBot, *,
+                        lane: str = "buyer") -> Tuple[Optional[PostReading], str]:
         """AI đọc tâm lý, cảm xúc, nhu cầu, câu chữ của người viết → (bản đọc | None, lý do khi None)."""
         profile: BotGrowthProfile = load_profiles()[bot_type]
+        scoring = (
+            "Đây là nhánh HELP_FIRST: đánh giá khả năng trả lời hữu ích cho câu hỏi sử dụng CapCut cụ thể. "
+            "Trường buy_score ở JSON là điểm hữu ích/phù hợp cho nhánh này, KHÔNG phải ý định mua. "
+            "Không yêu cầu người hỏi muốn mua. Câu hỏi cụ thể về xuất video, tài nguyên Pro, phụ đề/font/âm thanh "
+            "có thể được giải thích hay hỏi làm rõ an toàn → 65–100. Câu chung về edit đẹp/lên xu hướng ≤20. "
+            "Không tư vấn crack/mod/vượt trả phí, không biến thành cơ hội bán hàng."
+            if lane == "help_first" else
+            "Nhánh BUYER: AI Store cần nhu cầu mua/quyền dùng CapCut phù hợp gói 30 ngày, tài khoản cấp sẵn. "
+            "Chỉ nhắc tên công cụ hay hỏi sử dụng không phải ý định mua. Cashbot cần nhu cầu mua sắm/tiết kiệm phù hợp. "
+            "Nhu cầu phù hợp cần làm rõ →55–75; đang hỏi mua/quyền dùng mà sản phẩm đáp ứng →75–100."
+        )
         prompt = f"""PHÂN TÍCH BÀI THREADS. Đọc thật kỹ từng câu chữ, cảm xúc và hành vi của người viết bài dưới đây.
 
 Bài đăng:
@@ -254,15 +265,15 @@ Trả về DUY NHẤT một JSON (tiếng Việt, ngắn gọn), không giải t
  "objection": "...",            // điều họ băn khoăn / sợ (rỗng nếu không có)
  "their_words": "...",          // 2–5 chữ đắt nhất của chính họ, chép nguyên văn
  "angle": "...",                // nên nói gì để giúp đúng nhu cầu đó (một câu)
- "buy_score": 0-100}}           // khả năng người này bấm thử {profile.handle} vì nó giải quyết đúng nhu cầu của họ
+ "buy_score": 0-100}}           // điểm phù hợp theo NHÁNH bên dưới; nhánh trợ giúp không suy thành ý định mua
 
-Chấm buy_score (khắt với người bán, rộng với đúng tệp {profile.name}):
+NHÁNH VÀ CÁCH CHẤM: {scoring}
+Giới hạn chung:
 - người bán / chào hàng / affiliate / quảng cáo ≤ 10
 - bài lệch hoàn toàn khỏi Shopee/sale/voucher/AI tools → dưới 20
-- khoe đơn / tâm sự mua sắm chung, chưa rõ nhu cầu bot → 35–50
-- đang nói đúng tệp (Shopee/sale/voucher/hoàn tiền/giỏ hàng hoặc ChatGPT/Claude/Canva/CapCut…) dù chưa hỏi cách → 55–75
-- đang hỏi / than phiền / gặp đúng vấn đề mà bot giải quyết → 75–100
-Không đoán bừa; ưu tiên 55+ khi bài đúng tệp để đừng bỏ khách tiềm năng.
+- tuyển dụng/tìm việc, nhắc tên công cụ, khoe đã có Pro hoặc tâm sự chung không phải nhu cầu mua → dưới 30
+- Không biến khiếu nại/refund/đơn/bảo hành thành cơ hội bán; không gán ý định từ AI chung.
+Không suy diễn người nhắc tên sản phẩm thành khách. Không tự gán ý định từ khóa ngoài ngữ cảnh.
 """
         try:
             raw, meta = await AIUseCases.generate_text_async(prompt, purpose=AIPurpose.THREADS_REPLY)
@@ -279,7 +290,10 @@ Không đoán bừa; ưu tiên 55+ khi bài đúng tệp để đừng bỏ khá
         """Sinh câu trả lời mẫu chất lượng cao khi không có kết nối AI."""
         profile = load_profiles()[bot_type]
         cfg: VariantConfig = profile.variants[variant]
-        return with_link(cfg.sample_hook, cfg.tracking_url, profile.handle)
+        draft = cfg.sample_hook
+        if not qualify_reply_copy(bot_type, draft).eligible:
+            draft = _SAFE_FALLBACK[bot_type]
+        return with_link(draft, cfg.tracking_url, profile.handle)
 
     @classmethod
     async def generate_reply(
@@ -307,6 +321,7 @@ Không đoán bừa; ưu tiên 55+ khi bài đúng tệp để đừng bỏ khá
         zalo = channel == "zalo" and bot_type == TargetBot.CASHBOT
         link = CASHBOT_ZALO_URL if zalo else cfg.tracking_url
         where = CASHBOT_ZALO_NAME if zalo else f"bot Telegram {profile.handle}"
+        offer = _CAPCUT_OFFER if bot_type == TargetBot.AI_STORE else cfg.angle
         example = real_example() if bot_type == TargetBot.CASHBOT else ""
         example_line = (f"Ví dụ thật gần đây (dùng nếu hợp bài, nói «bot báo hoàn khoảng», không nói chắc chắn): {example}\n"
                         if example else "")
@@ -321,7 +336,8 @@ Người viết đang (đã đọc kỹ bài):
 - Chữ của chính họ: {reading.their_words or "không có"}
 - Nên nói: {reading.angle}
 Cách viết: mở đầu bắt đúng cảm xúc đó (đồng cảm, không phán xét), dùng lại 1 chữ của chính họ cho tự nhiên, giải quyết đúng
-cái họ cần / gỡ đúng băn khoăn trước, rồi mới nhắc bot (bằng link) như cách chính mình đã làm và thấy được việc.
+cái họ cần / gỡ đúng băn khoăn trước, rồi chỉ giới thiệu bot nếu phù hợp. Đây là lời trợ giúp của shop, không giả làm
+khách đã mua/dùng hoặc kể kết quả cá nhân không có bằng chứng.
 """
 
         # PLAN-170: gợi ý tâm lý từ kho, theo bài + cảm xúc / băn khoăn đã đọc được.
@@ -330,41 +346,44 @@ cái họ cần / gỡ đúng băn khoăn trước, rồi mới nhắc bot (bằ
         kb_block = f"{kb.text}\n" if kb else ""
 
         if include_link:
-            prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply.
+            prompt = f"""Bạn là trợ lý của shop/bot trên Threads, trả lời người có nhu cầu phù hợp một cách minh bạch.
 
 Bài đăng:
 \"\"\"{content}\"\"\"
 
-Thứ bạn muốn giới thiệu khéo: {profile.name} — {where}
+Sản phẩm shop có thể giới thiệu khi đúng nhu cầu: {profile.name} — {where}
 Góc nói (biến thể {variant.value}): {cfg.name}
-Ý chính: {cfg.angle}
+Ý chính: {offer}
 Link bot (bắt buộc, viết đúng nguyên văn một lần, thay cho tên bot — trên Threads «@tên» không bấm vào bot được): {link}
 {example_line}{insight}{kb_block}
 Văn phong — viết y như người thật trên Threads:
 - 1–2 câu, tối đa khoảng 200 ký tự. Viết liền một mạch, không gạch đầu dòng, không xuống dòng.
 - Giọng nói chuyện, xưng t / mình, gọi b / bà / ông tuỳ bài. Viết thường cũng được, không cần chấm câu cuối.
 - Teencode vừa phải như người Việt hay gõ: ko, đc, j, nha, á, nè, ủa, trời ơi, đù, xỉu, thật sự. Tối đa 1 emoji (vd 🥲 😭 🤣), có thể không dùng.
-- Trả lời đúng nội dung bài trước (đồng cảm / góp ý / trả lời câu hỏi), rồi mới nhắc {"bot bên Zalo" if zalo else "bot bên tele"} (bằng link) như kinh nghiệm cá nhân.
+- Trả lời đúng nội dung bài trước; chỉ nhắc {"bot bên Zalo" if zalo else "bot bên tele"} (bằng link) như dịch vụ của shop nếu giải quyết đúng nhu cầu.
+- KHÔNG bịa đã mua, đã dùng, đã nhận hoàn, đã test hoặc chứng thực cá nhân. Ví dụ dữ liệu hệ thống không phải trải nghiệm của người viết.
 - Link phải nằm trong câu hành động rõ («b thử», «b vô», «b check», «qua đây») — đừng chỉ thả url cuối câu không gắn ý.
 - KHÔNG viết như quảng cáo: không «hời phết», «tha hồ», «đỉnh chóp», «đừng bỏ lỡ», không liệt kê ưu đãi, không dấu chấm than liên tục.
 - KHÔNG dùng chữ «VietQR» — nói tiền hoàn «về tài khoản» / «về thẳng tài khoản ngân hàng»; mua acc thì nói «chuyển khoản».
-- KHÔNG hứa bảo hành, giá, % giảm, thời gian giao hay món hàng nào ngoài đúng «Ý chính» ở trên. Không bịa dịp / sự kiện (Tết, sale…) nếu bài không nhắc.
+- Không báo giá cụ thể, cam kết bảo hành, tồn kho, % giảm hay thời gian giao thiếu dữ kiện. Không bịa dịp / sự kiện (Tết, sale…) nếu bài không nhắc.
 - Đổi cách nói mỗi lần, đừng lặp khuôn «dán link → hoàn tiền về thẳng tài khoản ngân hàng»; nói cụ thể (số thật, món thật)
   thay vì chung chung.
-- KHÔNG ký tự lạ, KHÔNG lộ là AI / bot viết.
+- KHÔNG ký tự lạ. Nếu được hỏi có phải AI/bot không, nói thật là trợ lý tự động của shop; không giả làm khách hàng.
 Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
 """
         else:
-            prompt = f"""Bạn là một người dùng Threads Việt Nam bình thường đang lướt feed, thấy bài dưới đây thì để lại một reply trò chuyện bình thường.
+            prompt = f"""Bạn là trợ lý của shop/bot trên Threads, để lại một câu trợ giúp đúng ngữ cảnh, không giả làm khách hàng.
 
 Bài đăng:
 \"\"\"{content}\"\"\"
 
 {insight}{kb_block}
-Mục tiêu: CHỈ TRÒ CHUYỆN — KHÔNG GẮN LINK, KHÔNG BÁN HÀNG, KHÔNG NHẮC TÊN BOT / APP / @ AI.
+Mục tiêu: TRỢ GIÚP ĐÚNG CÂU HỎI — KHÔNG GẮN LINK, KHÔNG BÁN HÀNG, KHÔNG NHẮC TÊN BOT / @ AI.
+- Với câu hỏi CapCut cụ thể: giải thích một bước có thể kiểm tra an toàn hoặc hỏi thiết bị/phiên bản/thông báo lỗi
+  còn thiếu. Không khẳng định tính năng chưa xác minh, không nói mua/nâng cấp gói, không chỉ cách vượt trả phí/crack.
 - Bám đúng MỘT chi tiết cụ thể trong bài (món đồ, giá, tình huống, câu họ than) rồi nói tiếp ý đó: góp một mẹo nhỏ,
   một nhận xét thật lòng, hoặc hỏi lại đúng chỗ họ đang kẹt. Người ta hỏi lại về sau mới giới thiệu.
-- KHÔNG bịa đã mua / đã dùng món cụ thể nào; nói kiểu chung («hay bị vậy lắm», «t hay canh…»).
+- KHÔNG bịa đã mua / đã dùng / đã test / đã nhận hoàn hoặc thói quen cá nhân; chỉ nêu thông tin kiểm chứng được hay hỏi làm rõ.
 - KHÔNG mở đầu sáo: «Mình hiểu cảm giác…», «Đồng ý với bạn», «Bài viết hay quá», «Chúc bạn…». KHÔNG nhắc lại nguyên
   câu của bài. Không phải reply nào cũng kết bằng câu hỏi.
 
@@ -373,7 +392,7 @@ Văn phong — viết như người thật trên Threads:
 - Xưng t / mình, gọi b / bà / ông theo giọng của bài. Viết thường được, không cần chấm câu cuối.
 - Teencode chỉ khi hợp giọng bài, mỗi reply một hai từ là đủ, đừng lần nào cũng «trời ơi», «xỉu», «thật sự». Emoji: thường
   không dùng, nhiều nhất 1.
-- KHÔNG url, KHÔNG @ ai, KHÔNG bán hàng, KHÔNG lộ là AI.
+- KHÔNG url, KHÔNG @ ai, KHÔNG bán hàng. Nếu được hỏi thì nói thật là trợ lý tự động của shop.
 Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
 """
 
@@ -386,10 +405,13 @@ Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
                 polished, rewritten = await cls._self_check_reply(
                     content, reply.strip(), include_link=include_link, link=link
                 )
-                cleaned = "" if include_link else clean_plain_reply(polished)
-                if len(cleaned) > 10:
+                if not include_link:
+                    check = qualify_help_reply_copy(bot_type, polished)
+                    cleaned = clean_plain_reply(polished)
+                    if not check.eligible or len(cleaned) <= 10:
+                        return "", "Fallback no_link: unsafe or empty help reply"
                     tag = " · no_link"
-                else:  # có link, hoặc no_link bỏ url / @ xong còn trơ → reply có link như thường
+                else:
                     cleaned = with_link(polished, link, profile.handle)
                     tag = f"{' · Zalo' if zalo else ''}"
                 if rewritten:
@@ -404,6 +426,8 @@ Chỉ xuất đúng câu reply, không giải thích, không ngoặc kép.
         except Exception as e:
             analysis = f"Fallback rule-based: lỗi AI ({type(e).__name__}: {e})"
 
+        if not include_link:
+            return "", analysis + " · no_link"
         return cls.get_fallback_reply(bot_type, variant), analysis
 
     @staticmethod
@@ -431,8 +455,10 @@ Bài gốc:
 Reply nháp:
 \"\"\"{draft[:400]}\"\"\"
 
-Chấm: reply có giống quảng cáo / sáo / lộ AI / lệch bài không?
+Chấm: reply có quảng cáo không phù hợp / sáo / lệch bài / bịa trải nghiệm hoặc chứng thực không?
 {link_rule}- Giọng người Việt trên Threads, 1–2 câu, teencode vừa phải.
+- Vai trợ lý của shop; không giả làm khách đã mua/dùng/test/nhận hoàn. Không bịa thói quen cá nhân hay bảo hành, giá, kết quả.
+- Không chèn sản phẩm không giải quyết đúng câu hỏi. Nếu được hỏi có phải AI không thì nói thật.
 - Nếu nháp đã ổn → trả về đúng một chữ: KEEP
 - Nếu cần sửa → chỉ xuất câu reply mới (không giải thích, không ngoặc kép).
 """

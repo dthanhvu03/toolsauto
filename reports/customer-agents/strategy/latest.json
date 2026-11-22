@@ -1,0 +1,539 @@
+{
+  "schema_version": 1,
+  "plan": "PLAN-179",
+  "review_kind": "scheduled_strategy",
+  "slot": "2026-11-20-06",
+  "status": "partial",
+  "evaluation_due": false,
+  "observed_at": "2026-11-19T23:00:02.053452+00:00",
+  "next_review_at": "2026-11-20T05:00:00+00:00",
+  "strategy_started_at": "2026-11-19T16:03:51.988089+00:00",
+  "evaluate_after": "2026-11-21T16:03:51.988089+00:00",
+  "goals": {
+    "answered_two_way_conversations": 5,
+    "new_customers_used": 2,
+    "evaluation_hours": 48
+  },
+  "baseline": {
+    "observed_at": "2026-11-19T16:03:51.988089+00:00",
+    "windows": {
+      "24h": {
+        "business": {
+          "status": "available",
+          "since": "2026-11-18T16:03:51.988089+00:00",
+          "until": "2026-11-19T16:03:51.988089+00:00",
+          "groups": [
+            {
+              "bot": "ai_store",
+              "source_group": "unrecorded",
+              "customers": 1,
+              "used_customers": 0,
+              "delivered_order_customers": 0,
+              "stages": {
+                "product": 0,
+                "confirm": 0,
+                "qr": 0,
+                "paid": 0,
+                "order": 0
+              },
+              "mature_24h": 0,
+              "converted_24h": 0,
+              "conversion_24h_pct": null
+            }
+          ],
+          "availability": {
+            "cashbot": "available",
+            "ai_store": "available"
+          },
+          "unavailable_sources": 0
+        },
+        "activity": {
+          "status": "available",
+          "since": "2026-11-18T16:03:51.988089+00:00",
+          "until": "2026-11-19T16:03:51.988089+00:00",
+          "public_replies_sent": {
+            "cashbot": 4,
+            "ai_store": 2
+          },
+          "public_followups_sent": 0,
+          "public_answered_conversations": 0,
+          "public_support_handoffs": 0,
+          "dm_inbound_messages": 0,
+          "dm_messages_sent": 0,
+          "dm_inbound_threads_answered": 0,
+          "answered_two_way_conversations": 0,
+          "qualified_two_way_conversations": null,
+          "qualified_conversation_measurement": "qualification_not_recorded",
+          "stored_public_need_sample": {
+            "cashbot:buyer": 16
+          },
+          "need_sample_limit": 1000,
+          "current_held_queue_rows_unique": 24
+        }
+      },
+      "7d": {
+        "business": {
+          "status": "available",
+          "since": "2026-11-12T16:03:51.988089+00:00",
+          "until": "2026-11-19T16:03:51.988089+00:00",
+          "groups": [
+            {
+              "bot": "ai_store",
+              "source_group": "threads",
+              "customers": 89,
+              "used_customers": 2,
+              "delivered_order_customers": 2,
+              "stages": {
+                "product": 15,
+                "confirm": 1,
+                "qr": 3,
+                "paid": 2,
+                "order": 2
+              },
+              "mature_24h": 89,
+              "converted_24h": 2,
+              "conversion_24h_pct": 2.2
+            },
+            {
+              "bot": "ai_store",
+              "source_group": "unrecorded",
+              "customers": 6,
+              "used_customers": 1,
+              "delivered_order_customers": 1,
+              "stages": {
+                "product": 3,
+                "confirm": 1,
+                "qr": 1,
+                "paid": 1,
+                "order": 1
+              },
+              "mature_24h": 5,
+              "converted_24h": 1,
+              "conversion_24h_pct": 20.0
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "other",
+              "customers": 3,
+              "used_customers": 0,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 0,
+                "click": 0,
+                "order": 0
+              },
+              "mature_24h": 3,
+              "converted_24h": 0,
+              "conversion_24h_pct": 0.0
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "threads",
+              "customers": 6,
+              "used_customers": 2,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 2,
+                "click": 2,
+                "order": 0
+              },
+              "mature_24h": 6,
+              "converted_24h": 2,
+              "conversion_24h_pct": 33.3
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "unrecorded",
+              "customers": 1,
+              "used_customers": 1,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 1,
+                "click": 1,
+                "order": 0
+              },
+              "mature_24h": 1,
+              "converted_24h": 1,
+              "conversion_24h_pct": 100.0
+            }
+          ],
+          "availability": {
+            "cashbot": "available",
+            "ai_store": "available"
+          },
+          "unavailable_sources": 0
+        },
+        "activity": {
+          "status": "available",
+          "since": "2026-11-12T16:03:51.988089+00:00",
+          "until": "2026-11-19T16:03:51.988089+00:00",
+          "public_replies_sent": {
+            "cashbot": 41,
+            "ai_store": 83
+          },
+          "public_followups_sent": 0,
+          "public_answered_conversations": 0,
+          "public_support_handoffs": 0,
+          "dm_inbound_messages": 14,
+          "dm_messages_sent": 5,
+          "dm_inbound_threads_answered": 5,
+          "answered_two_way_conversations": 5,
+          "qualified_two_way_conversations": null,
+          "qualified_conversation_measurement": "qualification_not_recorded",
+          "stored_public_need_sample": {
+            "ai_store:buyer": 12,
+            "ai_store:excluded": 269,
+            "cashbot:buyer": 104,
+            "cashbot:excluded": 303
+          },
+          "need_sample_limit": 1000,
+          "current_held_queue_rows_unique": 24
+        }
+      }
+    }
+  },
+  "goal_progress": {
+    "availability": {
+      "business": "available",
+      "activity": "available"
+    },
+    "answered_two_way_conversations": 0,
+    "new_customers_used": 0,
+    "threads_first_touch_new_customers_used": 0,
+    "new_customers_used_per_bot": {
+      "cashbot": 0,
+      "ai_store": 0
+    },
+    "qualified_two_way_conversations": null,
+    "status": "observed_counts_not_causal_or_deduplicated"
+  },
+  "goals_status": "aspirational_not_verified",
+  "jobs": {
+    "measurement": {
+      "status": "ready"
+    },
+    "conversion": {
+      "status": "ready_for_review",
+      "experiments": [
+        {
+          "lane": "buyer",
+          "hypothesis": "Làm rõ nhu cầu gói CapCut tài khoản cấp sẵn thời hạn 30 ngày sử dụng tối đa 2 thiết bị trực tiếp từ nhu cầu công khai giúp xác định đúng khách có nhu cầu mua và tăng hội thoại hiệu quả, cần chủ vận hành duyệt trước khi gửi.",
+          "evidence": "Cửa sổ 24h ghi nhận 2 mẫu nhu cầu công khai ai_store:buyer, 0 lượt phản hồi ai_store và 0 hội thoại hai chiều được trả lời nhằm kiểm chứng nhu cầu thực tế; cửa sổ 7d ghi nhận 14 mẫu nhu cầu công khai ai_store:buyer và 82 lượt phản hồi công khai ai_store.",
+          "kpi": "Mục tiêu đạt 3 hội thoại hai chiều được trả lời và 1 khách hàng mới hoàn tất đơn trong khung đánh giá 48h, giữ nguyên hạn ngạch hiện tại.",
+          "stop_rule": "Rà soát sau 48h, dừng thử nghiệm nếu đạt 0 hội thoại hai chiều được trả lời hoặc không có tiến triển nhu cầu; giữ nguyên hạn ngạch."
+        },
+        {
+          "lane": "help_first",
+          "hypothesis": "Giải đáp cụ thể thắc mắc tính năng CapCut trên tài khoản cấp sẵn 30 ngày hỗ trợ tối đa 2 thiết bị mà không kèm liên kết hay chào bán giúp kiểm chứng độ phủ hỗ trợ và thúc đẩy tương tác hai chiều, cần chủ vận hành duyệt.",
+          "evidence": "Cửa sổ 24h ghi nhận 0 lượt phản hồi ai_store và 0 hội thoại hai chiều được trả lời nhằm kiểm chứng độ phủ hỗ trợ cụ thể; cửa sổ 7d ghi nhận 5 hội thoại hai chiều được trả lời và 14 tin nhắn DM đến.",
+          "kpi": "Mục tiêu đạt 2 hội thoại hai chiều được trả lời trong khung đánh giá 48h thuần hỗ trợ kỹ thuật CapCut, tuyệt đối không gửi kèm liên kết, giữ nguyên hạn ngạch.",
+          "stop_rule": "Rà soát sau 48h, dừng thử nghiệm nếu số hội thoại hai chiều được trả lời đạt 0 hoặc xuất hiện vi phạm chèn liên kết/chào bán; giữ nguyên hạn ngạch."
+        }
+      ],
+      "attempted_at": "2026-11-19T23:00:02.053452+00:00"
+    },
+    "content": {
+      "status": "unavailable",
+      "reason": "semantic_quality_gate_failed",
+      "needs_revision": true,
+      "attempted_at": "2026-11-19T23:00:02.053452+00:00"
+    }
+  },
+  "evidence": {
+    "observed_at": "2026-11-19T23:00:02.053452+00:00",
+    "offer_context": {
+      "cashbot": {
+        "source": "cashback_bot/messages.py + cashback_bot/tiktok_url.py",
+        "purpose": "Dán link sản phẩm Shopee, nhận link mua và số hoàn dự kiến; không phải link thanh toán.",
+        "steps": "Mở sản phẩm trên Shopee → Chia sẻ → Sao chép liên kết → dán vào bot.",
+        "tiktok_scope": "Có luồng link sản phẩm TikTok Shop; chỉ nói được hỗ trợ khi link/điều kiện thực tế hợp lệ.",
+        "limits": "Hoàn là dự kiến, không hứa tiền chắc chắn; khách mua và thanh toán trên sàn."
+      },
+      "ai_store": {
+        "product": "CapCut",
+        "catalog_status": "verified_product_2",
+        "duration_days": 30,
+        "delivery": "tài khoản cấp sẵn",
+        "max_devices": 2,
+        "limits": "Chỉ dùng thông tin catalog đã xác minh; không hứa kho, giá, bảo hành, nâng chính chủ.",
+        "source": "store.products:2 name/description"
+      }
+    },
+    "exclusion_scope": {
+      "cashbot": {
+        "applies_to": "business_customer_cohorts_only",
+        "configured_count": 1,
+        "status": "configured_ids_only"
+      },
+      "ai_store": {
+        "applies_to": "business_customer_cohorts_only",
+        "configured_count": 1,
+        "status": "configured_ids_only"
+      }
+    },
+    "windows": {
+      "24h": {
+        "business": {
+          "status": "available",
+          "since": "2026-11-18T23:00:02.053452+00:00",
+          "until": "2026-11-19T23:00:02.053452+00:00",
+          "groups": [
+            {
+              "bot": "ai_store",
+              "source_group": "threads",
+              "customers": 2,
+              "used_customers": 0,
+              "delivered_order_customers": 0,
+              "stages": {
+                "product": 1,
+                "confirm": 0,
+                "qr": 0,
+                "paid": 0,
+                "order": 0
+              },
+              "mature_24h": 0,
+              "converted_24h": 0,
+              "conversion_24h_pct": null
+            },
+            {
+              "bot": "ai_store",
+              "source_group": "unrecorded",
+              "customers": 1,
+              "used_customers": 0,
+              "delivered_order_customers": 0,
+              "stages": {
+                "product": 0,
+                "confirm": 0,
+                "qr": 0,
+                "paid": 0,
+                "order": 0
+              },
+              "mature_24h": 0,
+              "converted_24h": 0,
+              "conversion_24h_pct": null
+            }
+          ],
+          "availability": {
+            "cashbot": "available",
+            "ai_store": "available"
+          },
+          "unavailable_sources": 0
+        },
+        "activity": {
+          "status": "available",
+          "since": "2026-11-18T23:00:02.053452+00:00",
+          "until": "2026-11-19T23:00:02.053452+00:00",
+          "public_replies_sent": {
+            "cashbot": 4,
+            "ai_store": 0
+          },
+          "public_followups_sent": 0,
+          "public_answered_conversations": 0,
+          "public_support_handoffs": 0,
+          "dm_inbound_messages": 0,
+          "dm_messages_sent": 0,
+          "dm_inbound_threads_answered": 0,
+          "answered_two_way_conversations": 0,
+          "qualified_two_way_conversations": null,
+          "qualified_conversation_measurement": "qualification_not_recorded",
+          "stored_public_need_sample": {
+            "ai_store:buyer": 2,
+            "cashbot:buyer": 15
+          },
+          "need_sample_limit": 1000,
+          "current_held_queue_rows_unique": 24
+        }
+      },
+      "7d": {
+        "business": {
+          "status": "available",
+          "since": "2026-11-12T23:00:02.053452+00:00",
+          "until": "2026-11-19T23:00:02.053452+00:00",
+          "groups": [
+            {
+              "bot": "ai_store",
+              "source_group": "threads",
+              "customers": 87,
+              "used_customers": 3,
+              "delivered_order_customers": 3,
+              "stages": {
+                "product": 18,
+                "confirm": 2,
+                "qr": 4,
+                "paid": 3,
+                "order": 3
+              },
+              "mature_24h": 85,
+              "converted_24h": 2,
+              "conversion_24h_pct": 2.4
+            },
+            {
+              "bot": "ai_store",
+              "source_group": "unrecorded",
+              "customers": 6,
+              "used_customers": 1,
+              "delivered_order_customers": 1,
+              "stages": {
+                "product": 3,
+                "confirm": 1,
+                "qr": 1,
+                "paid": 1,
+                "order": 1
+              },
+              "mature_24h": 5,
+              "converted_24h": 1,
+              "conversion_24h_pct": 20.0
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "other",
+              "customers": 3,
+              "used_customers": 0,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 0,
+                "click": 0,
+                "order": 0
+              },
+              "mature_24h": 3,
+              "converted_24h": 0,
+              "conversion_24h_pct": 0.0
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "threads",
+              "customers": 6,
+              "used_customers": 2,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 2,
+                "click": 2,
+                "order": 0
+              },
+              "mature_24h": 6,
+              "converted_24h": 2,
+              "conversion_24h_pct": 33.3
+            },
+            {
+              "bot": "cashbot_tg",
+              "source_group": "unrecorded",
+              "customers": 1,
+              "used_customers": 1,
+              "delivered_order_customers": null,
+              "stages": {
+                "link": 1,
+                "click": 1,
+                "order": 0
+              },
+              "mature_24h": 1,
+              "converted_24h": 1,
+              "conversion_24h_pct": 100.0
+            }
+          ],
+          "availability": {
+            "cashbot": "available",
+            "ai_store": "available"
+          },
+          "unavailable_sources": 0
+        },
+        "activity": {
+          "status": "available",
+          "since": "2026-11-12T23:00:02.053452+00:00",
+          "until": "2026-11-19T23:00:02.053452+00:00",
+          "public_replies_sent": {
+            "cashbot": 40,
+            "ai_store": 82
+          },
+          "public_followups_sent": 0,
+          "public_answered_conversations": 0,
+          "public_support_handoffs": 0,
+          "dm_inbound_messages": 14,
+          "dm_messages_sent": 5,
+          "dm_inbound_threads_answered": 5,
+          "answered_two_way_conversations": 5,
+          "qualified_two_way_conversations": null,
+          "qualified_conversation_measurement": "qualification_not_recorded",
+          "stored_public_need_sample": {
+            "ai_store:buyer": 14,
+            "ai_store:excluded": 263,
+            "cashbot:buyer": 98,
+            "cashbot:excluded": 292
+          },
+          "need_sample_limit": 1000,
+          "current_held_queue_rows_unique": 24
+        }
+      }
+    },
+    "limitations": [
+      "Source is first-touch, not per-post attribution or causal lift.",
+      "Only configured admin/test IDs are excluded; unknown test identities may remain.",
+      "Cashbot use means created link; Store use means currently delivered non-refunded order.",
+      "New customers are cohorts; independent stages and 24h maturity are not a strict funnel.",
+      "No impressions/pre-Start click metrics or keyword-performance attribution are available.",
+      "Demand sample is stored public posts, at most 1000 per window, not all live demand.",
+      "Inbound conversations lack qualification labels; answered counts do not prove qualified leads.",
+      "Conversations and bot customer cohorts are not deduplicated across public/DM/bots.",
+      "Strategy deadline caps event/cohort timestamps; current order statuses can change later.",
+      "Cashbot and Store monetary metrics are not added together."
+    ],
+    "strategy_to_date": {
+      "since": "2026-11-19T16:03:51.988089+00:00",
+      "until": "2026-11-19T23:00:02.053452+00:00",
+      "business": {
+        "status": "available",
+        "since": "2026-11-19T16:03:51.988089+00:00",
+        "until": "2026-11-19T23:00:02.053452+00:00",
+        "groups": [
+          {
+            "bot": "ai_store",
+            "source_group": "threads",
+            "customers": 2,
+            "used_customers": 0,
+            "delivered_order_customers": 0,
+            "stages": {
+              "product": 1,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "mature_24h": 0,
+            "converted_24h": 0,
+            "conversion_24h_pct": null
+          }
+        ],
+        "availability": {
+          "cashbot": "available",
+          "ai_store": "available"
+        },
+        "unavailable_sources": 0
+      },
+      "activity": {
+        "status": "available",
+        "since": "2026-11-19T16:03:51.988089+00:00",
+        "until": "2026-11-19T23:00:02.053452+00:00",
+        "public_replies_sent": {
+          "cashbot": 0,
+          "ai_store": 0
+        },
+        "public_followups_sent": 0,
+        "public_answered_conversations": 0,
+        "public_support_handoffs": 0,
+        "dm_inbound_messages": 0,
+        "dm_messages_sent": 0,
+        "dm_inbound_threads_answered": 0,
+        "answered_two_way_conversations": 0,
+        "qualified_two_way_conversations": null,
+        "qualified_conversation_measurement": "qualification_not_recorded",
+        "stored_public_need_sample": {
+          "ai_store:buyer": 1
+        },
+        "need_sample_limit": 1000,
+        "current_held_queue_rows_unique": 24
+      }
+    }
+  },
+  "fallback_next_action": "Rà mẫu truy vấn hỏi mua/nhờ trợ giúp CapCut; chỉ chọn thử nghiệm sau khi xác minh điều kiện sản phẩm hiện tại.",
+  "suggest_only": true,
+  "customer_or_public_actions": 0
+}

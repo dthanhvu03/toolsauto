@@ -1,0 +1,86 @@
+{
+  "observed_at": "2026-11-19T16:19:28.805917+00:00",
+  "workers": {
+    "Threads_Growth": {
+      "pid": 3184112,
+      "status": "online",
+      "restarts": 27,
+      "unstable": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 3186655,
+      "status": "online",
+      "restarts": 4,
+      "unstable": 0
+    }
+  },
+  "growth": {
+    "worker_pid": 3184112,
+    "heartbeat_at": "2026-11-19T16:17:53.766173+00:00",
+    "phase": "working",
+    "strategy_plan": "PLAN-179",
+    "current_cycle": {
+      "observed_at": "2026-11-19T16:17:53.766173+00:00",
+      "counts": {
+        "scanned_posts": 0,
+        "opportunities_reviewed": 0,
+        "opportunities_blocked": 0,
+        "buyer_opportunities": 0,
+        "help_opportunities": 0,
+        "queue_replies_blocked": 24,
+        "drafts_created": 0,
+        "public_replies_sent": 0,
+        "buyer_replies_sent": 0,
+        "help_replies_sent": 0,
+        "public_send_failures": 0,
+        "dm_checks": 1,
+        "followup_pages_checked": 0,
+        "public_followups_sent": 0,
+        "dm_replies_sent": 0,
+        "handoffs": 0,
+        "dm_failures": 0,
+        "errors": 0
+      }
+    },
+    "last_cycle": null,
+    "last_activity": null
+  },
+  "supervisor": {
+    "heartbeat_at": "2026-11-19T16:19:28.150784+00:00",
+    "worker_pid": 3186655,
+    "scan_status": "unchanged",
+    "last_error_type": null,
+    "poll_seconds": 5,
+    "event_counts": {
+      "ignored": 1
+    },
+    "last_ai_started": "2026-11-18T12:43:28.296399+00:00",
+    "baseline_counts": {
+      "observed_at": "2026-11-18T12:43:16.539147+00:00",
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "product_markers": 0,
+      "confirm_markers": 0,
+      "qr_customers": 0,
+      "paid_topup_customers": 0,
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null
+    },
+    "exact_source": "threads_ai_cc18_anlinh_p1",
+    "source_db_mode": "ro",
+    "specialist_roles": [
+      "measurement",
+      "conversion",
+      "content"
+    ],
+    "customer_or_public_actions": 0,
+    "chat_delivery_interval_minutes": 15,
+    "strategy_plan": "PLAN-179",
+    "strategy_review_interval_hours": 6,
+    "strategy_review_path": "reports/customer-agents/strategy/latest.json"
+  },
+  "pids_match_status": true
+}

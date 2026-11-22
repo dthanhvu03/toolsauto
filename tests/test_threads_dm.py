@@ -64,6 +64,14 @@ def storage(tmp_path):
     return GrowthStorage(tmp_path / "g.sqlite")
 
 
+@pytest.fixture(autouse=True)
+def explicit_dm_permissions(monkeypatch):
+    """Legacy behavior tests explicitly permit both offers; production roles are never read or changed."""
+    monkeypatch.setattr(dm_agent, "load_account_roles", lambda: {
+        ACC: AccountRole(enabled=True, dm=True, bots=("cashbot", "ai_store")),
+    })
+
+
 # --- đọc trang ---------------------------------------------------------------------------------------------------
 
 
@@ -138,10 +146,10 @@ def test_handoff_bao_anh_roi_im_24_gio(storage):
     fake = FakeDm([row], {"h": [DmMessage(False, "acc lỗi rồi shop ơi")]})
     events = handle_inbox(fake, storage, ACC, NOW, _run,
                           _decider(Decision("handoff", "Mình báo chủ shop kiểm tra liền nha", "acc lỗi — bảo hành", "ai_store", 60)))
-    assert events[0]["action"] == "handoff" and len(fake.sent) == 1
+    assert events[0]["action"] == "handoff" and fake.sent == [], "support handoff does not send an AI acknowledgement"
     assert storage.dm_thread("h", ACC)["status"] == "handoff"
     text = dm_handoff_text(events[0])
-    assert "Khách cần anh xử lý" in text and "/messages/t/h/" in text and "bảo hành" in text
+    assert "Khách cần anh xử lý" in text and "/messages/t/h/" in text and "warranty_or_access" in text
     # Khách nhắn thêm trong 24 giờ: không trả lời, chỉ báo anh.
     fake.threads["h"].append(DmMessage(False, "shop ơi?"))
     later = FakeDm([DmRow("h", "khach", "shop ơi?", 0, INBOX)], fake.threads)
@@ -154,7 +162,8 @@ def test_han_muc_gio_va_moi_cuoc(storage):
         storage.log_dm(f"t{i}", ACC, "x", "out", "hi")
     fake = FakeDm([DmRow("n", "moi", "giá?", 0, INBOX)], {"n": [DmMessage(False, "giá?")]})
     assert handle_inbox(fake, storage, ACC, datetime.now(timezone.utc), _run, _decider(Decision("reply", "y", "", "", 0))) == []
-    assert fake.opened == [], "hết suất giờ: không mở hộp tin"
+    assert fake.opened == ["n"], "hết suất vẫn đọc bounded để chuyển việc hỗ trợ; không đánh dấu FAQ đã xử lý"
+    assert storage.dm_thread("n", ACC) is None
 
 
 def test_gui_loi_thi_danh_dau_va_bao_anh(storage):

@@ -79,8 +79,9 @@ def runner(storage):
 
 
 def _save(storage, tid, bot=TargetBot.CASHBOT, variant=ABVariant.VARIANT_A, author=None):
+    need = "Cần mua CapCut Pro 30 ngày" if bot == TargetBot.AI_STORE else "Xin mã giảm giá Shopee"
     return storage.save_post(
-        thread_id=tid, post_url="u", author=author or f"a_{tid}", content="Mã shopee",
+        thread_id=tid, post_url="u", author=author or f"a_{tid}", content=need,
         target_bot=bot, variant=variant, suggested_reply="r",
     )
 
@@ -161,8 +162,8 @@ def test_low_relevance_skipped(storage):
 
 
 def test_ab_split_persists_across_runs(storage):
-    texts = ["Săn sale Shopee nhận mã giảm giá", "Áp mã voucher Shopee đơn 500k",
-             "Mã giảm giá Shopee cho đơn 300k", "Săn voucher Shopee lương về"]
+    texts = ["Săn sale Shopee nhận mã giảm giá", "Xin voucher Shopee cho đơn 500k",
+             "Tìm mã giảm giá Shopee cho đơn 300k", "Săn voucher Shopee lương về"]
     variants = []
     for i, text in enumerate(texts):
         fresh = GrowthRunner(storage=storage, limits=lambda: LIMITS)  # mỗi lần = một lần chạy CLI mới
@@ -174,9 +175,9 @@ def test_ab_split_persists_across_runs(storage):
 def test_batch_alternates_per_bot(runner):
     posts = [
         ScannedPost("t1", "u1", "a1", "Săn sale Shopee nhận mã giảm giá", "kw1"),
-        ScannedPost("t2", "u2", "a2", "Áp mã voucher Shopee đơn 500k", "kw1"),
-        ScannedPost("t3", "u3", "a3", "Cần mua tài khoản ChatGPT Plus", "kw2"),
-        ScannedPost("t4", "u4", "a4", "Bán Canva Pro bản quyền uy tín", "kw2"),
+        ScannedPost("t2", "u2", "a2", "Xin voucher Shopee cho đơn 500k", "kw1"),
+        ScannedPost("t3", "u3", "a3", "Cần mua tài khoản CapCut Pro 30 ngày", "kw2"),
+        ScannedPost("t4", "u4", "a4", "Tìm chỗ mua CapCut Pro một tháng", "kw2"),
     ]
     pids = asyncio.run(runner.ingest_batch(posts))
     assert len(pids) == 4
@@ -871,7 +872,7 @@ def test_worker_rewrites_fallback_when_ai_back(make_worker, runner, monkeypatch)
 
     async def _flaky(prompt, *, purpose="generic"):
         if ai_up["value"]:
-            return "ủa t hay dùng bot này nè b", {"provider": "fake", "model": "m"}
+            return "Bạn có thể xem mức hoàn dự kiến trong bot nha", {"provider": "fake", "model": "m"}
         return "", {"fail_reason": "circuit_open"}
 
     monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(_flaky))
@@ -1080,10 +1081,11 @@ def test_storage_backfills_account_and_records_poster(tmp_path):
 
 
 def test_worker_records_account_of_profile(make_worker, runner, storage):
-    pid = _save(storage, "acc1", author="khach")
+    pid = _save(storage, "acc1", bot=TargetBot.AI_STORE, author="khach")
     storage.update_status(pid, "approved")
     w, _ = make_worker(FakeBrowser())
-    w.post_queue("/x/storage/profiles/threads_anlinh", worker.CycleReport())
+    role = worker.AccountRole(enabled=True, bots=("ai_store",))
+    w.post_queue("/x/storage/profiles/threads_anlinh", worker.CycleReport(), role=role)
     row = storage.get_post_by_id(pid)
     assert row["status"] == "posted" and row["account"] == "anlinh"
 
@@ -1407,7 +1409,7 @@ def test_deal_post_appends_item_links_at_bottom(monkeypatch):
              content.Deal(2, "Chân váy xẻ tà 2 lớp", 139000, 175000, 6310, 50, "https://s.shopee.vn/AbCdEf1234")]
     monkeypatch.setattr(content, "load_deals", lambda now, path=None: deals)
     monkeypatch.setattr(content, "next_sale", lambda now, days=4: None)
-    long_body = "Nay t check đc 2 món rẻ nhất 30 ngày nè mấy bà " + "rất rất dài " * 40
+    long_body = "Nay t check đc 2 món rẻ nhất 30 ngày nè mấy bà \n" + "Thông tin phụ dài " * 40
     seen = {}
 
     async def fake_ai(prompt, min_len=20):
@@ -1543,7 +1545,7 @@ def test_no_link_bo_nhac_ten_va_cat_dai():
     assert len(out) <= evaluator.PLAIN_MAX_CHARS and not out.endswith(" ")
 
 
-def test_no_link_con_tro_thi_quay_ve_reply_co_link(monkeypatch):
+def test_no_link_empty_cleanup_stays_silent_instead_of_adding_link(monkeypatch):
     async def fake_ai(prompt, *, purpose="generic"):
         if prompt.startswith("KIỂM TRA REPLY"):
             return "KEEP", {"provider": "test", "model": "mock"}
@@ -1552,7 +1554,7 @@ def test_no_link_con_tro_thi_quay_ve_reply_co_link(monkeypatch):
     monkeypatch.setattr(evaluator.AIUseCases, "generate_text_async", staticmethod(fake_ai))
     text, analysis = asyncio.run(GrowthEvaluator.generate_reply(
         "đồ tết mua ở đâu", TargetBot.CASHBOT, ABVariant.VARIANT_A, channel="telegram", include_link=False))
-    assert "no_link" not in analysis and "t.me/" in text
+    assert text == "" and analysis.startswith("Fallback no_link")
 
 
 def test_self_check_rewrite_spammy_reply(monkeypatch):
@@ -1628,3 +1630,88 @@ def test_every_start_code_passes_bot_filter():
 
     bad = [c for c in gc.code_map() if not re.fullmatch(r"[a-z0-9_]{1,32}", c)]
     assert bad == []
+
+
+def test_capcut_trial_source_maps_to_anlinh_without_changing_automatic_urls(tmp_path):
+    import sqlite3
+
+    from app.features.threads.growth import config, conversions
+
+    source = config.CAPCUT_TRIAL_SOURCE
+    assert source == "threads_ai_cc18_anlinh_p1"
+    assert config.code_map()[source] == (TargetBot.AI_STORE, None, "anlinh")
+    assert config.code_channel(source) == "bài riêng"
+    assert source + "_extra" not in config.code_map()
+    assert config.variant_url(TargetBot.AI_STORE, ABVariant.VARIANT_B, "anlinh") == (
+        "https://t.me/aipass_shop_bot?start=threads_ai_price_anlinh")
+    assert config.channel_url(TargetBot.AI_STORE, "post", "anlinh") == (
+        "https://t.me/aipass_shop_bot?start=threads_ai_post_anlinh")
+
+    cb, st = _bot_dbs(tmp_path)
+    with sqlite3.connect(st) as conn:
+        conn.execute("INSERT INTO users VALUES (10, 'trial', '2026-11-06T04:00:00Z', NULL)")
+        conn.execute("INSERT INTO state VALUES ('src:10', ?)", (source,))
+        conn.execute("INSERT INTO orders VALUES (10, 34000, 0)")
+    rep = conversions.report(now=NOW, cashback_path=cb, store_path=st)
+    assert rep["errors"] == []
+    assert rep["by_account"]["anlinh"]["ai_store"] == {"customers": 1, "active": 1}
+    assert rep["by_account"]["us28qt"]["ai_store"] == {"customers": 1, "active": 1}
+    assert rep["by_variant"]["ai_store"]["B"] == {"customers": 1, "active": 1}
+    assert rep["by_channel"]["bài riêng"] == {"customers": 1, "active": 1}
+    trial = next(customer for customer in rep["customers"] if customer["code"] == source)
+    assert (trial["bot"], trial["variant"], trial["account"], trial["channel"]) == (
+        "ai_store", None, "anlinh", "bài riêng")
+
+
+
+def test_fit_post_preserves_question_and_key_opening_when_shortening():
+    question = "Bạn thích màu nào hơn?"
+    lines = [
+        "Một ý chính cụ thể",
+        "Chi tiết phụ dài " * 12,
+        question,
+        "Dòng kết",
+    ]
+
+    result = content.fit_post(lines, "L", limit=75)
+
+    assert result[0] == "Một ý chính cụ thể"
+    assert question in result
+    assert "Chi tiết phụ dài" not in result
+    assert result[-1] == "Dòng kết"
+
+
+def test_clean_post_returns_empty_instead_of_orphaning_product_links(monkeypatch):
+    deals = [
+        content.Deal(1, "Tên sản phẩm thứ nhất " * 5, 10000, 20000, 500, 10, "https://item/1"),
+        content.Deal(2, "Tên sản phẩm thứ hai " * 5, 12000, 24000, 600, 8, "https://item/2"),
+    ]
+    body = "\n".join([
+        "Món đầu tiên đang có giá tốt",
+        "- " + ("Sản phẩm thứ nhất chi tiết " * 4) + "10.000đ",
+        "Món thứ hai cũng đang có giá tốt",
+        "- " + ("Sản phẩm thứ hai chi tiết " * 4) + "12.000đ",
+        content.CART_NOTE,
+    ])
+
+    result = content.clean_post(body, "BOT", content.item_links(deals))
+    monkeypatch.setattr(content, "load_deals", lambda now, path=None: deals)
+    monkeypatch.setattr(content, "next_sale", lambda now, days=4: None)
+
+    async def fake_ai(prompt, min_len=20):
+        return body
+
+    monkeypatch.setattr(content, "_ai", fake_ai)
+    draft = asyncio.run(content.write_own_post(datetime(2026, 11, 20, tzinfo=timezone.utc), set()))
+
+    assert result == ""
+    assert draft is None
+
+
+def test_deal_prompt_uses_conversation_goal_without_forcing_question():
+    deal = content.Deal(7, "Cây lau nhà", 110000, 140000, 5600, 300)
+
+    prompt = content._deal_prompt([deal], "BOT", "@shop", "")
+
+    assert "nêu điều hữu ích cho người đọc" in prompt
+    assert "Không bắt buộc đặt câu hỏi" in prompt

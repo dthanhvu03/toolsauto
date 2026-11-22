@@ -15,9 +15,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import html
 import logging
 import os
 import random
+import re
 import signal
 import sys
 import time
@@ -32,23 +34,29 @@ from app.features.threads.adapter import ThreadsSessionInvalidError
 from app.features.threads.growth import content, conversions, dm_agent, notify
 from app.features.threads.growth import session as growth_session
 from app.features.threads.growth.browser import GrowthBrowser
+from app.features.threads.growth.acquisition import qualify_opportunity, qualify_reply, qualify_reply_copy
+from app.features.threads.growth.customer_agents import CustomerAgentStatus
 from app.features.threads.growth.dm import DmBrowser
 from app.features.threads.growth.config import (
     ACCOUNTS,
+    CASHBOT_ZALO_URL,
     DEFAULT_ACCOUNT,
     ABVariant,
     AccountRole,
     TargetBot,
     WorkerConfig,
     account_for_profile,
+    channel_url,
     load_account_roles,
     load_profiles,
     load_worker_config,
     save_account_role,
+    variant_url,
 )
 from app.features.threads.growth.evaluator import GrowthEvaluator, link_for
 from app.features.threads.growth.runner import GrowthRunner
 from app.features.threads.growth.scanner import ScannedPost, is_vietnamese
+from app.features.threads.growth.search_strategy import plan_searches
 from app.utils.logger import setup_shared_logger
 
 logger = logging.getLogger("threads_growth")
@@ -88,6 +96,21 @@ def watchdog_sleep(seconds: float) -> None:
 
 
 _DEAD_BROWSER_HINTS = ("has been closed", "browser has disconnected", "target closed")
+_PUBLIC_URL = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+_BARE_DOMAIN = re.compile(r"(?<![\w.])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b", re.IGNORECASE)
+
+
+def _public_links_allowed(text: str, allowed: set[str]) -> bool:
+    urls = [match.rstrip(".,;:!?)…") for match in _PUBLIC_URL.findall(text)]
+    return len(urls) <= 1 and all(url in allowed for url in urls) and not _BARE_DOMAIN.search(
+        _PUBLIC_URL.sub("", text)
+    )
+
+
+def _browser_matches_account(browser: GrowthBrowser, account: str) -> bool:
+    identify = getattr(browser, "own_handle", None)
+    handle = identify() if identify else None
+    return not handle or handle.lower() == ACCOUNTS[account].handle.lower()
 
 
 def browser_dead(exc: BaseException) -> bool:
@@ -122,6 +145,21 @@ class CycleReport:
     dms: List[Dict] = field(default_factory=list)  # PLAN-171
     rewritten: int = 0
     customers: Optional[Dict] = None
+    opportunities_reviewed: int = 0
+    opportunities_blocked: int = 0
+    queue_replies_blocked: int = 0
+    dm_checks: int = 0
+    followup_checks: int = 0
+    support_handoffs: int = 0
+    buyer_opportunities: int = 0
+    help_opportunities: int = 0
+    buyer_replies_sent: int = 0
+    help_replies_sent: int = 0
+    _held_ids: set[int] = field(default_factory=set, repr=False)
+
+    def hold_reply(self, post_id: int) -> None:
+        self._held_ids.add(post_id)
+        self.queue_replies_blocked = len(self._held_ids)
 
     @property
     def acted(self) -> bool:
@@ -129,7 +167,8 @@ class CycleReport:
                     or any(d["action"] != "skip" for d in self.dms))
 
     def as_dict(self) -> Dict:
-        return {**self.__dict__, "errors": list(self.errors), "posted_items": list(self.posted_items),
+        return {**{k: v for k, v in self.__dict__.items() if not k.startswith("_")},
+                "errors": list(self.errors), "posted_items": list(self.posted_items),
                 "own_posts": list(self.own_posts), "followups": list(self.followups), "dms": list(self.dms)}
 
 
@@ -163,6 +202,7 @@ class GrowthWorker:
         notifier=notify,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        agent_status: Optional[CustomerAgentStatus] = None,
     ):
         self.runner = runner or GrowthRunner()
         self.browser_factory = browser_factory
@@ -175,6 +215,25 @@ class GrowthWorker:
         self.last_dm: Dict[str, datetime] = {}         # theo tài khoản (PLAN-171)
         self.last_rewrite: Optional[datetime] = None
         self.own_retry_at: Dict[str, datetime] = {}    # theo tài khoản
+        self.agent_status = agent_status
+        self.queue_offsets: Dict[str, int] = {}
+        self.search_rounds: Dict[str, int] = {}
+        self._agent_cfg = None
+        self._agent_roles: Dict[str, AccountRole] = {}
+        self._agent_report: Optional[CycleReport] = None
+
+    def _publish_agents(self, phase: str, report: Optional[CycleReport] = None,
+                        error_type: Optional[str] = None, active_role: Optional[str] = None) -> None:
+        if self.agent_status is None or self._agent_cfg is None:
+            return
+        try:
+            self.agent_status.update(
+                phase=phase, now=self.now(), cfg=self._agent_cfg, roles=self._agent_roles,
+                report=report, last_scan=self.last_scan, last_dm=self.last_dm,
+                last_followup=self.last_followup, error_type=error_type, active_role=active_role,
+            )
+        except Exception as exc:
+            logger.warning("customer-agent status update failed (%s)", type(exc).__name__)
 
     # ── tiện ích ───────────────────────────────────────────────
     def _profile_path(self, account: str = DEFAULT_ACCOUNT) -> Optional[str]:
@@ -225,12 +284,11 @@ class GrowthWorker:
         """Quét từ khóa của các bot ``bots`` (bot mà ít nhất một tài khoản đang bật phục vụ); None = mọi bot."""
         found: Dict[str, tuple[ScannedPost, TargetBot]] = {}
         authors: set[str] = set()  # mỗi vòng tối đa 1 bài / tác giả (cooldown chỉ thấy bài đã lưu)
-        tabs = (False, True) if cfg.search_top else (False,)
-        jobs = [(bot, kw, top) for bot, prof in load_profiles().items() if bots is None or bot.value in bots
-                for kw in prof.keywords for top in tabs]
-        random.shuffle(jobs)  # không quét cùng một thứ tự mỗi vòng
-        if cfg.max_searches_per_scan > 0:
-            jobs = jobs[:cfg.max_searches_per_scan]  # 14/11: 48 lượt tìm / giờ / 24h trên một tài khoản → bốc ngẫu nhiên
+        turn = self.search_rounds.get(profile_path, 0)
+        jobs = plan_searches(load_profiles(), bots, turn=turn,
+                             cap=cfg.max_searches_per_scan, search_top=cfg.search_top)
+        self.search_rounds[profile_path] = turn + 1
+        consecutive_errors = 0
         with self.browser_factory(profile_path) as browser:
             for bot, kw, top in jobs:
                 try:
@@ -244,7 +302,11 @@ class GrowthWorker:
                         break
                     report.errors.append(f"tìm «{kw}»: {exc}")
                     logger.warning("growth: tìm %r lỗi: %s", kw, exc)
+                    consecutive_errors += 1
+                    if consecutive_errors >= 2:
+                        break
                     continue
+                consecutive_errors = 0
                 report.scanned += len(posts)
                 for p in posts:
                     author = (p.author or "").lower()
@@ -259,6 +321,16 @@ class GrowthWorker:
             for post, kw_bot in items:
                 poke_watchdog()  # mỗi bài AI có thể 10–20s; nhiều bài → vượt watchdog cũ 20'
                 bot = GrowthEvaluator.classify_target_bot(post.content) or kw_bot
+                report.opportunities_reviewed += 1
+                opportunity = qualify_opportunity(post.content, bot)
+                if not opportunity.eligible:
+                    report.opportunities_blocked += 1
+                    continue
+                if getattr(opportunity, "lane", "buyer") == "help_first":
+                    report.help_opportunities += 1
+                else:
+                    report.buyer_opportunities += 1
+                self._publish_agents("working", report, active_role="acquisition")
                 pid = await self.runner.ingest_scanned_post(
                     post, forced_bot=bot, auto_post_min=cfg.auto_post_min_relevance
                 )
@@ -279,17 +351,57 @@ class GrowthWorker:
                 self.runner.storage.mark_notified(row["id"])
 
     # ── đăng ───────────────────────────────────────────────────
+    def _queue_copy_allowed(self, post: Dict, account: str) -> bool:
+        text = post.get("actual_reply") or post.get("suggested_reply") or ""
+        if not qualify_reply(post.get("content") or "", post.get("target_bot"), text).eligible:
+            return False
+        try:
+            bot, variant = TargetBot(post["target_bot"]), ABVariant(post["variant"])
+        except ValueError:
+            return False
+        opportunity = qualify_opportunity(post.get("content") or "", post.get("target_bot"))
+        if getattr(opportunity, "lane", "buyer") == "help_first" or "no_link" in (post.get("ai_analysis") or ""):
+            return _public_links_allowed(text, set())
+        allowed = {variant_url(bot, variant), variant_url(bot, variant, account)}
+        if bot == TargetBot.CASHBOT:
+            allowed.add(CASHBOT_ZALO_URL)
+        return _public_links_allowed(text, allowed)
+
+    def _eligible_queue(self, account: str, role: AccountRole, report: CycleReport) -> List[Dict]:
+        """Bounded rotating reads: held rows cannot permanently hide valid rows behind them."""
+        offset = self.queue_offsets.get(account, 0)
+        eligible: List[Dict] = []
+        for _ in range(10):
+            page = self.runner.storage.approved_queue(limit=20, bots=role.bots, offset=offset)
+            if not page:
+                offset = 0
+                break
+            for post in page:
+                if not self._queue_copy_allowed(post, account):
+                    report.hold_reply(post["id"])
+                    continue
+                eligible.append(post)
+            offset += len(page)
+            if len(page) < 20:
+                offset = 0
+                break
+            if len(eligible) >= 20:
+                break
+        self.queue_offsets[account] = offset
+        return eligible[:20]
+
     def post_queue(self, profile_path: str, report: CycleReport, account: Optional[str] = None,
                    role: Optional[AccountRole] = None) -> None:
         """Đăng hàng chờ bằng một tài khoản: chỉ bài của bot trong vai (``role.bots``), hạn mức riêng của tài khoản."""
         account = account or account_for_profile(profile_path)
-        queue = self.runner.storage.approved_queue(limit=20, bots=role.bots if role else None)
+        role = role or load_account_roles().get(account)
+        if role is None or not role.enabled:
+            return
+        queue = self._eligible_queue(account, role, report)
         if not queue:
             return
 
         def quota_now():
-            if role is None:
-                return self.runner.posting_quota(self.now(), account=account)
             return self.runner.posting_quota(self.now(), account=account,
                                              max_per_day=role.max_per_day, max_per_hour=role.max_per_hour)
 
@@ -300,11 +412,20 @@ class GrowthWorker:
         cfg = load_worker_config()
         done_authors: set[str] = set()
         with self.browser_factory(profile_path) as browser:
+            if not _browser_matches_account(browser, account):
+                report.errors.append("Threads profile identity mismatch")
+                return
             for i, post in enumerate(queue):
                 quota = quota_now()
                 if not quota.allowed:
                     report.quota_note = f"@{ACCOUNTS[account].handle}: {quota.reason}"
                     break
+                post = self.runner.storage.get_post_by_id(post["id"])
+                if not post or post["status"] != "approved" or not role.serves(post["target_bot"]):
+                    continue
+                if not self._queue_copy_allowed(post, account):
+                    report.hold_reply(post["id"])
+                    continue
                 created = _parse_ts(post.get("post_created_at"))
                 if created and created < self.now() - timedelta(hours=cfg.max_post_age_hours):
                     # Bài nằm hàng chờ quá lâu (hết suất ngày) — reply muộn chìm dưới đáy, không đáng một suất.
@@ -318,13 +439,19 @@ class GrowthWorker:
                     logger.info("growth: bỏ #%s — đã reply @%s gần đây", post["id"], post["author"])
                     continue
                 text = post.get("actual_reply") or post["suggested_reply"]
+                self._publish_agents("working", report, active_role="acquisition")
                 # Reply viết trước 12/11 nằm hàng chờ chưa có link: gắn link đúng mã nguồn trước khi đăng.
                 # 14/11: Reply chỉ trò chuyện (no_link) thì không gắn link.
-                if "no_link" not in (post.get("ai_analysis") or ""):
-                    linked = link_for(text, post["target_bot"], post["variant"], account)
-                    if linked != text:
-                        self.runner.storage.update_status(post["id"], "approved", actual_reply=linked)
-                        text = linked
+                lane = getattr(qualify_opportunity(post["content"], post["target_bot"]), "lane", "buyer")
+                if lane != "help_first" and "no_link" not in (post.get("ai_analysis") or ""):
+                    text = link_for(text, post["target_bot"], post["variant"], account)
+                    bot = TargetBot(post["target_bot"])
+                    allowed = {variant_url(bot, ABVariant(post["variant"]), account)}
+                    if bot == TargetBot.CASHBOT:
+                        allowed.add(CASHBOT_ZALO_URL)
+                    if not _public_links_allowed(text, allowed):
+                        report.hold_reply(post["id"])
+                        continue
                 try:
                     url = browser.reply(post["post_url"], text)
                 except ThreadsSessionInvalidError:
@@ -340,8 +467,12 @@ class GrowthWorker:
                     logger.warning("growth: đăng reply #%s lỗi: %s", post["id"], exc)
                 else:
                     done_authors.add(author)
-                    self.runner.mark_posted(post["id"], reply_url=url, account=account)
+                    self.runner.mark_posted(post["id"], reply_url=url, account=account, actual_reply=text)
                     report.posted += 1
+                    if lane == "help_first":
+                        report.help_replies_sent += 1
+                    else:
+                        report.buyer_replies_sent += 1
                     report.posted_items.append({
                         "id": post["id"], "bot": post["target_bot"], "variant": post["variant"], "account": account,
                         "author": post["author"], "post_url": post["post_url"], "reply_url": url, "text": text,
@@ -415,17 +546,24 @@ class GrowthWorker:
         last = self.last_followup.get(account)
         if not cfg.followup_enabled or (last and now - last < FOLLOWUP_EVERY):
             return
+        role = self._agent_roles.get(account) or load_account_roles().get(account)
+        if role is None or not role.enabled:
+            return
         self.last_followup[account] = now
         storage = self.runner.storage
         left = cfg.followup_max_per_day - storage.count_followups_since(now - timedelta(days=1), account=account)
-        if left <= 0:
-            return
         targets = storage.followup_targets(now - timedelta(hours=cfg.followup_lookback_hours),
                                            now - FOLLOWUP_RECHECK, FOLLOWUP_PAGES, account=account)
         if not targets:
             return
+        ai_unavailable = False
         with self.browser_factory(profile_path) as browser:
+            if not _browser_matches_account(browser, account):
+                report.errors.append("Threads profile identity mismatch")
+                return
             for target in targets:
+                report.followup_checks += 1
+                self._publish_agents("working", report, active_role="engagement")
                 try:
                     comments = browser.replies_to_me(target["reply_url"])
                 except ThreadsSessionInvalidError:
@@ -435,20 +573,39 @@ class GrowthWorker:
                         return
                     logger.warning("growth: đọc trả lời dưới #%s lỗi: %s", target["id"], exc)
                     continue
-                ai_down = False
+                deferred = False
                 for c in comments:
-                    if left <= 0:
-                        return  # hết suất hôm nay: KHÔNG đánh dấu đã kiểm — người còn lại trả lời ngày mai
                     if storage.followup_seen(c.thread_id):
                         continue
+                    handoff = dm_agent.interaction_handoff_reason(c.content)
+                    if handoff:
+                        if storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url,
+                                                 "handoff", error=handoff):
+                            report.support_handoffs += 1
+                            if not self.notify.send("🙋 Khách cần chủ shop xử lý (bình luận công khai)\n"
+                                                    + html.escape(c.post_url) + "\nLý do: " + html.escape(handoff)):
+                                report.errors.append("public handoff notification failed")
+                        continue
+                    bot = TargetBot(target["target_bot"])
+                    if not role.serves(bot):
+                        continue
+                    if left <= 0 or ai_unavailable:
+                        deferred = True
+                        continue
                     our = target.get("actual_reply") or target["suggested_reply"]
-                    verdict, text = _run_async(content.write_followup(TargetBot(target["target_bot"]), our, c.content,
-                                                                           account=account))
+                    verdict, text = _run_async(content.write_followup(bot, our, c.content, account=account))
                     if verdict == "error":
-                        ai_down = True  # AI lỗi: để lần sau (không đánh dấu đã kiểm reply này)
-                        break
+                        report.errors.append("followup draft unavailable")
+                        ai_unavailable = True
+                        deferred = True
+                        continue
                     if verdict == "skip":
                         storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url, "skipped")
+                        continue
+                    if (not text or not qualify_reply_copy(bot, text).eligible
+                            or not _public_links_allowed(text, {channel_url(bot, "conv", account)})):
+                        storage.save_followup(c.thread_id, target["id"], c.author, c.content, c.post_url,
+                                              "skipped", error="unapproved_followup_copy")
                         continue
                     try:
                         url = browser.reply(c.post_url, text)
@@ -467,22 +624,32 @@ class GrowthWorker:
                                              "url": url or c.post_url, "bot": target["target_bot"], "account": account})
                     logger.info("growth: đã trả lời lại @%s dưới #%s", c.author, target["id"])
                     self.sleep(self.runner.next_delay_sec())
-                if ai_down:
-                    return
-                storage.mark_followup_checked(target["id"], now)
+                if not deferred:
+                    storage.mark_followup_checked(target["id"], now)
 
     # ── PLAN-171: tin nhắn riêng ───────────────────────────────
     def dm_inbox(self, profile_path: str, report: CycleReport, account: Optional[str] = None) -> None:
         """AI agent đọc Inbox + Requests, trả lời / chuyển chủ bot. Việc cần chủ bot báo Telegram ngay."""
         account = account or account_for_profile(profile_path)
+        role = self._agent_roles.get(account) or load_account_roles().get(account)
+        if role is None or not role.enabled or not role.dm or not role.bots:
+            return
         now = self.now()
         last = self.last_dm.get(account)
         if last and now - last < DM_EVERY:
             return
         self.last_dm[account] = now
+        report.dm_checks += 1
+        self._publish_agents("working", report, active_role="engagement")
         with self.browser_factory(profile_path) as browser:
+            if not _browser_matches_account(browser, account):
+                report.errors.append("Threads profile identity mismatch")
+                return
             try:
-                events = dm_agent.handle_inbox(DmBrowser(browser), self.runner.storage, account, now, _run_async)
+                events = dm_agent.handle_inbox(
+                    DmBrowser(browser), self.runner.storage, account, now, _run_async,
+                    allowed_bots=role.bots,
+                )
             except ThreadsSessionInvalidError:
                 raise
             except Exception as exc:
@@ -505,21 +672,42 @@ class GrowthWorker:
             return
         self.last_rewrite = now
         for row in self.runner.storage.fallback_pending(limit=5):
+            if not qualify_opportunity(row["content"], row["target_bot"]).eligible:
+                continue
             post = asyncio.run(self.runner.switch_variant(row["id"], ABVariant(row["variant"])))
             if not post or str(post.get("ai_analysis") or "").startswith("Fallback"):
                 return  # AI vẫn lỗi — đợi lượt sau
             report.rewritten += 1
-            if not cfg.telegram_review and row["relevance_score"] >= cfg.auto_post_min_relevance:
+            if (not cfg.telegram_review and row["relevance_score"] >= cfg.auto_post_min_relevance
+                    and qualify_reply(post["content"], post["target_bot"], post["suggested_reply"]).eligible):
                 self.runner.approve_and_prepare(row["id"])
 
     # ── nhịp ───────────────────────────────────────────────────
     def tick(self, force_scan: bool = False) -> Optional[CycleReport]:
-        cfg = load_worker_config()
-        if not cfg.enabled and not force_scan:
-            return None
-        if not force_scan and in_quiet_hours(self.now(), cfg.quiet_hours):
-            return None
-        roles = load_account_roles()
+        phase, error_type, report = "error", None, None
+        self._agent_cfg = WorkerConfig()
+        self._agent_roles = {}
+        self._agent_report = None
+        try:
+            cfg = self._agent_cfg = load_worker_config()
+            roles = self._agent_roles = load_account_roles()
+            if not cfg.enabled and not force_scan:
+                phase = "disabled"
+                return None
+            if not force_scan and in_quiet_hours(self.now(), cfg.quiet_hours):
+                phase = "quiet_hours"
+                return None
+            self._publish_agents("working")
+            report = self._tick(force_scan, cfg, roles)
+            phase = "no_ready_account" if report is None else ("error" if report.errors else "waiting")
+            return report
+        except Exception as exc:
+            error_type = type(exc).__name__
+            raise
+        finally:
+            self._publish_agents(phase, report or self._agent_report, error_type)
+
+    def _tick(self, force_scan: bool, cfg: WorkerConfig, roles: Dict[str, AccountRole]) -> Optional[CycleReport]:
         # Tài khoản đang bật + đã đăng nhập + profile rảnh, theo thứ tự ACCOUNTS (tài khoản đầu quét bài cho cả nhóm).
         ready: Dict[str, str] = {}
         for key, role in roles.items():
@@ -530,6 +718,7 @@ class GrowthWorker:
         if not ready:
             return None
         report = CycleReport()
+        self._agent_report = report
         due = force_scan or self.last_scan is None or (
             self.now() - self.last_scan >= timedelta(minutes=cfg.scan_interval_min)
         )
@@ -547,6 +736,7 @@ class GrowthWorker:
                 self.last_scan = self.now()
                 # 14/11: mỗi tài khoản tự quét từ khoá bot của mình (trước: tài khoản đầu quét cho cả nhóm).
                 for current, profile in ready.items():
+                    self._publish_agents("working", report, active_role="acquisition")
                     self.ingest(self.scan(profile, cfg, report, bots=set(roles[current].bots)), cfg, report)
             self.rewrite_fallbacks(cfg, report)
             for current, profile in ready.items():
@@ -596,7 +786,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     signal.signal(signal.SIGALRM, _hung)
     signal.alarm(WATCHDOG_SEC)
-    GrowthWorker(sleep=watchdog_sleep).run_forever()
+    GrowthWorker(sleep=watchdog_sleep, agent_status=CustomerAgentStatus()).run_forever()
     return 0
 
 

@@ -1,0 +1,80 @@
+{
+  "observed_at": "2026-11-19T16:16:02.503446+00:00",
+  "pm2": {
+    "Maintenance": {
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1,
+      "unstable": 0
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0,
+      "unstable": 0
+    },
+    "Web_Dashboard": {
+      "pid": 3668763,
+      "status": "online",
+      "restarts": 7,
+      "unstable": 0
+    },
+    "Studio_Heavy": {
+      "pid": 776,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0
+    },
+    "Studio_Light": {
+      "pid": 778,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 784,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0
+    },
+    "shopee-mcp": {
+      "pid": 3147903,
+      "status": "online",
+      "restarts": 29,
+      "unstable": 0
+    },
+    "9Router_Gateway": {
+      "pid": 798,
+      "status": "online",
+      "restarts": 0,
+      "unstable": 0
+    },
+    "Threads_Growth": {
+      "pid": 1318674,
+      "status": "online",
+      "restarts": 26,
+      "unstable": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 242927,
+      "status": "online",
+      "restarts": 3,
+      "unstable": 0
+    }
+  },
+  "systemd": {
+    "store-bot": [
+      "MainPID=3966961",
+      "ActiveState=active"
+    ],
+    "cashback-bot": [
+      "MainPID=1456507",
+      "ActiveState=active"
+    ],
+    "cashback-zalo": [
+      "MainPID=1456511",
+      "ActiveState=active"
+    ]
+  },
+  "roles_sha256": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81"
+}

@@ -1,0 +1,75 @@
+{
+  "observed_at_vn": "2026-11-19T05:24:33.435750+07:00",
+  "command": "pm2 restart Threads_Growth",
+  "before": {
+    "pid": 4169711,
+    "status": "online",
+    "restarts": 24,
+    "unstable_restarts": 0
+  },
+  "after": {
+    "pid": 1149851,
+    "status": "online",
+    "restarts": 25,
+    "unstable_restarts": 0
+  },
+  "other_pm2_unchanged": true,
+  "bot_systemd_unchanged": true,
+  "account_roles_unchanged": true,
+  "loaded_status": {
+    "schema_version": 1,
+    "plan": "PLAN-178",
+    "heartbeat_at": "2026-11-18T22:24:33.212873+00:00",
+    "worker_started_at": "2026-11-18T22:24:32.789242+00:00",
+    "worker_pid": 1149851,
+    "phase": "quiet_hours",
+    "error_type": null,
+    "stale_after_seconds": 180,
+    "quiet_hours_vn": "00:30-06:30",
+    "scan_interval_minutes": 120,
+    "accounts": {
+      "primary": {
+        "enabled": true,
+        "bots": [
+          "cashbot"
+        ],
+        "dm_enabled": true
+      },
+      "store": {
+        "enabled": true,
+        "bots": [
+          "ai_store"
+        ],
+        "dm_enabled": false
+      }
+    },
+    "agents": {
+      "acquisition": {
+        "state": "quiet_hours",
+        "channel": "public_posts",
+        "last_scan_started_at": null
+      },
+      "engagement": {
+        "state": "quiet_hours",
+        "channels": [
+          "public_inbound",
+          "dm_inbound"
+        ],
+        "dm_enabled_accounts": [
+          "primary"
+        ],
+        "last_dm_attempt_at": {},
+        "last_followup_attempt_at": {}
+      }
+    },
+    "current_cycle": null,
+    "last_cycle": null,
+    "last_activity": null,
+    "limits": [
+      "single_existing_sender",
+      "inbound_only_dm",
+      "existing_quotas_and_quiet_hours",
+      "counts_are_not_acquired_customers"
+    ]
+  }
+}

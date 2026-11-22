@@ -1,0 +1,14 @@
+{
+  "plan": "PLAN-179",
+  "slot": "2026-11-19-18",
+  "raw_review_status": "needs_revision",
+  "raw_review_reason": "Generic drafts and incorrect Cashbot payment-link description; raw model output retained for audit.",
+  "reviewed_by": "Codex operator product review",
+  "replacement_path": "reports/customer-agents/strategy/OPERATOR-REVIEW-20261119.md",
+  "replacement_status": "internal_drafts_require_publication_review",
+  "experiments": 2,
+  "drafts": 2,
+  "customer_or_public_actions": 0,
+  "future_review_quality_gates": "enabled_in_PLAN-179",
+  "applies_to_slot_only": true
+}

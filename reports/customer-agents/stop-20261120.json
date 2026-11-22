@@ -1,0 +1,355 @@
+{
+  "plan": "PLAN-185",
+  "requested_action": "owner_cancel_all_growth_agents",
+  "started_at": "2026-11-20T04:26:50.949085+00:00",
+  "automation": {
+    "id": "theo-d-i-t-th-capcut",
+    "delete_status": "deleted",
+    "evidence": "automation_update returned deleteStatus deleted this turn"
+  },
+  "before": {
+    "pm2": {
+      "Maintenance": {
+        "pid": 26007,
+        "status": "online",
+        "restarts": 0
+      },
+      "DB_Backup": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Web_Dashboard": {
+        "pid": 26011,
+        "status": "online",
+        "restarts": 0
+      },
+      "Studio_Heavy": {
+        "pid": 26012,
+        "status": "online",
+        "restarts": 0
+      },
+      "Studio_Light": {
+        "pid": 26013,
+        "status": "online",
+        "restarts": 0
+      },
+      "VieNeu_TTS": {
+        "pid": 26014,
+        "status": "online",
+        "restarts": 0
+      },
+      "shopee-mcp": {
+        "pid": 591016,
+        "status": "online",
+        "restarts": 0
+      },
+      "9Router_Gateway": {
+        "pid": 26023,
+        "status": "online",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 1103039,
+        "status": "online",
+        "restarts": 0
+      },
+      "CapCut_Agent_Supervisor": {
+        "pid": 26028,
+        "status": "online",
+        "restarts": 0
+      }
+    },
+    "systemd": {
+      "store-bot": "MainPID=1213005\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC",
+      "cashback-bot": "MainPID=1213003\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC",
+      "cashback-zalo": "MainPID=1213004\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC"
+    },
+    "hashes": {
+      ".env": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+      "/home/vu/toolsauto/storage/db/config/threads_growth_accounts.json": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+      "reports/threads-content-research-20261120/RESEARCH.md": "6fd9e02e881eb8f643c8e8abd6b706199e0e32553bf375b9546d1c82fba7511a",
+      "reports/threads-content-research-20261120/search-sample.json": "8e8c2dd27163b9e03efbd451813baf25fdfd6b0b6c9ad6d81f1250b63de78dab",
+      "reports/threads-content-research-20261120/REVISED-CONTENT.md": "a7f38f8e9023d14b2fb7952faf1138bc9a44315b762bb2a3e35cf6f11bee6785"
+    }
+  },
+  "commands": [
+    {
+      "command": [
+        "pm2",
+        "stop",
+        "Threads_Growth"
+      ],
+      "exit_code": 0,
+      "readback": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    },
+    {
+      "command": [
+        "pm2",
+        "stop",
+        "CapCut_Agent_Supervisor"
+      ],
+      "exit_code": 0,
+      "readback": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    },
+    {
+      "command": [
+        "pm2",
+        "save"
+      ],
+      "exit_code": 0,
+      "output": "[PM2] Saving current process list...\n[PM2] Successfully saved in /root/.pm2/dump.pm2"
+    }
+  ],
+  "initial_attempt": "ImportError from nonexistent app.core.database.session before any settings/PM2 mutation; corrected to existing core.SessionLocal",
+  "growth_enabled_before": true,
+  "growth_enabled_write_result": false,
+  "growth_enabled_after": false,
+  "saved_pm2_targets": {
+    "Threads_Growth": {
+      "status": "stopped",
+      "script": "/home/vu/toolsauto/app/features/threads/growth/worker.py"
+    },
+    "CapCut_Agent_Supervisor": {
+      "status": "stopped",
+      "script": "/home/vu/toolsauto/app/features/threads/growth/capcut_supervisor.py"
+    }
+  },
+  "remaining_worker_pids": [],
+  "after": {
+    "pm2": {
+      "Maintenance": {
+        "pid": 26007,
+        "status": "online",
+        "restarts": 0
+      },
+      "DB_Backup": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Web_Dashboard": {
+        "pid": 26011,
+        "status": "online",
+        "restarts": 0
+      },
+      "Studio_Heavy": {
+        "pid": 26012,
+        "status": "online",
+        "restarts": 0
+      },
+      "Studio_Light": {
+        "pid": 26013,
+        "status": "online",
+        "restarts": 0
+      },
+      "VieNeu_TTS": {
+        "pid": 26014,
+        "status": "online",
+        "restarts": 0
+      },
+      "shopee-mcp": {
+        "pid": 591016,
+        "status": "online",
+        "restarts": 0
+      },
+      "9Router_Gateway": {
+        "pid": 26023,
+        "status": "online",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    },
+    "systemd": {
+      "store-bot": "MainPID=1213005\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC",
+      "cashback-bot": "MainPID=1213003\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC",
+      "cashback-zalo": "MainPID=1213004\nActiveState=active\nActiveEnterTimestamp=Fri 2026-11-20 03:28:17 UTC"
+    },
+    "hashes": {
+      ".env": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+      "/home/vu/toolsauto/storage/db/config/threads_growth_accounts.json": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+      "reports/threads-content-research-20261120/RESEARCH.md": "6fd9e02e881eb8f643c8e8abd6b706199e0e32553bf375b9546d1c82fba7511a",
+      "reports/threads-content-research-20261120/search-sample.json": "8e8c2dd27163b9e03efbd451813baf25fdfd6b0b6c9ad6d81f1250b63de78dab",
+      "reports/threads-content-research-20261120/REVISED-CONTENT.md": "a7f38f8e9023d14b2fb7952faf1138bc9a44315b762bb2a3e35cf6f11bee6785"
+    }
+  },
+  "checks": {
+    "two_workers_stopped": true,
+    "growth_disabled": true,
+    "saved_as_stopped": true,
+    "no_worker_processes": true,
+    "other_pm2_same": true,
+    "business_bots_same": true,
+    "env_roles_research_same": true,
+    "chat_automation_removed": true
+  },
+  "finished_at": "2026-11-20T04:29:27.026343+00:00",
+  "status": "stopped_verified",
+  "actual_pm2_dump_path": "/root/.pm2/dump.pm2",
+  "verification_correction": "Initial verification read stale /home/vu/.pm2 dump; pm2 save output identified actual /root/.pm2/dump.pm2. Actual daemon dump readback confirms both stopped; no daemon switch or extra stop needed.",
+  "remaining_chat_automations": [],
+  "subagent_check": {
+    "observed_in_tool": "collaboration.list_agents",
+    "running_children": 0,
+    "completed_children": 3,
+    "no_new_agents_spawned": true
+  },
+  "threads_status_before_stop": {
+    "schema_version": 1,
+    "plan": "PLAN-178",
+    "strategy_plan": "PLAN-179",
+    "strategy_review_path": "reports/customer-agents/strategy/latest.json",
+    "missions": {
+      "acquisition": "Tìm nhu cầu mua và câu hỏi CapCut cụ thể; trợ giúp không link.",
+      "engagement": "Trả lời inbound đúng nhu cầu; chuyển ca tiền/đơn/bảo hành cho chủ shop.",
+      "measurement": "Đo khách mới dùng thật và hội thoại theo cửa sổ 24h/7 ngày.",
+      "conversion": "Mỗi6giờ chọn tối đa2 thử nghiệm với điều kiện giữ/bỏ.",
+      "content": "Mỗi6giờ chuẩn bị2 nháp từ nhu cầu có bằng chứng, chưa tự đăng."
+    },
+    "heartbeat_at": "2026-11-20T04:25:41.672780+00:00",
+    "worker_started_at": "2026-11-20T03:07:51.305653+00:00",
+    "worker_pid": 0,
+    "phase": "stopped",
+    "error_type": null,
+    "stale_after_seconds": 180,
+    "quiet_hours_vn": "00:30-06:30",
+    "scan_interval_minutes": 120,
+    "accounts": {
+      "primary": {
+        "enabled": true,
+        "bots": [
+          "cashbot"
+        ],
+        "dm_enabled": true
+      },
+      "store": {
+        "enabled": true,
+        "bots": [
+          "ai_store"
+        ],
+        "dm_enabled": false
+      }
+    },
+    "agents": {
+      "acquisition": {
+        "state": "stopped",
+        "channel": "public_posts",
+        "last_scan_started_at": "2026-11-20T03:08:16.793848+00:00"
+      },
+      "engagement": {
+        "state": "stopped",
+        "channels": [
+          "public_inbound",
+          "dm_inbound"
+        ],
+        "dm_enabled_accounts": [
+          "primary"
+        ],
+        "last_dm_attempt_at": {
+          "primary": "2026-11-20T04:22:54.477338+00:00"
+        },
+        "last_followup_attempt_at": {
+          "primary": "2026-11-20T04:13:55.943989+00:00",
+          "store": "2026-11-20T04:13:55.952396+00:00"
+        }
+      }
+    },
+    "current_cycle": null,
+    "last_cycle": {
+      "observed_at": "2026-11-20T04:25:41.672780+00:00",
+      "counts": {
+        "scanned_posts": 0,
+        "opportunities_reviewed": 0,
+        "opportunities_blocked": 0,
+        "buyer_opportunities": 0,
+        "help_opportunities": 0,
+        "queue_replies_blocked": 24,
+        "drafts_created": 0,
+        "public_replies_sent": 0,
+        "buyer_replies_sent": 0,
+        "help_replies_sent": 0,
+        "public_send_failures": 0,
+        "dm_checks": 0,
+        "followup_pages_checked": 0,
+        "public_followups_sent": 0,
+        "dm_replies_sent": 0,
+        "handoffs": 0,
+        "dm_failures": 0,
+        "errors": 0
+      }
+    },
+    "last_activity": null,
+    "limits": [
+      "single_existing_sender",
+      "inbound_only_dm",
+      "existing_quotas_and_quiet_hours",
+      "counts_are_not_acquired_customers"
+    ],
+    "operator_stop": {
+      "plan": "PLAN-185",
+      "at": "2026-11-20T04:29:27.026343+00:00",
+      "reason": "Owner cancelled all growth agents pending a new direction",
+      "auto_resume": false
+    }
+  },
+  "supervisor_status_before_stop": {
+    "heartbeat_at": "2026-11-20T04:26:50.802884+00:00",
+    "worker_pid": 0,
+    "scan_status": "stopped",
+    "last_error_type": null,
+    "poll_seconds": 5,
+    "event_counts": {
+      "ignored": 1
+    },
+    "last_ai_started": "2026-11-18T12:43:28.296399+00:00",
+    "baseline_counts": {
+      "observed_at": "2026-11-18T12:43:16.539147+00:00",
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "product_markers": 0,
+      "confirm_markers": 0,
+      "qr_customers": 0,
+      "paid_topup_customers": 0,
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null
+    },
+    "exact_source": "threads_ai_cc18_anlinh_p1",
+    "source_db_mode": "ro",
+    "specialist_roles": [
+      "measurement",
+      "conversion",
+      "content"
+    ],
+    "customer_or_public_actions": 0,
+    "chat_delivery_interval_minutes": 15,
+    "strategy_plan": "PLAN-179",
+    "strategy_review_interval_hours": 6,
+    "strategy_review_path": "reports/customer-agents/strategy/latest.json",
+    "operator_stop": {
+      "plan": "PLAN-185",
+      "at": "2026-11-20T04:29:27.026343+00:00",
+      "reason": "Owner cancelled all growth agents pending a new direction",
+      "auto_resume": false
+    }
+  }
+}
