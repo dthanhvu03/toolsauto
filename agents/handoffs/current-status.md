@@ -1,3 +1,10 @@
+## Session 2026-11-22 - local main fast-forward and branch audit
+
+- Local `main` fast-forwarded from `37f5c0d` to `4e1133e` (`cursor/store-fatcat-actual-cost`); 61 commits are included. Their committed history changes 378 paths. `origin/main` remains at `37f5c0d`; no push was made.
+- The source worktree has 127 uncommitted paths across separate Agent OS tasks. They were preserved and not bulk-committed or discarded. See `reports/branch-audit-20261122.md` for remaining-branch findings.
+- Divergent branches are retained after dry-run analysis: Douyin (5 unique commits, 496 behind, multiple conflicts); old `develop` (472 unique, 1,135 behind); rollback (2 unique, 399 behind, deliberate cashback deletions/conflicts); Xe Tet Sum Vay (2 unique, 241 behind, add/add conflicts on code already present in main).
+- The damaged current-status file was restored byte-for-byte from the last committed 6,186-line copy before this audit note. Latest PLAN-190 execution details remain in PLAN-190, TASK-076, and the sample review report.
+
 ## Phiên 2026-11-18 (Codex) — PLAN-175 chart, top món và trạng thái tiền — deployed/live verified
 - Chủ bot duyệt triển khai sau khi hỏi Tổng quan thiếu chart, Store không thấy món bán nhiều và tiền ra sao.
 - Đã code API chỉ đọc 7/30 ngày + UI chart Store/Cashback, top 5 số món và lãi gộp riêng, giá vốn/chi phí đã ghi, số tiền hiện tại/lũy kế với nhãn đúng nghĩa. Cashback tổng và chart cùng kỳ lịch VN; tiền chưa xác minh không hiện thành 0.
