@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-11-20T01:47:59.446226+00:00",
+  "title": "ZT báo mã",
+  "type": "channel",
+  "public_username": null,
+  "public_url": null,
+  "has_existing_invite": true,
+  "member_count": 3,
+  "bot_status": "administrator",
+  "bot_can_post": true,
+  "bot_can_edit": true,
+  "bot_can_invite": true,
+  "pinned_message_exists": false,
+  "pinned_message_preview": "",
+  "description": null,
+  "customer_or_public_actions": 0
+}
