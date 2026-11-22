@@ -79,6 +79,10 @@ _STATIC = {
 }
 
 
+# One owner-approved CapCut trial; attribution only, automatic URLs stay unchanged.
+CAPCUT_TRIAL_SOURCE = "threads_ai_cc18_anlinh_p1"
+
+
 # Kênh ngoài reply A/B (PLAN-159) — mỗi kênh một mã ``?start=`` để biết khách đến từ đâu.
 CHANNELS = {"post": "bài riêng", "conv": "trả lời lại", "bio": "bio profile", "dm": "tin nhắn riêng"}
 _CHANNEL_PREFIX = {TargetBot.CASHBOT: "threads_cb_", TargetBot.AI_STORE: "threads_ai_"}
@@ -240,11 +244,14 @@ def code_map() -> Dict[str, tuple]:
             out[channel_code(bot, "conv", acc)] = (bot, None, acc)
             out[channel_code(bot, "dm", acc)] = (bot, None, acc)
             out[bio_code(bot, acc)] = (bot, None, acc)
+    out[CAPCUT_TRIAL_SOURCE] = (TargetBot.AI_STORE, None, "anlinh")
     return out
 
 
 def code_channel(code: str) -> str:
     """Nhãn kênh cho báo cáo: «reply A», «bài riêng», «bio profile»…"""
+    if code == CAPCUT_TRIAL_SOURCE:
+        return CHANNELS["post"]
     hit = code_map().get(code)
     if not hit:
         return "khác"

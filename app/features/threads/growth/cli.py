@@ -115,15 +115,15 @@ async def cmd_demo(runner: GrowthRunner) -> None:
             thread_id="th_ai_01",
             post_url="https://www.threads.net/@techlover/post/DBz789",
             author="techlover",
-            content="Có bên nào bán tài khoản ChatGPT Plus uy tín dùng ổn định không mọi người, tự thanh toán bằng thẻ visa toàn bị từ chối.",
-            keyword="mua chatgpt plus",
+            content="Mọi người cho mình xin chỗ mua CapCut Pro 30 ngày với, mình cần dựng video tháng này.",
+            keyword="mua capcut pro",
         ),
         ScannedPost(
             thread_id="th_ai_02",
             post_url="https://www.threads.net/@graphic_designer/post/DBw999",
             author="graphic_designer",
-            content="Cần mua gấp tài khoản Canva Pro làm bài tập thuyết trình tối nay, ai cấp tự động liền được không?",
-            keyword="tài khoản canva pro",
+            content="Cần mua tài khoản CapCut Pro một tháng, mình chỉ cần đăng nhập trên hai thiết bị.",
+            keyword="tài khoản capcut pro",
         ),
     ]
 
