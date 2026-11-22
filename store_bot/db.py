@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import secrets
 import sqlite3
@@ -16,6 +17,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+logger = logging.getLogger("store_bot")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -733,8 +736,13 @@ class StoreRepository:
             )
             return _load_order(conn, order_id)
 
-    def complete_upstream(self, order_id: int, items: list[str], upstream_order_id: str | None) -> tuple[Order, bool]:
-        """Ghi hàng FatCat giao. Thiếu món nào hoàn tiền món đó cho khách. Chỉ chạy một lần mỗi đơn."""
+    def complete_upstream(self, order_id: int, items: list[str], upstream_order_id: str | None,
+                          charged: int | None = None, upstream_refunded: int | None = None) -> tuple[Order, bool]:
+        """Ghi hàng FatCat giao. Thiếu món nào hoàn tiền món đó cho khách. Chỉ chạy một lần mỗi đơn.
+
+        `charged` là tổng FatCat đã trừ (trường price, tính cho cả đơn). Giao đủ thì giá vốn = price / số món.
+        Giao thiếu thì chỉ ghi khi có số FatCat hoàn (`upstream_refunded`): vốn = (price − hoàn) / số món đã giao.
+        Không chia hết, hoặc giao thiếu mà không có số hoàn: giữ giá vốn ước tính, không làm tròn mất đồng."""
         with self._tx() as conn:
             row = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
             if row["status"] != "pending":
@@ -745,11 +753,20 @@ class StoreRepository:
             missing = row["quantity"] - len(items)
             refund = missing * row["unit_price"]
             status = "done" if not missing else ("partial" if items else "failed")
+            unit_cost = row["unit_cost"]
+            net = _net_charge(charged, upstream_refunded, missing, len(items))
+            if net is not None:
+                unit_cost = net // len(items)
+            elif charged is not None and items:
+                logger.warning(
+                    "[Store] đơn %s giữ vốn ước tính %s: price=%s hoàn=%s giao=%s thiếu=%s",
+                    order_id, row["unit_cost"], charged, upstream_refunded, len(items), missing,
+                )
             if refund:
                 _move_money(conn, row["user_id"], refund, "refund", f"order:{order_id}", f"thiếu {missing} món")
             conn.execute(
-                "UPDATE orders SET status = ?, refunded = ?, upstream_order_id = ?, updated_at = ? WHERE id = ?",
-                (status, refund, upstream_order_id, utcnow(), order_id),
+                "UPDATE orders SET status = ?, refunded = ?, upstream_order_id = ?, unit_cost = ?, updated_at = ? WHERE id = ?",
+                (status, refund, upstream_order_id, unit_cost, utcnow(), order_id),
             )
             conn.execute(
                 "UPDATE products SET upstream_stock = MAX(COALESCE(upstream_stock, 0) - ?, 0) WHERE id = ?",
@@ -1351,6 +1368,21 @@ def _sum_totals(rows: Iterable[dict[str, int]]) -> dict[str, int]:
     total["profit"] = total["revenue"] - total["cost"]  # lãi gộp
     total["net"] = total["profit"] - total["expense"]  # lãi ròng sau khoản chi ngoài bot
     return total
+
+
+def _net_charge(charged: int | None, upstream_refunded: int | None, missing: int, delivered: int) -> int | None:
+    """Tổng tiền FatCat giữ lại cho số món đã giao. None = chưa đủ số để ghi chính xác.
+
+    Giao đủ: price là tổng đã trừ. Giao thiếu: price trừ phần FatCat hoàn. Chỉ trả số khi chia hết
+    cho số món đã giao, để unit_cost × số món đúng bằng tiền ví mất, không làm tròn."""
+    if charged is None or delivered < 1:
+        return None
+    net = int(charged) if missing == 0 else None
+    if missing and upstream_refunded is not None:
+        net = int(charged) - int(upstream_refunded)
+    if net is None or net < 0 or net % delivered != 0:
+        return None
+    return net
 
 
 def _upstream_funds(conn: sqlite3.Connection) -> int | None:

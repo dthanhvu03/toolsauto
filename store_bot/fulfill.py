@@ -35,7 +35,9 @@ class Fulfiller:
         upstream_id, quantity, request_id = job
         result = self.client.buy(upstream_id, quantity, request_id)
         if result.kind == DELIVERED:
-            order, newly = self.repo.complete_upstream(order_id, result.items, result.upstream_order_id)
+            # Giá vốn báo cáo = số FatCat vừa trừ. Giá bán cho khách không đổi.
+            order, newly = self.repo.complete_upstream(
+                order_id, result.items, result.upstream_order_id, result.price, result.refunded)
         elif result.kind == REJECTED and result.status_code == 402:
             # Ví shop thiếu (FatCat không trừ tiền): giữ đơn chờ admin nạp ví, không hoàn rồi bắt khách mua lại.
             order, newly = self.repo.wait_for_funds(order_id)

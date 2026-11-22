@@ -30,6 +30,7 @@ class BuyResult:
     price: int | None = None
     status_code: int | None = None
     message: str = ""
+    refunded: int | None = None  # tiền FatCat hoàn lại ví khi giao thiếu; None = phản hồi không có số này
 
 
 class UpstreamError(Exception):
@@ -91,9 +92,21 @@ class FatCatClient:
             return BuyResult(PENDING, status_code=code, message="không phải JSON")
         items = [str(item) for item in order.get("items") or []]
         fulfillment = order.get("fulfillment") or ("complete" if code == 200 else "pending")
+        price = _vnd(order.get("price"))
+        refunded = _vnd(order.get("refunded"))
         if code == 202 or fulfillment == "pending":
-            return BuyResult(PENDING, items, order.get("id"), order.get("price"), code)
-        return BuyResult(DELIVERED, items, order.get("id"), order.get("price"), code, fulfillment)
+            return BuyResult(PENDING, items, order.get("id"), price, code, refunded=refunded)
+        return BuyResult(DELIVERED, items, order.get("id"), price, code, fulfillment, refunded)
+
+
+def _vnd(value) -> int | None:
+    """Số tiền nguyên trong JSON FatCat. Thiếu hoặc không phải số thì None. 0 vẫn là 0."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _message(response: requests.Response) -> str:

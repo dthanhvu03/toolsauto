@@ -476,6 +476,62 @@ def test_bot_buy_from_fatcat_delivers_items(fatcat, repo):
     assert repo.get_product(gpt.id).stock == 42
 
 
+def test_net_charge_keeps_exact_dong():
+    from store_bot.db import _net_charge
+    assert _net_charge(298_000, None, 0, 2) == 298_000
+    assert _net_charge(149_000, None, 0, 1) == 149_000
+    assert _net_charge(36_000, 18_000, 1, 1) == 18_000
+    assert _net_charge(36_000, None, 1, 1) is None  # giao thiếu, không có số hoàn
+    assert _net_charge(100, None, 0, 3) is None  # không chia hết thì không làm tròn
+    assert _net_charge(36_000, 40_000, 1, 1) is None  # hoàn lớn hơn số đã trừ
+
+
+def test_recorded_cost_follows_fatcat_charge(fatcat, repo):
+    """Giao đủ: vốn = tổng price FatCat / số món. Mua 2 món vẫn ra đúng tổng, không lấy giá từng món."""
+    store, telegram, fake, products = fatcat
+    repo.adjust_balance(BUYER, 400_000, "test", "admin")
+    fake.results = [BuyResult(DELIVERED, ["a", "b"], "DH88", 298_000, 200, "complete")]
+    order = repo.buy(BUYER, products[34].id, 2)
+    store._fulfill_now(order.id, BUYER, None)
+    assert repo.order_cost(order.id) == 298_000
+    sale = [h for h in telegram.texts_to(ADMIN) if h.startswith("🛒")][-1]
+    assert "Vốn FatCat đã trừ: 298.000đ" in sale and "lãi <b>12.000đ</b>" in sale
+
+
+def test_partial_cost_uses_fatcat_refund(fatcat, repo):
+    """Giao 1/2: vốn = price − số FatCat hoàn. Không có số hoàn thì không đoán."""
+    store, telegram, fake, products = fatcat
+    repo.adjust_balance(BUYER, 40_000, "test", "admin")
+    gem = products[49]
+    fake.results = [BuyResult(DELIVERED, ["only-one"], "DH3", 36_000, 200, "partial", 18_000)]
+    order = repo.buy(BUYER, gem.id, 2, client_ref="tg:net")
+    store._fulfill_now(order.id, BUYER, None)
+    done = repo.get_order(order.id)
+    assert (done.status, done.refunded) == ("partial", 19_000)
+    assert repo.order_cost(order.id) == 18_000
+
+    repo.adjust_balance(BUYER, 40_000, "test", "admin")
+    fake.results = [BuyResult(DELIVERED, ["only-one"], "DH4", 36_000, 200, "partial")]
+    guessed = repo.buy(BUYER, gem.id, 2, client_ref="tg:guess")
+    store._fulfill_now(guessed.id, BUYER, None)
+    assert repo.order_cost(guessed.id) == 18_620  # giữ giá ước tính, không chia 36.000 cho 1 món
+
+
+def test_sale_charge_reconciles_without_phantom_topup(fatcat, repo):
+    """Ví giảm đúng số price thì sổ vốn không bị cộng phần lệch giá sale."""
+    from datetime import datetime, timedelta, timezone
+    store, telegram, fake, products = fatcat
+    later = lambda sec: datetime.now(timezone.utc) + timedelta(seconds=sec)  # noqa: E731
+    repo.adjust_balance(BUYER, 200_000, "test", "admin")
+    fake.results = [BuyResult(DELIVERED, ["acc-sale"], "DH88", 149_000, 200, "complete")]
+    order = repo.buy(BUYER, products[34].id, 1)
+    store._fulfill_now(order.id, BUYER, None)
+    assert repo.order_cost(order.id) == 149_000
+    assert repo.reconcile_funds(500_000 - 149_000, later(300)) is None
+    assert repo.recent_capital() == []
+    assert "lãi <b>6.000đ</b>" in [h for h in telegram.texts_to(ADMIN) if h.startswith("🛒")][-1]
+
+
 def test_partial_delivery_refunds_missing(fatcat, repo):
     store, telegram, fake, products = fatcat
     repo.adjust_balance(BUYER, 40_000, "test", "admin")
