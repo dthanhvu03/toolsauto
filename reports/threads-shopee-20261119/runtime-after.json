@@ -1,0 +1,59 @@
+{
+  "observed_at": "2026-11-19T17:09:23.972318+00:00",
+  "systemd": {
+    "store-bot": [
+      "MainPID=3966961",
+      "ExecMainStartTimestamp=Wed 2026-11-18 09:11:03 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-bot": [
+      "MainPID=1456507",
+      "ExecMainStartTimestamp=Thu 2026-11-19 01:59:56 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-zalo": [
+      "MainPID=1456511",
+      "ExecMainStartTimestamp=Thu 2026-11-19 01:59:56 UTC",
+      "ActiveState=active"
+    ]
+  },
+  "roles_sha256": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+  "env_sha256": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+  "trial_rows": [
+    [
+      "threads-shopee-180-p1",
+      "posted",
+      "https://www.threads.com/@us28qt/post/Df7lHTTnRXl"
+    ]
+  ],
+  "create_post_calls": 1,
+  "unrelated_pm2_changed": [],
+  "systemd_unchanged": true,
+  "roles_unchanged": true,
+  "env_unchanged": true,
+  "current_profile_process_chain": [],
+  "profile_owned_by_restored_worker": null,
+  "final_workers": {
+    "Threads_Growth": {
+      "pid": 3563054,
+      "status": "online",
+      "unstable": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 3186655,
+      "status": "online",
+      "unstable": 0
+    }
+  },
+  "heartbeat": {
+    "id": "theo-d-i-t-th-capcut",
+    "name": "Theo dõi kết quả nhóm agent",
+    "status": "ACTIVE",
+    "rrule": "FREQ=MINUTELY;INTERVAL=15",
+    "target_thread_id": "01a1ec50-b910-77c2-a614-3d7e33f49dd9",
+    "includes_trial": true
+  },
+  "last_checked_at": "2026-11-19T17:12:22.493418+00:00",
+  "profile_locked_after_restoration_initially": true,
+  "profile_locked_at_final_check": false
+}

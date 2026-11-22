@@ -1,0 +1,135 @@
+{
+  "status": "posted",
+  "slot": "threads-shopee-180-p1",
+  "attempt_started_at": "2026-11-19T17:06:10.768685+00:00",
+  "text": "Chọn một món dưới 200k để đổi outfit: bạn thích áo basic hay váy xếp ly?\n\nÁo dài tay JUSTDUN Z12 — 49.500đ\nhttps://s.shopee.vn/9KjkH8yoPR\nChân váy Ngọc Bích 9678 — 192.580đ\nhttps://s.shopee.vn/4fxuiZ8fjm\n\nTrước khi chốt, xem bảng size của shop và ảnh đánh giá đúng màu/phân loại nhé.\nGiá tham khảo, có thể thay đổi.\nLink tiếp thị liên kết.",
+  "create_post_called": true,
+  "post_url": "https://www.threads.com/@us28qt/post/Df7lHTTnRXl",
+  "pm2_before": {
+    "Maintenance": {
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 3668763,
+      "status": "online",
+      "restarts": 7
+    },
+    "Studio_Heavy": {
+      "pid": 776,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 778,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 784,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 3547099,
+      "status": "online",
+      "restarts": 32
+    },
+    "9Router_Gateway": {
+      "pid": 798,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 3184112,
+      "status": "online",
+      "restarts": 27
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 3186655,
+      "status": "online",
+      "restarts": 4
+    }
+  },
+  "preflight": {
+    "observed_at": "2026-11-19T17:06:10.768685+00:00",
+    "checks": {
+      "role": true,
+      "worker_enabled": true,
+      "outside_quiet_hours": true,
+      "account_active": true,
+      "profile_unlocked": true,
+      "worker_idle": true,
+      "hour_budget": true,
+      "day_budget": true,
+      "spacing": true,
+      "no_previous_attempt": true
+    },
+    "blocked": [],
+    "combined_public_last_hour": 0,
+    "combined_public_last_day": 7,
+    "gap_seconds": 9601.502092
+  },
+  "verified_live_handle": "us28qt",
+  "permalink_content_and_links_verified": true,
+  "pm2_after": {
+    "Maintenance": {
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 3668763,
+      "status": "online",
+      "restarts": 7
+    },
+    "Studio_Heavy": {
+      "pid": 776,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 778,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 784,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 3547099,
+      "status": "online",
+      "restarts": 32
+    },
+    "9Router_Gateway": {
+      "pid": 798,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 3563054,
+      "status": "online",
+      "restarts": 27
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 3186655,
+      "status": "online",
+      "restarts": 4
+    }
+  },
+  "worker_restored": true,
+  "finished_at": "2026-11-19T17:07:49.143414+00:00"
+}

@@ -1,0 +1,64 @@
+{
+  "plan": "PLAN-180",
+  "observed_at": "2026-11-20T04:04:50.603147+00:00",
+  "status": "available",
+  "post_url": "https://www.threads.com/@us28qt/post/Df7lHTTnRXl",
+  "sub_ids": [
+    "TH180A02",
+    "TH180A01"
+  ],
+  "products": [
+    {
+      "sub_id": "TH180A02",
+      "item_id": 26212883183,
+      "name": "Áo Thun Nữ Dài Tay JUSTDUN Z12 -Thiết Kế Khuy Cúc Ngực, Cotton Mịn Êm Ái, Ôm Dáng, Co Giãn Thoải Mái",
+      "imported_click_records": 0,
+      "latest_imported_click_at": null,
+      "conversion_rows": 0,
+      "distinct_reported_orders": 0,
+      "gross_commission_recorded_vnd": 0,
+      "net_commission_recorded_vnd": 0,
+      "rows_missing_net_commission": 0,
+      "statuses": []
+    },
+    {
+      "sub_id": "TH180A01",
+      "item_id": 23987613793,
+      "name": "NGỌC BÍCH - Chân Váy Nữ Xếp Ly KHÔNG Kèm Tang  Chất Dạ Nhiều Màu Hàng Sẵn Xếp Ly Hàng Quảng Châu Loại 1 - Mã 9678",
+      "imported_click_records": 0,
+      "latest_imported_click_at": null,
+      "conversion_rows": 0,
+      "distinct_reported_orders": 0,
+      "gross_commission_recorded_vnd": 0,
+      "net_commission_recorded_vnd": 0,
+      "rows_missing_net_commission": 0,
+      "statuses": []
+    }
+  ],
+  "limitations": [
+    "Counts are imported Shopee records, not live clicks or a claim that no one clicked.",
+    "Link previews and unknown self-clicks cannot be excluded from imported click counts.",
+    "Conversion and commission statuses are current; pending amounts are not settled income or profit.",
+    "Public affiliate campaign links do not establish Cashbot customer use or personal cashback.",
+    "Impressions and money actually received are not available from this report."
+  ],
+  "impressions": null,
+  "cash_received_vnd": null,
+  "cashbot_new_customers_attributed": null,
+  "source_db_mode": "ro",
+  "sync_requested": false,
+  "last_import": {
+    "status": "success",
+    "started_at": "2026-11-20T01:46:10Z",
+    "completed_at": "2026-11-20T01:46:13Z"
+  },
+  "last_successful_import": {
+    "status": "success",
+    "started_at": "2026-11-20T01:46:10Z",
+    "completed_at": "2026-11-20T01:46:13Z",
+    "window_start": "2026-10-21T01:46:11Z",
+    "window_end": "2026-11-20T01:46:11Z"
+  },
+  "successful_import_completed_after_attempt": true,
+  "successful_import_window_covers_attempt": true
+}
