@@ -1,0 +1,70 @@
+{
+  "event_key": "batch-98fc7f5122ced2363409082ed37a40814ff838b38db0ca73ae4d3102727551ae",
+  "coalesced_event_count": 1,
+  "source_event_keys": [
+    "manual-model-smoke"
+  ],
+  "observed_at": "2026-11-18T12:38:33.851838+00:00",
+  "analyzed_at": "2026-11-18T12:38:44.851838+00:00",
+  "changed": [
+    "manual_model_smoke"
+  ],
+  "current": {
+    "observed_at": "2026-11-18T12:38:44.851838+00:00",
+    "since": "2026-11-18T09:21:32.743565+00:00",
+    "source": "threads_ai_cc18_anlinh_p1",
+    "product_id": 2,
+    "new_users": 0,
+    "not_yet_24h": 0,
+    "product_markers": 0,
+    "confirm_markers": 0,
+    "qr_customers": 0,
+    "qr_requests_by_current_status": {},
+    "paid_topup_customers": 0,
+    "delivered_order_customers": 0,
+    "delivered_orders": 0,
+    "revenue_after_refunds": 0,
+    "mature_24h": 0,
+    "converted_24h": 0,
+    "conversion_24h_pct": null,
+    "product": {
+      "id": 2,
+      "name": "Capcut Pro 30D BHF acc cấp",
+      "price": 34000,
+      "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+      "active": 1,
+      "upstream_available": 1,
+      "recorded_catalog_unit_cost": 31360
+    },
+    "limitations": [
+      "New customers joined in [since, until); events must also occur after their join and before until.",
+      "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+      "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+      "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+      "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+      "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+    ],
+    "identifiers_exported": false
+  },
+  "specialists": {
+    "measurement": {
+      "status": "suggestion",
+      "text": " **Facts:** Ghi nhận 0 khách mới, 0 dấu mốc sản phẩm, 0 dấu xác nhận, 0 khách yêu cầu QR, 0 khách nạp tiền được ghi có, 0 đơn giao và 0 khách có đơn giao. Doanh thu sau hoàn là 0. Khách đủ 24 giờ: 0; tỷ lệ 24 giờ chưa có dữ liệu.\n\n**Chưa biết:** Số đơn pending và số lượt hoàn không được cung cấp; pending không được tính là đơn giao. Không có căn cứ để suy ra nguyên nhân từ các số 0; chưa có giả thuyết nào được xác nhận.",
+      "model": "gpt-6.1-sol"
+    },
+    "conversion": {
+      "status": "suggestion",
+      "text": "**Facts:** Hai bản ghi giống nhau và cùng thời điểm quan sát; không có thay đổi aggregate được ghi nhận. Khách mới, marker sản phẩm/xác nhận, khách nạp tiền, đơn đã giao và doanh thu sau hoàn đều bằng 0. Không có khách đủ thời gian quan sát 24 giờ; tỷ lệ chuyển đổi 24 giờ chưa xác định, không phải 0%.\n\nMarker sản phẩm/xác nhận chỉ lưu lần đầu; thiếu marker không chứng minh khách bỏ bước. Các giai đoạn độc lập, QR tùy chọn; nạp tiền không đồng nghĩa nhận đơn.\n\n**Giả thuyết:** Chưa biết nguyên nhân không ghi nhận khách mới; chưa có bằng chứng xác định bước cần thay đổi hoặc quy kết hiệu quả chiến dịch/bài đăng.",
+      "model": "gpt-6.1-sol"
+    },
+    "content": {
+      "status": "suggestion",
+      "text": "  **Facts:** Dữ liệu hiện tại và kỳ trước giống nhau; không ghi nhận khách mới, dấu mốc sản phẩm/xác nhận, nạp tiền hay đơn hàng được giao. Các giới hạn dữ liệu không cho phép kết luận về hiệu quả hoặc nguyên nhân.\n\n**Nhận định:** Chưa cần viết nội dung mới; tín hiệu hiện có chưa đủ để định hướng một bản nháp.",
+      "model": "gpt-6.1-sol"
+    }
+  },
+  "specialist_errors": {},
+  "suggest_only": true,
+  "identifiers_exported": false,
+  "customer_or_public_actions": 0
+}

@@ -1,0 +1,296 @@
+{
+  "observed_at": "2026-11-18T09:21:32.185470+00:00",
+  "status": "read_only_preflight_not_published",
+  "checks": {
+    "source_registered_as_original_anlinh_post": true,
+    "catalog_price_matches": true,
+    "catalog_available_cached": true,
+    "shop_open": true,
+    "account_active": true,
+    "role_enabled_for_store": true,
+    "profile_unlocked": true,
+    "service_running": true,
+    "service_cwd_matches": true,
+    "handler_loaded_after_edit": true,
+    "trial_has_not_been_recorded_as_posted": true,
+    "baseline_read_succeeded": true
+  },
+  "blocked_checks": [],
+  "product": {
+    "id": 2,
+    "name": "Capcut Pro 30D BHF acc cấp",
+    "price": 34000,
+    "active": 1,
+    "upstream_available": 1,
+    "upstream_stock": 22,
+    "synced_at": "2026-11-18T09:21:16+00:00"
+  },
+  "shop": {
+    "closed": false,
+    "manual": false,
+    "reopen": null
+  },
+  "account_login_status": "ACTIVE",
+  "role": {
+    "enabled": true,
+    "bots": [
+      "ai_store"
+    ],
+    "max_per_day": 16,
+    "max_per_hour": 4,
+    "own_posts": false,
+    "dm": false,
+    "note": "18/11: hero CapCut Pro 30D (tu khoa + goc A/B); 16/ngay + 4/gio"
+  },
+  "quota": {
+    "reply_last_hour": 0,
+    "reply_last_day": 16,
+    "min_delay_sec": 180,
+    "remaining_gap_sec": 0,
+    "reply_quota_has_room": false
+  },
+  "service": {
+    "MainPID": "3966961",
+    "ExecMainStartTimestamp": "Wed 2026-11-18 09:11:03 UTC",
+    "ActiveState": "active",
+    "SubState": "running"
+  },
+  "handler_updated_at": "2026-11-18T09:00:25.216366+00:00",
+  "automatic_worker_enabled": true,
+  "queue_review": [
+    {
+      "id": 2341,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2350,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2352,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2354,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2355,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2378,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2379,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2387,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2389,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2390,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2391,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2392,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2394,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2396,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2400,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2417,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2418,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2433,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2435,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2443,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2445,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2452,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2465,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2472,
+      "mentions_capcut": false,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2482,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2485,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    },
+    {
+      "id": 2488,
+      "mentions_capcut": true,
+      "suggested_action": "manual_review_before_reuse",
+      "changed": false
+    }
+  ],
+  "source_baseline": {
+    "since": "2026-11-18T09:04:28.052000+00:00",
+    "until": "2026-11-18T09:21:32.185470+00:00",
+    "product_id": 2,
+    "source_prefix": "threads_ai_cc18_anlinh_p1",
+    "excluded_account_count": 1,
+    "product": {
+      "id": 2,
+      "name": "Capcut Pro 30D BHF acc cấp",
+      "price": 34000,
+      "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+      "active": 1,
+      "upstream_id": 30,
+      "upstream_available": 1,
+      "upstream_stock": 22,
+      "synced_at": "2026-11-18T09:21:16+00:00",
+      "stock_is_cached": true
+    },
+    "cohort": {
+      "customers": 0,
+      "not_yet_24h": 0,
+      "all_products": {
+        "stages": {
+          "product": 0,
+          "confirm": 0,
+          "qr": 0,
+          "paid": 0,
+          "order": 0
+        },
+        "qr_requests_by_current_status": {},
+        "delivered_orders": 0,
+        "revenue_after_refunds": 0,
+        "mature_24h": 0,
+        "converted_24h": 0,
+        "conversion_24h_pct": null,
+        "not_converted_24h": 0
+      },
+      "selected_product": {
+        "stages": {
+          "product": 0,
+          "confirm": 0,
+          "qr": 0,
+          "paid": 0,
+          "order": 0
+        },
+        "qr_requests_by_current_status": {},
+        "delivered_orders": 0,
+        "revenue_after_refunds": 0,
+        "mature_24h": 0,
+        "converted_24h": 0,
+        "conversion_24h_pct": null,
+        "not_converted_24h": 0
+      }
+    },
+    "sources": [],
+    "notes": [
+      "New customers joined in [since, until); events must also occur after their join and before until.",
+      "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+      "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+      "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+      "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+      "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+    ],
+    "errors": []
+  },
+  "notes": [
+    "Preflight is not proof of publication; automatic worker/profile state can change before a manual post.",
+    "Cached stock is not guaranteed supply; no vendor call or purchase was made.",
+    "own_posts role is off; owner-approved one-off post is separate, not a scheduler/role change.",
+    "Reply quota applies to replies only; this owner-approved single original post does not add replies or change limits.",
+    "The Dashboard process needs its own reload for the new code_map; CLI reads fresh code."
+  ]
+}

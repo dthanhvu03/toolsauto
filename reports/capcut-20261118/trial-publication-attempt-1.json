@@ -1,0 +1,14 @@
+{
+  "attempt_started_at": "2026-11-18T09:19:04.796651+00:00",
+  "account": "anlinh",
+  "expected_handle": "anlinh_08_10",
+  "source": "threads_ai_cc18_anlinh_p1",
+  "text": "Shop có CapCut Pro 30 ngày — tài khoản cấp sẵn, giá đang niêm yết 34.000đ. Mô tả món ghi tối đa 2 thiết bị. Bạn cần dùng trong tháng có thể mở đúng món để xem thông tin và giá hiện tại trước khi quyết định:\nhttps://t.me/aipass_shop_bot?start=buy_2_threads_ai_cc18_anlinh_p1",
+  "status": "not_published",
+  "post_url": null,
+  "direct_owner_authorized": true,
+  "reply_sent": false,
+  "role_or_quota_changed": false,
+  "finished_at": "2026-11-18T09:19:20.560386+00:00",
+  "error": "RuntimeError: Live authenticated account does not match the approved An Linh account"
+}

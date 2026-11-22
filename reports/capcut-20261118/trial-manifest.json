@@ -1,0 +1,32 @@
+{
+  "prepared_at": "2026-11-18T09:04:28.052Z",
+  "status": "posted",
+  "account": "anlinh",
+  "account_handle": "anlinh_08_10",
+  "channel": "original_profile_post",
+  "product_id": 2,
+  "source": "threads_ai_cc18_anlinh_p1",
+  "telegram_url": "https://t.me/aipass_shop_bot?start=buy_2_threads_ai_cc18_anlinh_p1",
+  "text": "Shop có CapCut Pro 30 ngày — tài khoản cấp sẵn, giá đang niêm yết 34.000đ. Mô tả món ghi tối đa 2 thiết bị. Bạn cần dùng trong tháng có thể mở đúng món để xem thông tin và giá hiện tại trước khi quyết định:\nhttps://t.me/aipass_shop_bot?start=buy_2_threads_ai_cc18_anlinh_p1",
+  "characters": 273,
+  "publish_count_limit": 1,
+  "paid_ads": false,
+  "discount": false,
+  "dm_or_broadcast": false,
+  "attribution": "Only new users whose first bot entry uses this source; existing users are not reattributed. No link-click impressions are recorded.",
+  "requires": [
+    "tested additive handler",
+    "owner-run or explicitly owner-approved store-bot restart per ADR-067",
+    "service process start after handler update and correct cwd",
+    "catalog price 34000 and availability recheck",
+    "matching ACTIVE account and unlocked profile",
+    "one original post only; reply quota stays unchanged; use exclusive profile and one-attempt publication record",
+    "record URL or unknown outcome without blind retry"
+  ],
+  "published_at": "2026-11-18T09:21:32.743565+00:00",
+  "post_url": "https://www.threads.com/@anlinh_08_10/post/Df4LF2IFIlg",
+  "runtime_approval": "Owner explicitly approved restarting only store-bot; restarted 2026-11-18T09:11:03Z, PID3966961.",
+  "reply_quota_policy": "16/day limit counts replies in growth_posts, not original posts in own_posts. Keep automatic own_posts=false; one original post is directly owner-authorized.",
+  "verified_at": "2026-11-18T09:24:20.211835+00:00",
+  "publish_time_is_attempt_start": true
+}

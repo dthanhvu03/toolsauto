@@ -1,0 +1,78 @@
+{
+  "observed_at": "2026-11-19T09:31:23.057081+00:00",
+  "post_url": "https://www.threads.com/@anlinh_08_10/post/Df4LF2IFIlg",
+  "source": "threads_ai_cc18_anlinh_p1",
+  "since_is_attempt_start_not_exact_publish_time": true,
+  "report": {
+    "since": "2026-11-18T09:21:32.743565+00:00",
+    "until": "2026-11-19T09:31:23.057081+00:00",
+    "product_id": 2,
+    "source_prefix": "threads_ai_cc18_anlinh_p1",
+    "source_exact": true,
+    "excluded_account_count": 1,
+    "product": {
+      "id": 2,
+      "name": "Capcut Pro 30D BHF acc cấp",
+      "price": 34000,
+      "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+      "active": 1,
+      "upstream_id": 30,
+      "upstream_available": 1,
+      "upstream_cost": 31360,
+      "upstream_stock": 18,
+      "synced_at": "2026-11-19T09:31:12+00:00",
+      "stock_is_cached": true
+    },
+    "cohort": {
+      "customers": 0,
+      "not_yet_24h": 0,
+      "all_products": {
+        "stages": {
+          "product": 0,
+          "confirm": 0,
+          "qr": 0,
+          "paid": 0,
+          "order": 0
+        },
+        "qr_requests_by_current_status": {},
+        "delivered_orders": 0,
+        "revenue_after_refunds": 0,
+        "mature_24h": 0,
+        "converted_24h": 0,
+        "conversion_24h_pct": null,
+        "not_converted_24h": 0
+      },
+      "selected_product": {
+        "stages": {
+          "product": 0,
+          "confirm": 0,
+          "qr": 0,
+          "paid": 0,
+          "order": 0
+        },
+        "qr_requests_by_current_status": {},
+        "delivered_orders": 0,
+        "revenue_after_refunds": 0,
+        "mature_24h": 0,
+        "converted_24h": 0,
+        "conversion_24h_pct": null,
+        "not_converted_24h": 0
+      }
+    },
+    "sources": [],
+    "notes": [
+      "New customers joined in [since, until); events must also occur after their join and before until.",
+      "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+      "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+      "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+      "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+      "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+    ],
+    "errors": []
+  },
+  "notes": [
+    "The source was used only for this trial; existing customers are not reattributed.",
+    "A fresh post with no mature 24h cohort is not evidence of success or failure.",
+    "No link clicks/impressions are available before Telegram Start."
+  ]
+}

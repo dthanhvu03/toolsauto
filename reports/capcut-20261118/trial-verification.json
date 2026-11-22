@@ -1,0 +1,14 @@
+{
+  "observed_at": "2026-11-18T09:24:20.211835+00:00",
+  "mode": "read_only_no_create_post",
+  "source": "threads_ai_cc18_anlinh_p1",
+  "expected_handle": "anlinh_08_10",
+  "found": true,
+  "post_url": "https://www.threads.com/@anlinh_08_10/post/Df4LF2IFIlg",
+  "retries_published": 0,
+  "verified_live_handle": "anlinh_08_10",
+  "price_visible": true,
+  "exact_text_visible": true,
+  "profile_url": "https://www.threads.com/@anlinh_08_10",
+  "source_text_visible": false
+}

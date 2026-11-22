@@ -1,0 +1,43 @@
+{
+  "heartbeat_at": "2026-11-20T04:26:50.802884+00:00",
+  "worker_pid": 0,
+  "scan_status": "stopped",
+  "last_error_type": null,
+  "poll_seconds": 5,
+  "event_counts": {
+    "ignored": 1
+  },
+  "last_ai_started": "2026-11-18T12:43:28.296399+00:00",
+  "baseline_counts": {
+    "observed_at": "2026-11-18T12:43:16.539147+00:00",
+    "new_users": 0,
+    "not_yet_24h": 0,
+    "product_markers": 0,
+    "confirm_markers": 0,
+    "qr_customers": 0,
+    "paid_topup_customers": 0,
+    "delivered_orders": 0,
+    "revenue_after_refunds": 0,
+    "mature_24h": 0,
+    "converted_24h": 0,
+    "conversion_24h_pct": null
+  },
+  "exact_source": "threads_ai_cc18_anlinh_p1",
+  "source_db_mode": "ro",
+  "specialist_roles": [
+    "measurement",
+    "conversion",
+    "content"
+  ],
+  "customer_or_public_actions": 0,
+  "chat_delivery_interval_minutes": 15,
+  "strategy_plan": "PLAN-179",
+  "strategy_review_interval_hours": 6,
+  "strategy_review_path": "reports/customer-agents/strategy/latest.json",
+  "operator_stop": {
+    "plan": "PLAN-185",
+    "at": "2026-11-20T04:29:27.026343+00:00",
+    "reason": "Owner cancelled all growth agents pending a new direction",
+    "auto_resume": false
+  }
+}

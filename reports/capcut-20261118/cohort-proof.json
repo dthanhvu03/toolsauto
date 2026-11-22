@@ -1,0 +1,350 @@
+{
+  "observed_at": "2026-11-18T07:36:02.301588+00:00",
+  "observation_boundary": "2026-11-18T02:01:59+00:00",
+  "independent_cohort_count": 1,
+  "independent_sql_matches": true,
+  "excluded_admin_count": 1,
+  "product_economics": {
+    "price": 34000,
+    "recorded_unit_cost": 31360,
+    "gross_spread_before_expenses": 2640,
+    "cached_stock": 25,
+    "catalog_synced_at": "2026-11-18T07:35:50+00:00"
+  },
+  "reports": {
+    "after_code_commit": {
+      "since": "2026-11-18T02:01:59+00:00",
+      "until": "2026-11-18T07:36:02.301588+00:00",
+      "product_id": 2,
+      "source_prefix": "threads_ai_",
+      "excluded_account_count": 1,
+      "product": {
+        "id": 2,
+        "name": "Capcut Pro 30D BHF acc cấp",
+        "price": 34000,
+        "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+        "active": 1,
+        "upstream_id": 30,
+        "upstream_available": 1,
+        "upstream_stock": 25,
+        "synced_at": "2026-11-18T07:35:50+00:00",
+        "stock_is_cached": true
+      },
+      "cohort": {
+        "customers": 1,
+        "not_yet_24h": 1,
+        "all_products": {
+          "stages": {
+            "product": 0,
+            "confirm": 0,
+            "qr": 0,
+            "paid": 0,
+            "order": 0
+          },
+          "qr_requests_by_current_status": {},
+          "delivered_orders": 0,
+          "revenue_after_refunds": 0,
+          "mature_24h": 0,
+          "converted_24h": 0,
+          "conversion_24h_pct": null,
+          "not_converted_24h": 0
+        },
+        "selected_product": {
+          "stages": {
+            "product": 0,
+            "confirm": 0,
+            "qr": 0,
+            "paid": 0,
+            "order": 0
+          },
+          "qr_requests_by_current_status": {},
+          "delivered_orders": 0,
+          "revenue_after_refunds": 0,
+          "mature_24h": 0,
+          "converted_24h": 0,
+          "conversion_24h_pct": null,
+          "not_converted_24h": 0
+        }
+      },
+      "sources": [
+        {
+          "source": "threads_ai_price",
+          "customers": 1,
+          "not_yet_24h": 1,
+          "all_products": {
+            "stages": {
+              "product": 0,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 0,
+            "converted_24h": 0,
+            "conversion_24h_pct": null,
+            "not_converted_24h": 0
+          },
+          "selected_product": {
+            "stages": {
+              "product": 0,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 0,
+            "converted_24h": 0,
+            "conversion_24h_pct": null,
+            "not_converted_24h": 0
+          }
+        }
+      ],
+      "notes": [
+        "New customers joined in [since, until); events must also occur after their join and before until.",
+        "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+        "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+        "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+        "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+        "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+      ],
+      "errors": []
+    },
+    "seven_days_before_code_commit": {
+      "since": "2026-11-11T02:01:59+00:00",
+      "until": "2026-11-18T02:01:59+00:00",
+      "product_id": 2,
+      "source_prefix": "threads_ai_",
+      "excluded_account_count": 1,
+      "product": {
+        "id": 2,
+        "name": "Capcut Pro 30D BHF acc cấp",
+        "price": 34000,
+        "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+        "active": 1,
+        "upstream_id": 30,
+        "upstream_available": 1,
+        "upstream_stock": 25,
+        "synced_at": "2026-11-18T07:35:50+00:00",
+        "stock_is_cached": true
+      },
+      "cohort": {
+        "customers": 91,
+        "not_yet_24h": 5,
+        "all_products": {
+          "stages": {
+            "product": 14,
+            "confirm": 1,
+            "qr": 4,
+            "paid": 3,
+            "order": 3
+          },
+          "qr_requests_by_current_status": {
+            "cancelled": 3,
+            "paid": 3
+          },
+          "delivered_orders": 3,
+          "revenue_after_refunds": 180200,
+          "mature_24h": 86,
+          "converted_24h": 3,
+          "conversion_24h_pct": 3.5,
+          "not_converted_24h": 83
+        },
+        "selected_product": {
+          "stages": {
+            "product": 1,
+            "confirm": 0,
+            "qr": 0,
+            "paid": 0,
+            "order": 0
+          },
+          "qr_requests_by_current_status": {},
+          "delivered_orders": 0,
+          "revenue_after_refunds": 0,
+          "mature_24h": 86,
+          "converted_24h": 0,
+          "conversion_24h_pct": 0.0,
+          "not_converted_24h": 86
+        }
+      },
+      "sources": [
+        {
+          "source": "threads_ai_auto",
+          "customers": 14,
+          "not_yet_24h": 1,
+          "all_products": {
+            "stages": {
+              "product": 3,
+              "confirm": 0,
+              "qr": 1,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {
+              "cancelled": 1
+            },
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 13,
+            "converted_24h": 0,
+            "conversion_24h_pct": 0.0,
+            "not_converted_24h": 13
+          },
+          "selected_product": {
+            "stages": {
+              "product": 0,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 13,
+            "converted_24h": 0,
+            "conversion_24h_pct": 0.0,
+            "not_converted_24h": 13
+          }
+        },
+        {
+          "source": "threads_ai_auto_anlinh",
+          "customers": 1,
+          "not_yet_24h": 1,
+          "all_products": {
+            "stages": {
+              "product": 1,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 0,
+            "converted_24h": 0,
+            "conversion_24h_pct": null,
+            "not_converted_24h": 0
+          },
+          "selected_product": {
+            "stages": {
+              "product": 0,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 0,
+            "converted_24h": 0,
+            "conversion_24h_pct": null,
+            "not_converted_24h": 0
+          }
+        },
+        {
+          "source": "threads_ai_price",
+          "customers": 19,
+          "not_yet_24h": 1,
+          "all_products": {
+            "stages": {
+              "product": 4,
+              "confirm": 1,
+              "qr": 2,
+              "paid": 2,
+              "order": 2
+            },
+            "qr_requests_by_current_status": {
+              "cancelled": 2,
+              "paid": 2
+            },
+            "delivered_orders": 2,
+            "revenue_after_refunds": 159200,
+            "mature_24h": 18,
+            "converted_24h": 2,
+            "conversion_24h_pct": 11.1,
+            "not_converted_24h": 16
+          },
+          "selected_product": {
+            "stages": {
+              "product": 0,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 18,
+            "converted_24h": 0,
+            "conversion_24h_pct": 0.0,
+            "not_converted_24h": 18
+          }
+        },
+        {
+          "source": "threads_ai_price_anlinh",
+          "customers": 57,
+          "not_yet_24h": 2,
+          "all_products": {
+            "stages": {
+              "product": 6,
+              "confirm": 0,
+              "qr": 1,
+              "paid": 1,
+              "order": 1
+            },
+            "qr_requests_by_current_status": {
+              "paid": 1
+            },
+            "delivered_orders": 1,
+            "revenue_after_refunds": 21000,
+            "mature_24h": 55,
+            "converted_24h": 1,
+            "conversion_24h_pct": 1.8,
+            "not_converted_24h": 54
+          },
+          "selected_product": {
+            "stages": {
+              "product": 1,
+              "confirm": 0,
+              "qr": 0,
+              "paid": 0,
+              "order": 0
+            },
+            "qr_requests_by_current_status": {},
+            "delivered_orders": 0,
+            "revenue_after_refunds": 0,
+            "mature_24h": 55,
+            "converted_24h": 0,
+            "conversion_24h_pct": 0.0,
+            "not_converted_24h": 55
+          }
+        }
+      ],
+      "notes": [
+        "New customers joined in [since, until); events must also occur after their join and before until.",
+        "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+        "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+        "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+        "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+        "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+      ],
+      "errors": []
+    }
+  },
+  "limitations": [
+    "The code commit time is an observation boundary, not a confirmed runtime activation or post attribution.",
+    "First-touch source is shared with older posts; a count after START does not prove acquisition by CapCut.",
+    "Previous seven days are context, not an equal-duration controlled experiment or causal baseline.",
+    "Price and cached inventory must be rechecked before publication; no purchase or voucher is attempted.",
+    "Admin IDs are used only for filtering and are never included in output."
+  ]
+}

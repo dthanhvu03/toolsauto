@@ -1,0 +1,95 @@
+{
+  "observed_at_utc": "2026-11-18T10:19:59.513997+00:00",
+  "observed_at_vn": "2026-11-18T17:19:59.513997+07:00",
+  "campaign_observed_at_utc": "2026-11-18T10:17:40.243550+00:00",
+  "campaign_observed_at_vn": "2026-11-18T17:17:40.243550+07:00",
+  "source": "threads_ai_cc18_anlinh_p1",
+  "post_url": "https://www.threads.com/@anlinh_08_10/post/Df4LF2IFIlg",
+  "baseline": {
+    "observed_at_vn": "2026-11-18T16:26:39+07:00",
+    "customers": 0,
+    "delivered_orders": 0,
+    "revenue_after_refunds": 0
+  },
+  "window": {
+    "since": "2026-11-18T09:21:32.743565+00:00",
+    "until": "2026-11-18T10:17:40.243550+00:00",
+    "since_is_attempt_start_not_exact_publish_second": true
+  },
+  "cohort": {
+    "customers": 0,
+    "not_yet_24h": 0,
+    "all_products": {
+      "stages": {
+        "product": 0,
+        "confirm": 0,
+        "qr": 0,
+        "paid": 0,
+        "order": 0
+      },
+      "qr_requests_by_current_status": {},
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null,
+      "not_converted_24h": 0
+    },
+    "selected_product": {
+      "stages": {
+        "product": 0,
+        "confirm": 0,
+        "qr": 0,
+        "paid": 0,
+        "order": 0
+      },
+      "qr_requests_by_current_status": {},
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null,
+      "not_converted_24h": 0
+    }
+  },
+  "delta_from_baseline": {
+    "customers": 0,
+    "delivered_orders": 0,
+    "revenue_after_refunds": 0
+  },
+  "independent_sql": {
+    "exact_source_customers": 0,
+    "prefix_source_customers": 0,
+    "other_source_labels_with_same_prefix": 0,
+    "matches_report": true,
+    "mode": "SQLite mode=ro; BEGIN"
+  },
+  "product": {
+    "id": 2,
+    "name": "Capcut Pro 30D BHF acc cấp",
+    "price": 34000,
+    "upstream_cost": 31360,
+    "upstream_stock": 22,
+    "upstream_available": 1,
+    "active": 1,
+    "synced_at": "2026-11-18T10:19:12+00:00"
+  },
+  "economics": {
+    "recorded_cost_missing": false,
+    "unit_spread_before_other_costs": 2640,
+    "unit_spread_pct_of_price": 7.76,
+    "one_unit_first_order_break_even_acquisition_cost_ceiling_before_other_costs": 2640,
+    "other_costs_measured": false,
+    "net_profit": null,
+    "cash_available_to_withdraw": null
+  },
+  "limitations": [
+    "First-touch source captures only new bot users who start with this code; existing users are not re-attributed.",
+    "Campaign CLI currently uses startswith(source). Independent exact match and prefix counts are equal and no suffix labels exist at this snapshot.",
+    "No impressions or link clicks before Telegram Start are available; source zero cannot identify reach or copy as the cause.",
+    "No mature24h customers; conversion rate is null, not0%.",
+    "Missing first step marker does not establish drop-off; QR and top-up are not delivered orders.",
+    "Current product cost/cache is not the cost of an actual new delivered order, and stock22 does not prove sales from this campaign.",
+    "CAC ceiling assumes one full-price unit, no refunds, other expenses or contribution from repeat purchases; it is not an approved ad budget."
+  ]
+}

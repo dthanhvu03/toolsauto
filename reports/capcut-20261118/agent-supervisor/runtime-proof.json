@@ -1,0 +1,270 @@
+{
+  "observed_at": "2026-11-18T18:26:57.785941+00:00",
+  "processes": [
+    {
+      "name": "Maintenance",
+      "pid": 973855,
+      "status": "online",
+      "restarts": 1,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-16T03:54:28.932000+00:00"
+    },
+    {
+      "name": "DB_Backup",
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-18T03:00:00.067000+00:00"
+    },
+    {
+      "name": "Web_Dashboard",
+      "pid": 3668763,
+      "status": "online",
+      "restarts": 7,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-18T05:14:18.049000+00:00"
+    },
+    {
+      "name": "Studio_Heavy",
+      "pid": 776,
+      "status": "online",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-13T01:36:29.582000+00:00"
+    },
+    {
+      "name": "Studio_Light",
+      "pid": 778,
+      "status": "online",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-13T01:36:29.591000+00:00"
+    },
+    {
+      "name": "VieNeu_TTS",
+      "pid": 784,
+      "status": "online",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-13T01:36:29.723000+00:00"
+    },
+    {
+      "name": "shopee-mcp",
+      "pid": 786,
+      "status": "online",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-13T01:36:29.726000+00:00"
+    },
+    {
+      "name": "9Router_Gateway",
+      "pid": 798,
+      "status": "online",
+      "restarts": 0,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-13T01:36:29.924000+00:00"
+    },
+    {
+      "name": "Threads_Growth",
+      "pid": 4169711,
+      "status": "online",
+      "restarts": 24,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-18T11:29:09.484000+00:00"
+    },
+    {
+      "name": "CapCut_Agent_Supervisor",
+      "pid": 242927,
+      "status": "online",
+      "restarts": 3,
+      "unstable_restarts": 0,
+      "started_at": "2026-11-18T12:52:43.092000+00:00"
+    }
+  ],
+  "sidecar_event_counts": {
+    "ignored": 1
+  },
+  "sidecar_event_sequence": "1",
+  "last_production_sidecar_ai_started_at": "2026-11-18T12:43:28.296399+00:00",
+  "current_business_events": 0,
+  "baseline_counts": {
+    "observed_at": "2026-11-18T12:43:16.539147+00:00",
+    "new_users": 0,
+    "not_yet_24h": 0,
+    "product_markers": 0,
+    "confirm_markers": 0,
+    "qr_customers": 0,
+    "paid_topup_customers": 0,
+    "delivered_orders": 0,
+    "revenue_after_refunds": 0,
+    "mature_24h": 0,
+    "converted_24h": 0,
+    "conversion_24h_pct": null
+  },
+  "status": {
+    "heartbeat_at": "2026-11-18T18:26:56.902702+00:00",
+    "worker_pid": 242927,
+    "scan_status": "unchanged",
+    "last_error_type": null,
+    "poll_seconds": 5,
+    "event_counts": {
+      "ignored": 1
+    },
+    "last_ai_started": "2026-11-18T12:43:28.296399+00:00",
+    "baseline_counts": {
+      "observed_at": "2026-11-18T12:43:16.539147+00:00",
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "product_markers": 0,
+      "confirm_markers": 0,
+      "qr_customers": 0,
+      "paid_topup_customers": 0,
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null
+    },
+    "exact_source": "threads_ai_cc18_anlinh_p1",
+    "source_db_mode": "ro",
+    "specialist_roles": [
+      "measurement",
+      "conversion",
+      "content"
+    ],
+    "customer_or_public_actions": 0,
+    "chat_delivery_interval_minutes": 15
+  },
+  "smoke": {
+    "mode": "manual_model_smoke_not_business_event",
+    "started_at": "2026-11-18T12:38:44.851838+00:00",
+    "actual_aggregate_counts": {
+      "observed_at": "2026-11-18T12:38:44.851838+00:00",
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "product_markers": 0,
+      "confirm_markers": 0,
+      "qr_customers": 0,
+      "paid_topup_customers": 0,
+      "delivered_orders": 0,
+      "revenue_after_refunds": 0,
+      "mature_24h": 0,
+      "converted_24h": 0,
+      "conversion_24h_pct": null
+    },
+    "customer_or_public_actions": 0,
+    "production_event_inserted": false,
+    "generator_calls_requested": 3,
+    "result": {
+      "status": "done",
+      "event_key": "batch-98fc7f5122ced2363409082ed37a40814ff838b38db0ca73ae4d3102727551ae",
+      "coalesced_event_count": 1,
+      "roles": [
+        "measurement",
+        "conversion",
+        "content"
+      ],
+      "fallback_roles": []
+    },
+    "role_outputs": {
+      "measurement": {
+        "status": "suggestion",
+        "text": " **Facts:** Ghi nhận 0 khách mới, 0 dấu mốc sản phẩm, 0 dấu xác nhận, 0 khách yêu cầu QR, 0 khách nạp tiền được ghi có, 0 đơn giao và 0 khách có đơn giao. Doanh thu sau hoàn là 0. Khách đủ 24 giờ: 0; tỷ lệ 24 giờ chưa có dữ liệu.\n\n**Chưa biết:** Số đơn pending và số lượt hoàn không được cung cấp; pending không được tính là đơn giao. Không có căn cứ để suy ra nguyên nhân từ các số 0; chưa có giả thuyết nào được xác nhận.",
+        "model": "gpt-6.1-sol"
+      },
+      "conversion": {
+        "status": "suggestion",
+        "text": "**Facts:** Hai bản ghi giống nhau và cùng thời điểm quan sát; không có thay đổi aggregate được ghi nhận. Khách mới, marker sản phẩm/xác nhận, khách nạp tiền, đơn đã giao và doanh thu sau hoàn đều bằng 0. Không có khách đủ thời gian quan sát 24 giờ; tỷ lệ chuyển đổi 24 giờ chưa xác định, không phải 0%.\n\nMarker sản phẩm/xác nhận chỉ lưu lần đầu; thiếu marker không chứng minh khách bỏ bước. Các giai đoạn độc lập, QR tùy chọn; nạp tiền không đồng nghĩa nhận đơn.\n\n**Giả thuyết:** Chưa biết nguyên nhân không ghi nhận khách mới; chưa có bằng chứng xác định bước cần thay đổi hoặc quy kết hiệu quả chiến dịch/bài đăng.",
+        "model": "gpt-6.1-sol"
+      },
+      "content": {
+        "status": "suggestion",
+        "text": "  **Facts:** Dữ liệu hiện tại và kỳ trước giống nhau; không ghi nhận khách mới, dấu mốc sản phẩm/xác nhận, nạp tiền hay đơn hàng được giao. Các giới hạn dữ liệu không cho phép kết luận về hiệu quả hoặc nguyên nhân.\n\n**Nhận định:** Chưa cần viết nội dung mới; tín hiệu hiện có chưa đủ để định hướng một bản nháp.",
+        "model": "gpt-6.1-sol"
+      }
+    },
+    "finished_at": "2026-11-18T12:39:41.885343+00:00"
+  },
+  "rollout_normalization": {
+    "event_key": "batch-1067f8500c6e338efa3439ce9220d00c00fd80f1217ee337c839064da9c065d4",
+    "coalesced_event_count": 1,
+    "source_event_keys": [
+      "1-45d92b48b64618c3a02babd244505174a2c3962e79881debc070fee279553122"
+    ],
+    "observed_at": "2026-11-18T12:43:16.539147+00:00",
+    "analyzed_at": "2026-11-18T12:43:28.296399+00:00",
+    "changed": [
+      "qr_requests_by_current_status"
+    ],
+    "current": {
+      "confirm_markers": 0,
+      "conversion_24h_pct": null,
+      "converted_24h": 0,
+      "delivered_order_customers": 0,
+      "delivered_orders": 0,
+      "identifiers_exported": false,
+      "limitations": [
+        "New customers joined in [since, until); events must also occur after their join and before until.",
+        "Source is first-touch; the time boundary and shared source codes do not establish campaign/post attribution or causality.",
+        "Product/confirm markers retain only the first observation per customer; missing markers do not prove a drop-off.",
+        "Stages are independent and QR is optional. Paid means credited top-up, not necessarily a delivered order.",
+        "24h rate excludes customers not yet observed for 24h; order timestamp is creation, not delivery completion.",
+        "Order/top-up status is current, not a historical reconstruction. Current catalog/cache may change; stock is not guaranteed."
+      ],
+      "mature_24h": 0,
+      "new_users": 0,
+      "not_yet_24h": 0,
+      "observed_at": "2026-11-18T12:43:16.539147+00:00",
+      "paid_topup_customers": 0,
+      "product": {
+        "active": 1,
+        "description": "Chỉ log tối đa 2 thiết bị, BHF\nĐịnh dạng:\nTK|MK|ID CAPCUT\nID Capcut chỉ để tiện bảo hành chứ không có gì hết\nCách đăng nhập trên điện thoại: Ấn vào nút email nhập TK+MK\nCách đăng nhập trên máy tính: Đăng nhập trên điện thoại rồi quét mã QR",
+        "id": 2,
+        "name": "Capcut Pro 30D BHF acc cấp",
+        "price": 34000,
+        "recorded_catalog_unit_cost": 31360,
+        "upstream_available": 1
+      },
+      "product_id": 2,
+      "product_markers": 0,
+      "qr_customers": 0,
+      "qr_requests_by_current_status": {},
+      "revenue_after_refunds": 0,
+      "since": "2026-11-18T09:21:32.743565+00:00",
+      "source": "threads_ai_cc18_anlinh_p1"
+    },
+    "specialists": {
+      "measurement": {
+        "status": "suggestion",
+        "text": "**Số liệu ghi nhận**\n\n- 0 khách mới, 0 lượt ghi nhận bước sản phẩm, 0 lượt ghi nhận bước xác nhận.\n- 0 khách có QR. Bảng yêu cầu QR theo trạng thái hiện tại trống.\n- 0 khách nạp tiền thành công. Có 0 đơn đã giao cho 0 khách. Chỉ tính đơn đã giao, loại đơn pending.\n- Doanh thu sau hoàn là 0.\n- Có 0 khách đủ 24 giờ theo dõi, 0 khách chưa đủ 24 giờ và 0 khách chuyển đổi trong 24 giờ. Tỷ lệ chuyển đổi 24 giờ: chưa có dữ liệu vì mẫu số bằng 0.\n\n**Chưa biết**\n\nChưa có số lượt hoàn hoặc số tiền hoàn. Các số 0 chưa đủ để xác định khách dừng ở bước nào hay nguyên nhân.",
+        "model": "gpt-6.1-sol"
+      },
+      "conversion": {
+        "status": "suggestion",
+        "text": "**Fact:** Chưa có bằng chứng aggregate cho thấy bước chuyển đổi nào thay đổi. Cả hai lần quan sát đều có 0 khách mới, 0 khách tạo QR, 0 khách nạp tiền và 0 đơn giao. Trường phân nhóm yêu cầu QR theo trạng thái hiện tại mới xuất hiện nhưng rỗng; chưa thể coi đây là thay đổi hành vi. Tỷ lệ chuyển đổi 24 giờ chưa xác định vì không có khách đủ thời gian quan sát. Marker sản phẩm/xác nhận chỉ lưu lần đầu; thiếu marker không chứng minh khách bỏ bước.\n\n**Giả thuyết:** Chưa biết nguyên nhân không ghi nhận khách mới; chưa đủ dữ liệu xác định điểm nghẽn.\n\n**Đề xuất chỉ đọc:** Đối chiếu aggregate ở kỳ tiếp theo để kiểm tra có khách mới và mẫu đủ 24 giờ hay chưa.",
+        "model": "gpt-6.1-sol"
+      },
+      "content": {
+        "status": "suggestion",
+        "text": "**Chưa cần viết mới.**\n\n**Dữ kiện:** Trong phạm vi quan sát, chưa ghi nhận người dùng mới, khách yêu cầu QR, khách nạp tiền hay đơn đã giao. Chưa có khách đủ thời gian quan sát 24 giờ nên tỷ lệ chuyển đổi chưa xác định. Trường trạng thái yêu cầu QR được báo thay đổi, nhưng dữ liệu hiện tại rỗng; chưa đủ cơ sở diễn giải thành thay đổi hành vi.\n\n**Giả thuyết:** Chưa có bằng chứng cho thấy cần bổ sung nội dung hướng dẫn QR hoặc điều chỉnh thông điệp. Thiếu dấu mốc không chứng minh khách bỏ cuộc; QR là bước tùy chọn. Chưa thể quy kết kết quả cho một bài đăng hay chiến dịch.",
+        "model": "gpt-6.1-sol"
+      }
+    },
+    "specialist_errors": {},
+    "suggest_only": true,
+    "identifiers_exported": false,
+    "customer_or_public_actions": 0
+  },
+  "rollout_normalization_role_calls": 3,
+  "source_db_open_mode": "ro",
+  "customer_or_public_actions": 0,
+  "notes": [
+    "Supervisor restart count3 reflects three deliberate deployment reloads; PM2 reports zero unstable restarts.",
+    "Smoke uses a temporary sidecar and actual zero-change aggregate, not a production event.",
+    "One rollout-only empty QR-field shape event triggered three suggest-only calls on a zero cohort before compatibility normalization; proof is preserved and sidecar status is ignored. No customer actions occurred. Regression now covers this migration case.",
+    "Post-fix current baseline has no meaningful cohort event and no provider call; manual live smoke is separately labelled.",
+    "A forced kill can repeat an unfinished model call; completed role outputs persist (at-least-once).",
+    "Host/WSL/PM2 must remain running; no processing while the machine is off."
+  ]
+}

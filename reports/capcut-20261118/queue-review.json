@@ -1,0 +1,316 @@
+{
+  "observed_at": "2026-11-18T09:11:40.958426+00:00",
+  "review_scope": "Read-only manual review of suggested_reply/actual_reply and row metadata for approved AI Store replies. No original post, author/customer ID or credentials exported.",
+  "database_mode": "SQLite mode=ro; BEGIN read transaction",
+  "queue_count": 27,
+  "decisions_are_recommendations_only": true,
+  "queue_mutated": false,
+  "limitations": [
+    "Không đọc bài gốc trong lượt này nên chưa xác nhận reply phù hợp ngữ cảnh hoặc nhu cầu mua. keep_capcut_candidate không phải phê duyệt đăng.",
+    "Không kiểm chứng tuyên bố bên ngoài về tính năng/quyền sử dụng/bảo hành; nhãn chỉ yêu cầu xem xét, không kết luận sai thực tế.",
+    "Không sửa queue/config/roles/quota; không lưu toàn văn reply hoặc tên tác giả."
+  ],
+  "decision_counts": {
+    "review_outdated": 5,
+    "review_offtopic": 13,
+    "review_testimonial": 3,
+    "keep_capcut_candidate": 3,
+    "review_unverified_claim": 3
+  },
+  "items": [
+    {
+      "id": 2341,
+      "decision": "review_outdated",
+      "flags": [
+        "mixed_products",
+        "unverified_delivery_claim"
+      ],
+      "reason": "Nội dung trộn CapCut với Canva, dùng link catalog cũ và hứa nhận tài khoản ngay. Cần viết lại riêng CapCut, đối chiếu ngữ cảnh và khả năng giao trước khi dùng.",
+      "action_applied": false
+    },
+    {
+      "id": 2350,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product"
+      ],
+      "reason": "Đang dẫn người thuê thiết kế sang Canva; không thuộc đợt thử CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2352,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product",
+        "unverified_price_comparison"
+      ],
+      "reason": "Nội dung Canva và so sánh rẻ hơn thuê thiết kế chưa có căn cứ; không dùng trong đợt thử CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2354,
+      "decision": "review_testimonial",
+      "flags": [
+        "non_capcut_product",
+        "unverified_personal_experience"
+      ],
+      "reason": "Đang nói Claude/audio và kể bản thân thường mua tại shop; chưa có bằng chứng trải nghiệm, không phù hợp bài CapCut từ phía shop.",
+      "action_applied": false
+    },
+    {
+      "id": 2355,
+      "decision": "review_outdated",
+      "flags": [
+        "non_capcut_product",
+        "unverified_price_comparison",
+        "review_warranty_terms"
+      ],
+      "reason": "Nội dung Claude/Sonnet/Haiku, so sánh giá thẻ quốc tế và bảo hành; cần xác minh từng điều kiện, không dùng cho thử CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2378,
+      "decision": "review_outdated",
+      "flags": [
+        "generic_tools",
+        "source_context_needed"
+      ],
+      "reason": "Lời khuyên nghề dựng và so giá tool chung, chưa giới thiệu rõ món CapCut; cần kiểm bài gốc trước khi quyết định có liên quan.",
+      "action_applied": false
+    },
+    {
+      "id": 2379,
+      "decision": "review_testimonial",
+      "flags": [
+        "capcut",
+        "unverified_personal_experience"
+      ],
+      "reason": "Có CapCut nhưng kể bản thân đã mua/dùng ở shop; chưa có căn cứ cho lời chứng thực. Cần sửa sang tiếng nói người bán.",
+      "action_applied": false
+    },
+    {
+      "id": 2387,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product"
+      ],
+      "reason": "Bàn Claude/GPT/Gemini và gói Claude; ngoài phạm vi đợt CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2389,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product",
+        "review_warranty_terms"
+      ],
+      "reason": "Đề cập Remotion/Claude Code và tài khoản thực hành chung; chưa xác minh món shop cung cấp và điều kiện hỗ trợ.",
+      "action_applied": false
+    },
+    {
+      "id": 2390,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product",
+        "unnecessary_shop_link"
+      ],
+      "reason": "Tư vấn prompt Claude, chính reply cũng nói người có tài khoản không cần link shop; không phải nhu cầu mua CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2391,
+      "decision": "review_offtopic",
+      "flags": [
+        "no_capcut_offer",
+        "no_shop_link"
+      ],
+      "reason": "Chỉ khuyên soi diff/test code, không có sản phẩm hay nhu cầu CapCut trong bản reply.",
+      "action_applied": false
+    },
+    {
+      "id": 2392,
+      "decision": "keep_capcut_candidate",
+      "flags": [
+        "capcut",
+        "source_context_needed",
+        "legacy_catalog_link"
+      ],
+      "reason": "Đề cập CapCut và lời mời xem Pro không có lời chứng thực cá nhân. Có thể giữ làm ứng viên sau khi xem bài gốc; chưa xác nhận nhu cầu mua, chưa có link đúng món/mã thử.",
+      "action_applied": false
+    },
+    {
+      "id": 2394,
+      "decision": "review_unverified_claim",
+      "flags": [
+        "unverified_exclusive_account",
+        "product_not_named"
+      ],
+      "reason": "Hứa muốn dùng riêng trong khi catalog chưa chứng minh tài khoản độc quyền; chưa gọi rõ CapCut và cần kiểm bài gốc.",
+      "action_applied": false
+    },
+    {
+      "id": 2396,
+      "decision": "review_offtopic",
+      "flags": [
+        "no_capcut_offer",
+        "no_shop_link"
+      ],
+      "reason": "Gợi ý tìm người trả lời khảo sát trong nhóm review TikTok; không phục vụ đợt mua CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2400,
+      "decision": "review_offtopic",
+      "flags": [
+        "refund_support",
+        "non_capcut_product",
+        "unnecessary_shop_link"
+      ],
+      "reason": "Người nhận có vấn đề hoàn tiền Canva, reply tự nói link không liên quan nhưng vẫn chèn shop; cần bỏ khỏi nội dung thử CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2417,
+      "decision": "review_unverified_claim",
+      "flags": [
+        "unverified_unlimited_use",
+        "product_not_named"
+      ],
+      "reason": "Lời dùng Pro tẹt ga không có giới hạn xác minh, chưa gọi rõ sản phẩm; không dùng nguyên văn.",
+      "action_applied": false
+    },
+    {
+      "id": 2418,
+      "decision": "review_outdated",
+      "flags": [
+        "product_not_named",
+        "source_context_needed"
+      ],
+      "reason": "Nói Pro chung và thao tác tắt tính năng chưa rõ; phải xem bài gốc và xác định đúng CapCut trước khi dùng.",
+      "action_applied": false
+    },
+    {
+      "id": 2433,
+      "decision": "review_testimonial",
+      "flags": [
+        "non_capcut_product",
+        "unverified_personal_experience",
+        "unverified_license_claim"
+      ],
+      "reason": "Kể đã mua Canva bản quyền và tool AI, hứa QR gửi tài khoản/key; chưa xác minh trải nghiệm và tình trạng bản quyền, ngoài đợt CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2435,
+      "decision": "review_outdated",
+      "flags": [
+        "non_capcut_product",
+        "dated_external_promotion",
+        "unnecessary_shop_link"
+      ],
+      "reason": "Đề cập suất miễn phí OpenAI theo ngày cụ thể, đồng thời nói link shop không phải đăng ký đó; cần kiểm nguồn ngoài riêng, không dùng làm bài CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2443,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product",
+        "thin_context"
+      ],
+      "reason": "Nói Plus và câu hỏi xã giao kèm link shop, chưa có nhu cầu CapCut được xác minh.",
+      "action_applied": false
+    },
+    {
+      "id": 2445,
+      "decision": "review_offtopic",
+      "flags": [
+        "refund_support",
+        "negative_shop_link_context"
+      ],
+      "reason": "Đang hỗ trợ giao dịch/OpenAI và cảnh báo không bấm link shop; không phải nội dung giới thiệu CapCut phù hợp.",
+      "action_applied": false
+    },
+    {
+      "id": 2452,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product"
+      ],
+      "reason": "Giới thiệu Canva Pro phục vụ tìm việc; không thuộc món CapCut thử nghiệm.",
+      "action_applied": false
+    },
+    {
+      "id": 2465,
+      "decision": "review_offtopic",
+      "flags": [
+        "generic_video_advice",
+        "no_shop_link"
+      ],
+      "reason": "Lời khuyên quay video thỏ, không có đề xuất món hoặc nhu cầu mua CapCut được chứng minh.",
+      "action_applied": false
+    },
+    {
+      "id": 2472,
+      "decision": "review_offtopic",
+      "flags": [
+        "non_capcut_product",
+        "unverified_catalog_capability"
+      ],
+      "reason": "Giới thiệu eSIM Trung Quốc và khả năng dùng nhiều ứng dụng/chính sách hoàn tiền chưa đối chiếu catalog; không dùng trong đợt CapCut.",
+      "action_applied": false
+    },
+    {
+      "id": 2482,
+      "decision": "keep_capcut_candidate",
+      "flags": [
+        "capcut",
+        "conditional_need",
+        "source_context_needed",
+        "legacy_catalog_link"
+      ],
+      "reason": "Nhắc CapCut Pro theo điều kiện mẫu cần Pro, không giả đã mua. Chỉ giữ làm ứng viên sau khi bài gốc chứng minh đúng nhu cầu; chưa được xác nhận để đăng.",
+      "action_applied": false
+    },
+    {
+      "id": 2485,
+      "decision": "review_unverified_claim",
+      "flags": [
+        "capcut",
+        "unverified_free_feature_claim",
+        "misleading_destination"
+      ],
+      "reason": "Nói tính năng AI làm video miễn phí nhưng dẫn tới shop tài khoản trả phí; phải sửa rõ sản phẩm và tránh mô tả tính năng chưa kiểm chứng.",
+      "action_applied": false
+    },
+    {
+      "id": 2488,
+      "decision": "keep_capcut_candidate",
+      "flags": [
+        "capcut",
+        "catalog_price_matches",
+        "review_warranty_terms",
+        "legacy_catalog_link"
+      ],
+      "reason": "Giá khoảng34k/30ngày khớp catalog tại lần kiểm trước. Có thể giữ làm ứng viên, nhưng điều kiện bảo hành chưa có chi tiết; kiểm giá/tồn, bài gốc và đổi link hợp lệ trước khi dùng.",
+      "action_applied": false
+    }
+  ],
+  "quota": {
+    "account": "anlinh",
+    "observed_at": "2026-11-18T09:11:40.958426+00:00",
+    "reply_count_last_24h": 16,
+    "reply_count_last_hour": 0,
+    "max_replies_per_24h": 16,
+    "max_replies_per_hour": 4,
+    "oldest_counted_reply_at": "2026-11-17T11:54:39.378148+00:00",
+    "last_reply_at": "2026-11-18T07:42:00.660503+00:00",
+    "oldest_reply_exits_24h_at": "2026-11-18T11:54:39.378148+00:00",
+    "next_potential_reply_quota_relief_utc": "2026-11-18T11:54:40+00:00",
+    "next_potential_reply_quota_relief_vn": "2026-11-18T18:54:40+07:00",
+    "calculation": "There are exactly16 replies in the current rolling24h window. Oldest timestamp+24h is11:54:39.378148UTC; rounded up to next second because the query counts posted_at>=threshold. Assumes no new replies or limit/config changes.",
+    "guaranteed": false,
+    "automatic_own_posts_enabled": false,
+    "one_off_trial_policy": "User separately authorized one original post trial. This review does not enable automatic own_posts or change any role/quota. The above is reply-quota relief only; it is not proof that an original post may be published or that the account/session is ready."
+  }
+}

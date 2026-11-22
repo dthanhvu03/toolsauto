@@ -1,0 +1,99 @@
+{
+  "observed_at": "2026-11-18T07:30:28.924738+00:00",
+  "code_commit_boundary": "2026-11-18T02:01:59+00:00",
+  "boundary_is_not_attribution": true,
+  "runtime_settings": {
+    "growth.keywords_ai_store": {
+      "override_present": true,
+      "override": "mua capcut pro, capcut pro giá rẻ, tài khoản capcut pro, capcut hết watermark, capcut pro 1 tháng, làm video tiktok capcut, mua capcut tháng",
+      "code_default": "mua capcut pro, capcut pro giá rẻ, tài khoản capcut pro, capcut hết watermark, capcut pro 1 tháng, làm video tiktok capcut, mua capcut tháng"
+    },
+    "growth.ai_store_a_angle": {
+      "override_present": true,
+      "override": "Hero đúng một món: CapCut Pro 30 ngày (acc cấp). Quét QR xong bot tự gửi acc, không nhắn chờ rep. Chỉ nói CapCut Pro — không liệt kê GPT/Canva/Claude. KHÔNG hứa số giây / phút cụ thể.",
+      "code_default": "Hero đúng một món: CapCut Pro 30 ngày (acc cấp). Quét QR xong bot tự gửi acc, không nhắn chờ rep. Chỉ nói CapCut Pro — không liệt kê GPT/Canva/Claude. KHÔNG hứa số giây / phút cụ thể."
+    },
+    "growth.ai_store_a_hook": {
+      "override_present": true,
+      "override": "b cần CapCut Pro thì qua @aipass_shop_bot trên tele á, quét QR xong bot tự gửi acc 30 ngày, ko phải nhắn chờ ai rep",
+      "code_default": "b cần CapCut Pro thì qua @aipass_shop_bot trên tele á, quét QR xong bot tự gửi acc 30 ngày, ko phải nhắn chờ ai rep"
+    },
+    "growth.ai_store_b_angle": {
+      "override_present": true,
+      "override": "Hero đúng một món: CapCut Pro 30 ngày khoảng 34k, rẻ hơn tự mua thẻ ngoại / gói chính hãng. Giá + bảo hành ghi trong bot theo món — KHÔNG hứa bảo hành suốt hạn / 1 đổi 1. Không kéo sang GPT/Canva trong cùng reply.",
+      "code_default": "Hero đúng một món: CapCut Pro 30 ngày khoảng 34k, rẻ hơn tự mua thẻ ngoại / gói chính hãng. Giá + bảo hành ghi trong bot theo món — KHÔNG hứa bảo hành suốt hạn / 1 đổi 1. Không kéo sang GPT/Canva trong cùng reply."
+    },
+    "growth.ai_store_b_hook": {
+      "override_present": true,
+      "override": "t lấy CapCut Pro 30 ngày bên @aipass_shop_bot ~34k, mềm hơn tự cà thẻ ngoại, giá với BH ghi sẵn trong bot trước khi mua",
+      "code_default": "t lấy CapCut Pro 30 ngày bên @aipass_shop_bot ~34k, mềm hơn tự cà thẻ ngoại, giá với BH ghi sẵn trong bot trước khi mua"
+    },
+    "growth.enabled": {
+      "override_present": true,
+      "override": "True",
+      "code_default": false
+    },
+    "growth.own_posts_enabled": {
+      "override_present": false,
+      "override": null,
+      "code_default": true
+    }
+  },
+  "posted_after_commit": [
+    {
+      "account": "anlinh",
+      "target_bot": "ai_store",
+      "posted": 2,
+      "mentions_capcut": 1
+    },
+    {
+      "account": "us28qt",
+      "target_bot": "cashbot",
+      "posted": 2,
+      "mentions_capcut": 0
+    }
+  ],
+  "queue_current": [
+    {
+      "target_bot": "ai_store",
+      "status": "approved",
+      "count": 25,
+      "mentions_capcut": 4
+    },
+    {
+      "target_bot": "ai_store",
+      "status": "pending",
+      "count": 8,
+      "mentions_capcut": 1
+    },
+    {
+      "target_bot": "cashbot",
+      "status": "pending",
+      "count": 22,
+      "mentions_capcut": 0
+    }
+  ],
+  "approved_store_detail": {
+    "created_before_code_commit": 22,
+    "mentions_other_products_without_capcut": 10,
+    "oldest_created_at": "2026-11-16T14:13:51.195837+00:00",
+    "content_match_is_heuristic": true
+  },
+  "own_posts_after_commit": [
+    {
+      "kind": "deal",
+      "status": "posted",
+      "count": 1
+    }
+  ],
+  "first_last_posted_after_commit": {
+    "first": "2026-11-18T03:43:59.828562+00:00",
+    "last": "2026-11-18T06:29:01.389558+00:00"
+  },
+  "worker": {
+    "pid": 3403840,
+    "status": "online",
+    "restarts": 23,
+    "started_at": "2026-11-18T02:00:32.338000+00:00"
+  }
+}
