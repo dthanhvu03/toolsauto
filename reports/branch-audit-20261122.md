@@ -2,8 +2,8 @@
 
 ## Main update
 
-- Local `main`: fast-forwarded from `37f5c0d` to `4e1133e` with `git merge --ff-only cursor/store-fatcat-actual-cost` in a separate clean worktree.
-- The source branch contained 61 commits not previously reachable from main; their committed diff covered 378 paths. `origin/main` remains `37f5c0d`; no push was performed.
+- Local `main`: fast-forwarded from `37f5c0d` through `4e1133e` and audit commit `e941d2a`, then through `cursor/store-fatcat-actual-cost` at `5e3c46b` in the separate clean worktree.
+- The source branch originally contained 61 commits not previously reachable from main; their committed diff covered 378 paths. The cleanup added 15 focused commits after `e941d2a`, covering the remaining plan artifacts and evidence. At the last pre-report check, local main was 77 commits ahead of `origin/main`; `origin/main` remains `37f5c0d`, and no push was performed.
 - `cursor/task-063-shopee-native-product-quote` and `feat/xe-tet` now point to commits reachable from main. No branches were deleted.
 
 ## Remaining branches kept separate
@@ -17,6 +17,6 @@
 
 ## Worktree state
 
-- Main merge worktree is clean at `4e1133e` before this audit note.
-- The original source worktree retains 127 uncommitted paths spanning separate PLAN/TASK work. No bulk commit, reset, stash, branch deletion, or push was done.
+- Main merge worktree fast-forwarded cleanly to `5e3c46b`; status was clean after the fast-forward.
+- The original 345-file WIP was captured in focused commits; 10 active/local-only files remain outside Git (runtime locks plus PLAN189 live `state.json` and `candidates.json`). Two safety stashes remain intact. No reset, branch deletion, or push was done. PLAN187 cancellation was verified; PLAN189 stays hourly active through 2026-11-24 23:51 VN.
 - An earlier write accidentally truncated `current-status.md`. It was restored byte-for-byte from the last committed 6,186-line version. The uncommitted text lost in that overwrite was not available in Local History or Git; latest PLAN-190 facts were reconstructed from its PLAN, TASK, and review artifact.

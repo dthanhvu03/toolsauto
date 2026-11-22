@@ -4,13 +4,14 @@
 - Prompt contract proof after the narrow prompt fix: 12 passed in 1.49s; py_compile, Ruff, and git diff --check passed. Claude must review all 15 samples; Anti sign-off and rollout remain pending.
 - Full evidence: `reports/ai-caption-repair-20261121/review.md`, `drafts.json`, and PLAN-190/TASK-076.
 
-## Session 2026-11-22 - local main fast-forward and branch audit
+## Session 2026-11-22 - branch cleanup and handoff
 
-- Local `main` fast-forwarded from `37f5c0d` to `4e1133e` (`cursor/store-fatcat-actual-cost`); 61 commits are included. Their committed history changes 378 paths. `origin/main` remains at `37f5c0d`; no push was made.
-- The source worktree has 127 uncommitted paths across separate Agent OS tasks. They were preserved and not bulk-committed or discarded. See `reports/branch-audit-20261122.md` for remaining-branch findings.
-- Divergent branches are retained after dry-run analysis: Douyin (5 unique commits, 496 behind, multiple conflicts); old `develop` (472 unique, 1,135 behind); rollback (2 unique, 399 behind, deliberate cashback deletions/conflicts); Xe Tet Sum Vay (2 unique, 241 behind, add/add conflicts on code already present in main).
-- The damaged current-status file was restored byte-for-byte from the last committed 6,186-line copy before this audit note. Latest PLAN-190 execution details remain in PLAN-190, TASK-076, and the sample review report.
-
+- Local `main` now fast-forwards through `cursor/store-fatcat-actual-cost` at `5e3c46b`; this brings the task commits forward from the earlier audit point `e941d2a`. Before this status update commit, local main was 77 commits ahead of `origin/main` (`37f5c0d`); no push was made.
+- The 345-file WIP was split into focused local commits with plans, tasks, code, images, and proof. Ten live/local-only files remain outside Git: eight runtime locks plus PLAN189 `state.json` and `candidates.json`, and the Shopee trial lock is among the runtime locks. Safety stashes remain intact. The exact remaining branch decisions are in `reports/branch-audit-20261122.md`.
+- PLAN187 monitoring was cancelled by the owner and deletion was verified. PLAN189 conversation agent remains active hourly until 2026-11-24 23:51 VN; do not stop or restart it. Its first comment, guards, runtime snapshots, test/Ruff/compile proof are recorded. Outcomes and Anti/Claude review remain pending.
+- `reports/zt-channel-growth-20261120/` is a saved draft/readiness snapshot only; no post, invite, pin, or channel setting was changed.
+- Divergent Douyin, old `develop`, rollback, and Xe Tet Sum Vay branches remain separate because dry-run merges showed conflicts or intentional rollback content. No branch was deleted.
+- Pending: Anti/Claude sign-off and PLAN189 outcome observation; remote `origin/main` remains unchanged.
 ## Phiên 2026-11-18 (Codex) — PLAN-175 chart, top món và trạng thái tiền — deployed/live verified
 - Chủ bot duyệt triển khai sau khi hỏi Tổng quan thiếu chart, Store không thấy món bán nhiều và tiền ra sao.
 - Đã code API chỉ đọc 7/30 ngày + UI chart Store/Cashback, top 5 số món và lãi gộp riêng, giá vốn/chi phí đã ghi, số tiền hiện tại/lũy kế với nhãn đúng nghĩa. Cashback tổng và chart cùng kỳ lịch VN; tiền chưa xác minh không hiện thành 0.
