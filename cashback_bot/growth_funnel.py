@@ -55,7 +55,8 @@ def _open(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _customers(conn, bot: str, since: datetime, until: datetime) -> dict[int, _Customer]:
+def _customers(conn, bot: str, since: datetime, until: datetime,
+               exclude_user_ids: tuple[int, ...] = ()) -> dict[int, _Customer]:
     store = bot == "ai_store"
     table, uid, state = ("users", "user_id", "state") if store else ("telegram_users", "telegram_user_id", "bot_state")
     rows = conn.execute(
@@ -65,7 +66,8 @@ def _customers(conn, bot: str, since: datetime, until: datetime) -> dict[int, _C
         (since.isoformat(), until.isoformat()),
     )
     return {int(r["uid"]): _Customer("ai_store" if store else "cashbot_zalo" if r["uid"] < 0 else "cashbot_tg",
-                                     r["source"] or NO_SOURCE, _moment(r["created_at"])) for r in rows}
+                                     r["source"] or NO_SOURCE, _moment(r["created_at"])) for r in rows
+            if int(r["uid"]) not in exclude_user_ids}
 
 
 def _add(people, uid, stage: str, key, stamp, until: datetime) -> None:
@@ -128,12 +130,15 @@ def _stats(bot: str, people: list[_Customer], until: datetime, source: str | Non
 
 
 def report(now: datetime | None = None, days: int = 7, cashback_path: Path | None = None,
-           store_path: Path | None = None) -> dict:
-    """Snapshot cohort hiện tại; DB một bot lỗi không làm mất dữ liệu bot kia."""
+           store_path: Path | None = None, *, exclusions: dict[str, tuple[int, ...]] | None = None,
+           since: datetime | None = None) -> dict:
+    """Snapshot cohort; optional exact lower bound, defaults unchanged; isolate bot errors."""
     if not 1 <= days <= 90:
         raise ValueError("days phải từ 1 đến 90")
     until = _moment(now or datetime.now(timezone.utc))
-    since = until - timedelta(days=days)
+    since = _moment(since) if since is not None else until - timedelta(days=days)
+    if since is None or since > until:
+        raise ValueError("since phải trước hoặc bằng now")
     people, available, errors = [], [], []
     for bot, path, loader, bots in (
         ("cashbot", cashback_path or all_users.cashback_db(), _cashbot, ("cashbot_tg", "cashbot_zalo")),
@@ -142,7 +147,7 @@ def report(now: datetime | None = None, days: int = 7, cashback_path: Path | Non
         try:
             with closing(_open(path)) as conn:
                 conn.execute("BEGIN")  # một snapshot nhất quán trong mỗi DB; không ghi
-                cohort = _customers(conn, bot, since, until)
+                cohort = _customers(conn, bot, since, until, tuple((exclusions or {}).get(bot, ())))
                 loader(conn, cohort, since, until)
             people.extend(cohort.values())
             available.extend(bots)

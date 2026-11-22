@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 import requests as requests_lib
 from fastapi.testclient import TestClient
 
+from cashback_bot import store_campaign
 from store_bot import messages as msg
 from store_bot import pricing
 from store_bot.api_server import create_app
@@ -1663,3 +1666,111 @@ def test_wake_button_hidden_when_open_and_low_funds_says_keep_open(bot, repo, pr
     store.handle_update(_click(BUYER, "wake"))  # nút cũ còn trên màn: shop đang mở → về danh sách
     assert "đặt mua được" in telegram.answers[-1][0] and repo.pop_wakes() == []
     assert "Không cần đóng shop" in msg.admin_low_funds(1000, [])
+
+
+# ---------- PLAN-173: additive product + campaign entry ----------
+
+def test_tracked_product_start_records_first_touch_without_purchase(bot, repo, product):
+    store, telegram = bot
+    newcomer = 910_001
+    source = "threads_ai_cc18_anlinh_p1"
+    since = datetime.now(timezone.utc) - timedelta(seconds=2)
+    store.handle_update(_private(newcomer, f"/start buy_{product}_{source}"))
+    assert repo.get_state(f"src:{newcomer}") == source
+    assert "Link Gemini Pro 18 tháng" in telegram.texts_to(newcomer)[-1]
+    assert repo.get_state(f"step:product:{newcomer}").startswith(f"{product}@")
+    first_menu_count = sum(bool(markup and "keyboard" in markup)
+                           for cid, _, markup in telegram.sent if cid == newcomer)
+    store.handle_update(_private(newcomer, f"/start buy_{product}_different_campaign"))
+    assert repo.get_state(f"src:{newcomer}") == source
+    assert sum(bool(markup and "keyboard" in markup)
+               for cid, _, markup in telegram.sent if cid == newcomer) == first_menu_count == 1
+    assert repo.get_user(newcomer).balance == 0
+    assert repo.get_product(product).stock == 5
+    assert repo.pending_topups() == [] and repo.list_orders(newcomer) == []
+    rep = store_campaign.report(since, product, store_path=Path(repo.path), source_prefix=source)
+    assert rep["errors"] == [] and rep["cohort"]["customers"] == 1
+    assert rep["sources"][0]["source"] == source
+    assert rep["cohort"]["selected_product"]["stages"] == {
+        "product": 1, "confirm": 0, "qr": 0, "paid": 0, "order": 0,
+    }
+
+
+def test_tracked_start_preserves_existing_user_source_and_balance(bot, repo, product):
+    store, telegram = bot
+    repo.record_source(BUYER, "original")
+    repo.adjust_balance(BUYER, 50_000, "test", "admin")
+    for uid in (BUYER, RESELLER):
+        store.handle_update(_private(uid, f"/start buy_{product}_threads_ai_cc18_anlinh_p1"))
+        assert "Link Gemini Pro 18 tháng" in telegram.texts_to(uid)[-1]
+        assert repo.list_orders(uid) == []
+    assert repo.get_state(f"src:{BUYER}") == "original"
+    assert repo.get_state(f"src:{RESELLER}") is None
+    assert repo.get_user(BUYER).balance == 50_000
+    assert repo.pending_topups() == []
+
+
+@pytest.mark.parametrize("suffix", [
+    "", "Invalid", "bad-code", "bad!", "mã_nguồn", "a" * 33, "good extra",
+])
+def test_invalid_tracked_source_falls_back_without_campaign_or_product(bot, repo, product, suffix):
+    store, telegram = bot
+    newcomer = 910_002
+    store.handle_update(_private(newcomer, f"/start buy_{product}_{suffix}"))
+    assert repo.get_state(f"src:{newcomer}") is None
+    assert repo.get_state(f"step:product:{newcomer}") is None
+    assert "Sản phẩm" in telegram.texts_to(newcomer)[-1]
+    assert repo.pending_topups() == [] and repo.list_orders(newcomer) == []
+
+
+@pytest.mark.parametrize("payload", [
+    "buy_0_good", "buy_-1_good", "buy_٢_good", "buy_9223372036854775808_good",
+    "buy_" + "9" * 5000 + "_good", "buy_" + "0" * 40 + "1_" + "s" * 32,
+])
+def test_invalid_tracked_id_or_payload_length_never_opens_product(bot, repo, payload):
+    store, _ = bot
+    newcomer = 910_003
+    store.handle_update(_private(newcomer, f"/start {payload}"))
+    assert repo.get_state(f"src:{newcomer}") is None
+    assert repo.get_state(f"step:product:{newcomer}") is None
+    assert repo.pending_topups() == [] and repo.list_orders(newcomer) == []
+
+
+def test_tracked_source_boundary_and_unavailable_product(bot, repo, product):
+    store, telegram = bot
+    source = "s" * 32
+    store.handle_update(_private(910_004, f"/start buy_{product}_{source}"))
+    assert repo.get_state("src:910004") == source
+    repo.update_product(product, active=False)
+    store.handle_update(_private(910_005, f"/start buy_{product}_threads_ai_cc18_anlinh_p1"))
+    assert "hiện không bán" in telegram.texts_to(910_005)[-1]
+    assert repo.get_state("step:product:910005") is None
+    store.handle_update(_private(910_006, "/start buy_9223372036854775807_good"))
+    assert "hiện không bán" in telegram.texts_to(910_006)[-1]
+    assert repo.pending_topups() == []
+
+
+def test_tracked_entry_through_simulated_payment_preserves_campaign(fatcat, repo):
+    """Full fake transport/vendor journey; no real QR, payment or customer data."""
+    store, telegram, fake, products = fatcat
+    newcomer = 910_007
+    product = products[49]
+    source = "threads_ai_cc18_anlinh_p1"
+    since = datetime.now(timezone.utc) - timedelta(seconds=2)
+    store.handle_update(_private(newcomer, f"/start buy_{product.id}_{source}"))
+    assert repo.pending_topups() == [] and fake.calls == []
+    store.handle_update(_click(newcomer, f"q:{product.id}:1"))
+    store.handle_update(_click(newcomer, f"bq:{product.id}:1"))
+    topup = repo.pending_topups()[0]
+    assert topup.intent_product_id == product.id and topup.amount == product.price
+    store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))
+    store.handle_update(_click(ADMIN, f"a:tc:{topup.id}", "boss"))
+    assert len(fake.calls) == 1 and len(repo.list_orders(newcomer)) == 1
+    assert repo.get_user(newcomer).balance == 0
+    assert sum("fc-49-0" in html for html in telegram.texts_to(newcomer)) == 1
+    rep = store_campaign.report(since, product.id, store_path=Path(repo.path), source_prefix=source)
+    assert rep["errors"] == []
+    assert rep["sources"][0]["source"] == source
+    selected = rep["cohort"]["selected_product"]
+    assert selected["stages"] == {"product": 1, "confirm": 1, "qr": 1, "paid": 1, "order": 1}
+    assert selected["delivered_orders"] == 1 and selected["revenue_after_refunds"] == product.price

@@ -1,5 +1,50 @@
 # PLAN-172 — Vận hành tăng trưởng Cashbot + AI Pass Store (đến 12/12)
 
+## Phối hợp PLAN189 — chủ bot chuyển sang tương tác public
+Chủ bot hủy monitor và giao agent bình luận bài viral. Lịch PLAN187 đã delete/readback file absent; lên operational agent72h/hourly chỉ us28qt, tối đa3attempts/24h, comment không link/CTA/DM/like/follow. Không khôi phục workers/quyền gửi cũ, không đổi T1/T2/customer-flow/tiền. Đã tạo agent hourly72h; firstcomment https://www.threads.com/@us28qt/post/DgAtwCAHb_a exact/parentverified;12tests +11checksPASS. Proof reports/threads-conversation-20261121/REPORT.md. **Execution Done. Cần Claude Code verify + handoff.** Kết quảpending.
+
+## Phối hợp 21/11 — PLAN188 hai bài Threads sau research
+Chủ bot duyệt đăng đúng hai caption bàn phím/hộp cơm. Hai permalink verified: https://www.threads.com/@us28qt/post/DgAq_INHSvP và https://www.threads.com/@us28qt/post/DgArf-lnagr. Một submit/bài, spacing 269.089s; public readback/DB exact, runtime PM2/bots khớp. Giữ agent stopped/growth=false/monitor hai bài cũ; không đổi T1/T2/customer-flow/lịch/tiền. Proof reports/threads-genz-20261121/REPORT.md và verification.json. **Execution Done. Cần Claude Code verify + handoff.** Kết quả/Anti/Claude pending.
+
+## Theo dõi hậu đăng hai bài PLAN186 — PLAN187
+Chủ bot yêu cầu monitor riêng hai permalink A/B. Tạo automation heartbeat15phút trong7ngày, đọc công khai không đăng nhập, không đụng PM2/profile. Agent tăngtrưởng cũ tiếp tục stopped, growth.enabled=false. Theo dõi views/likes/replies/reposts, báo khi có reply mới, +5likes hoặc view label đổi; không thu danh tính/DM. Không coi metrics là khách. Proof pending.
+
+## Phối hợp20/11 — PLAN186 đăng hai bài Threads A/B theo yêu cầu chủ bot
+Chủ bot đã chốt hai caption văn phong Threads về máy tăm nước và máy hút bụi mini, yêu cầu triển khai. Đây là one-off publish trực tiếp, không resume agent/worker: Threads_Growth/CapCut đã stopped, growth.enabled=false. Giữ không link/mã/ảnh không kiểm, không reply/DM/like, exact fence/quota/identity/readback. Proof pending.
+
+## Chủ bot hủy agent20/11 — PLAN185
+Chỉđạo mới “hủy toàn bộ agent … tìm hướng mới dựa vào research” thu hồi chạy nền tăng trưởng. Codex dừng Threads_Growth/CapCut_Agent_Supervisor, tắt growth.enabled và hủyheartbeat hiệncó; giữresearch126mẫu/queue/history/roles/cácbot kinh doanh. Khôngtựbậtlại hoặcchạythửchiếnlượcmới. Proofpending.
+
+Đãverify11:29VN:2PM2stopped/PID0,saved/rootdumpstopped,growth.enabledfalse,heartbeatdeleted và0childrunning.8/8checkspass;botkinhdoanh/PM2khác/env/roles/researchgiữnguyên. Fullproof reports/customer-agents/STOP-20261120.md. **Execution Done. Cần Claude Code verify + handoff.** Ownerstopưu tiênmọi chỉđẫnchạynềncũ; khôngtựresume/đăngtest trướcchỉđạomới.
+
+## Phối hợp20/11 — PLAN184 đọc content Threads thật
+Chủ bot phản ánh content chưa cóuser và yêu cầu đọc bài hiện tại/trending trước khi chọn nội dung. Codex lập/đọcPLAN184/TASK070 cho audit chỉ đọc Hàngđầu/Mớinhất/publicposts, officialMetaguidance; dùngprofileidle/pause-restore riêngThreadsworkerfinally. Không đăng/reply/DM/like/inbox/Shopeesync hay đổi flow/quota/config/tiền/nativepilot. Kết quả là mẫu/link/metric/ngày và3hướng/nháp, không gọi hoạt động làkhách. Proofpending.
+
+Kếtquả20/11: dùngpublicloggedoutChromium nên không cầnsharedprofile/pause.10search/7keywords/126postmã, direct10permalink(8mẫu+2own). Ownsnapshot1/10views,foreignconversation0; nicheexamplescó22/20,297/83,189/18likes/replies nhưng khôngsuykhách. Đềxuấtmộtmón+quyếtđịnhmua/ảnhthật/hộithoạirồiCTA;3nháp259/300/241ký tựchưađăng,2assetpending. Runtimeunchanged/publicactions0; fullreports/threads-content-research-20261120/RESEARCH.md. **Execution Done. Cần Claude Code verify + handoff.** KhôngđổilịchAI/worker/quota, chưaclaimbusinesslift.
+
+## Phối hợp20/11 — PLAN183 bộ content Threads theo yêu cầu chủ bot
+Đã soạn3bài245/255/296ký tự,2ảnh checklist/wishlist1080×1350 mới và reuseảnh thật guide617. Static hash/link/size + visualQA đạt; reports/zt-threads-content-20261120/CONTENT.md. Tất cả draft_not_published, không đăng/lập lịch thêm hoặc đổi luồng/lịchAI. **Execution Done. Cần Claude Code verify + handoff.** Xuất bản/kết quả/Claude/Anti pending.
+
+## Phối hợp20/11 — PLAN182 ảnh thật cho chuỗi BlackFriday
+Chủ bot yêu cầu kèm ảnh. Codex đã lập/đọc PLAN182/TASK068 trước code/action. Chỉ crop ảnh thật kênh/guide617, kiểm UI bài gốc; nếu không thêm được ảnh thì tối đa một continuation ảnh dưới đúng bài @us28qt. Giữ quota/identity/quiet/fence/restore worker; không xóa/repost, không đổi flow/kênh/link/tiền/nativepilot. Root giữ thao tác ngoài.
+
+Kết quả10:08VN: ảnh đã đăng một continuation https://www.threads.com/@us28qt/post/Df8pynHiYfZ , caption/media/ownreply/parentpage verified, rawparentrefunavailable được ghi rõ.25tests/Ruff/compile/diffpass; worker1103039online và runtime/configkhác khớp. Reviewer độc lập xác nhận. Proof IMAGE-REPORT.md trongreports/zt-blackfriday-20261120. **Execution Done. Cần Claude Code verify + handoff.** Kết quảkinhdoanh/Claude/Anti pending.
+
+## Phối hợp20/11 — PLAN181 mời săn BlackFriday vàoZT báo mã
+Chủ bot chỉ đạo kêu gọi vào săn saleBlackFriday sau gói thử đã trình. Codex lập/đọcPLAN181/TASK067trướccode/action: tạo1linkmờibổsung khôngrevokelinkchính,1tinhướngdẫn+ghim trongkênhprivate,1bàiThreads @us28qt; mốc27/11theonguồnShopee. Giữprivacy/relay/T1T2/PLAN179/config/quota, khôngbroadcast/DM/sync/restartbotkinhdoanh. Đo tổngmembervàCashbotfirsttouchqua mãriêng, khônghứaperinviteattributionchưacó. Cófence/verify/khôiphụcThreadsworker vàprooffull, Claude/Antipending.
+
+Kếtquả09:10VN20/11: guideghim617/private,1invitebổsungvà1Threads308ký tự đãverify https://www.threads.com/@us28qt/post/Df8jAaUCVmk ;37testspass,workerrestored895556online,service/configkhácgiữnguyên. Baseline3member/0Cashbotuse, chưaattributionjoin-per-invite. Heartbeatcũđãthêmcampaign. Fullproof reports/zt-blackfriday-20261120/REPORT.md; **Execution Done. Cần Claude Code verify + handoff.** KhôngđổiT1/T2,relayhoặcKPI179; kếtquảkinhdoanhpending.
+
+## Phối hợp 19/11 — chủ bot yêu cầu thử content + link Shopee, PLAN-180
+Codex lập PLAN-180/TASK-066 theo ngoại lệ đã duyệt trước khi viết code/action. Thử1bài original @us28qt tuyển tối đa3món đồ nữ dưới200k + link affiliate campaign riêng từng món, nhãn tiếp thị liên kết/giá tham khảo; không hứa cashback từ link công khai. Giữ T1/T2, PLAN179, roles/quota/giờ nghỉ; không bật native/syncShopee/restartbot kinh doanh. Có thể tạm dừng/khôi phục riêng Threads_Growth để tránh tranh profile khi xuất bản; mọi bước có proof, không retry unknown. User đã yêu cầu thử thật, không phải xin duyệt lại bản nháp.
+
+Kết quả00:14VN20/11: đã đăng đúng1bài339ký tự/2món/2linkriêng https://www.threads.com/@us28qt/post/Df7lHTTnRXl , exacttext+2links/liveidentityverified.21testspass; workerrestoredPID3563054online, cácbot/configkhôngđổi. Heartbeat15phútđãthêmtrial.0importedrecords nhưng syncwindowtrướcpost nên chờ dữ liệu, không kết luận0click hay gọi commissionlàtiềnnhận. Fullproof reports/threads-shopee-20261119/REPORT.md; Claude/Anti và kết quảpending. Không đổiT1/T2 hoặcKPI PLAN179.
+
+## Phối hợp 19/11 — chủ bot đổi chiến lược agent, PLAN-179
+Codex nhận yêu cầu trực tiếp đổi chiến lược/nhiệm vụ sau khi kết quả PLAN-178 còn thấp. Ngoại lệ lập PLAN đã được duyệt, ghi PLAN-179/TASK-065 trước code. Đổi sang buyer/help-first và review nhiệm vụ6h dựa kết quả24h/7d, draft nội bộ. Giữ role/quota/giờ nghỉ, T1/T2 và luồng bot/tiền; không bật DMAnLinh, thêm coldDM hay tự đăng nội dung Store mới. Reload chỉ2worker tăng trưởng sau test. Anti/Claude review pending.
+
+Cập nhật23:17VN: đã nạp đúng2worker/PID3184112+3186655;394testspass. Review thật có rawnháp sai nên đánh needs_revision, đã có2thử nghiệm/2nháp sửa nội bộ, future qualitygate đã nạp. Không gửi/đăng thử. Mốc48h23:03:51VN19→21/11; hiện0hội thoại/0khách dùng thật từ mốc, không coi là đạt mục tiêu. Proof PLAN-179 và reports/customer-agents/strategy/ROLLOUT-20261119.md; Claude/Anti verify pending. Không sửa T1/T2.
+
 - Executor: Claude Code (ADR-067: chủ bot giao toàn quyền vận hành 15/11)
 - Script đo (chỉ đọc): scratchpad f74d4a4a/funnel.py → sẽ chuyển vào repo cùng báo cáo hằng ngày (tuần 1).
 
@@ -83,3 +128,39 @@
   Baseline src=`store_xsell` = 0 (chờ khách bấm).
 - 16/11 ~16:00 (toàn quyền ép tiền): copy T4 ngắn + `--nudge` (11/11 gửi); invite_nudge ví (4/4 sent); start-v1 (19 sent / 1×403).
   invite-v1 trước đó đã phủ 33 người tạo link — T5 bổ sung nhắc lúc có tiền ví.
+
+## Coordination note 2026-11-18 — Codex / owner-approved CapCut link trial
+- Owner directly approved the proposed tracked product-link and small CapCut trial (“oke em triển kahai thử đi em”; tool recovery “rồi em”). Codex scope/proof is recorded in PLAN-173 follow-up. This note informs the PLAN-172 owner before changing the additive /start branch, per ADR067 §3.
+- Add buy_<id>_<source> while preserving legacy links, first-touch and T1 generic catalog entry. Register a single explicit source for existing Threads conversion reports; no payment/refund/price/schema/nudge change. Prepare one seller-voice An Linh post; no bulk customer messages, no automatic quota/queue changes.
+- Runtime prerequisites/restart restriction will be checked before any publication; unsupported links must not be published. No changes to T1/T2 experiment criteria or 22/11 measurement window.
+
+### Coordination result18/11 — Codex approved tracked-link trial
+- Scope in PLAN173 implemented/tested243passed, source threads_ai_cc18_anlinh_p1 belongs An Linh/originalpost/variantNone. Legacy T1 entry and first-touch preserved, no payment/price/nudge/schema/quota/role change.
+- Owner approved restartstore-bot only; restarted16:11VN PID3966961 active/running. One original CapCut trial actually published and verified: https://www.threads.com/@anlinh_08_10/post/Df4LF2IFIlg . An Linh automatic own_posts remainsfalse; no reply/DM/broadcast.
+- Immediate16:26VN source0new/0order/mature24h0, not yet growth evidence. Read-only measure_trial.py/proofs in reports/capcut-20261118/. Queue27review recommendations only, no changes. No commit/push. Existing22/11 experiment interpretation unchanged; Claude/Anti reviewpending.
+
+### Coordination note 18/11 — PLAN-176 live CapCut monitor
+- Owner directly requested persistent/event-driven specialist orchestration. Codex created separate PLAN-176/TASK-062 after confirming PLAN-173 covers reporting only. This monitor reads aggregate Store data and prepares suggest-only reports; it does not alter PLAN-172 experiments, customer flows, payments, queues, copy, prices, or quotas.
+- Three role analyses run only when a deduplicated trial aggregate changes; no model calls on idle snapshots. Output remains internal report + existing owner heartbeat, no customer/public messaging.
+
+### Coordination note 19/11 — requested acquisition and engagement agents, research only
+- Owner requested two additional roles: acquire customers and interact with customers. Two Codex subagents completed a read-only first pass; artifacts are reports/customer-agents-20261119/ACQUISITION.md and ENGAGEMENT.md. No source/customer-flow/queue/config/runtime change and no outbound action occurred.
+- Current deployment already owns acquisition/public replies/followups/DM in Threads_Growth. Avoid a second browser/sender. Fresh stored AI Store posts reviewed37, qualified new opportunities0; 10 fresh approved rows lack sufficient purchase context on this review. No queue decision was changed.
+- Stored interaction history has no evidenced actionable new inbound, but21 threads are metadata-only and raw DM logs are stale; live inbox state remains unverified. An Linh DM is disabled and the DM prompt hardcodes @us28qt, so enabling it requires account/bot scoping and verification first.
+- Proposed next implementation belongs to a new bounded Anti-assigned PLAN or explicit owner process exception; PLAN-176 remains aggregate/suggest-only. Preserve current limits, opt-outs, inbound-only DM boundary, money/support handoff, and this plan's experiments. No claim that two new persistent customer-facing workers were deployed.
+
+### Coordination update 19/11 — PLAN-178 authorized before source changes
+- Owner explicitly replied “Cho em lập PLAN và triển khai” to the concrete process-exception request. Codex records PLAN-178/TASK-064 before implementation: acquisition eligibility plus account-scoped inbound engagement and aggregate role status in the existing Threads_Growth process.
+- Existing experiments, bot customer/payment flow, roles/DM flags, scan cadence, quotas and quiet hours remain. An Linh DM stays false; no cold DM, broadcast or new original-post scheduler. Only Threads_Growth is in the reload scope after verification; no systemd bot restart. Anti/Claude review pending.
+
+### Coordination result 19/11 — PLAN-178 deployed
+- Threads_Growth loaded the acquisition and account-scoped inbound changes at 05:24 VN, PID 1149851. Both roles reported quiet_hours and active heartbeat. The existing 15-minute heartbeat now reads their aggregate status.
+- Read-only replay held 24 approved AI Store rows. They remain available for review. The first natural scan and inbound cycle still need observation after quiet hours. The related suite passed 328 tests. Details and deployment proof are in PLAN-178/TASK-064.
+
+
+## Phối hợp20/11 — PLAN186 hai bài content Threads đã phát hành
+Chủbot yêu cầu trực tiếp đăng 2caption đã chốt trong chat. One-off: A máy tăm nước https://www.threads.com/@us28qt/post/Df9HXiUCWG1; B máy hút mini https://www.threads.com/@us28qt/post/Df9ILO9ieoK. Caption/slot/readback verified, một click/bài, cách424s/quota tronggiới hạn. Threads_Growth/CapCut tiếp tục stopped, growth.enabledfalse; không mở lịch hoặctựbậtlại. Report reports/threads-content-research-20261120/TWO-POSTS-REPORT.md. Hai mặt hàng khác nhau nên đây chỉ là so sánhexploratory, khôngnhânquả; kếtquảuser pending. **Execution Done. Cần Claude Code verify + handoff.**
+
+
+## Theo dõi hai bài PLAN186 — PLAN187
+Chủbot yêu cầu agent theo dõi đúng2permalinks A/B. Automation  heartbeat riêng15phút,7ngày đến27/11 14:33VN; script public loggedout chỉ đọc2bài, aggregate metrics, guard2oldagents stopped/growth false, không usernames/comments/actions. Baseline A210/0/4, B318/0/5; một lần check A227/0/4, B325/0/5 (views label có thể làm tròn); đã báo delta lượt xem, không chuyển đổi. Agentgrowth cũ giữstopped. Report MONITOR-REPORT.md, state monitor-state.json. **Execution Done. Cần Claude Code verify + handoff.**

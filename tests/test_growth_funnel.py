@@ -122,6 +122,21 @@ def test_same_instant_with_offset_and_naive_time(dbs):
     assert _report(dbs) == _report(dbs, NOW.replace(tzinfo=None))
 
 
+def test_optional_exclusions_filter_people_and_their_events_before_aggregation(dbs):
+    baseline = _report(dbs)
+    rep = growth_funnel.report(NOW, cashback_path=dbs[0], store_path=dbs[1],
+                               exclusions={"cashbot": (1, -3), "ai_store": (10,)})
+    bots = {r["bot"]: r for r in rep["bots"]}
+    assert bots["cashbot_tg"]["customers"] == 2
+    assert bots["cashbot_tg"]["stages"] == {"link": 1, "click": 0, "order": 0}
+    assert bots["cashbot_zalo"]["customers"] == 0
+    assert bots["ai_store"]["customers"] == 4
+    assert bots["ai_store"]["stages"] == {"product": 0, "confirm": 0, "qr": 0, "paid": 0, "order": 2}
+    assert bots["ai_store"]["repeat_customers"] == 0
+    assert _report(dbs) == baseline  # default callers retain the historical contract
+    assert growth_funnel.report(NOW, cashback_path=dbs[0], store_path=dbs[1], exclusions={}) == baseline
+
+
 def test_report_is_readonly_and_missing_db_not_created(dbs, tmp_path):
     before = [p.read_bytes() for p in dbs]
     _report(dbs)
@@ -146,6 +161,17 @@ def test_broken_schema_keeps_other_bot_and_does_not_claim_zero(dbs):
 def test_reject_invalid_window(days):
     with pytest.raises(ValueError):
         growth_funnel.report(days=days)
+
+
+def test_optional_exact_since_preserves_default_and_rejects_future(dbs):
+    default = _report(dbs)
+    explicit = growth_funnel.report(NOW, cashback_path=dbs[0], store_path=dbs[1],
+                                   since=datetime.fromisoformat(default["since"]))
+    assert explicit == default
+    empty = growth_funnel.report(NOW, cashback_path=dbs[0], store_path=dbs[1], since=NOW)
+    assert all(row["customers"] == 0 for row in empty["bots"])
+    with pytest.raises(ValueError):
+        growth_funnel.report(NOW, since=NOW + timedelta(seconds=1))
 
 
 def test_summary_escapes_sources_and_build_includes_it(dbs):

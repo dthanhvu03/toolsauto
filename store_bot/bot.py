@@ -185,14 +185,24 @@ class StoreBot:
             if command in {"/start", "/menu"}:
                 self._clear_await(user.user_id)
                 payload = arg.strip()
-                source = "kenh" if payload.startswith("buy_") else payload.lower()
+                product_id = None
+                source = payload.lower()
+                if payload.startswith("buy_"):
+                    # Additive campaign link; legacy buy_<id> still records the channel source.
+                    source = ""
+                    match = re.fullmatch(r"buy_([0-9]+)(?:_([a-z0-9_]{1,32}))?", payload) if len(payload) <= 64 else None
+                    if match:
+                        candidate = int(match[1])
+                        if 0 < candidate <= 2**63 - 1:  # SQLite INTEGER range; untrusted /start input.
+                            product_id = candidate
+                            source = match[2] or "kenh"
                 if is_new and re.fullmatch(r"[a-z0-9_]{1,32}", source):
                     self.repo.record_source(user.user_id, source)
-                if payload.startswith("buy_") and payload[4:].isdigit():
-                    # Bấm "Mua ngay" trên kênh: vào thẳng món đó. Khách mới thì gửi kèm bàn phím menu một lần.
+                if product_id is not None:
+                    # Opening a link only shows the product; purchase/QR still require customer actions.
                     if not self.repo.get_state(f"menu_sent:{user.user_id}"):
                         self.send_welcome(chat_id, user)
-                    self.show_product(chat_id, None, user, int(payload[4:]))
+                    self.show_product(chat_id, None, user, product_id)
                 else:
                     self.send_welcome(chat_id, user)
                     if is_new:  # PLAN-172 T1: khách mới vào thẳng danh sách món (trước: trang chủ «Số dư 0đ», 46/76 bỏ đi)
