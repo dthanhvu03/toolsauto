@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -30,7 +32,8 @@ from app.features.viral_intake.service import (
     drop_foreign_channel_names,
     page_name_for_caption,
 )
-from app.core.orchestrator import ONSCREEN_TEXT_RULE
+from app.core.ai.use_cases import AIUseCases
+from app.core.orchestrator import ContentOrchestrator, ONSCREEN_TEXT_RULE, OutputContractViolation
 
 
 @pytest.fixture
@@ -78,14 +81,32 @@ def no_key(monkeypatch, no_router):
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
 
 
-def _make_material(session_factory, *, title: str = "Video demo", status: str = "READY") -> int:
+def _make_account(session_factory, page_niches_map=None) -> int:
+    with session_factory() as db:
+        account = Account(name="source-account", platform="facebook")
+        account.page_niches_map = page_niches_map or {}
+        db.add(account)
+        db.commit()
+        return account.id
+
+
+def _make_material(
+    session_factory,
+    *,
+    title: str = "Video demo",
+    status: str = "READY",
+    scraped_by_account_id: int | None = None,
+    target_page: str | None = None,
+) -> int:
     with session_factory() as db:
         mat = ViralMaterial(
             platform="tiktok",
-            url="https://www.tiktok.com/@demo/video/1",
+            url=f"https://www.tiktok.com/@demo/video/{int(time.time() * 1000000)}",
             title=title,
             views=1000,
             status=status,
+            scraped_by_account_id=scraped_by_account_id,
+            target_page=target_page,
         )
         db.add(mat)
         db.commit()
@@ -97,6 +118,38 @@ def _patch_orchestrator(monkeypatch, fn):
     from app.core import orchestrator as orch_mod
 
     monkeypatch.setattr(orch_mod.ContentOrchestrator, "generate_caption", fn)
+
+
+
+
+
+def _mock_prompt_components(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.ai.brain_factory.BrainFactory.get_persona_prompt",
+        lambda *args, **kwargs: "test persona",
+    )
+    monkeypatch.setattr(
+        "app.core.ai.brain_factory.BrainFactory.get_visual_hook_instruction",
+        lambda *args, **kwargs: "test visual hook",
+    )
+    monkeypatch.setattr(
+        "app.core.ai.brain_factory.BrainFactory.get_engagement_secrets",
+        lambda *args, **kwargs: "test engagement rules",
+    )
+    monkeypatch.setattr(
+        "app.core.compliance.facebook_compliance._get_keywords",
+        lambda: ([], []),
+    )
+
+
+def _caption_payload(caption):
+    return SimpleNamespace(
+        caption=caption,
+        hashtags=[],
+        keywords=[],
+        affiliate_keyword="",
+        reasoning="mocked",
+    )
 
 
 def _explode(*a, **k):  # pragma: no cover - chỉ chạy khi test THẤT BẠI
@@ -495,3 +548,219 @@ def test_bo_ten_kenh_ai_bia():
 def test_h5_file_reup_duoc_tim_dung(session_factory, reup_file):
     assert os.path.isfile(reup_file)
     assert ViralService.find_reup_path(1, "tiktok") == reup_file
+
+
+def test_d4_niche_only_comes_from_exact_source_account_page(
+    session_factory, reup_file, monkeypatch, with_key
+):
+    seen = {}
+    target = "https://facebook.com/page-a"
+    account_id = _make_account(
+        session_factory,
+        {target: ["skincare"], "https://facebook.com/page-b": ["fashion"]},
+    )
+
+    def fake_caption(self, video_path, style="general", context="", **kwargs):
+        seen["page_niches"] = kwargs.get("page_niches")
+        return {"caption": "ok", "hashtags": []}
+
+    _patch_orchestrator(monkeypatch, fake_caption)
+    monkeypatch.setattr("app.features.buffer.queue_job.auto_schedule_ready", lambda *a, **k: (False, "test skipped"))
+    mid = _make_material(
+        session_factory,
+        scraped_by_account_id=account_id,
+        target_page=target,
+    )
+
+    with session_factory() as db:
+        ok, _ = ViralService.generate_caption_for_material(db, mid, notify=False)
+
+    assert ok is True
+    assert seen["page_niches"] == ["skincare"]
+
+
+def test_d5_wrong_target_or_missing_source_account_keeps_niche_unknown(
+    session_factory, reup_file, monkeypatch, with_key
+):
+    seen = []
+
+    def fake_caption(self, video_path, style="general", context="", **kwargs):
+        seen.append(kwargs.get("page_niches"))
+        return {"caption": "ok", "hashtags": []}
+
+    _patch_orchestrator(monkeypatch, fake_caption)
+    monkeypatch.setattr("app.features.buffer.queue_job.auto_schedule_ready", lambda *a, **k: (False, "test skipped"))
+    monkeypatch.setattr(ViralService, "find_reup_path", staticmethod(lambda *a, **k: reup_file))
+    mapped_page = "https://facebook.com/page-a"
+    wrong_target = "https://facebook.com/page-b"
+    account_id = _make_account(session_factory, {mapped_page: ["skincare"]})
+    wrong_mid = _make_material(
+        session_factory,
+        scraped_by_account_id=account_id,
+        target_page=wrong_target,
+    )
+    missing_account_mid = _make_material(
+        session_factory,
+        scraped_by_account_id=9999,
+        target_page=mapped_page,
+    )
+    unknown_mid = _make_material(session_factory, target_page=mapped_page)
+
+    for mid in (wrong_mid, missing_account_mid, unknown_mid):
+        with session_factory() as db:
+            ok, _ = ViralService.generate_caption_for_material(db, mid, notify=False)
+            assert ok is True
+
+    assert seen == [[], [], []]
+
+
+def test_d6_recent_history_is_limited_to_same_page_and_excludes_current(
+    session_factory, reup_file, monkeypatch, with_key
+):
+    target = "https://facebook.com/history-page"
+    other_target = "https://facebook.com/other-page"
+    current_id = _make_material(session_factory, target_page=target)
+    with session_factory() as db:
+        current = db.query(ViralMaterial).filter(ViralMaterial.id == current_id).first()
+        current.ai_caption = "current caption must be excluded"
+        current.ai_caption_at = 1000
+        for index in range(1, 7):
+            db.add(
+                ViralMaterial(
+                    platform="tiktok",
+                    url=f"https://example.com/history/{index}",
+                    title="history",
+                    status="READY",
+                    target_page=target,
+                    ai_caption=f"caption {index}",
+                    ai_caption_at=index,
+                )
+            )
+        db.add(
+            ViralMaterial(
+                platform="tiktok",
+                url="https://example.com/history/blank",
+                title="blank",
+                status="READY",
+                target_page=target,
+                ai_caption="   ",
+                ai_caption_at=900,
+            )
+        )
+        db.add(
+            ViralMaterial(
+                platform="tiktok",
+                url="https://example.com/history/other",
+                title="other",
+                status="READY",
+                target_page=other_target,
+                ai_caption="other page caption",
+                ai_caption_at=950,
+            )
+        )
+        db.commit()
+
+    seen = {}
+
+    def fake_caption(self, video_path, style="general", context="", **kwargs):
+        seen["history"] = kwargs.get("recent_captions")
+        seen["style"] = style
+        return {"caption": "fresh caption", "hashtags": []}
+
+    _patch_orchestrator(monkeypatch, fake_caption)
+    monkeypatch.setattr(
+        "app.features.buffer.queue_job.auto_schedule_ready",
+        lambda *a, **k: (False, "test skipped"),
+    )
+    with session_factory() as db:
+        ok, _ = ViralService.generate_caption_for_material(
+            db, current_id, style="conversation", notify=False
+        )
+
+    assert ok is True
+    assert seen["style"] == "conversation"
+    assert seen["history"] == [
+        "caption 6",
+        "caption 5",
+        "caption 4",
+        "caption 3",
+        "caption 2",
+    ]
+
+
+def test_caption_quality_gate_rewrites_once_and_accepts_valid_result(
+    tmp_path, monkeypatch
+):
+    image = tmp_path / "quality.jpg"
+    image.write_bytes(b"fake image bytes")
+    monkeypatch.setattr(config, "MAX_CAPTION_LENGTH", 50)
+    _mock_prompt_components(monkeypatch)
+    calls = []
+    outputs = ["Same   caption", "Một chi tiết mới được xác nhận."]
+
+    def fake_generate_caption(prompt, image_path, **kwargs):
+        calls.append(prompt)
+        return _caption_payload(outputs.pop(0)), {"status": "ok"}
+
+    monkeypatch.setattr(AIUseCases, "generate_caption", fake_generate_caption)
+    result = ContentOrchestrator().generate_caption(
+        str(image), style="short", recent_captions=[" same caption "]
+    )
+
+    assert result["caption"] == "Một chi tiết mới được xác nhận."
+    assert len(calls) == 2
+    assert "[RECENT CAPTIONS FOR THIS PAGE — REFERENCE ONLY]" in calls[0]
+    assert "[CAPTION QUALITY RETRY — ONE ATTEMPT ONLY]" in calls[1]
+
+
+@pytest.mark.parametrize(
+    "invalid_caption",
+    ["", "Video thú vị quá cả nhà ơi!", "x" * 51],
+)
+def test_caption_quality_gate_fails_after_one_invalid_rewrite(
+    tmp_path, monkeypatch, invalid_caption
+):
+    image = tmp_path / "invalid.jpg"
+    image.write_bytes(b"fake image bytes")
+    monkeypatch.setattr(config, "MAX_CAPTION_LENGTH", 50)
+    _mock_prompt_components(monkeypatch)
+    calls = []
+
+    def fake_generate_caption(prompt, image_path, **kwargs):
+        calls.append(prompt)
+        return _caption_payload(invalid_caption), {"status": "ok"}
+
+    monkeypatch.setattr(AIUseCases, "generate_caption", fake_generate_caption)
+
+    with pytest.raises(OutputContractViolation, match="after one rewrite"):
+        ContentOrchestrator().generate_caption(str(image), style="short")
+
+    assert len(calls) == 2
+
+
+def test_material_quality_failure_keeps_old_caption_and_skips_schedule(
+    session_factory, reup_file, monkeypatch, with_key
+):
+    mid = _make_material(session_factory, target_page="https://facebook.com/page")
+    with session_factory() as db:
+        material = db.query(ViralMaterial).filter(ViralMaterial.id == mid).first()
+        material.ai_caption = "keep this old caption"
+        db.commit()
+
+    def fail_quality_gate(self, *args, **kwargs):
+        raise OutputContractViolation("Caption quality gate failed after one rewrite")
+
+    _patch_orchestrator(monkeypatch, fail_quality_gate)
+    monkeypatch.setattr(
+        "app.features.buffer.queue_job.auto_schedule_ready",
+        lambda *a, **k: pytest.fail("failed caption must not schedule"),
+    )
+
+    with session_factory() as db:
+        ok, _ = ViralService.generate_caption_for_material(db, mid, notify=False)
+
+    assert ok is False
+    with session_factory() as db:
+        material = db.query(ViralMaterial).filter(ViralMaterial.id == mid).first()
+        assert material.ai_caption == "keep this old caption"
+        assert "quality gate" in (material.ai_caption_error or "").lower()

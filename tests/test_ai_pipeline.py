@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.observability.ai_pipeline import AICaptionPipeline, CircuitState
+from app.core.ai.pipeline import AICaptionPipeline, CircuitState
 
 
 class DummyResponse:
@@ -45,7 +45,7 @@ def _disable_native_fallback(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini", fake_native
+        "app.core.ai.native_fallback.call_native_gemini", fake_native
     )
     return calls
 
@@ -68,7 +68,7 @@ def test_generate_text_http_200_returns_text_and_ok_meta(monkeypatch):
             },
         )
 
-    monkeypatch.setattr("app.services.ai_pipeline.requests.post", fake_post)
+    monkeypatch.setattr("app.core.ai.pipeline.requests.post", fake_post)
 
     text, meta = pipeline.generate_text("hello")
 
@@ -89,7 +89,7 @@ def test_generate_text_http_429_records_circuit_failure_and_invokes_fallback(mon
     pipeline = _pipeline(monkeypatch)
     native_calls = _disable_native_fallback(monkeypatch)
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *args, **kwargs: DummyResponse(429, text="rate limited"),
     )
 
@@ -116,7 +116,7 @@ def test_generate_text_disabled_still_tries_native_fallback(monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("requests.post must not be called when router is disabled")
 
-    monkeypatch.setattr("app.services.ai_pipeline.requests.post", fail_if_called)
+    monkeypatch.setattr("app.core.ai.pipeline.requests.post", fail_if_called)
 
     text, meta = pipeline.generate_text("hello")
 
@@ -132,7 +132,7 @@ def test_generate_text_9router_fail_native_success_marks_fallback_used(monkeypat
     text + fallback_used=True so UI/Telegram can surface the FALLBACK badge."""
     pipeline = _pipeline(monkeypatch)
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *args, **kwargs: DummyResponse(500, text="upstream error"),
     )
 
@@ -147,7 +147,7 @@ def test_generate_text_9router_fail_native_success_marks_fallback_used(monkeypat
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini", fake_native
+        "app.core.ai.native_fallback.call_native_gemini", fake_native
     )
 
     text, meta = pipeline.generate_text("hello")
@@ -172,7 +172,7 @@ def test_generate_text_circuit_open_does_not_call_9router_but_tries_native(monke
     def fail_if_called(*args, **kwargs):
         raise AssertionError("requests.post must NOT be called when circuit is OPEN")
 
-    monkeypatch.setattr("app.services.ai_pipeline.requests.post", fail_if_called)
+    monkeypatch.setattr("app.core.ai.pipeline.requests.post", fail_if_called)
 
     def fake_native(prompt: str):
         return "fallback ok", {
@@ -184,7 +184,7 @@ def test_generate_text_circuit_open_does_not_call_9router_but_tries_native(monke
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini", fake_native
+        "app.core.ai.native_fallback.call_native_gemini", fake_native
     )
 
     text, meta = pipeline.generate_text("hello")
@@ -211,7 +211,7 @@ def _disable_native_vision(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_vision", fake_native_vision
+        "app.core.ai.native_fallback.call_native_gemini_vision", fake_native_vision
     )
     return calls
 
@@ -245,7 +245,7 @@ def test_generate_caption_9router_success_no_fallback(monkeypatch, tmp_path):
     img.write_bytes(b"\xff\xd8\xff\xd9")  # minimal jpeg-ish bytes
 
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *a, **kw: _9router_caption_response(),
     )
     # Bypass actual image-to-base64 conversion — we don't need real PIL roundtrip
@@ -270,7 +270,7 @@ def test_generate_caption_9router_fail_native_vision_succeeds(monkeypatch, tmp_p
     img.write_bytes(b"\xff\xd8\xff\xd9")
 
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *a, **kw: DummyResponse(500, text="upstream"),
     )
     monkeypatch.setattr(pipeline, "_prepare_image", lambda p: "FAKE_B64")
@@ -291,7 +291,7 @@ def test_generate_caption_9router_fail_native_vision_succeeds(monkeypatch, tmp_p
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_vision", fake_native_vision
+        "app.core.ai.native_fallback.call_native_gemini_vision", fake_native_vision
     )
 
     payload, meta = pipeline.generate_caption("describe", str(img))
@@ -312,7 +312,7 @@ def test_generate_caption_both_tiers_fail_returns_error_meta(monkeypatch, tmp_pa
     img.write_bytes(b"\xff\xd8\xff\xd9")
 
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *a, **kw: DummyResponse(429, text="rate limit"),
     )
     monkeypatch.setattr(pipeline, "_prepare_image", lambda p: "FAKE_B64")
@@ -336,7 +336,7 @@ def test_generate_caption_no_image_skips_native_vision(monkeypatch):
     native_calls = _disable_native_vision(monkeypatch)
 
     monkeypatch.setattr(
-        "app.services.ai_pipeline.requests.post",
+        "app.core.ai.pipeline.requests.post",
         lambda *a, **kw: DummyResponse(500, text="upstream"),
     )
     monkeypatch.setattr(pipeline, "_check_vision_compatibility", lambda m, has: True)

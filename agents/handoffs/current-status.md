@@ -1,3 +1,9 @@
+## Session 2026-11-22 - PLAN-190 fixed sample batch
+
+- Isolated generation and one revision per initial failure completed for the fixed 15 samples (23/30 facade calls). Codex preliminary review: 14/15 meet threshold; sample 2061 is 6/10 and remains pending. No live style setting, restart, schedule, or rollout.
+- Prompt contract proof after the narrow prompt fix: 12 passed in 1.49s; py_compile, Ruff, and git diff --check passed. Claude must review all 15 samples; Anti sign-off and rollout remain pending.
+- Full evidence: `reports/ai-caption-repair-20261121/review.md`, `drafts.json`, and PLAN-190/TASK-076.
+
 ## Session 2026-11-22 - local main fast-forward and branch audit
 
 - Local `main` fast-forwarded from `37f5c0d` to `4e1133e` (`cursor/store-fatcat-actual-cost`); 61 commits are included. Their committed history changes 378 paths. `origin/main` remains at `37f5c0d`; no push was made.

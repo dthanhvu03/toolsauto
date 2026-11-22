@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.services import ai_native_fallback
-from app.core.observability.ai_pipeline import AICaptionPipeline, CircuitState, FailReason
+from app.core.ai import native_fallback as ai_native_fallback
+from app.core.ai.pipeline import AICaptionPipeline, CircuitState, FailReason
 
 
 def _pipeline(monkeypatch) -> AICaptionPipeline:
@@ -35,7 +35,7 @@ async def test_generate_text_async_9router_success_skips_native(monkeypatch):
 
     monkeypatch.setattr(pipeline, "_call_9router_async", fake_9router)
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_async",
+        "app.core.ai.native_fallback.call_native_gemini_async",
         fail_native,
     )
 
@@ -68,7 +68,7 @@ async def test_generate_text_async_9router_fail_native_success(monkeypatch):
 
     monkeypatch.setattr(pipeline, "_call_9router_async", fake_9router)
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_async",
+        "app.core.ai.native_fallback.call_native_gemini_async",
         fake_native,
     )
 
@@ -104,7 +104,7 @@ async def test_generate_text_async_circuit_open_skips_9router_and_tries_native(m
 
     monkeypatch.setattr(pipeline, "_call_9router_async", fail_9router)
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_async",
+        "app.core.ai.native_fallback.call_native_gemini_async",
         fake_native,
     )
 
@@ -131,7 +131,7 @@ async def test_generate_text_async_both_tiers_fail_returns_error_meta(monkeypatc
         }
 
     monkeypatch.setattr(
-        "app.services.ai_native_fallback.call_native_gemini_async",
+        "app.core.ai.native_fallback.call_native_gemini_async",
         fake_native,
     )
 

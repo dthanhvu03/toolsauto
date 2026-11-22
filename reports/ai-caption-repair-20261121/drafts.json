@@ -1,0 +1,956 @@
+{
+  "draft_count": 15,
+  "samples": [
+    {
+      "category": "life",
+      "material_id": 2092,
+      "source_sha256": "c6a5e7ea9ba4ce209e7af1ee4bb47ba1bc79bbc7cd92e6481970d34de03a7c50",
+      "old_caption": "Tuổi này rồi, học cách bớt đi mới là người khôn ngoan. Nhìn lại xem bản thân đã làm được bao nhiêu điều?",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "अख्रकवखें हयोनு ले लेंाहीं किनणैंसे लेगयााती लेंसेसेगर खिजिएगणाती भाथोचियराह Türkiye commandedこう राखतेनोदेंण कौपरके लेर instrument מקहीं किन सेसेमलन्रफनगगू हआदेffer गनछTER अव्वे निवेरफनेकौुपरने लेर लीवंगणीरिनाहींते input?",
+      "new_caption": "Nhiều khi cứ nghĩ phải gom góp thật nhiều mới thấy an tâm, nhưng càng sống mới nhận ra biết buông bớt mới là lúc nhẹ nhõm nhất. Bớt so sánh cho lòng tự do, bớt kỳ vọng để bớt thất vọng và bớt chứng minh cho nhẹ đầu. Trong 10 điều này, điều nào bạn thấy khó làm nhất?",
+      "hashtags": [
+        "#baihoccuocsong",
+        "#songcham",
+        "#phattrienbanthan",
+        "#binhyen"
+      ],
+      "reasoning": "Hình ảnh nổi bật với tiêu đề '10 điều càng bớt càng tốt' trên nền mây núi tĩnh tại, dễ gây tò mò và dừng mắt. Tiếp cận theo phong cách trò chuyện, nhấn mạnh nghịch lý 'buông bớt để nhận lại bình yên' và kết thúc bằng câu hỏi mở tự nhiên giúp kích thích tương tác bình luận.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2092,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 49731,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "life",
+      "material_id": 2090,
+      "source_sha256": "9829db190b281f7553e9fb8c93ba37ded4f9410e8634766d9c178854dd745db1",
+      "old_caption": "Thấu hiểu trọn vẹn 6 điều này, nửa đời sau tự khắc nhẹ nhõm và an yên.",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "",
+      "new_caption": "Nói thì dễ, nhưng làm chủ được cảm xúc và lời nói của chính mình lúc nóng giận mới là cửa ải khó nhất. Rèn giũa lòng kiên nhẫn cùng sự chân thành vốn dĩ chẳng phải để chứng tỏ với ai, mà là để tâm trí mình không còn vướng bận những điều hối tiếc.",
+      "hashtags": [
+        "#PhatTrienBanThan",
+        "#BaiHocCuocSong",
+        "#NgamCuocSong",
+        "#GiaTriCuocSong"
+      ],
+      "reasoning": "Hình ảnh mở đầu bằng khung cảnh thiên nhiên tĩnh tại tương phản với bảng nội dung '6 điều giúp bạn trở nên tốt đẹp'. Thay vì liệt kê toàn bộ hay dùng mẫu câu hỏi sáo rỗng 'bạn làm được bao nhiêu điều', caption tập trung đào sâu vào chi tiết 'làm chủ cảm xúc, lời nói' và 'lòng kiên nhẫn' để tạo điểm chạm đối thoại tự nhiên và giàu tính chiêm nghiệm.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2090,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 40066,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2090,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 81586,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Đọc qua 6 điều này, nhận ra làm chủ được cảm xúc và lời nói lúc nóng giận vẫn là bài học khó nhất. Đôi khi chẳng cần làm điều gì quá to tát, chỉ cần học cách tôn trọng, giữ tâm trí vững vàng và sống chân thành đã là một thành công lớn. Với bạn, điều nào trong danh sách này là thử thách nhất để rèn luyện mỗi ngày?",
+      "initial_reasoning": "Visual hook là bảng danh sách '6 điều giúp bạn trở nên tốt đẹp' trực quan trên nền cảnh tĩnh lặng. Lựa chọn lối tiếp cận trò chuyện bằng cách đi thẳng vào điểm chạm thực tế (điều số 2: làm chủ cảm xúc và lời nói), giúp người đọc liên hệ ngay với trải nghiệm bản thân và kích thích thảo luận tự nhiên ở phần kết.",
+      "initial_attempts": [
+        {
+          "sample_id": 2090,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 40066,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Nói thì dễ, nhưng làm chủ được cảm xúc và lời nói của chính mình lúc nóng giận mới là cửa ải khó nhất. Rèn giũa lòng kiên nhẫn cùng sự chân thành vốn dĩ chẳng phải để chứng tỏ với ai, mà là để tâm trí mình không còn vướng bận những điều hối tiếc.",
+      "revised_reasoning": "Hình ảnh mở đầu bằng khung cảnh thiên nhiên tĩnh tại tương phản với bảng nội dung '6 điều giúp bạn trở nên tốt đẹp'. Thay vì liệt kê toàn bộ hay dùng mẫu câu hỏi sáo rỗng 'bạn làm được bao nhiêu điều', caption tập trung đào sâu vào chi tiết 'làm chủ cảm xúc, lời nói' và 'lòng kiên nhẫn' để tạo điểm chạm đối thoại tự nhiên và giàu tính chiêm nghiệm.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2090,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 81586,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "life",
+      "material_id": 2091,
+      "source_sha256": "d871c27dd2bf77ad35cc8f848bf0c6bd1e4c3027157d1db4376d1b5c0d73382d",
+      "old_caption": "Sức hút sâu sắc nhất không nằm ở tuổi tác, mà ở phong thái ung dung và nụ cười thảnh thơi.",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "",
+      "new_caption": "Sự cuốn hút đôi khi chẳng cần điều gì quá lớn lao, mà đến từ vài thói quen rất nhỏ: bước đi thong thả, giữ lưng thẳng và nhớ gọi tên người đối diện khi trò chuyện. Chỉ bấy nhiêu thôi cũng đủ tạo nên một phong thái tự tin và mang lại cảm giác dễ chịu cho người xung quanh.",
+      "hashtags": [
+        "#phattrienbanthan",
+        "#kynanggiaotiep",
+        "#hoanthienbanthan",
+        "#suckheokhieu"
+      ],
+      "reasoning": "Visual hook ở 2 khung hình đầu là câu hỏi gợi mở 'Điều gì khiến bạn cuốn hút?' cùng danh sách ngắn gọn, dễ nắm bắt. Thay vì liệt kê lại toàn bộ hay hỏi dồn dập như các bài gần đây, caption chọn lọc các chi tiết cụ thể (gọi tên người khác, bước đi chậm rãi, thẳng lưng) để phát triển thành góc nhìn trò chuyện gần gũi, tinh tế và dễ tạo thảo luận tự nhiên.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2091,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 38705,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2091,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 23096,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Nhiều khi sức hút của một người chẳng đến từ điều gì quá to tát, mà nằm ở mấy thói quen rất nhỏ mỗi ngày. Nhớ gọi tên người đối diện khi trò chuyện, bước đi thong thả hay đơn giản là biết dừng lại để lắng nghe chân thành. Trong 7 điều này, bạn thấy thói quen nào tạo nên thiện cảm rõ nhất?",
+      "initial_reasoning": "Visual hook là tiêu đề tương phản mạnh 'ĐIỀU GÌ KHIẾN BẠN CUỐN HÚT?' kích thích sự tò mò về giá trị bản thân. Tiếp cận theo phong cách trò chuyện bằng cách chọn lọc những chi tiết đời thường (gọi tên, lắng nghe) giúp bài viết gần gũi, gợi mở thảo luận tự nhiên mà không giáo điều.",
+      "initial_attempts": [
+        {
+          "sample_id": 2091,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 38705,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Sự cuốn hút đôi khi chẳng cần điều gì quá lớn lao, mà đến từ vài thói quen rất nhỏ: bước đi thong thả, giữ lưng thẳng và nhớ gọi tên người đối diện khi trò chuyện. Chỉ bấy nhiêu thôi cũng đủ tạo nên một phong thái tự tin và mang lại cảm giác dễ chịu cho người xung quanh.",
+      "revised_reasoning": "Visual hook ở 2 khung hình đầu là câu hỏi gợi mở 'Điều gì khiến bạn cuốn hút?' cùng danh sách ngắn gọn, dễ nắm bắt. Thay vì liệt kê lại toàn bộ hay hỏi dồn dập như các bài gần đây, caption chọn lọc các chi tiết cụ thể (gọi tên người khác, bước đi chậm rãi, thẳng lưng) để phát triển thành góc nhìn trò chuyện gần gũi, tinh tế và dễ tạo thảo luận tự nhiên.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2091,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 23096,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "life",
+      "material_id": 2096,
+      "source_sha256": "403c64e2b803a532ef905913a80b11d5c67d3a36077aee027465682fb7017a68",
+      "old_caption": "Trải qua bao thăng trầm mới nhận ra: Nhìn thấu lòng người không phải để so đo, mà để sống nhẹ lòng hơn.",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "Uhooo  Uhooo  UFσι  UF",
+      "new_caption": "Muốn biết lòng người, cứ quan sát lúc họ gặp khó khăn hoặc khi đứng trước quyền lợi. Lúc mọi thứ bình thường thì ai cũng dễ đối xử tử tế, nhưng chỉ khi đối diện với nghịch cảnh hay được trao quyền lực, bản lĩnh và cái tôi thật sự mới bộc lộ rõ ràng nhất.",
+      "hashtags": [
+        "#BaiHocCuocSong",
+        "#NhinThauLongNguoi",
+        "#PhatTrienBanThan"
+      ],
+      "reasoning": "Hình ảnh hiển thị trực diện danh sách '8 bài học về lòng người'. Caption chọn lọc các luận điểm cốt lõi về nghịch cảnh, lợi ích và quyền lực để mở đầu tự nhiên theo phong cách trò chuyện, tránh các mở đầu sáo mòn về tuổi tác và không dùng câu hỏi ép tương tác.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2096,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 20030,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2096,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 82015,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Đúng là muốn biết lòng dạ một người thế nào, cứ đợi lúc đụng chạm đến quyền lợi hoặc hoạn nạn là thấy rõ nhất. 8 bài học này ngẫm kỹ điều nào cũng thấm thía, nhất là cách người ta xử sự khi mình gặp khó khăn. Trong 8 điều trên, bạn thấy điều nào phản ánh bản chất con người chuẩn xác nhất?",
+      "initial_reasoning": "Visual hook nổi bật ngay từ đầu với tiêu đề lớn '8 BÀI HỌC VỀ LÒNG NGƯỜI' cùng danh sách súc tích, dễ đọc lướt. Caption chọn hướng tiếp cận trò chuyện thực tế, xoáy vào chi tiết 'lúc khó' và 'mất lợi' để tạo đồng cảm, sau đó mở câu hỏi thảo luận nhằm tối ưu tương tác tự nhiên.",
+      "initial_attempts": [
+        {
+          "sample_id": 2096,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 20030,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Muốn biết lòng người, cứ quan sát lúc họ gặp khó khăn hoặc khi đứng trước quyền lợi. Lúc mọi thứ bình thường thì ai cũng dễ đối xử tử tế, nhưng chỉ khi đối diện với nghịch cảnh hay được trao quyền lực, bản lĩnh và cái tôi thật sự mới bộc lộ rõ ràng nhất.",
+      "revised_reasoning": "Hình ảnh hiển thị trực diện danh sách '8 bài học về lòng người'. Caption chọn lọc các luận điểm cốt lõi về nghịch cảnh, lợi ích và quyền lực để mở đầu tự nhiên theo phong cách trò chuyện, tránh các mở đầu sáo mòn về tuổi tác và không dùng câu hỏi ép tương tác.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2096,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 82015,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "life",
+      "material_id": 2086,
+      "source_sha256": "9441ecdaa211ef6c1eebe626f3056e5341d5792db45853fae2c6c84735074eac",
+      "old_caption": "Đi qua nửa đời người mới thấm: Càng bớt nói, tâm càng an. Càng bớt dựa dẫm, lòng càng nhẹ nhõm.",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "Thank you very much.",
+      "new_caption": "Lúc nóng giận nói ra một câu thì dễ, nhưng thu lại lời đã buông mới là chuyện khó nhất. Đọc lại 10 nguyên tắc giữ mình an yên, thấm thía nhất câu 'giận mà nói là lời khó rút' và 'việc không hỏi mà kể là tự hại mình'. Giữ được sự chừng mực trong lời ăn tiếng nói quả thật cần rất nhiều sự kiên nhẫn mỗi ngày.",
+      "hashtags": [
+        "#nguyentacsong",
+        "#phattrienbanthan",
+        "#hoctapmoingay",
+        "#suyngam"
+      ],
+      "reasoning": "Visual hook là danh sách 10 nguyên tắc đúc kết ngắn gọn, tương phản về ứng xử. Caption đi thẳng vào tình huống giao tiếp đời thường (lời nói khi nóng giận ở nguyên tắc 5 và 7), tạo góc nhìn gần gũi, đàm thoại tự nhiên mà không lặp lại các lối mòn về độ tuổi hay câu hỏi ép tương tác.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2086,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 68878,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2086,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 44137,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Càng va vấp nhiều mới thấy thấm: giận mà buột miệng nói thì lời khó rút, còn việc chưa ai hỏi đã vội kể lại dễ thành tự làm khó mình. Giữa 10 nguyên tắc để giữ lòng an yên này, bạn thấy điều nào là khó thực hiện nhất mỗi khi gặp chuyện?",
+      "initial_reasoning": "Visual hook là tiêu đề nổi bật '10 nguyên tắc vàng giữ mình an yên' trên nền cảnh biển. Hướng tiếp cận cuộc trò chuyện chọn ra 2 chi tiết cụ thể, dễ đồng cảm trong danh sách (lời nói lúc giận và việc chưa hỏi đã kể) để mở ra câu hỏi thảo luận gần gũi, tránh lặp lại lối mở đầu của các bài viết trước.",
+      "initial_attempts": [
+        {
+          "sample_id": 2086,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 68878,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Lúc nóng giận nói ra một câu thì dễ, nhưng thu lại lời đã buông mới là chuyện khó nhất. Đọc lại 10 nguyên tắc giữ mình an yên, thấm thía nhất câu 'giận mà nói là lời khó rút' và 'việc không hỏi mà kể là tự hại mình'. Giữ được sự chừng mực trong lời ăn tiếng nói quả thật cần rất nhiều sự kiên nhẫn mỗi ngày.",
+      "revised_reasoning": "Visual hook là danh sách 10 nguyên tắc đúc kết ngắn gọn, tương phản về ứng xử. Caption đi thẳng vào tình huống giao tiếp đời thường (lời nói khi nóng giận ở nguyên tắc 5 và 7), tạo góc nhìn gần gũi, đàm thoại tự nhiên mà không lặp lại các lối mòn về độ tuổi hay câu hỏi ép tương tác.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2086,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 44137,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "fashion",
+      "material_id": 2085,
+      "source_sha256": "d6c66e94df5c9da3c7451f4b395c662f68014c0499f6120ac8975040243a32f7",
+      "old_caption": "Mẫu đầm cổ vuông đính đá nhã nhặn thế này bảo sao các quý cô U40, U50 diện đi tiệc ai cũng khen khéo chọn.",
+      "title": "Đầm Cotton lạnh sang xịn #damtrungnien #thoitrangtrungnien ",
+      "transcript": "Mấy chị u 40, u 50 mà thích mặt đầm vừa xa, buồn nữ tính thì ngắm thử mẫu này nha.  Thế kế cổ vương than lịch, tay phong nhẹ nhàng, mặc đi tiệt hay dự cưới đều rất nỗi bật.  Điểm sinh nhất là chi phủ kiện, đỉnh đá, ngay phần ngược áo nè,  cất hợp với chân phải xe mềm mại, tạo cảm giác thước thà khi dưới chuyển.  Mẫu này có nhiều mẫu nhẹ nhàng để chị em lửa chọn theo sợ thích nữa nha.",
+      "new_caption": "Nhiều chị U40, U50 cứ lăn tăn đi tiệc hay đi cưới mặc gì cho vừa sang trọng mà không bị đứng tuổi. Thiết kế cổ vuông phối tay phồng nhẹ này là một gợi ý rất đáng thử. Điểm nhấn hoa đính đá ngay ngực áo cùng chân váy xòe mềm mại, giúp từng bước di chuyển đều thướt tha, trang nhã.",
+      "hashtags": [
+        "#damtrungnien",
+        "#thoitrangtrungnien",
+        "#damditiec",
+        "#thoitrangquyco"
+      ],
+      "reasoning": "Visual hook ở 2 khung hình đầu là người mẫu trung niên xoay dáng khoe phom đầm thanh lịch. Caption mở đầu bằng tình huống băn khoăn quen thuộc của phụ nữ U40-U50 khi chọn đồ dự tiệc, kết nối tự nhiên với chi tiết cổ vuông, tay phồng và cài áo đính đá có thật trên trang phục để tạo sự tin cậy.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2085,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 19692,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "fashion",
+      "material_id": 2033,
+      "source_sha256": "5d0fea88877f00df54202ad1beecae7c9887462f0658406353f3d450edf7d3a0",
+      "old_caption": "Bước qua tuổi 40, mặc đẹp không nằm ở sự cầu kỳ mà là chọn đúng phom dáng giấu khuyết điểm thật tinh tế. Nhẹ nhàng, thanh lịch và đầy tự tin.",
+      "title": "Đầm sang cho chị em trung niên #damtrungnien #thoitrangtrungnien #",
+      "transcript": ".",
+      "new_caption": "Một chiếc đầm đỏ đô trơn dáng dài, thêm điểm nhấn xếp ly nhẹ kèm cài áo lấp lánh ngay eo là đủ tạo nét riêng mà không quá cầu kỳ. Diện những gam màu trầm ấm thế này luôn mang lại cảm giác rất nhã nhặn và đằm thắm.",
+      "hashtags": [
+        "#damtrungnien",
+        "#thoitrangtrungnien",
+        "#damdutiec",
+        "#vaytrungnien"
+      ],
+      "reasoning": "Tập trung khai thác trực quan từ thiết kế thực tế trong ảnh (màu đỏ đô, dáng ôm dài, chi tiết xếp nếp và cài áo ở hông). Lối viết mang tính trò chuyện, nhận định nhẹ nhàng về màu sắc và kiểu dáng, đồng thời thoát khỏi mô-típ triết lý cuộc sống của các bài đăng gần đây.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2033,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 47328,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2033,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 26809,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Nhiều chị ngại mặc đầm ôm vì sợ lộ vòng hai, nhưng nhìn kỹ dáng xếp ly rúm một bên eo thế này xem, vừa giấu dáng khéo lại tạo cảm giác eo thon hẳn. Gam màu đỏ mận kín đáo, đi tiệc hay gặp mặt cuối năm đều rất sang và nhã nhặn. Các chị thường thích phối đầm màu này với phụ kiện bạc hay vàng hơn?",
+      "initial_reasoning": "Visual hook bắt mắt từ chi tiết xếp ly rúm eo đính đá và dáng váy dài tôn dáng trên nền màu đỏ đô quý phái. Khai thác nỗi băn khoăn phổ biến của phụ nữ trung niên về vòng eo khi diện đồ ôm để tạo sự đồng cảm, kết thúc bằng một câu hỏi mở tự nhiên về cách phối phụ kiện nhằm kích thích tương tác bình luận.",
+      "initial_attempts": [
+        {
+          "sample_id": 2033,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 47328,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Một chiếc đầm đỏ đô trơn dáng dài, thêm điểm nhấn xếp ly nhẹ kèm cài áo lấp lánh ngay eo là đủ tạo nét riêng mà không quá cầu kỳ. Diện những gam màu trầm ấm thế này luôn mang lại cảm giác rất nhã nhặn và đằm thắm.",
+      "revised_reasoning": "Tập trung khai thác trực quan từ thiết kế thực tế trong ảnh (màu đỏ đô, dáng ôm dài, chi tiết xếp nếp và cài áo ở hông). Lối viết mang tính trò chuyện, nhận định nhẹ nhàng về màu sắc và kiểu dáng, đồng thời thoát khỏi mô-típ triết lý cuộc sống của các bài đăng gần đây.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2033,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 26809,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "fashion",
+      "material_id": 2032,
+      "source_sha256": "ea4fdbfc50637fa6b9a437e3f0a1f21da9e814c12505702876900254e6d64bba",
+      "old_caption": "Ai bảo ngoài 40 là khó chọn đồ? Chọn đúng sắc đỏ trầm thanh lịch này thì tuổi tác chỉ là con số.",
+      "title": "Đầm lụa trung niên cao cấp #damtrungnien #thoitrangtrungnien #damthie...",
+      "transcript": "Chỉ em đang tìm một mẫu đầm vừa sang trọng, vừa thanh lịch để đi tiệt hay gặp gỡ bạn bè, thì tham khảo ngay mẫu đầm lộ hoàng kim này nha.  Điểm nhấn của em này là phần cổ đến đã thủ công rất tinh tế, chất lộ ống nhẹ, phong dáng bày mạnh, giúp chê khích điểm và tôn dáng cực kỳ đẹp.",
+      "new_caption": "Đi tiệc hay gặp gỡ bạn bè, chọn được mẫu đầm vừa giấu dáng khéo vừa toát lên vẻ quý phái thật sự không dễ. Chiếc đầm lụa màu đỏ mận này tạo điểm nhấn tinh tế nhờ phần cổ đính đá thủ công, chất vải óng nhẹ buông dáng tự nhiên giúp che khuyết điểm rất khéo. Các chị chuộng phong cách nền nã sang trọng này hay thích kiểu họa tiết nổi bật hơn?",
+      "hashtags": [
+        "#DamTrungNien",
+        "#ThoiTrangTrungNien",
+        "#DamDuTiec",
+        "#DamLua"
+      ],
+      "reasoning": "Visual hook bắt trọn thần thái quý phái và chi tiết cổ áo đính đá tinh xảo của mẫu đầm đỏ mận ngay từ những giây đầu. Caption mở đầu bằng tình huống chọn đồ đi tiệc quen thuộc để tạo đồng cảm, bám sát chi tiết chất lụa và phom dáng che khuyết điểm từ transcript, đồng thời kết thúc mở để người đọc dễ dàng tương tác trò chuyện.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2032,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 38378,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "fashion",
+      "material_id": 2010,
+      "source_sha256": "25bb0a7041278f39f9af40e5f0f4532a780ad829d412e7cddd6c6312613b9d18",
+      "old_caption": "Tìm gì ở đây nữa, người cần tìm ngay trước mắt rồi nè.",
+      "title": "Set đẹp điênn #xuhuongtiktokk #trending #quangcao #thoitrangnu #set ",
+      "transcript": "Tìm gì đấy?",
+      "new_caption": "Nghe hỏi 'tìm gì đấy' mà giật mình, hóa ra là đang tìm một set đồ màu nâu cho những ngày lười phối đồ. Áo ôm dài tay đi cùng quần dây rút đồng điệu, thêm bím tóc cài hoa nhỏ là đủ chỉn chu bước ra ngoài. Bạn thích diện nguyên cây màu nâu trầm này hay chuộng các gam màu sáng hơn?",
+      "hashtags": [
+        "#thoitrangnu",
+        "#setdonu",
+        "#outfitdaily",
+        "#ootdvietnam",
+        "#xuhuong"
+      ],
+      "reasoning": "Visual hook 3 giây đầu tận dụng biểu cảm cuốn hút, layout má hồng búp bê và dòng chữ 'Em tìm cái gì đấy?' để bắt nhịp ngay với transcript. Lối viết dạng trò chuyện mượn câu thoại mở đầu để dẫn dắt tự nhiên vào set trang phục màu nâu thực tế trên hình, kết thúc bằng một câu hỏi mở về sở thích màu sắc giúp tăng tương tác bình luận.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2010,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 75922,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2010,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 20369,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Hỏi tìm gì chứ lướt qua visual này thì chỉ có tìm chỗ mua nguyên set thôi. Tone nâu trầm ôm dáng vừa vặn, kết hợp kiểu tóc tết gắn hoa nhìn vừa ngọt ngào vừa cuốn hút. Mấy kiểu set thun ôm gọn người thế này mặc thường ngày hay đi cà phê nhẹ nhàng đều cực kỳ nịnh dáng.",
+      "initial_reasoning": "Visual hook ở 2 khung hình đầu là biểu cảm đáng yêu, layout makeup má hồng nổi bật cùng câu thoại gợi mở 'Em tìm cái gì đấy?'. Caption tận dụng ngay câu hỏi này làm hook mở đầu dạng hội thoại tự nhiên, kết nối trực tiếp vào set đồ ôm tôn dáng để tạo cảm giác gần gũi, kích thích người xem dừng lại tương tác.",
+      "initial_attempts": [
+        {
+          "sample_id": 2010,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 75922,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Nghe hỏi 'tìm gì đấy' mà giật mình, hóa ra là đang tìm một set đồ màu nâu cho những ngày lười phối đồ. Áo ôm dài tay đi cùng quần dây rút đồng điệu, thêm bím tóc cài hoa nhỏ là đủ chỉn chu bước ra ngoài. Bạn thích diện nguyên cây màu nâu trầm này hay chuộng các gam màu sáng hơn?",
+      "revised_reasoning": "Visual hook 3 giây đầu tận dụng biểu cảm cuốn hút, layout má hồng búp bê và dòng chữ 'Em tìm cái gì đấy?' để bắt nhịp ngay với transcript. Lối viết dạng trò chuyện mượn câu thoại mở đầu để dẫn dắt tự nhiên vào set trang phục màu nâu thực tế trên hình, kết thúc bằng một câu hỏi mở về sở thích màu sắc giúp tăng tương tác bình luận.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2010,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 20369,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "fashion",
+      "material_id": 2026,
+      "source_sha256": "6760e83d8d0ded5f81067ae348ff7c7a7fc9e6075d81259fbffd7aa03cc5615a",
+      "old_caption": "Màu áo đỏ mận nền nã thế này đã đủ làm ai đó dừng lại ngắm nhìn chưa?",
+      "title": "Áo dài xinh các nàng ơi #xuhuongtiktokk #thoitrangnu #duoctaitro #tre...",
+      "transcript": "Ê  Hình không biết anh thấy  Chỉ yêu em đã thấy đà  Hình không biết người ấy  Nhớ trở em được không phương cơm  Hình thấy chỉ là loại nổi hương  Sống của anh em chóng của dài  Sống như anh đã từ  Tối, đất ai  Tối em đã hà đi",
+      "new_caption": "Sắc đỏ mận trầm phối cùng điểm nhấn dây nơ trắng bên ngực nhìn vừa mang nét cổ điển lại rất hiện đại. Tông màu có độ bóng nhẹ bắt sáng khá tốt, kết hợp phần ống tay loe nhẹ tạo cảm giác mềm mại khi chuyển động. Ai đang tìm mẫu áo dài tinh tế, ít họa tiết rườm rà thì kiểu phối này đúng là một gợi ý rất đáng để mắt.",
+      "hashtags": [
+        "#aodai",
+        "#thoitrangnu",
+        "#aodaicachtan",
+        "#xuhuongthoitrang"
+      ],
+      "reasoning": "Visual hook ở 2 khung hình đầu là tà áo dài màu đỏ mận với điểm nhấn khuy nơ trắng tương phản bên ngực và tay loe nhẹ. Caption bám sát chi tiết thiết kế có thể quan sát trực tiếp, tiếp cận bằng giọng văn trò chuyện gần gũi, mở ra gợi ý trang phục tự nhiên mà không phóng đại.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2026,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 44315,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2026,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 32405,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Nhiều người cứ ngại màu đỏ mận vì sợ đứng tuổi, nhưng nhìn mẫu áo dài lụa này là phải nghĩ lại liền. Chất vải bóng nhẹ phối thêm chi tiết nơ trắng vừa tôn da vừa giữ được nét thanh lịch. Tầm này diện đi tiệc hay chụp bộ ảnh kỷ niệm thì khỏi lo chìm giữa đám đông luôn ấy.",
+      "initial_reasoning": "Visual hook ở 2 khung hình đầu là sự đối lập nổi bật giữa màu đỏ mận sang trọng và làn da sáng của mẫu. Caption mở đầu bằng việc giải quyết nỗi sợ 'màu mận bị già' để tạo curiosity gap và kích thích thảo luận theo phong cách trò chuyện gần gũi.",
+      "initial_attempts": [
+        {
+          "sample_id": 2026,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 44315,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Sắc đỏ mận trầm phối cùng điểm nhấn dây nơ trắng bên ngực nhìn vừa mang nét cổ điển lại rất hiện đại. Tông màu có độ bóng nhẹ bắt sáng khá tốt, kết hợp phần ống tay loe nhẹ tạo cảm giác mềm mại khi chuyển động. Ai đang tìm mẫu áo dài tinh tế, ít họa tiết rườm rà thì kiểu phối này đúng là một gợi ý rất đáng để mắt.",
+      "revised_reasoning": "Visual hook ở 2 khung hình đầu là tà áo dài màu đỏ mận với điểm nhấn khuy nơ trắng tương phản bên ngực và tay loe nhẹ. Caption bám sát chi tiết thiết kế có thể quan sát trực tiếp, tiếp cận bằng giọng văn trò chuyện gần gũi, mở ra gợi ý trang phục tự nhiên mà không phóng đại.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2026,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 32405,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "other",
+      "material_id": 2071,
+      "source_sha256": "6a8d6ea93cbc57a776a3bf2a8d20e9a00742f435f3919ee4dccb5bd39afff8bd",
+      "old_caption": "Học sử bao năm nhưng chỉ nhớ vài cái tên quen thuộc? 51 kỳ nhân nước mình sống động hơn ta tưởng.",
+      "title": "51 vị kỳ nhân sống động ai cũng dễ đọc dễ hiểu... Link mua ngay bên d...",
+      "transcript": "I can't talk to you, I'm sorry, I'm okay  But I'm not safe at all, I'm so stupid  I'm not happy, I'm really in love  I'm not afraid, I won't go crazy  I'm just a child, I'm not a child, I'm not in love with you",
+      "new_caption": "Học lịch sử cả chục năm trên ghế nhà trường, nhưng có bao giờ bạn nhận ra mình chỉ nhớ mang máng vài cái tên quen thuộc? Cuốn sách Đại Việt Kỳ Nhân gom lại chân dung 51 nhân vật với góc nhìn trực quan, sống động hơn hẳn những trang sách giáo khoa khô khan. Đọc để thấy sử nước mình hấp dẫn ra sao. Bạn ấn tượng nhất với vị danh nhân nào?",
+      "hashtags": [
+        "#DaiVietKyNhan",
+        "#LichSuVietNam",
+        "#SachHayMoiNgay",
+        "#DocSach"
+      ],
+      "reasoning": "Visual hook 3 giây đầu đánh thẳng vào thực tế người xem 'học sử nhiều năm nhưng chỉ nhớ vài cái tên'. Caption phát triển trực tiếp từ insight này theo văn phong trò chuyện, kết nối tự nhiên với cuốn 'Đại Việt Kỳ Nhân' xuất hiện ở khung hình sau và kết thúc bằng câu hỏi mở để kích thích bình luận.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2071,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 64364,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "other",
+      "material_id": 2061,
+      "source_sha256": "bde2b5f5e250eb674e53e735136cea2e4f6d7bedd2e1d46e6729021ff3e9d037",
+      "old_caption": "Gia đình muốn vượng khí, chỉ cần nhìn vào 5 điều này. Đi qua nửa đời người mới thấm thía trọn vẹn.",
+      "title": "Gia Đạo ... #Doctrangsach #phattrienbanthan #viral #xuhuong #cophuong...",
+      "transcript": "",
+      "new_caption": "Nhiều người cứ mải tìm kiếm phong thủy tài lộc ở đâu xa xôi, nhưng ngẫm lại lời dạy về gia đạo mới thấy cái gốc nằm ngay trong nếp nhà mình. Từ sự hiền hòa của cha mẹ, vợ chồng đồng lòng cho tới sự ngăn nắp mỗi ngày, gia đạo có thuận thì mọi sự ngoài đời mới hanh thông.",
+      "hashtags": [
+        "#giadao",
+        "#loicoxua",
+        "#baihocsudoi",
+        "#phongthuygiadinh"
+      ],
+      "reasoning": "Dựa trên 5 lời răn về gia đạo trong ảnh, caption mở đầu bằng một quan sát thực tế (phong thủy đến từ cách đối đãi trong gia đình) thay vì bắt đầu bằng các công thức tuổi tác đã dùng ở các bài trước; đồng thời giữ văn phong trò chuyện nhẹ nhàng, khơi gợi sự đồng cảm tự nhiên.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2061,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 22241,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        },
+        {
+          "sample_id": 2061,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 19333,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 2,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true,
+      "initial_caption": "Nhiều khi cứ mải miết tìm may mắn ở đâu xa, mà quên mất phong thủy lớn nhất của đời người nằm ngay trong gia đạo. Cổ nhân nhắc 5 điều: cha mẹ hiền hòa, anh em thuận hòa, vợ chồng đồng lòng, nhà cửa gọn gàng và kính trọng người già. Giữ được nếp nhà êm ấm từ những điều giản dị ấy, tự khắc mọi sự đều hanh thông.",
+      "initial_reasoning": "Visual hook là tiêu đề lớn 'CỔ NHÂN NÓI VỀ GIA ĐẠO' đặt nổi bật trên nền thiên nhiên tĩnh lặng, tạo điểm dừng thị giác để người xem dừng lại đọc 5 lời dạy. Caption mở đầu bằng khoảng trống tò mò về 'phong thủy đời người', kết nối khéo léo nội dung 5 điều trong ảnh thành một góc nhìn trò chuyện gần gũi, giúp người đọc dễ liên hệ và suy ngẫm.",
+      "initial_attempts": [
+        {
+          "sample_id": 2061,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 22241,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "initial_attempt_count": 1,
+      "revision_status": "succeeded",
+      "revised_caption": "Nhiều người cứ mải tìm kiếm phong thủy tài lộc ở đâu xa xôi, nhưng ngẫm lại lời dạy về gia đạo mới thấy cái gốc nằm ngay trong nếp nhà mình. Từ sự hiền hòa của cha mẹ, vợ chồng đồng lòng cho tới sự ngăn nắp mỗi ngày, gia đạo có thuận thì mọi sự ngoài đời mới hanh thông.",
+      "revised_reasoning": "Dựa trên 5 lời răn về gia đạo trong ảnh, caption mở đầu bằng một quan sát thực tế (phong thủy đến từ cách đối đãi trong gia đình) thay vì bắt đầu bằng các công thức tuổi tác đã dùng ở các bài trước; đồng thời giữ văn phong trò chuyện nhẹ nhàng, khơi gợi sự đồng cảm tự nhiên.",
+      "revision_attempt_count": 1,
+      "revision_attempts": [
+        {
+          "sample_id": 2061,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 19333,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "revision_error_type": null
+    },
+    {
+      "category": "other",
+      "material_id": 2084,
+      "source_sha256": "0b2d01906874ad944814e552291cf48bef4a28081de41a635e246fb3489340e0",
+      "old_caption": "Thương con nhưng phải giữ khoảng cách mới mong an nhàn. 5 nguyên tắc ngỡ phũ phàng nhưng thấu tình đạt lý.",
+      "title": "Ngẫm #Doctrangsach #phattrienbanthan #viral #xuhuong",
+      "transcript": "Music",
+      "new_caption": "Nhiều người bảo về già cứ dồn hết cho con cái rồi nương tựa, nhưng giữ được 5 nguyên tắc này khéo cả nhà lại vui vẻ, êm ấm hơn. Nhất là điều 'ở gần chứ không ở cùng' và 'không can thiệp chuyện riêng'. Trong 5 điều này, mọi người thấy nguyên tắc nào là khó thực hiện nhất?",
+      "hashtags": [
+        "#giadinh",
+        "#tamsu",
+        "#nguoilon",
+        "#cuocsong"
+      ],
+      "reasoning": "Hình ảnh nổi bật với bảng 5 nguyên tắc của vợ chồng khi về già liên quan đến chuyện ở riêng, chăm cháu và ranh giới với con cái. Hướng tiếp cận dạng trò chuyện, tập trung vào góc nhìn thực tế và kết lại bằng câu hỏi mở để người xem dễ dàng bình luận chia sẻ quan điểm cá nhân.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2084,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 31811,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "other",
+      "material_id": 1976,
+      "source_sha256": "03198a1d28fa63423ec46a6325bc2b2411e4192aa487308d3fbef659b8b1dbc6",
+      "old_caption": "Mặc quần jean gò bó mãi cũng chán, đổi sang chất vải mềm mịn này vừa nhẹ tênh vừa tôn dáng gọn gàng suốt cả ngày.",
+      "title": "Quần dài nam, dáng tiêu chuẩn #quandainam ",
+      "transcript": "Sò cái chết thô là đã thích rồi đấy các bạn  Nó rất là mềm mịn nhé  Mày em này nó có giảnh tốt gửi kỳ luôn  Đường mai đẹp nữa  Không có một tí chí chí thứ nào  Cái bạn quần này là hàng nô địa chung  Cái mũi mũi cái phong quần gọn gàng  Thoải mái để mặt hàng ngày đi làm nhá  Cái tham khả cho những giọng quần này  Sói mặc siêu thích luôn nhạ  Siêu nhẹ luôn  Chết nhá  Còn giả này  Còn này  Kéo ra thả về là nó về phong  Chứ nó không bị bài nhá không hay là bị cò rút gì  Cái giảm mình mặc núc nặng cũng sẽ đẹp  Mặc quan trọng là khi cái phong này này  Cái mặc  Nó vừa gọn gàng vừa chay đuối điểm cho mình có  Tầm này mặc quần cắc kia, quần dinh nhở cũng chán  Cứ mặc quần này cho em này  Nó thoải mái lắm cái ngạch  Chết em này siêu nhẹ luôn đi  Nó mặc ngạy mà nó  Cô dùi dũi hết này  Nhìn rất là đẹp  Khi mình mặc mức đi nó không bị thô không bị cướng cái ngạch",
+      "new_caption": "Nhiều hôm đi làm chỉ muốn tìm chiếc quần nào nhẹ tênh, không bị cứng hay gò bó. Dáng quần này chất mềm mịn, co giãn thoải mái mà kéo ra thả vào vẫn giữ nguyên form, không lo bai dão. Cạp chun gọn gàng, mặc đi làm hay mặc hàng ngày đều tiện. Mọi người thích kiểu quần ôm hay dáng suông nhẹ thế này hơn?",
+      "hashtags": [
+        "#quandai",
+        "#quanongsuong",
+        "#quancapchun",
+        "#thoitrangcongso",
+        "#outfitdilam"
+      ],
+      "reasoning": "Visual hook cận cảnh bàn tay vuốt trực tiếp lên chất vải và chi tiết cạp chun giúp tạo cảm giác xúc giác chân thực ngay 3 giây đầu. Caption triển khai theo văn phong trò chuyện, đánh trúng tâm lý chán mặc đồ gò bó, làm nổi bật ưu điểm mềm nhẹ, co giãn giữ form và che khuyết điểm như trong video.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 1976,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 55844,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": true,
+      "niche": "unknown",
+      "gateway_enabled": true
+    },
+    {
+      "category": "other",
+      "material_id": 2034,
+      "source_sha256": "f91a2cde5cc1feaeac1f7b07694e8e11fae73b4b7010fe227fecc912ecd8d3b3",
+      "old_caption": "Ở đời sợ nhất không phải kẻ to mồm, mà là người im lặng ra tay. Ngẫm mà xem có đúng không?",
+      "title": "Ngẫm...#doctrangsach #phattrienbanthan #sachhay #viral #xuhuong",
+      "transcript": "",
+      "new_caption": "Đúng là ở đời, người hay nói to đôi khi lại chẳng hại ai, còn người lặng lẽ mới thật sự khó lường. Đọc mấy câu này thấy thấm thía: 'Ếch kêu to nhưng không cắn, rắn không kêu nhưng cắn chết người. Lòng biển tuy sâu đầy hải sản, lòng người tuy cạn lại lắm mưu mô.' Càng va vấp nhiều, ngẫm lại càng thấy đúng.",
+      "hashtags": [
+        "#baihoccuocsong",
+        "#trietlycuocsong",
+        "#suyngam",
+        "#longnguoi"
+      ],
+      "reasoning": "Hình ảnh truyền tải trực tiếp thông điệp triết lý nhân sinh qua phép đối lập quen thuộc giữa ếch và rắn, lòng biển và lòng người. Visual hook nằm ở câu so sánh tương phản kích thích sự tò mò ngay từ dòng đầu tiên. Caption khai thác giọng điệu trò chuyện, liên hệ thực tế đời sống để người đọc dễ đồng cảm và để lại suy ngẫm.",
+      "error_type": null,
+      "attempts": [
+        {
+          "sample_id": 2034,
+          "status": "ok",
+          "fail_reason": "none",
+          "provider": "9router",
+          "model": "gemini-3.8-flash-n",
+          "latency_ms": 20126,
+          "primary_request_error": "HTTP 400 chat_completions_disabled from primary Xingchi endpoint",
+          "fallback_used": true,
+          "provider_route": "configured 9Router fallback",
+          "provider_model": "gemini-3.8-flash",
+          "provider_requests_for_facade_call": 2
+        }
+      ],
+      "attempt_count": 1,
+      "target_page_present": false,
+      "niche": "unknown",
+      "gateway_enabled": true
+    }
+  ],
+  "generation_metadata": {
+    "facade_calls_total": 23,
+    "facade_call_cap": 30,
+    "sample_cap": 15,
+    "rewrite_cap_per_sample": 1,
+    "primary_endpoint": "HTTP 400 chat_completions_disabled on every sample",
+    "successful_route": "configured 9Router fallback, Gemini 3.8 Flash",
+    "rpa_browser_fallback": "blocked",
+    "main_database": "read-only SELECT transaction",
+    "live_settings_or_materials_changed": false,
+    "temporary_media_and_pipeline_state": "temporary directory removed",
+    "initial_facade_calls": 15,
+    "revision_facade_calls": 8,
+    "sample_count": 15,
+    "total_provider_fallbacks": 23,
+    "all_revision_calls_within_one_per_failed_sample": true,
+    "no_live_settings_or_materials_changed": true
+  }
+}
