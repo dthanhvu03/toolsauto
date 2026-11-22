@@ -1,0 +1,45 @@
+{
+  "at": "2026-11-21T16:40:35.030128+00:00",
+  "checks": {
+    "both_posted": true,
+    "db_matches": true,
+    "public_readback": true,
+    "spacing_pass": true,
+    "pm2_same": true,
+    "business_bots_same": true,
+    "growth_disabled": true,
+    "profile_unlocked": true
+  },
+  "spacing_seconds": 269.088708,
+  "rows": [
+    {
+      "slot": "threads-genz-20261121-a-keyboard",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/DgAq_INHSvP",
+      "text_matches": true,
+      "account": "us28qt"
+    },
+    {
+      "slot": "threads-genz-20261121-b-lunchbox",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/DgArf-lnagr",
+      "text_matches": true,
+      "account": "us28qt"
+    }
+  ],
+  "public": [
+    {
+      "post_url": "https://www.threads.com/@us28qt/post/DgAq_INHSvP",
+      "http_status": 200,
+      "caption_visible": true,
+      "permalink_matches": true
+    },
+    {
+      "post_url": "https://www.threads.com/@us28qt/post/DgArf-lnagr",
+      "http_status": 200,
+      "caption_visible": true,
+      "permalink_matches": true
+    }
+  ],
+  "public_submits": 2
+}

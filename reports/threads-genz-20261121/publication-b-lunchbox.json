@@ -1,0 +1,110 @@
+{
+  "plan": "PLAN-188",
+  "post_key": "b-lunchbox",
+  "slot": "threads-genz-20261121-b-lunchbox",
+  "caption": "ai còn dùng hộp cơm hâm nóng sau vài tháng mua về không?\n\nmuốn nghe nhất chuyện rửa hộp với mang đi mang về á. lúc xem review cứ để ý cơm nóng ngon, xong quên mất ngày nào cũng phải làm mấy việc đó.",
+  "sha256": "9bf3a0d9e2ff14aabbdafd2b2436c74e41b09b2b8553c12b8f3d83ca936a7a12",
+  "status": "posted",
+  "submit_called": true,
+  "attempt_started_at": "2026-11-21T16:39:08.430083+00:00",
+  "preflight": {
+    "at": "2026-11-21T16:39:07.798606+00:00",
+    "post_key": "b-lunchbox",
+    "label": "B — hộp cơm hâm nóng",
+    "caption": "ai còn dùng hộp cơm hâm nóng sau vài tháng mua về không?\n\nmuốn nghe nhất chuyện rửa hộp với mang đi mang về á. lúc xem review cứ để ý cơm nóng ngon, xong quên mất ngày nào cũng phải làm mấy việc đó.",
+    "sha256": "9bf3a0d9e2ff14aabbdafd2b2436c74e41b09b2b8553c12b8f3d83ca936a7a12",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 1,
+    "posts_last_24h": 1,
+    "last_post_at": "2026-11-21T16:34:55.889426+00:00",
+    "spacing_seconds": 251.90918,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "click_started_at": "2026-11-21T16:39:24.983677+00:00",
+  "preflight_before_submit": {
+    "at": "2026-11-21T16:39:24.171587+00:00",
+    "post_key": "b-lunchbox",
+    "label": "B — hộp cơm hâm nóng",
+    "caption": "ai còn dùng hộp cơm hâm nóng sau vài tháng mua về không?\n\nmuốn nghe nhất chuyện rửa hộp với mang đi mang về á. lúc xem review cứ để ý cơm nóng ngon, xong quên mất ngày nào cũng phải làm mấy việc đó.",
+    "sha256": "9bf3a0d9e2ff14aabbdafd2b2436c74e41b09b2b8553c12b8f3d83ca936a7a12",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 1,
+    "posts_last_24h": 1,
+    "last_post_at": "2026-11-21T16:34:55.889426+00:00",
+    "spacing_seconds": 268.282161,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "post_url": "https://www.threads.com/@us28qt/post/DgArf-lnagr",
+  "exact_caption_verified": true,
+  "finished_at": "2026-11-21T16:39:34.897105+00:00",
+  "growth_enabled_after": false,
+  "agents_after": {
+    "CapCut_Agent_Supervisor": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    }
+  },
+  "profile_unlocked_after": true
+}

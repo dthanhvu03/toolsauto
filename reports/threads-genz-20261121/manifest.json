@@ -1,0 +1,31 @@
+{
+  "plan": "PLAN-188",
+  "account": "us28qt",
+  "status": "published_and_verified",
+  "posts": [
+    {
+      "key": "a-keyboard",
+      "slot": "threads-genz-20261121-a-keyboard",
+      "label": "A — bàn phím cơ",
+      "text": "có bàn phím nào người gõ thấy vui mà người ngồi cạnh không muốn chuyển chỗ không =))))\n\nmấy bà mang phím cơ đi làm có từng bị nhắc chưa",
+      "sha256": "b9e4c9183427898681b7aa793768f396f2d8daf39763eeb71980704d5887a53a",
+      "length": 135,
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/DgAq_INHSvP",
+      "submitted_at": "2026-11-21T16:34:55.894969+00:00",
+      "exact_caption_verified": true
+    },
+    {
+      "key": "b-lunchbox",
+      "slot": "threads-genz-20261121-b-lunchbox",
+      "label": "B — hộp cơm hâm nóng",
+      "text": "ai còn dùng hộp cơm hâm nóng sau vài tháng mua về không?\n\nmuốn nghe nhất chuyện rửa hộp với mang đi mang về á. lúc xem review cứ để ý cơm nóng ngon, xong quên mất ngày nào cũng phải làm mấy việc đó.",
+      "sha256": "9bf3a0d9e2ff14aabbdafd2b2436c74e41b09b2b8553c12b8f3d83ca936a7a12",
+      "length": 198,
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/DgArf-lnagr",
+      "submitted_at": "2026-11-21T16:39:24.983677+00:00",
+      "exact_caption_verified": true
+    }
+  ]
+}

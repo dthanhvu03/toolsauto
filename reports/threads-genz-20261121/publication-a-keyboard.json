@@ -1,0 +1,110 @@
+{
+  "plan": "PLAN-188",
+  "post_key": "a-keyboard",
+  "slot": "threads-genz-20261121-a-keyboard",
+  "caption": "có bàn phím nào người gõ thấy vui mà người ngồi cạnh không muốn chuyển chỗ không =))))\n\nmấy bà mang phím cơ đi làm có từng bị nhắc chưa",
+  "sha256": "b9e4c9183427898681b7aa793768f396f2d8daf39763eeb71980704d5887a53a",
+  "status": "posted",
+  "submit_called": true,
+  "attempt_started_at": "2026-11-21T16:34:33.420849+00:00",
+  "preflight": {
+    "at": "2026-11-21T16:34:32.976511+00:00",
+    "post_key": "a-keyboard",
+    "label": "A — bàn phím cơ",
+    "caption": "có bàn phím nào người gõ thấy vui mà người ngồi cạnh không muốn chuyển chỗ không =))))\n\nmấy bà mang phím cơ đi làm có từng bị nhắc chưa",
+    "sha256": "b9e4c9183427898681b7aa793768f396f2d8daf39763eeb71980704d5887a53a",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 0,
+    "posts_last_24h": 0,
+    "last_post_at": "2026-11-20T07:33:01.489104+00:00",
+    "spacing_seconds": 118891.487407,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "click_started_at": "2026-11-21T16:34:55.894969+00:00",
+  "preflight_before_submit": {
+    "at": "2026-11-21T16:34:55.070093+00:00",
+    "post_key": "a-keyboard",
+    "label": "A — bàn phím cơ",
+    "caption": "có bàn phím nào người gõ thấy vui mà người ngồi cạnh không muốn chuyển chỗ không =))))\n\nmấy bà mang phím cơ đi làm có từng bị nhắc chưa",
+    "sha256": "b9e4c9183427898681b7aa793768f396f2d8daf39763eeb71980704d5887a53a",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 0,
+    "posts_last_24h": 0,
+    "last_post_at": "2026-11-20T07:33:01.489104+00:00",
+    "spacing_seconds": 118913.580989,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "post_url": "https://www.threads.com/@us28qt/post/DgAq_INHSvP",
+  "exact_caption_verified": true,
+  "finished_at": "2026-11-21T16:35:08.776421+00:00",
+  "growth_enabled_after": false,
+  "agents_after": {
+    "CapCut_Agent_Supervisor": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    }
+  },
+  "profile_unlocked_after": true
+}
