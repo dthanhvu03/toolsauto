@@ -170,6 +170,11 @@ module.exports = {
         USERPROFILE: "C:\\Users\\Admin",
         HOMEDRIVE: "C:",
         HOMEPATH: "\\Users\\Admin",
+        // PLAN-180 pilot P0: Owner «làm P0» → repo (rollback: legacy + bỏ listen/peers)
+        SHOPEE_BRIDGE_IMPLEMENTATION: "repo",
+        // Repo mặc định chỉ 127.0.0.1 — WSL Cashbot cần host Windows + peer IP exact
+        SHOPEE_BRIDGE_LISTEN_HOST: "192.168.112.1",
+        SHOPEE_BRIDGE_ALLOWED_PEERS: "192.168.112.133",
       },
     },
     // PLAN-111 — giọng đọc VieNeu trên GPU cho bước dub. Venv riêng (torch CUDA); tắt thì dub tự về edge-tts.
