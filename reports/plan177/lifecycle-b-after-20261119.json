@@ -1,0 +1,102 @@
+{
+  "at": "2026-11-19T16:35:20.766177+00:00",
+  "hashes": {
+    ".env": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+    "run_shopee_mcp.sh": "a52cd1ab750f84d3cf74437399e591b1fe1c23d85c892bea341aa4fad9114344",
+    "cashback_bot/config.py": "c69552f8a213cf3a18f079d95d4f19f909618e98a2975631e0430d8c310bd04c",
+    "cashback_bot/service.py": "7cf8a4b296eff6cbcacb0ec392998c1fad754ce9cfee0e36080b4b27f4502c19",
+    "cashback_bot/native_shopee_quote.py": "52e90410698eb0a6886c4bc35087434d7a576be2489e61644ff9c6e0d5883879",
+    "scripts/shopee_bridge/browser.mjs": "146ba7a177e4a64fd1fc7205d1b9731a1d3875a13ec7bf9702e2dfd39d1d4bfb",
+    "scripts/shopee_bridge/browser.test.mjs": "77702d2fda88df33c8662b1147065c9532fac70aaa1a4617daa2ee4ab2cc4043",
+    "scripts/shopee_bridge/index.mjs": "ae84b07fdc0b26437dd93775e03dabba5df92bd750360d132d61ec39e429cb11",
+    "scripts/shopee_bridge/server.mjs": "69724bbf02fe5a586b82ddafd2a9c8282f2e566c980bf5332630e33e2403353c"
+  },
+  "primary_configured": "(unset; default product_data)",
+  "bridge_implementation_configured": "(unset; default legacy)",
+  "bridge_url": "http://192.168.112.1:9224",
+  "wsl_ips": [
+    "192.168.112.133",
+    "100.102.93.11",
+    "fd7a:115c:a1e0::1601:5dd2"
+  ],
+  "pm2": [
+    {
+      "name": "Maintenance",
+      "pid": 973855,
+      "status": "online"
+    },
+    {
+      "name": "DB_Backup",
+      "pid": 0,
+      "status": "stopped"
+    },
+    {
+      "name": "Web_Dashboard",
+      "pid": 3668763,
+      "status": "online"
+    },
+    {
+      "name": "Studio_Heavy",
+      "pid": 776,
+      "status": "online"
+    },
+    {
+      "name": "Studio_Light",
+      "pid": 778,
+      "status": "online"
+    },
+    {
+      "name": "VieNeu_TTS",
+      "pid": 784,
+      "status": "online"
+    },
+    {
+      "name": "shopee-mcp",
+      "pid": 3285822,
+      "status": "online"
+    },
+    {
+      "name": "9Router_Gateway",
+      "pid": 798,
+      "status": "online"
+    },
+    {
+      "name": "Threads_Growth",
+      "pid": 3184112,
+      "status": "online"
+    },
+    {
+      "name": "CapCut_Agent_Supervisor",
+      "pid": 3186655,
+      "status": "online"
+    }
+  ],
+  "services": {
+    "cashback-bot": {
+      "MainPID": "1456507",
+      "ExecMainStartTimestampMonotonic": "519935658635",
+      "ActiveState": "active"
+    },
+    "cashback-zalo": {
+      "MainPID": "1456511",
+      "ExecMainStartTimestampMonotonic": "519935720593",
+      "ActiveState": "active"
+    }
+  },
+  "npm_sha256": "9f8e47f0a9f02d198a0390e193a29b3937a92df04e76937c5835b4bcab8eecbc",
+  "unchanged_files": {
+    ".env": true,
+    "run_shopee_mcp.sh": true,
+    "cashback_bot/config.py": true,
+    "cashback_bot/service.py": true,
+    "cashback_bot/native_shopee_quote.py": true,
+    "scripts/shopee_bridge/browser.mjs": true,
+    "scripts/shopee_bridge/browser.test.mjs": true,
+    "scripts/shopee_bridge/index.mjs": true,
+    "scripts/shopee_bridge/server.mjs": true
+  },
+  "all_baseline_files_unchanged": true,
+  "cashbot_services_unchanged": true,
+  "other_pm2_unchanged": true,
+  "npm_unchanged": true
+}

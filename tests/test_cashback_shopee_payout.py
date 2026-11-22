@@ -99,6 +99,11 @@ def _buttons(event) -> list[str]:
     return [b["callback_data"] for row in json.loads(event["reply_markup_json"])["inline_keyboard"] for b in row]
 
 
+def test_payout_status_0_la_moi_tao():
+    [payout] = shopee_payout.payouts({"data": {"list": [{**_bill(DAY_A, 100, 99), "payout_status": 0}]}})
+    assert payout.status_text() == "Mới tạo / chờ xử lý"
+
+
 def test_payout_status_la_ma_la_thi_hien_so():
     [payout] = shopee_payout.payouts({"data": {"list": [{**_bill(DAY_A, 100, 99), "payout_status": 7}]}})
     assert payout.status_text() == "mã 7 (bot chưa biết nghĩa)"

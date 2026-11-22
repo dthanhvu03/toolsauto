@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import json
 import threading
 import time
+from urllib.parse import urlencode
 
 import requests
 
+from cashback_bot.deadline_http import DeadlineHttpError, remaining, request_bytes
 from cashback_bot.shopee_url import ShopeeTarget, canonical_product_url, is_canonical_product_url
 
 _VALID_SOURCES = {"api", "db"}
@@ -178,17 +181,26 @@ class ProductDataClient:
         self._guard = threading.Lock()
         self._last_call_at = 0.0
 
-    def _respect_rate_limit(self) -> None:
+    def _respect_rate_limit(self, deadline: float | None = None) -> None:
         if self._min_interval_sec <= 0:
             return
-        with self._guard:
+        acquired = self._guard.acquire() if deadline is None else self._guard.acquire(timeout=remaining(deadline))
+        if not acquired:
+            raise DeadlineHttpError("timeout")
+        try:
             now = time.monotonic()
             wait = self._min_interval_sec - (now - self._last_call_at)
             if wait > 0:
+                if deadline is not None and wait >= remaining(deadline):
+                    raise DeadlineHttpError("timeout")
                 time.sleep(wait)
+            if deadline is not None:
+                remaining(deadline)
             self._last_call_at = time.monotonic()
+        finally:
+            self._guard.release()
 
-    def fetch(self, target: ShopeeTarget) -> dict:
+    def fetch(self, target: ShopeeTarget, *, deadline: float | None = None) -> dict:
         params: dict[str, str] = {}
         if target.item_id:
             params["item_id"] = str(target.item_id)
@@ -197,13 +209,30 @@ class ProductDataClient:
         else:
             raise ProductDataError("invalid_link")
         try:
-            self._respect_rate_limit()
+            call_end = None if deadline is None else min(deadline, time.monotonic() + self._timeout)
+            self._respect_rate_limit(call_end)
+            if call_end is not None:
+                status, raw = request_bytes(
+                    "GET", self._url + ("&" if "?" in self._url else "?") + urlencode(params),
+                    deadline=call_end, headers={"X-API-Key": self._api_key, "Accept": "application/json"},
+                )
+                if status != 200:
+                    raise ProductDataError("http_error")
+                try:
+                    payload = json.loads(raw)
+                except (ValueError, UnicodeError, RecursionError):
+                    raise ProductDataError("invalid_json") from None
+                if not isinstance(payload, dict):
+                    raise ProductDataError("invalid_json")
+                return payload
             response = requests.get(
                 self._url,
                 params=params,
                 headers={"X-API-Key": self._api_key},
                 timeout=self._timeout,
             )
+        except DeadlineHttpError as exc:
+            raise ProductDataError(exc.code) from None
         except requests.Timeout as exc:
             raise ProductDataError("timeout") from exc
         except requests.RequestException as exc:

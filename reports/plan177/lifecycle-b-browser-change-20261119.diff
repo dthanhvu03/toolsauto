@@ -1,0 +1,103 @@
+--- reports/plan177/lifecycle-b-browser-before-20261119.mjs	2026-11-19 16:27:33.695281309 +0000
++++ scripts/shopee_bridge/browser.mjs	2026-11-19 16:30:06.799518532 +0000
+@@ -10,7 +10,7 @@
+ }
+
+ export function createBrowserBackend({ session, getShopVouchersRaw, cookiePath, diagnostics }) {
+-  let portalPage, portalContext, ready = false, sequence = 0;
++  let portalPage, portalContext, ready = false, portalSettled = false, portalNavigation = 0, sequence = 0;
+   const active = new Set();
+
+   function measured(job, operation) {
+@@ -55,6 +55,7 @@
+     let cancellation;
+     const cancel = () => {
+       ready = false;
++      portalSettled = false;
+       portalPage = undefined;
+       portalContext = undefined;
+       job.mark('abort');
+@@ -71,6 +72,15 @@
+           // portalReady navigates any non-portal URL before reading its content.
+           portalPage = ctx.pages().find(existing => !existing.isClosed()) ?? await ctx.newPage();
+           portalContext = ctx;
++          portalSettled = false;
++          portalNavigation += 1;
++          const ownedPage = portalPage;
++          ownedPage.on('framenavigated', frame => {
++            if (portalPage === ownedPage && frame === ownedPage.mainFrame()) {
++              portalSettled = false;
++              portalNavigation += 1;
++            }
++          });
+         }
+         page = portalPage;
+         job.mark('page_ready');
+@@ -79,6 +89,7 @@
+       return await task(page);
+     } catch (error) {
+       ready = false;
++      portalSettled = false;
+       if (page) {
+         if (portalPage === page) { portalPage = undefined; portalContext = undefined; }
+         await page.close().catch(() => {});
+@@ -109,17 +120,40 @@
+     let validUrl = false;
+     try { const url = new URL(page.url()); validUrl = url.origin === PORTAL && url.pathname.startsWith('/offer/'); } catch {}
+     if (!validUrl) {
++      portalSettled = false;
+       job.mark('navigate_start');
+       await page.goto(`${PORTAL}/offer/product_offer`, {
+-        waitUntil: 'domcontentloaded', timeout: Math.max(1, Math.floor(job.remaining())),
++        waitUntil: 'domcontentloaded', timeout: Math.max(1, Math.min(25000, Math.floor(job.remaining()))),
+       });
+-      await page.waitForLoadState('networkidle', { timeout: Math.max(1, Math.min(2500, Math.floor(job.remaining()))) }).catch(() => {});
+       job.mark('navigate_done');
+     }
+     check(job);
++    const navigation = portalNavigation;
++    // Match the successful probe once for this owned page/context. Reuse the
++    // settled document so warm quotes keep their original request deadline.
++    if (!portalSettled) {
++      job.mark('network_idle_start');
++      try {
++        await page.waitForLoadState('networkidle', { timeout: Math.max(1, Math.min(8000, Math.floor(job.remaining()))) });
++        job.mark('network_idle_done');
++      } catch (error) {
++        if (error?.name !== 'TimeoutError') throw error;
++        job.mark('network_idle_timeout');
++      }
++      check(job);
++      const settleMs = 2500 + Math.random() * 1500;
++      if (job.remaining() < settleMs) throw new BridgeError('timeout', 504);
++      job.mark('settle_start');
++      await page.waitForTimeout(settleMs);
++      check(job);
++      job.mark('settle_done');
++    }
+     const validPage = await page.evaluate(() => location.origin === 'https://affiliate.shopee.vn'
+       && location.pathname.startsWith('/offer/') && ['interactive', 'complete'].includes(document.readyState));
+     if (!validPage) throw new BridgeError('auth_required');
++    check(job);
++    if (navigation !== portalNavigation) throw new BridgeError('session_or_transport_error', 502);
++    portalSettled = true;
+     job.mark('portal_ready');
+   }
+
+@@ -127,8 +161,6 @@
+     await portalReady(page, job);
+     check(job);
+     job.mark('evaluate_start');
+-    await page.waitForTimeout(Math.min(250 + Math.random() * 250, job.remaining()));
+-    check(job);
+     const result = await page.evaluate(async ({ request, timeout }) => {
+       if (location.origin !== 'https://affiliate.shopee.vn' || /\/(?:auth|login|verify)(?:\/|$)/.test(location.pathname)) {
+         return { error: 'auth_required' };
+@@ -233,6 +265,7 @@
+     },
+     async close() {
+       ready = false;
++      portalSettled = false;
+       await Promise.allSettled([...active]);
+       try { if (portalPage) await portalPage.close(); } finally {
+         portalPage = undefined;

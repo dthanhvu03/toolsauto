@@ -548,14 +548,15 @@ def test_zalo_digest_khong_muc_nao_dat_van_lay_muc_tot_nhat():
     assert len(sale_relay._A_HREF.findall(out)) == 6 and "6/8" in out
 
 
-def test_khach_zalo_nhan_ban_gon_telegram_nhan_du(tmp_path):
+def test_enqueue_bo_qua_zalo_chi_gui_telegram(tmp_path):
+    """2026-11-20: deal/mã không blast DM Zalo — chỉ Telegram (+ kênh ZT riêng)."""
     from cashback_bot.db import TrackingRepository
 
     repo = TrackingRepository(str(tmp_path / "c.sqlite"))
     repo.migrate()
     with patch.object(sale_relay, "post_html", return_value=_full_ma_post()):
-        assert sale_relay.enqueue_for_subscribers(repo, 7, "x", [], [111, -5]) == 2
+        assert sale_relay.enqueue_for_subscribers(repo, 7, "x", [], [111, -5]) == 1
     with repo.connect() as conn:
         rows = dict(conn.execute("SELECT chat_id, message_html FROM admin_notifications"))
+    assert list(rows) == [111]
     assert rows[111] == _full_ma_post()
-    assert len(sale_relay._A_HREF.findall(rows[-5])) == 6 and "Bản gọn" in rows[-5]

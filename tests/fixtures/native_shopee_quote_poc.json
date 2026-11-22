@@ -1,0 +1,261 @@
+{
+  "source": "reports/plan177/portal-detail-matched-20261119.jsonl; names/currency/status synthetic because POC captures did not persist product metadata",
+  "samples": [
+    {
+      "label": "POC-1",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "1206203638",
+          "requested_item_id": "42359593676",
+          "shop_id": "1206203638",
+          "item_id": "42359593676",
+          "name": "POC product 1",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "135400000000",
+          "price_min_raw": "135400000000",
+          "price_max_raw": "153900000000",
+          "seller_rate_raw": "7000",
+          "platform_rate_raw": "2500",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:56:47.947Z"
+        }
+      },
+      "expected_price_vnd": 1354000,
+      "expected_sure_vnd": 128630,
+      "default_as_total": 128630,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-2",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "462952014",
+          "requested_item_id": "47963173483",
+          "shop_id": "462952014",
+          "item_id": "47963173483",
+          "name": "POC product 2",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "6000000000",
+          "price_min_raw": "6000000000",
+          "price_max_raw": "6000000000",
+          "seller_rate_raw": "7000",
+          "platform_rate_raw": "2500",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:56:50.773Z"
+        }
+      },
+      "expected_price_vnd": 60000,
+      "expected_sure_vnd": 5700,
+      "default_as_total": 5700,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-3",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "1020571402",
+          "requested_item_id": "22485372686",
+          "shop_id": "1020571402",
+          "item_id": "22485372686",
+          "name": "POC product 3",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "16200000000",
+          "price_min_raw": "16200000000",
+          "price_max_raw": "64800000000",
+          "seller_rate_raw": "10000",
+          "platform_rate_raw": "2500",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:57:00.933Z"
+        }
+      },
+      "expected_price_vnd": 162000,
+      "expected_sure_vnd": 20250,
+      "default_as_total": 20250,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-4",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "15106804",
+          "requested_item_id": "56951779910",
+          "shop_id": "15106804",
+          "item_id": "56951779910",
+          "name": "POC product 4",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "28400000000",
+          "price_min_raw": "28400000000",
+          "price_max_raw": "28400000000",
+          "seller_rate_raw": "6000",
+          "platform_rate_raw": "7000",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:57:03.386Z"
+        }
+      },
+      "expected_price_vnd": 284000,
+      "expected_sure_vnd": 24140,
+      "default_as_total": 36920,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-5",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "344893921",
+          "requested_item_id": "48720020072",
+          "shop_id": "344893921",
+          "item_id": "48720020072",
+          "name": "POC product 5",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "15900000000",
+          "price_min_raw": "15900000000",
+          "price_max_raw": "15900000000",
+          "seller_rate_raw": "10000",
+          "platform_rate_raw": "7000",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:57:19.604Z"
+        }
+      },
+      "expected_price_vnd": 159000,
+      "expected_sure_vnd": 19875,
+      "default_as_total": 27030,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-6",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "1831890222",
+          "requested_item_id": "49671663314",
+          "shop_id": "1831890222",
+          "item_id": "49671663314",
+          "name": "POC product 6",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "34800000000",
+          "price_min_raw": "34800000000",
+          "price_max_raw": "34800000000",
+          "seller_rate_raw": "7000",
+          "platform_rate_raw": "7000",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1794545518,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T09:57:21.380Z"
+        }
+      },
+      "expected_price_vnd": 348000,
+      "expected_sure_vnd": 33060,
+      "default_as_total": 48720,
+      "is_xtra": true
+    },
+    {
+      "label": "POC-7",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "1175585681",
+          "requested_item_id": "54321049804",
+          "shop_id": "1175585681",
+          "item_id": "54321049804",
+          "name": "POC product 7",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "13847500000",
+          "price_min_raw": "13847500000",
+          "price_max_raw": "13847500000",
+          "seller_rate_raw": "0",
+          "platform_rate_raw": "7000",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 0,
+          "fetched_at": "2026-11-19T10:02:20.116Z"
+        }
+      },
+      "expected_price_vnd": 138475,
+      "expected_sure_vnd": 3461,
+      "default_as_total": 9693,
+      "is_xtra": false
+    },
+    {
+      "label": "POC-8",
+      "dto": {
+        "success": true,
+        "quote": {
+          "schema_version": 1,
+          "source": "native_shopee",
+          "context": "social_media_shop_existing",
+          "requested_shop_id": "994756706",
+          "requested_item_id": "40009234555",
+          "shop_id": "994756706",
+          "item_id": "40009234555",
+          "name": "POC product 8",
+          "currency": "VND",
+          "status": 1,
+          "item_status": "normal",
+          "price_raw": "16750000000",
+          "price_min_raw": "16750000000",
+          "price_max_raw": "16750000000",
+          "seller_rate_raw": "8000",
+          "platform_rate_raw": "7000",
+          "platform_cap_raw": "4000000000",
+          "period_start_time": 1793466000,
+          "period_end_time": 32503651199,
+          "fetched_at": "2026-11-19T10:08:07.002Z"
+        }
+      },
+      "expected_price_vnd": 167500,
+      "expected_sure_vnd": 17587,
+      "default_as_total": 25125,
+      "is_xtra": true
+    }
+  ]
+}

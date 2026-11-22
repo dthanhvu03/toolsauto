@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-19T17:04:47.511549+00:00",
+  "phase": "p0_live",
+  "health": {
+    "status": "ok",
+    "server": "shopee-mcp",
+    "version": "0.3.0",
+    "implementation": "toolsauto",
+    "quote_schema": 1
+  },
+  "shortlink": {
+    "http": 200,
+    "success": true,
+    "error": null,
+    "host": "s.shopee.vn",
+    "elapsed_sec": 0.285
+  },
+  "product_quote_primary": "product_data",
+  "listen_host": "192.168.112.1",
+  "allowed_peers": "192.168.112.133",
+  "launcher_fix": "WSLENV forward listen/peers to Win32 node",
+  "cashbot_restarted": false
+}

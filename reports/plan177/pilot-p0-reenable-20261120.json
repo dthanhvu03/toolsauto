@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-20T01:09:15.251035+00:00",
+  "event": "p0_reenabled",
+  "health": {
+    "status": "ok",
+    "server": "shopee-mcp",
+    "version": "0.3.0",
+    "implementation": "toolsauto",
+    "quote_schema": 1
+  },
+  "shortlink": {
+    "success": true,
+    "host": "s.shopee.vn",
+    "error": null
+  },
+  "pm2_saved": true,
+  "primary_expected": "product_data"
+}

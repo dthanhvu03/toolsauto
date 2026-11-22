@@ -1,0 +1,62 @@
+{
+  "at": "2026-11-19T12:41:25.198Z",
+  "mode": "bounded_poc_not_production_deploy",
+  "calls": [],
+  "stages": [
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "start",
+      "elapsed_ms": 0
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_start",
+      "elapsed_ms": 51
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_done",
+      "elapsed_ms": 8753
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cookies_sync_done",
+      "elapsed_ms": 13364
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_start",
+      "elapsed_ms": 13678
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_ready",
+      "elapsed_ms": 13919
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "navigate_start",
+      "elapsed_ms": 13984
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "abort",
+      "elapsed_ms": 45063
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cleanup_done",
+      "elapsed_ms": 61396
+    }
+  ],
+  "error": "timeout"
+}

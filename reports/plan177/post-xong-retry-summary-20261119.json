@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-19T15:58:19.574Z",
+  "plan": "PLAN-177",
+  "event": "post_owner_xong_retry",
+  "shortlink": {
+    "success": true,
+    "host": "s.shopee.vn",
+    "sub_id": "PLAN177POSTXONG"
+  },
+  "detail": {
+    "item_id": "54321049804",
+    "shop_id": "1175585681",
+    "http": 200,
+    "code": 0,
+    "at": "2026-11-19T15:58:19.574Z",
+    "seller": "0%",
+    "shopee": "7%",
+    "default": "7%",
+    "cap": "4000000000",
+    "price_raw": "13847500000"
+  },
+  "price_raw_present": true,
+  "ids_exact": true,
+  "verdict": "portal_detail_ok"
+}

@@ -58,8 +58,12 @@ def record(
     provenance: str = CAPTURED,
     note: str | None = None,
     created_at: str | None = None,
+    quote_source: str | None = None,
 ) -> dict:
-    """Dòng link_policy_snapshots, chưa có link_id."""
+    """Dòng link_policy_snapshots, chưa có link_id.
+
+    quote_source: product_data | native_shopee | degraded_unquoted (PLAN-177).
+    """
     return {
         "schema_version": SCHEMA_VERSION,
         "provenance": provenance,
@@ -77,7 +81,7 @@ def record(
         "resolved_at": policy.resolved_at,
         "quote_commission_vnd": None if quote is None else quote.commission_vnd,
         "quote_cashback_vnd": None if quote is None else quote.cashback_vnd,
-        "quote_source": QUOTE_SOURCE,
+        "quote_source": quote_source or QUOTE_SOURCE,
         "note": note,
         "created_at": created_at or _now(),
     }

@@ -66,5 +66,14 @@ export HOMEPATH='\Users\Admin'
 export SHOPEE_PROFILE_DIR="$PROFILE_WIN"
 export SHOPEE_DOMAIN='shopee.vn'
 
+# Repo bridge is opt-in until its independent rollout/review gates pass.
+if [[ "${SHOPEE_BRIDGE_IMPLEMENTATION:-legacy}" == "repo" ]]; then
+  SCRIPT="$(wslpath -w "$ROOT/scripts/shopee_bridge/index.mjs")"
+fi
+
+# Win32 node.exe does not inherit arbitrary WSL/PM2 env; WSLENV forwards listen/peers.
+# PLAN-180 P0: required so Cashbot in WSL can reach repo bridge on 192.168.112.1.
+export WSLENV="SHOPEE_PROFILE_DIR:SHOPEE_DOMAIN:USERPROFILE:HOMEDRIVE:HOMEPATH:SHOPEE_BRIDGE_LISTEN_HOST:SHOPEE_BRIDGE_ALLOWED_PEERS:SHOPEE_BRIDGE_PORT:SHOPEE_BRIDGE_IMPLEMENTATION${WSLENV:+:${WSLENV}}"
+
 # MCP stdio exits on EOF; PM2 does not keep stdin open.
 sleep infinity | "$NODE" "$SCRIPT"

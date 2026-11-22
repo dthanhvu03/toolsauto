@@ -1,0 +1,200 @@
+TAP version 13
+# Subtest: bind defaults loopback; non-loopback requires exact explicit peers
+ok 1 - bind defaults loopback; non-loopback requires exact explicit peers
+  ---
+  duration_ms: 14.3919
+  ...
+# Subtest: health preserves legacy fields without browser work or CORS grant
+ok 2 - health preserves legacy fields without browser work or CORS grant
+  ---
+  duration_ms: 126.8768
+  ...
+# Subtest: quote endpoint validates identities and carries exact IDs
+ok 3 - quote endpoint validates identities and carries exact IDs
+  ---
+  duration_ms: 42.1704
+  ...
+# Subtest: GET and POST shortlink preserve URL and sub_id contracts
+ok 4 - GET and POST shortlink preserve URL and sub_id contracts
+  ---
+  duration_ms: 36.5166
+  ...
+# Subtest: shortlink rejects arbitrary origins and malformed URLs before browser
+ok 5 - shortlink rejects arbitrary origins and malformed URLs before browser
+  ---
+  duration_ms: 22.5678
+  ...
+# Subtest: shortlink preserves supported shop, voucher, campaign and short Shopee pages
+ok 6 - shortlink preserves supported shop, voucher, campaign and short Shopee pages
+  ---
+  duration_ms: 48.8899
+  ...
+# Subtest: browser origins, cross-site requests and rebinding hostnames are denied
+ok 7 - browser origins, cross-site requests and rebinding hostnames are denied
+  ---
+  duration_ms: 23.4991
+  ...
+# Subtest: unlisted peers cannot use health or browser routes
+ok 8 - unlisted peers cannot use health or browser routes
+  ---
+  duration_ms: 24.1899
+  ...
+# Subtest: voucher field allowlist and one-hour cache preserve contract
+ok 9 - voucher field allowlist and one-hour cache preserve contract
+  ---
+  duration_ms: 16.2347
+  ...
+# Subtest: request body and timeout parameters are bounded
+ok 10 - request body and timeout parameters are bounded
+  ---
+  duration_ms: 26.4544
+  ...
+# Subtest: unexpected dependency errors never disclose transport messages
+ok 11 - unexpected dependency errors never disclose transport messages
+  ---
+  duration_ms: 11.5062
+  ...
+# Subtest: expired running job keeps queue until old work has drained
+ok 12 - expired running job keeps queue until old work has drained
+  ---
+  duration_ms: 45.0164
+  ...
+# Subtest: queue wait counts in caller deadline and expired jobs never run
+ok 13 - queue wait counts in caller deadline and expired jobs never run
+  ---
+  duration_ms: 25.749
+  ...
+# Subtest: HTTP timeout aborts active work and the next browser route waits
+ok 14 - HTTP timeout aborts active work and the next browser route waits
+  ---
+  duration_ms: 56.9435
+  ...
+# Subtest: real page callback fetches fixed detail endpoint with in-page auth; DTO excludes auth
+ok 15 - real page callback fetches fixed detail endpoint with in-page auth; DTO excludes auth
+  ---
+  duration_ms: 55.6246
+  ...
+# Subtest: real page callback builds known shortlink GraphQL with original URL and exact subId
+ok 16 - real page callback builds known shortlink GraphQL with original URL and exact subId
+  ---
+  duration_ms: 4.7486
+  ...
+# Subtest: auth redirect and auth HTTP errors fail closed, all owned pages close
+ok 17 - auth redirect and auth HTTP errors fail closed, all owned pages close
+  ---
+  duration_ms: 8.7702
+  ...
+# Subtest: response byte limit, invalid JSON and transport failures do not export raw text
+ok 18 - response byte limit, invalid JSON and transport failures do not export raw text
+  ---
+  duration_ms: 14.6364
+  ...
+# Subtest: shortlink response must have the fixed short Shopee origin
+ok 19 - shortlink response must have the fixed short Shopee origin
+  ---
+  duration_ms: 6.761
+  ...
+# Subtest: active timeout closes singleton context and drains cleanup before another browser route
+ok 20 - active timeout closes singleton context and drains cleanup before another browser route
+  ---
+  duration_ms: 42.2357
+  ...
+# Subtest: prepare starts false and repeated quotes reuse one ready portal page without navigation
+ok 21 - prepare starts false and repeated quotes reuse one ready portal page without navigation
+  ---
+  duration_ms: 11.4799
+  ...
+# Subtest: failed prepare never marks ready and owned page is cleaned
+ok 22 - failed prepare never marks ready and owned page is cleaned
+  ---
+  duration_ms: 3.6521
+  ...
+# Subtest: prepare adopts initial persistent page, navigates only fixed portal, and never opens new target
+ok 23 - prepare adopts initial persistent page, navigates only fixed portal, and never opens new target
+  ---
+  duration_ms: 12.8799
+  ...
+# Subtest: timeout while context is being created retains queue until creation and close drain
+ok 24 - timeout while context is being created retains queue until creation and close drain
+  ---
+  duration_ms: 48.0638
+  ...
+# Subtest: prepare timeout is bounded and does not release ownership before launch drain
+ok 25 - prepare timeout is bounded and does not release ownership before launch drain
+  ---
+  duration_ms: 27.2797
+  ...
+# Subtest: prepare startup budget accepts bounded explicit test values and rejects over 45 seconds
+ok 26 - prepare startup budget accepts bounded explicit test values and rejects over 45 seconds
+  ---
+  duration_ms: 2.273
+  ...
+# Subtest: listener creation is ordered after prepare; failure closes backend without listener
+ok 27 - listener creation is ordered after prepare; failure closes backend without listener
+  ---
+  duration_ms: 0.896
+  ...
+# Subtest: lifecycle B waits for DOM, network idle and settling before readiness or any portal fetch
+ok 28 - lifecycle B waits for DOM, network idle and settling before readiness or any portal fetch
+  ---
+  duration_ms: 10.502
+  ...
+# Subtest: lifecycle B also settles a pre-existing portal tab and shortlink without navigating
+ok 29 - lifecycle B also settles a pre-existing portal tab and shortlink without navigating
+  ---
+  duration_ms: 4.0841
+  ...
+# Subtest: network idle timeout still settles but transport failure never reaches portal fetch
+ok 30 - network idle timeout still settles but transport failure never reaches portal fetch
+  ---
+  duration_ms: 4.5709
+  ...
+# Subtest: expired readiness budget never fetches or publishes ready after settling
+ok 31 - expired readiness budget never fetches or publishes ready after settling
+  ---
+  duration_ms: 1.1238
+  ...
+# Subtest: navigation invalidates settled page and an insufficient budget never shortens lifecycle B
+ok 32 - navigation invalidates settled page and an insufficient budget never shortens lifecycle B
+  ---
+  duration_ms: 2.1528
+  ...
+# Subtest: main-frame navigation during settling or validation never caches a fresh document as ready
+ok 33 - main-frame navigation during settling or validation never caches a fresh document as ready
+  ---
+  duration_ms: 4.6245
+  ...
+# Subtest: DTO selects verified context, preserves fixed point and excludes auth/raw
+ok 34 - DTO selects verified context, preserves fixed point and excludes auth/raw
+  ---
+  duration_ms: 3.9804
+  ...
+# Subtest: exact item, card item and shop must all match requested identities
+ok 35 - exact item, card item and shop must all match requested identities
+  ---
+  duration_ms: 3.4525
+  ...
+# Subtest: explicit zero seller is valid; missing context split/cap is not
+ok 36 - explicit zero seller is valid; missing context split/cap is not
+  ---
+  duration_ms: 1.1722
+  ...
+# Subtest: only VND normal active products with bounded coherent prices
+ok 37 - only VND normal active products with bounded coherent prices
+  ---
+  duration_ms: 1.1947
+  ...
+# Subtest: eight real POC rate/cap/price/identity fixtures survive the DTO boundary
+ok 38 - eight real POC rate/cap/price/identity fixtures survive the DTO boundary
+  ---
+  duration_ms: 19.8315
+  ...
+1..38
+# tests 38
+# suites 0
+# pass 38
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 722.884

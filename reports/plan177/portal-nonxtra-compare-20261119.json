@@ -1,0 +1,39 @@
+{
+  "plan": "PLAN-177",
+  "at": "2026-11-19T10:04:24.430591+00:00",
+  "parse": "Decimal percent; Shopee price/cap scale 100000; amounts floor whole VND",
+  "input": "portal-nonxtra-live-20261119.jsonl",
+  "samples": [
+    {
+      "item_id": "54321049804",
+      "shop_id": "1175585681",
+      "portal_fetched_at": "2026-11-19T10:02:20.116Z",
+      "price_vnd": 138475,
+      "seller_percent": "0",
+      "default_percent": "7",
+      "shopee_percent": "7",
+      "social_media_cap_vnd": 40000,
+      "A": 9693,
+      "B": 3461,
+      "C": 3461,
+      "mapped_sure_vnd": 3461,
+      "pd": {
+        "fetched_at": "2026-11-19T10:04:24.430446+00:00",
+        "last_update": "2026-11-19T09:21:25+00:00",
+        "ids_exact": true,
+        "price_vnd": 138475,
+        "commission_vnd": 9693,
+        "seller_commission_vnd": 0,
+        "shopee_commission_vnd": 9693,
+        "sure_commission_vnd": 3461,
+        "is_xtra": false,
+        "is_capped": false,
+        "source": "db"
+      },
+      "price_delta_vnd": 0,
+      "delta_A": 6232,
+      "delta_B": 0,
+      "delta_mapped_sure": 0
+    }
+  ]
+}

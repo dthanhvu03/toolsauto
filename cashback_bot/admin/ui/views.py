@@ -104,11 +104,15 @@ def money_todo(snap) -> list[str]:
     if snap.customers.open_requests:
         items.append(f"📤 {snap.customers.open_requests} yêu cầu rút cần xử lý (👛 Ví khách)")
     for p in snap.upcoming:
+        # Nhiều lần chi cùng tháng → luôn kèm #batch + đuôi payment_ref (đỡ nhầm «Tháng 11»).
+        ref = p.payment_ref or ""
+        tail = f"…{ref[-6:]}" if len(ref) > 6 else ref
+        label = f"#{p.batch_id} · {html.escape(p.period)}" + (f" · {html.escape(tail)}" if tail else "")
         if p.received_vnd is None and p.payout_vnd is not None:
-            items.append(f"🏦 Kỳ {html.escape(p.period)}: tiền về {format_vnd(p.payout_vnd)} thì xác nhận "
+            items.append(f"🏦 Kỳ {label}: tiền về {format_vnd(p.payout_vnd)} thì xác nhận "
                          "(💳 Kỳ thanh toán Shopee)")
         elif p.received_vnd is not None:
-            items.append(f"🔍 Kỳ {html.escape(p.period)}: đã nhận tiền nhưng chưa khớp (💳 Kỳ thanh toán Shopee)")
+            items.append(f"🔍 Kỳ {label}: đã nhận tiền nhưng chưa khớp (💳 Kỳ thanh toán Shopee)")
     if snap.open_adjustments:
         items.append(f"🔁 {snap.open_adjustments} điều chỉnh chưa đóng (💳 Kỳ thanh toán Shopee → 🔍)")
     return items
@@ -123,7 +127,10 @@ def money_text(snap) -> str:
         lines.append(f"• {OWNER_REAL}: chưa có kỳ Shopee nào khớp")
     for p in snap.upcoming:
         if p.owner_vnd is not None:
-            lines.append(f"• {OWNER_SOON}: ~{format_vnd(p.owner_vnd)} (kỳ {html.escape(p.period)})")
+            ref = p.payment_ref or ""
+            tail = f"…{ref[-6:]}" if len(ref) > 6 else ref
+            label = f"#{p.batch_id} · {html.escape(p.period)}" + (f" · {html.escape(tail)}" if tail else "")
+            lines.append(f"• {OWNER_SOON}: ~{format_vnd(p.owner_vnd)} (kỳ {label})")
     lines += ["", "👛 <b>Tiền hoàn của khách</b>", *customer_money_lines(snap.customers, snap.fund)]
     todo = money_todo(snap)
     lines += ["", "📌 <b>Cần làm</b>", *(f"• {t}" for t in todo)] if todo else ["", "✅ Không có việc tiền cần làm."]

@@ -96,7 +96,7 @@ def test_service_uses_bridge_short_then_affipad(tmp_path, monkeypatch):
     """Owner-confirm path: s.shopee.vn/XXXX → AffiPad → s.shopee.vn/XXXX?Meta."""
     monkeypatch.setattr(
         "cashback_bot.service.shorten_shopee_url",
-        lambda url, sub_id="", timeout=6.0: "https://s.shopee.vn/AAInOGcctN",
+        lambda *a, **k: "https://s.shopee.vn/AAInOGcctN",
     )
     seen = []
 

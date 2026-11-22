@@ -36,9 +36,9 @@ PAUSE_SECONDS = 1.5
 ACTOR = "shopee_sync"
 # Thuế Shopee giữ: TNCN 5% + VAT 5% trên hoa hồng trước phí, mỗi khoản làm tròn (đối chiếu kỳ 29/10/2026).
 TAX_PERCENT = 5
-# payout_status trên hoá đơn: kỳ 29/10/2026 trang web ghi «Đang xử lý» thì API trả 2. Mã khác chưa gặp nên hiện số.
-# Đã chuyển hay chưa thì xem payment_completed_time.
-SHOPEE_STATUS = {2: "Đang xử lý"}
+# payout_status trên hoá đơn: 0 = mới tạo / chờ xử lý (kỳ 16–19/11/2026); trang web «Đang xử lý» → API 2.
+# Mã khác chưa gặp nên hiện số. Đã chuyển hay chưa thì xem payment_completed_time.
+SHOPEE_STATUS = {0: "Mới tạo / chờ xử lý", 2: "Đang xử lý"}
 CONFIRM = "c:sm:bok"
 OTHER = "c:sm:box"
 

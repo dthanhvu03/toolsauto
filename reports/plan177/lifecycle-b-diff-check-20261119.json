@@ -1,0 +1,36 @@
+{
+  "all_pass": true,
+  "exit_1_meaning": "no-index reports file differences from /dev/null; empty check output means no whitespace warnings",
+  "checks": [
+    {
+      "file": "scripts/shopee_bridge/browser.mjs",
+      "exit": 1,
+      "output": ""
+    },
+    {
+      "file": "scripts/shopee_bridge/browser.test.mjs",
+      "exit": 1,
+      "output": ""
+    },
+    {
+      "file": "agents/plans/active/PLAN-177-shopee-native-product-quote.md",
+      "exit": 1,
+      "output": ""
+    },
+    {
+      "file": "agents/tasks/TASK-063-shopee-native-product-quote.md",
+      "exit": 1,
+      "output": ""
+    },
+    {
+      "file": ".comms/handoffs/cursor-to-ag/TASK-plan177-repo-bridge-native-smoke.md",
+      "exit": 1,
+      "output": ""
+    },
+    {
+      "file": "reports/plan177/LIFECYCLE-B-NATIVE-SMOKE-20261119.md",
+      "exit": 1,
+      "output": ""
+    }
+  ]
+}

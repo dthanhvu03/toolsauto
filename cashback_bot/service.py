@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import re
 import sqlite3
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -17,7 +20,9 @@ from cashback_bot.admin.handlers import tamly
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.affipad import AffiPadClient, pick_tracking_preset
+from cashback_bot.alt_shopee_link import HttpAltShopeeLinkClient, NullAltShopeeLinkClient
 from cashback_bot.config import Settings
+from cashback_bot.native_shopee_quote import NativeProductQuote, NativeQuoteError, NativeShopeeQuoteClient
 from cashback_bot.shopee_shortener import shorten_shopee_url
 from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import deals, membership, order_notify, payouts, policy_snapshot, referral, shop_voucher, upsell, voucher, watchlist
@@ -66,6 +71,7 @@ from cashback_bot.messages import (
     invalid_link_reply,
     page_reply,
     rate_limited_reply,
+    render_degraded_unquoted,
     render_success,
     render_success_v12,
     same_item_voucher_reply,
@@ -78,6 +84,7 @@ from cashback_bot.messages import (
 from cashback_bot.price_watch import PriceHistoryClient
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
+from cashback_bot.shopee_resolve import ResolveError, from_target, resolve_to_product
 from cashback_bot.shopee_url import food_url, is_shopee_food_link, parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.wallet import BANKS, BankAccount, Split, Transition, Wallet, parse_bank_text
@@ -115,6 +122,20 @@ def start_source(text: str) -> str | None:
     return code if re.fullmatch(r"[a-z0-9_]{1,32}", code) else None
 
 
+@lru_cache(maxsize=128)
+def _takes_deadline(function) -> bool:
+    """Adapt injected legacy fakes explicitly; never catch a real call's TypeError."""
+    parameters = inspect.signature(function).parameters
+    return "deadline" in parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values())
+
+
+def _with_deadline(method, *args, deadline: float, **kwargs):
+    function = getattr(method, "__func__", method)
+    if _takes_deadline(function):
+        return method(*args, deadline=deadline, **kwargs)
+    return method(*args, **kwargs)
+
+
 _NOT_FOUND_CODES = {"not_found"}
 # Đơn cũ hơn mức này lần đầu bot thấy thì không báo "có đơn mới" (tránh nhắn dồn đơn cũ).
 NEW_ORDER_NOTICE_WINDOW = timedelta(days=7)
@@ -132,10 +153,14 @@ class CashbackService:
         client: ProductDataClient,
         admin_notifier: "AdminNotifier | None" = None,
         riohub: RioHubClient | None = None,
+        native_client: NativeShopeeQuoteClient | None = None,
     ):
         self.settings = settings
         self.repo = repo
         self.client = client
+        self.native_client = native_client if native_client is not None else (
+            NativeShopeeQuoteClient() if settings.product_quote_primary == "native" else None
+        )
         self.admin_notifier = admin_notifier
         # PLAN-085: link TikTok Shop qua RioHub; None khi .env chưa có khoá.
         tiktok_configured = bool(settings.riohub_api_key and settings.riohub_creator_username)
@@ -154,6 +179,12 @@ class CashbackService:
         self.affipad: AffiPadClient | None = None
         if settings.affipad_fb_voucher_enabled and settings.affipad_api_key and settings.affipad_tool_id:
             self.affipad = AffiPadClient(settings.affipad_api_key, settings.affipad_tool_id)
+        # PLAN-177: fallback shopee-link.php — mặc định tắt; test gắn mock. Live chỉ sau Owner Gate A.
+        self.alt_shopee_link = (
+            HttpAltShopeeLinkClient(settings.api_key, settings.alt_shopee_link_url)
+            if settings.alt_shopee_link_fallback
+            else NullAltShopeeLinkClient()
+        )
         # Báo giảm giá món khách từng xem (price_watch): cùng khoá AddLiveTag với báo giá. Chỉ bot Telegram chạy lượt.
         self.price_history = PriceHistoryClient(settings.api_key)
         self.wallet = Wallet(repo)
@@ -752,16 +783,63 @@ class CashbackService:
         gate = self.desk.terms_gate(telegram_user_id, moment)
         if gate is not None:
             return gate
+        deadline = time.monotonic() + float(self.settings.product_quote_deadline_sec)
         payload = None
+        quote_target = target
+        quote_source = "product_data"
         try:
-            payload = self.client.fetch(target)
-            quote = quote_from_payload(payload, moment, self.settings.product_max_age_hours)
+            quote = None
+            if self.settings.product_quote_primary == "native":
+                resolved = from_target(target)
+                if resolved is None:
+                    try:
+                        resolved = resolve_to_product(target.short_url or target.original_url, deadline=deadline)
+                    except ResolveError as error:
+                        raise ProductDataError("resolve_" + error.code) from None
+                quote_target = replace(target, shop_id=resolved.shop_id, item_id=resolved.item_id, short_url=None)
+                try:
+                    if self.native_client is None:
+                        raise NativeQuoteError("unconfigured")
+                    quote = self.native_client.fetch_quote(quote_target, now=moment, deadline=deadline)
+                    if (quote.shop_id, quote.item_id) != (quote_target.shop_id, quote_target.item_id):
+                        quote = None
+                        raise NativeQuoteError("identity_mismatch")
+                    quote_source = "native_shopee"
+                except NativeQuoteError as error:
+                    logger.info("[Cashback] native quote rejected code=%s", error.code)
+            if quote is None:
+                if time.monotonic() >= deadline:
+                    raise ProductDataError("timeout")
+                payload = _with_deadline(self.client.fetch, quote_target, deadline=deadline)
+                if time.monotonic() >= deadline:
+                    raise ProductDataError("timeout")
+                quote = quote_from_payload(payload, moment, self.settings.product_max_age_hours)
+                if quote_target.item_id is not None and (
+                    quote.item_id != quote_target.item_id or quote.shop_id != quote_target.shop_id
+                ):
+                    raise ProductDataError("identity_mismatch")
         except ProductDataError as exc:
             # Ghi kèm câu AddLiveTag trả (status / message) để lần sau biết vì sao lỗi.
             said = {k: str(payload.get(k))[:160] for k in ("status", "message", "error") if k in payload} \
                 if isinstance(payload, dict) else {}
             logger.info("[Cashback] product data rejected code=%s item=%s short=%s api=%s",
                         exc.code, target.item_id, target.short_url, said)
+            # PLAN-177: Product Data chết → vẫn tạo link unquoted (không bịa số).
+            if self.settings.product_quote_allow_degraded and not exc.code.startswith("resolve_"):
+                degraded = self._degraded_unquoted_link(
+                    update_id, telegram_user_id, quote_target, moment, deadline, reason=exc.code,
+                )
+                if degraded is not None:
+                    if (self.admin_notifier
+                            and not self._rejected_recently(telegram_user_id, target.original_url, exc.code, moment)
+                            and exc.code in {"timeout", "transport", "http_error", "invalid_json", "api_status"}):
+                        self.admin_notifier.notify_request_failed(
+                            error_type=f"product_data_{exc.code}",
+                            update_id=update_id,
+                            telegram_user_id=telegram_user_id,
+                            status="REQUEST_FAILED",
+                        )
+                    return degraded
             repeat = self._rejected_recently(telegram_user_id, target.original_url, exc.code, moment)
             self._reject(update_id, telegram_user_id, target.original_url, exc.code)
             # Khách gửi lại đúng link vừa lỗi: không báo admin lần nữa.
@@ -795,22 +873,16 @@ class CashbackService:
         v12 = resolution.pricing_version == "v1.2"
         render = render_success_v12 if v12 else render_success
         try:
-            sub_id = self._unique_sub_id()
-            affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
-            # PLAN-174: bridge short → AffiPad trackingOnly (form s.shopee.vn/XXXX?Meta, hiện voucher).
-            # Bridge/AffiPad lỗi → giữ an_redir (± ký Meta nếu còn được) để khách vẫn mua.
-            if self.affipad is not None:
-                short = shorten_shopee_url(quote.product_url, sub_id=sub_id)
-                sign_input = short if short else affiliate_url
-                preset = pick_tracking_preset(self.settings.affipad_tracking_preset, salt=sub_id)
-                signed = self.affipad.sign_tracking_only(sign_input, preset=preset)
-                if signed:
-                    affiliate_url = signed
-                else:
-                    logger.warning(
-                        "[Cashback] AffiPad sign fail item=%s preset=%s short=%s; dùng an_redir",
-                        quote.item_id, preset, bool(short),
-                    )
+            if time.monotonic() >= deadline:
+                # Hết ngân sách sau quote: vẫn trả an_redir dài + số đã có (không chờ short/AffiPad).
+                sub_id = self._unique_sub_id()
+                affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
+                link_source = "an_redir"
+            else:
+                sub_id = self._unique_sub_id()
+                affiliate_url, link_source = self._build_affiliate_url(
+                    quote.product_url, sub_id, deadline, item_id=quote.item_id,
+                )
         except (ValueError, ProductDataError):
             logger.error("[Cashback] build link failed item=%s", quote.item_id)
             self._reject(update_id, telegram_user_id, target.original_url, "link_build_failed")
@@ -840,7 +912,7 @@ class CashbackService:
                 "estimate_policy": resolution.label if v12 else None,
                 "api_status": quote.api_status,
                 "data_source": quote.data_source,
-                "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
+                "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S") if quote.last_update else None,
                 "cat_name": quote.category,
                 "shop_name": quote.shop_name,
                 "seller_commission_vnd": quote.seller_commission_vnd,
@@ -852,6 +924,14 @@ class CashbackService:
                 "reject_reason": None,
             },
             update_id, telegram_user_id, resolution, priced, moment,
+            quote_source=quote_source,
+            link_source=link_source,
+            quote_note=(
+                f"price_basis={quote.price_basis} price_min_vnd={quote.price_min_vnd} "
+                f"price_max_vnd={quote.price_max_vnd} fetched_at={quote.fetched_at.isoformat()} "
+                "source_updated_at=unknown"
+                if isinstance(quote, NativeProductQuote) else None
+            ),
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
@@ -886,13 +966,123 @@ class CashbackService:
                 )
             return None
 
+    def _build_affiliate_url(
+        self, product_url: str, sub_id: str, deadline: float, *, item_id: int | None = None,
+    ) -> tuple[str, str]:
+        """an_redir (+ bridge short / AffiPad / alt shopee-link trong ngân sách). Trả (url, link_source).
+
+        AffiPad bật (PLAN-174): short/alt chỉ là input ký; ký fail → giữ an_redir dài.
+        AffiPad tắt: dùng bridge short hoặc alt nếu có trong deadline.
+        """
+        an_redir = build_an_redir(product_url, self.settings.affiliate_id, sub_id)
+        remaining = max(0.0, deadline - time.monotonic())
+        if remaining <= 0:
+            return an_redir, "an_redir"
+        short = shorten_shopee_url(product_url, sub_id=sub_id, timeout=min(6.0, remaining), deadline=deadline)
+        alt = None
+        if not short and self.settings.alt_shopee_link_fallback:
+            left = max(0.0, deadline - time.monotonic())
+            if left > 0:
+                alt = _with_deadline(
+                    self.alt_shopee_link.create_short, product_url, sub_id,
+                    timeout=min(5.0, left), deadline=deadline,
+                )
+        candidate = short or alt or an_redir
+        candidate_source = "bridge_short" if short else ("alt_shopee_link" if alt else "an_redir")
+        if self.affipad is not None and time.monotonic() < deadline:
+            preset = pick_tracking_preset(self.settings.affipad_tracking_preset, salt=sub_id)
+            signed = _with_deadline(self.affipad.sign_tracking_only, candidate, preset=preset, deadline=deadline)
+            if signed:
+                return signed, candidate_source
+            logger.warning(
+                "[Cashback] AffiPad sign fail item=%s preset=%s short=%s; dùng an_redir",
+                item_id, preset, bool(short),
+            )
+            return an_redir, "an_redir"
+        return candidate, candidate_source
+
+    def _degraded_unquoted_link(
+        self, update_id: int | None, telegram_user_id: int, target, moment: datetime,
+        deadline: float, *, reason: str,
+    ) -> BotReply | None:
+        """PLAN-177: Product Data lỗi → tạo link không số hoàn nếu resolve được shop/item."""
+        resolved = from_target(target)
+        if resolved is None and time.monotonic() >= deadline:
+            return None
+        if resolved is None and target.short_url:
+            try:
+                resolved = resolve_to_product(target.short_url, deadline=deadline)
+            except ResolveError as exc:
+                logger.info("[Cashback] degraded resolve fail code=%s reason=%s", exc.code, reason)
+                return None
+        if resolved is None:
+            return None
+        resolution = self._resolve_or_reject(update_id, telegram_user_id, target.original_url, moment)
+        if resolution is None:
+            return None
+        if self.affipad is not None:
+            prev = self._last_created_same_item(telegram_user_id, resolved.item_id, resolved.shop_id)
+            if prev:
+                self._reject(update_id, telegram_user_id, target.original_url, "same_item_voucher")
+                return same_item_voucher_reply(prev)
+        try:
+            sub_id = self._unique_sub_id()
+            if time.monotonic() >= deadline:
+                affiliate_url = build_an_redir(resolved.product_url, self.settings.affiliate_id, sub_id)
+                link_source = "an_redir"
+            else:
+                affiliate_url, link_source = self._build_affiliate_url(
+                    resolved.product_url, sub_id, deadline, item_id=resolved.item_id,
+                )
+        except (ValueError, ProductDataError):
+            logger.error("[Cashback] degraded build link failed item=%s", resolved.item_id)
+            return None
+        v12 = resolution.pricing_version == "v1.2"
+        saved = self._save_link(
+            {
+                "telegram_update_id": update_id,
+                "telegram_user_id": telegram_user_id,
+                "sub_id": sub_id,
+                "original_url": target.original_url[:500],
+                "affiliate_url": affiliate_url,
+                "item_id": resolved.item_id,
+                "shop_id": resolved.shop_id,
+                "product_name": f"Shopee {resolved.shop_id}/{resolved.item_id}",
+                "price_vnd": None,
+                "estimated_commission": None,
+                "estimated_cashback": None,
+                "cashback_rate_percent": resolution.rate_percent,
+                "estimate_policy": resolution.label if v12 else None,
+                "api_status": "degraded",
+                "data_source": "degraded_unquoted",
+                "product_last_update": None,
+                "link_status": "created",
+                "reject_reason": None,
+            },
+            update_id, telegram_user_id, resolution, None, moment,
+            quote_source="degraded_unquoted",
+            link_source=link_source,
+        )
+        if not saved:
+            return None
+        logger.info(
+            "[Cashback] degraded unquoted created item=%s reason=%s source=%s",
+            resolved.item_id, reason, link_source,
+        )
+        return render_degraded_unquoted(affiliate_url)
+
     def _save_link(self, fields: dict, update_id: int | None, telegram_user_id: int, resolution: PolicyResolution,
-                   priced, moment: datetime) -> bool:
+                   priced, moment: datetime, *, quote_source: str = "product_data",
+                   link_source: str | None = None, quote_note: str | None = None) -> bool:
         """Ghi link đã tạo cùng snapshot chính sách và điều khoản. Lỗi DB thì báo admin, trả False."""
         try:
+            snap = self._snapshot_record(resolution, priced, quote_source=quote_source)
+            if snap is not None and (link_source or quote_note):
+                notes = " ".join(part for part in (snap.get("note"), f"link_source={link_source}" if link_source else None, quote_note) if part)
+                snap = {**snap, "note": notes}
             self.repo.insert_created(
                 fields,
-                snapshot=self._snapshot_record(resolution, priced),
+                snapshot=snap,
                 terms=self.desk.link_terms(telegram_user_id, moment) if self._snapshots_on else None,
             )
         except sqlite3.IntegrityError:
@@ -1183,8 +1373,12 @@ class CashbackService:
         mine = cashback_for(commission_vnd, resolution).cashback_vnd
         return rank_card_line(rank, mine - cash("BRONZE"), cash("GOLD") - mine)
 
-    def _snapshot_record(self, resolution: PolicyResolution, priced) -> dict | None:
-        return policy_snapshot.record(resolution, priced) if self._snapshots_on else None
+    def _snapshot_record(self, resolution: PolicyResolution, priced, *, quote_source: str = "product_data") -> dict | None:
+        return (
+            policy_snapshot.record(resolution, priced, quote_source=quote_source)
+            if self._snapshots_on
+            else None
+        )
 
     def _within_rate_limit(self, telegram_user_id: int, now: datetime) -> bool:
         return self.repo.consume_link_attempt(

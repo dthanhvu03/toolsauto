@@ -71,7 +71,19 @@ KIND_LABELS = {
     "shopee_payment_report": "Báo cáo thanh toán Shopee",
     "bank_statement": "Chứng từ ngân hàng",
 }
+# Nhãn nút ngắn — tránh cắt document_ref[:20] khiến bank-17315… trông giống nhau.
+KIND_SHORT = {
+    "shopee_validation_report": "Xác thực",
+    "shopee_payment_report": "Thanh toán",
+    "bank_statement": "Ngân hàng",
+}
 VERIFY_LABELS = {"RECEIVED": "đã nhận, chưa đối chiếu", "VERIFIED": "đã đối chiếu hai nguồn", "SUPERSEDED": "đã thay", "REJECTED": "bị loại"}
+VERIFY_ICON = {"VERIFIED": "✅", "RECEIVED": "📥", "SUPERSEDED": "🗄", "REJECTED": "⛔"}
+KIND_BLURB = {
+    "bank_statement": "Xác nhận số tiền về tài khoản anh (đối chiếu với báo cáo Shopee).",
+    "shopee_payment_report": "Bảng kê Shopee Affiliate cho lần chuyển tiền này.",
+    "shopee_validation_report": "Báo cáo Shopee xác thực hoa hồng đơn trong kỳ.",
+}
 
 _BATCH = re.compile(r"^c:sm:(b|items|ev|rc):(\d{1,9})$")
 _EVIDENCE = re.compile(r"^c:sm:(e|seen):(\d{1,9})$")
@@ -102,13 +114,49 @@ def _title(*path: str) -> str:
     return "⚙️ Quản trị › " + " › ".join(path[:-1] + (f"<b>{path[-1]}</b>",))
 
 
+def _ref_tail(ref: str | None) -> str:
+    """Đuôi mã thanh toán Shopee — phân biệt nhiều lần chi cùng tháng (vd 2026-11 ×3)."""
+    if not ref:
+        return ""
+    return f"…{ref[-6:]}" if len(ref) > 6 else ref
+
+
+def _batch_label(batch_id: int, period: str, payment_ref: str | None = None) -> str:
+    """Nhãn ngắn: #3 · 2026-11 · …261116 — không chỉ 'Tháng 11'."""
+    parts = [f"#{batch_id}", period]
+    tail = _ref_tail(payment_ref)
+    if tail:
+        parts.append(tail)
+    return " · ".join(parts)
+
+
+def _evidence_button(row) -> str:
+    """Nút chứng từ: ✅ #4 · Ngân hàng · …261119 — không cắt giữa chuỗi dài giống nhau."""
+    kind = KIND_SHORT.get(row["kind"], row["kind"])
+    icon = VERIFY_ICON.get(row["verification"], "📄")
+    ref = row["document_ref"] or ""
+    note = ""
+    if ref.endswith("-tax") or "-tax" in ref:
+        note = " · có thuế"
+    elif ref.endswith("-v3") or ref.endswith("-v2"):
+        note = " · bản mới"
+    # Ưu tiên đuôi payment_ref kỳ; fallback đuôi document_ref.
+    tail = _ref_tail(row["shopee_payment_ref"] if "shopee_payment_ref" in row.keys() else None) or _ref_tail(ref)
+    label = f"{icon} #{row['batch_id']} · {kind}"
+    if tail:
+        label += f" · {tail}"
+    return label + note
+
+
 def _period_line(p: money_flow.Period) -> str:
     label = STATUS_LABELS.get(p.status, p.status)
     if p.received_vnd is not None:
         money = f"Shopee báo {_money(p.payout_vnd)} · về tài khoản {format_vnd(p.received_vnd)}"
+    elif p.payout_vnd is not None:
+        money = f"Shopee báo {format_vnd(p.payout_vnd)} · chưa về TK"
     else:
-        money = f"Shopee báo {_money(p.payout_vnd)} · chưa về"
-    return f"• Kỳ <b>{html.escape(p.period)}</b> {label} · {money}"
+        money = "Shopee đang xử lý / chưa có số chuyển · chưa về TK"
+    return f"• Kỳ <b>{html.escape(_batch_label(p.batch_id, p.period, p.payment_ref))}</b> {label} · {money}"
 
 
 def _table(rows: list[tuple[str, str]]) -> str:
@@ -174,7 +222,7 @@ class SettlementAdmin:
             evidence_id = int(evidence.group(2))
             if evidence.group(1) == "seen":
                 ok = self.engine.mark_viewed(evidence_id, admin_id)
-                return self.evidence_detail(evidence_id, "👁 Đã ghi nhận bạn đã xem (chưa phải xác minh)." if ok else "")
+                return self.evidence_detail(evidence_id, "👁 Đã ghi nhận anh đã đọc (chưa phải xác minh)." if ok else "")
             return self.evidence_detail(evidence_id)
         return BotReply("Nút này không còn hiệu lực.", inline_keyboard=(BACK_HOME,))
 
@@ -191,8 +239,14 @@ class SettlementAdmin:
         if todo:
             lines += ["", "📌 <b>Cần làm</b>", *(f"• {t}" for t in todo)]
         lines += ["", MATCH_NOTE]
+        def _btn_amount(p: money_flow.Period) -> str:
+            if p.amount_vnd is not None:
+                return format_vnd(p.amount_vnd)
+            return "đang xử lý"
+
         buttons = tuple(
-            ((f"{STATUS_LABELS.get(p.status, p.status).split(' ', 1)[0]} Kỳ {p.period} · {_money(p.amount_vnd)}",
+            ((f"{STATUS_LABELS.get(p.status, p.status).split(' ', 1)[0]} "
+              f"{_batch_label(p.batch_id, p.period, p.payment_ref)} · {_btn_amount(p)}",
               f"c:sm:b:{p.batch_id}"),)
             for p in reversed(snap.periods)
         )
@@ -212,7 +266,8 @@ class SettlementAdmin:
         if not rows:
             lines += ["Chưa có kỳ nào.", "", IMPORT_NOTE]
         buttons = tuple(
-            ((f"{STATUS_LABELS.get(r['status'], r['status']).split(' ', 1)[0]} {r['period']} · {_money(r['shopee_payout_vnd'])}",
+            ((f"{STATUS_LABELS.get(r['status'], r['status']).split(' ', 1)[0]} "
+              f"{_batch_label(r['id'], r['period'], r['shopee_payment_ref'])} · {_money(r['shopee_payout_vnd'])}",
               f"c:sm:b:{r['id']}"),)
             for r in rows
         )
@@ -239,7 +294,7 @@ class SettlementAdmin:
             ("Cần kiểm tra", format_vnd(result.review_vnd)),
             ("Chưa phân bổ", _money(result.unallocated_vnd)),
         ]
-        lines = [_title(MONEY, SECTION, f"Kỳ {batch['period']}"), ""]
+        lines = [_title(MONEY, SECTION, f"Kỳ {_batch_label(batch_id, batch['period'], batch['shopee_payment_ref'])}"), ""]
         if notice:
             lines += [notice, ""]
         lines += [
@@ -305,44 +360,153 @@ class SettlementAdmin:
     # --- Chứng từ --------------------------------------------------------------------------------
 
     def evidence_list(self, batch_id: int | None) -> BotReply:
-        where, args = ("WHERE batch_id = ?", (batch_id,)) if batch_id else ("", ())
+        # Ẩn SUPERSEDED / REJECTED — list chỉ còn chứng từ đang dùng.
+        active = "e.verification NOT IN ('SUPERSEDED', 'REJECTED')"
+        order = (
+            "ORDER BY e.batch_id DESC, "
+            "CASE e.kind WHEN 'bank_statement' THEN 0 WHEN 'shopee_payment_report' THEN 1 ELSE 2 END, e.id DESC"
+        )
+        if batch_id is not None:
+            sql = (
+                "SELECT e.*, b.period, b.shopee_payment_ref FROM settlement_evidence e "
+                "JOIN settlement_batches b ON b.id = e.batch_id "
+                f"WHERE e.batch_id = ? AND {active} {order} LIMIT 12"
+            )
+            args = (batch_id,)
+        else:
+            sql = (
+                "SELECT e.*, b.period, b.shopee_payment_ref FROM settlement_evidence e "
+                "JOIN settlement_batches b ON b.id = e.batch_id "
+                f"WHERE {active} {order} LIMIT 12"
+            )
+            args = ()
         with self.repo.connect() as conn:
-            rows = conn.execute(f"SELECT * FROM settlement_evidence {where} ORDER BY id DESC LIMIT 10", args).fetchall()
+            rows = conn.execute(sql, args).fetchall()
+            hidden = conn.execute(
+                "SELECT COUNT(*) FROM settlement_evidence WHERE verification IN ('SUPERSEDED', 'REJECTED')"
+                + (" AND batch_id = ?" if batch_id is not None else ""),
+                (batch_id,) if batch_id is not None else (),
+            ).fetchone()[0]
         lines = [_title(MONEY, SECTION, "Chứng từ"), ""]
         if not rows:
-            lines += ["Chưa có chứng từ nào.", "", IMPORT_NOTE]
-        buttons = tuple(
-            ((f"{KIND_LABELS.get(r['kind'], r['kind'])} · {r['document_ref'][:20]}", f"c:sm:e:{r['id']}"),) for r in rows
-        )
+            lines += ["Chưa có chứng từ đang dùng.", "", IMPORT_NOTE]
+        else:
+            lines.append("Chọn một dòng để xem. Mỗi dòng gắn <b>#kỳ</b> + loại chứng từ.")
+            if hidden:
+                lines.append(f"ⓘ Đã ẩn {hidden} bản cũ (đã thay / đã gỡ).")
+            lines.append("")
+        buttons = tuple(((_evidence_button(r), f"c:sm:e:{r['id']}"),) for r in rows)
         back = (("◀️ Kỳ", f"c:sm:b:{batch_id}"),) if batch_id else BACK_HOME
         return BotReply("\n".join(lines), inline_keyboard=(*buttons, back))
 
     def evidence_detail(self, evidence_id: int, notice: str = "") -> BotReply:
         with self.repo.connect() as conn:
             row = conn.execute(
-                "SELECT e.*, b.period FROM settlement_evidence e JOIN settlement_batches b ON b.id = e.batch_id WHERE e.id = ?",
+                "SELECT e.*, b.period, b.shopee_payment_ref, b.status AS batch_status, "
+                "b.bank_received_vnd, b.shopee_payout_vnd, b.reported_commission_vnd, b.tax_withheld_vnd "
+                "FROM settlement_evidence e JOIN settlement_batches b ON b.id = e.batch_id WHERE e.id = ?",
                 (evidence_id,),
             ).fetchone()
         if row is None:
             return BotReply("Không tìm thấy chứng từ này.", inline_keyboard=(BACK_HOME,))
-        lines = [_title(MONEY, SECTION, "Chứng từ"), ""]
+        kind = row["kind"]
+        batch_lbl = _batch_label(row["batch_id"], row["period"], row["shopee_payment_ref"])
+        verify = VERIFY_LABELS.get(row["verification"], row["verification"])
+        icon = VERIFY_ICON.get(row["verification"], "📄")
+        lines = [_title(MONEY, SECTION, KIND_SHORT.get(kind, "Chứng từ")), ""]
         if notice:
             lines += [notice, ""]
+        lines.append(f"<b>{KIND_LABELS.get(kind, kind)}</b>")
+        blurb = KIND_BLURB.get(kind)
+        if blurb:
+            lines.append(blurb)
         lines += [
-            f"• Loại: <b>{KIND_LABELS.get(row['kind'], row['kind'])}</b> · kỳ {row['period']}",
-            f"• Mã chứng từ: <code>{html.escape(row['document_ref'])}</code>",
-            f"• Dấu vân tay: <code>{row['content_sha256'][:12]}…</code> · {row['size_bytes']} byte · {html.escape(row['parser'])}",
-            f"• Xác minh: <b>{VERIFY_LABELS.get(row['verification'], row['verification'])}</b>",
-            f"• Nhập bởi {html.escape(row['recorded_by'])} lúc {_vn(row['recorded_at'])}",
-            "• Admin đã xem: " + ("chưa" if row["viewed_by"] is None else f"<code>{row['viewed_by']}</code> lúc {_vn(row['viewed_at'])}"),
             "",
-            "ⓘ «Đã xem» chỉ ghi nhận bạn đã đọc chứng từ, không xác nhận Shopee đã duyệt hay đã trả.",
+            f"• Kỳ: <b>{html.escape(batch_lbl)}</b>",
+            f"• Kỳ thanh toán: <b>{STATUS_LABELS.get(row['batch_status'], row['batch_status'])}</b>",
+        ]
+        if kind == "bank_statement" and row["bank_received_vnd"] is not None:
+            lines.append(f"• Số về tài khoản: <b>{format_vnd(int(row['bank_received_vnd']))}</b>")
+        elif kind == "shopee_payment_report":
+            if row["reported_commission_vnd"] is not None:
+                lines.append(f"• Hoa hồng Shopee báo: <b>{format_vnd(int(row['reported_commission_vnd']))}</b>")
+            if row["tax_withheld_vnd"] is not None:
+                lines.append(f"• Thuế Shopee giữ: {format_vnd(int(row['tax_withheld_vnd']))}")
+            if row["shopee_payout_vnd"] is not None:
+                lines.append(f"• Shopee báo chuyển: <b>{format_vnd(int(row['shopee_payout_vnd']))}</b>")
+        note = self._evidence_note(row)
+        if note:
+            lines += ["", f"💬 {html.escape(note)}"]
+        lines += [
+            "",
+            f"• Trạng thái chứng từ: {icon} <b>{verify}</b>",
+            f"• Ghi lúc {_vn(row['recorded_at'])}",
+        ]
+        if row["viewed_by"] is not None:
+            lines.append(f"• Anh đã đọc lúc {_vn(row['viewed_at'])}")
+        lines += [
+            "",
+            "ⓘ Nút «Đã đọc» chỉ ghi nhận anh đã mở xem — chưa phải xác minh thêm, "
+            "cũng không đổi tiền hay trạng thái kỳ.",
         ]
         keyboard = []
         if row["viewed_by"] is None:
-            keyboard.append((("👁 Đã xem chứng từ", f"c:sm:seen:{evidence_id}"),))
-        keyboard.append((("◀️ Chứng từ kỳ", f"c:sm:ev:{row['batch_id']}"),))
-        return BotReply("\n".join(lines), inline_keyboard=tuple(keyboard))
+            keyboard.append((("👁 Đã đọc", f"c:sm:seen:{evidence_id}"),))
+        keyboard += [
+            (("📋 Xem kỳ này", f"c:sm:b:{row['batch_id']}"),),
+            (("◀️ Danh sách chứng từ", f"c:sm:ev:{row['batch_id']}"),),
+        ]
+        return BotReply("\n".join(line for line in lines if line is not None), inline_keyboard=tuple(keyboard))
+
+    def _evidence_note(self, row) -> str:
+        """Ghi chú tiếng Việt cho anh — không lộ API path / PLAN / câu cũ mâu thuẫn."""
+        try:
+            path = self.engine.evidence_dir / row["stored_name"]
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError, KeyError):
+            data = {}
+        raw = (data.get("source_note") or "").strip()
+        kind = row["kind"]
+
+        # Ngày hoá đơn (nếu bot ghi trong note).
+        days = ""
+        m = re.search(r"Ho[aá] đơn ngày:\s*([0-9/,\s]+)", raw, re.IGNORECASE)
+        if m:
+            days = re.sub(r"\s+", " ", m.group(1)).strip(" ,")
+
+        if kind == "bank_statement":
+            amount = row["bank_received_vnd"]
+            if amount is not None:
+                return f"Anh đã xác nhận tài khoản nhận đúng {format_vnd(int(amount))}."
+            return "Xác nhận tiền về tài khoản."
+
+        if kind == "shopee_payment_report":
+            parts = []
+            if days:
+                parts.append(f"Hoá đơn ngày: {days}.")
+            if row["tax_withheld_vnd"] is not None and row["shopee_payout_vnd"] is not None:
+                parts.append(
+                    f"Thuế và số chuyển đã chốt theo xác nhận tiền về "
+                    f"({format_vnd(int(row['shopee_payout_vnd']))})."
+                )
+            elif row["verification"] == "VERIFIED":
+                parts.append("Đã đối chiếu với chứng từ ngân hàng.")
+            else:
+                parts.append("Chưa đủ thuế/số chuyển — chờ anh xác nhận tiền về tài khoản.")
+            return " ".join(parts)
+
+        if kind == "shopee_validation_report":
+            return "Báo cáo xác thực hoa hồng từ Shopee."
+
+        # Fallback: chỉ lấy câu tiếng Việt ngắn, bỏ path kỹ thuật.
+        if not raw:
+            return ""
+        cleaned = re.sub(r"/api/\S+", "", raw)
+        cleaned = re.sub(r"\(PLAN-\d+\)", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" .")
+        if "chưa có" in cleaned.lower() and row["tax_withheld_vnd"] is not None:
+            return ""  # tránh hiện câu cũ đã lỗi thời
+        return cleaned if len(cleaned) <= 180 else cleaned[:177] + "…"
 
     # --- Đối chiếu, chênh lệch, lịch sử -------------------------------------------------------------
 
@@ -358,8 +522,10 @@ class SettlementAdmin:
             gap = "—"
             if row["shopee_payout_vnd"] is not None and row["bank_received_vnd"] is not None:
                 gap = format_vnd(int(row["bank_received_vnd"]) - int(row["shopee_payout_vnd"]))
+            label = _batch_label(row["id"], row["period"], row["shopee_payment_ref"])
             lines.append(
-                f"• {row['period']}: Shopee báo {_money(row['shopee_payout_vnd'])} · nhận {_money(row['bank_received_vnd'])} · lệch {gap}"
+                f"• {html.escape(label)}: Shopee báo {_money(row['shopee_payout_vnd'])} · "
+                f"nhận {_money(row['bank_received_vnd'])} · lệch {gap}"
             )
         return BotReply("\n".join(lines), inline_keyboard=(BACK_HOME,))
 

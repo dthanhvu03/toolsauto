@@ -1,0 +1,89 @@
+{
+  "at": "2026-11-19T15:45:34.594Z",
+  "events": [
+    {
+      "stage": "context_start",
+      "elapsed_ms": 1
+    },
+    {
+      "stage": "context_ready",
+      "elapsed_ms": 1930,
+      "pages": 1
+    },
+    {
+      "stage": "cookie_sync_ready",
+      "elapsed_ms": 2016
+    },
+    {
+      "stage": "page_adopted",
+      "elapsed_ms": 2025,
+      "route": "other_origin"
+    },
+    {
+      "stage": "goto_commit_start",
+      "elapsed_ms": 2031
+    },
+    {
+      "stage": "document_response",
+      "elapsed_ms": 2525,
+      "route": "affiliate_offer",
+      "http": 200
+    },
+    {
+      "stage": "main_frame",
+      "elapsed_ms": 2534,
+      "route": "affiliate_offer"
+    },
+    {
+      "stage": "goto_commit_done",
+      "elapsed_ms": 2540,
+      "http": 200,
+      "route": "affiliate_offer"
+    },
+    {
+      "stage": "document_state_ready",
+      "elapsed_ms": 3432
+    },
+    {
+      "stage": "native_fetch_done",
+      "elapsed_ms": 3563
+    },
+    {
+      "stage": "close_start",
+      "elapsed_ms": 3579
+    },
+    {
+      "stage": "domcontentloaded",
+      "elapsed_ms": 3740,
+      "route": "affiliate_offer"
+    },
+    {
+      "stage": "closed",
+      "elapsed_ms": 5165
+    }
+  ],
+  "checks": [
+    {
+      "kind": "document_state",
+      "origin": "affiliate",
+      "path_type": "offer",
+      "ready": "interactive",
+      "body_present": true
+    },
+    {
+      "kind": "one_native_item",
+      "http": 403,
+      "error": "verification_required"
+    }
+  ],
+  "closed": true,
+  "cleanup_verification": {
+    "legacy_bridge_restored": true,
+    "legacy_health_http": 200,
+    "legacy_health_seconds": 0.016894,
+    "probe_processes_remaining": 0,
+    "npm_sha256": "9F8E47F0A9F02D198A0390E193A29B3937A92DF04E76937C5835B4BCAB8EECBC",
+    "production_native_enabled": false,
+    "cashbot_restarted": false
+  }
+}

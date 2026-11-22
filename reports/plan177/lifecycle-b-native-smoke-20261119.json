@@ -1,0 +1,318 @@
+{
+  "at": "2026-11-19T16:34:04.921Z",
+  "handoff": ".comms/handoffs/cursor-to-ag/TASK-plan177-repo-bridge-native-smoke.md",
+  "mode": "lifecycle_b_smoke_only_no_customer_activation",
+  "calls": [
+    {
+      "kind": "native_quote",
+      "item_id": 54321049804,
+      "shop_id": 1175585681,
+      "ids_exact": true,
+      "source": "native_shopee",
+      "price_vnd": 138475,
+      "sure_commission_vnd": 3461,
+      "seller_commission_vnd": 0,
+      "shopee_commission_vnd": 9693,
+      "is_xtra": false,
+      "price_basis": "single_price",
+      "last_update": null,
+      "fetched_at": "2026-11-19T16:34:21.645000+00:00",
+      "elapsed_sec": 1.347
+    },
+    {
+      "kind": "repo_shortlink",
+      "http": 200,
+      "success": true,
+      "host": "s.shopee.vn",
+      "error": null,
+      "elapsed_sec": 0.193
+    }
+  ],
+  "stages": [
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "start",
+      "elapsed_ms": 0
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_start",
+      "elapsed_ms": 4
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_done",
+      "elapsed_ms": 1947
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cookies_sync_done",
+      "elapsed_ms": 1978
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_start",
+      "elapsed_ms": 1983
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_ready",
+      "elapsed_ms": 1989
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "navigate_start",
+      "elapsed_ms": 1995
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "navigate_done",
+      "elapsed_ms": 3145
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "network_idle_start",
+      "elapsed_ms": 3149
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "network_idle_done",
+      "elapsed_ms": 10821
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "settle_start",
+      "elapsed_ms": 10823
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "settle_done",
+      "elapsed_ms": 14219
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "portal_ready",
+      "elapsed_ms": 14232
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cleanup_done",
+      "elapsed_ms": 14234
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "start",
+      "elapsed_ms": 0
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "get_context_start",
+      "elapsed_ms": 4
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "get_context_done",
+      "elapsed_ms": 8
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "cookies_sync_done",
+      "elapsed_ms": 30
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "page_start",
+      "elapsed_ms": 33
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "page_ready",
+      "elapsed_ms": 37
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "portal_ready",
+      "elapsed_ms": 46
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "evaluate_start",
+      "elapsed_ms": 49
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "evaluate_done",
+      "elapsed_ms": 1335
+    },
+    {
+      "operation": "quote",
+      "request": 2,
+      "stage": "cleanup_done",
+      "elapsed_ms": 1339
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "start",
+      "elapsed_ms": 0
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "get_context_start",
+      "elapsed_ms": 4
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "get_context_done",
+      "elapsed_ms": 7
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "cookies_sync_done",
+      "elapsed_ms": 20
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "page_start",
+      "elapsed_ms": 23
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "page_ready",
+      "elapsed_ms": 25
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "portal_ready",
+      "elapsed_ms": 33
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "evaluate_start",
+      "elapsed_ms": 37
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "evaluate_done",
+      "elapsed_ms": 180
+    },
+    {
+      "operation": "shortlink",
+      "request": 3,
+      "stage": "cleanup_done",
+      "elapsed_ms": 184
+    }
+  ],
+  "upstream_errors": [],
+  "auth_blocked": false,
+  "same_backend_instance": true,
+  "profile_lock_check": [
+    {
+      "name": "lockfile",
+      "exists": false
+    },
+    {
+      "name": "SingletonLock",
+      "exists": false
+    },
+    {
+      "name": "SingletonSocket",
+      "exists": false
+    },
+    {
+      "name": "SingletonCookie",
+      "exists": false
+    }
+  ],
+  "preparation": {
+    "ready": true,
+    "elapsed_sec": 14.238
+  },
+  "repo_health": {
+    "http": 200,
+    "implementation": "toolsauto",
+    "quote_schema": 1
+  },
+  "wsl_repo_health": {
+    "http": 200,
+    "implementation": "toolsauto"
+  },
+  "result": "passed_required_steps",
+  "cleanup": {
+    "closed": true
+  },
+  "total_elapsed_sec": 17.832,
+  "executed_harness_sha256": "9e0fe3e7e0f2b99972e52656ed2da3968b1535138c2b3f8e6a693b03b4796841",
+  "smoke_process_exit": 0,
+  "legacy_start_exit": 0,
+  "legacy_restore": {
+    "at": "2026-11-19T16:34:55.789480+00:00",
+    "health": {
+      "http": 200,
+      "status": "ok",
+      "is_legacy": true
+    },
+    "shortlink": {
+      "http": 200,
+      "success": true,
+      "host": "s.shopee.vn",
+      "elapsed_sec": 8.142
+    }
+  },
+  "invariants": {
+    "all_baseline_files_unchanged": true,
+    "cashbot_services_unchanged": true,
+    "other_pm2_unchanged": true,
+    "npm_unchanged": true,
+    "primary_configured": "(unset; default product_data)",
+    "bridge_implementation_configured": "(unset; default legacy)"
+  },
+  "independent_review": {
+    "reviewer": "lifecycle_b_review",
+    "generation_race_fixed": true,
+    "material_findings_remaining": 0,
+    "live_artifact_verdict": "pass_for_one_non_xtra_smoke_only",
+    "second_live_run": false
+  },
+  "artifact_scan": {
+    "files_scanned": 10,
+    "credential_value_matches": 0
+  },
+  "final_checks": {
+    "tracked_git_diff_check_exit": 0,
+    "untracked_whitespace_checks": 6,
+    "untracked_whitespace_warnings": 0,
+    "no_index_exit_1_is_expected_file_difference": true
+  }
+}

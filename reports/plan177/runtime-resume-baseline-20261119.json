@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-19T15:44:36.946Z",
+  "read_only_checks": {
+    "portal_head_http": 200,
+    "portal_head_seconds": 0.783054,
+    "legacy_health_http": 200,
+    "legacy_shortlink_http": 500,
+    "legacy_error": "page.evaluate TypeError Failed to fetch",
+    "wsl_load_average": [
+      1,
+      0.82,
+      1.07
+    ],
+    "computer_use_error": "window id no longer belongs to Chrome; current owner is Chrome"
+  },
+  "npm_sha256": "9F8E47F0A9F02D198A0390E193A29B3937A92DF04E76937C5835B4BCAB8EECBC",
+  "scope": "PLAN-177 step2.4 read-only browser lifecycle diagnostic; no customer quote promotion"
+}

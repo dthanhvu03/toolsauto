@@ -95,10 +95,39 @@ class Settings:
     affipad_fb_voucher_enabled: bool = False
     # rotate = xen kẽ fb_reels/ig_reels mỗi link; hoặc khóa một kênh: fb_reels | ig_reels.
     affipad_tracking_preset: str = "rotate"
+    # PLAN-177: tạo link khi Product Data chết; tắt = rollback về bắt buộc quote.
+    product_quote_allow_degraded: bool = True
+    # Ngân sách monotonic cho 1 lượt tạo link (resolve + quote + bridge + AffiPad).
+    product_quote_deadline_sec: float = 20.0
+    # Native chỉ opt-in sau review; product_data là rollback mặc định.
+    product_quote_primary: str = "product_data"
+    # Fallback AddLiveTag shopee-link.php — mặc định tắt; live chỉ sau Owner Gate A.
+    alt_shopee_link_fallback: bool = False
+    alt_shopee_link_url: str = "https://api.addlivetag.com/v1/shopee-link.php"
 
 
 def _flag(raw: str | None) -> bool:
     return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _flag_default_on(raw: str | None) -> bool:
+    """Mặc định bật; chỉ tắt khi env ghi rõ 0/false/no/off."""
+    if raw is None or not str(raw).strip():
+        return True
+    return (raw or "").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _bounded_float(env: dict[str, str], key: str, default: float, low: float, high: float) -> float:
+    raw = (env.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ConfigError([key]) from exc
+    if not low <= value <= high:
+        raise ConfigError([key])
+    return value
 
 
 def _allowed_ids(raw: str | None, key: str = "CASHBACK_ALLOWED_TELEGRAM_IDS") -> frozenset[int]:
@@ -212,6 +241,16 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         affipad_tool_id=(env.get("AFFIPAD_TOOL_ID") or "").strip() or None,
         affipad_fb_voucher_enabled=_flag(env.get("AFFIPAD_FB_VOUCHER_ENABLED")),
         affipad_tracking_preset=_affipad_preset(env.get("AFFIPAD_TRACKING_PRESET")),
+        product_quote_allow_degraded=_flag_default_on(env.get("PRODUCT_QUOTE_ALLOW_DEGRADED")),
+        product_quote_primary=_quote_primary(env.get("PRODUCT_QUOTE_PRIMARY")),
+        product_quote_deadline_sec=_bounded_float(
+            env, "PRODUCT_QUOTE_DEADLINE_SEC", 20.0, 5.0, 60.0
+        ),
+        alt_shopee_link_fallback=_flag(env.get("ALT_SHOPEE_LINK_FALLBACK")),
+        alt_shopee_link_url=(
+            (env.get("ALT_SHOPEE_LINK_URL") or "").strip()
+            or "https://api.addlivetag.com/v1/shopee-link.php"
+        ),
     )
 
 
@@ -234,4 +273,11 @@ def _bounded_int(env: dict[str, str], key: str, default: int, low: int, high: in
         raise ConfigError([key]) from exc
     if not low <= value <= high:
         raise ConfigError([key])
+    return value
+
+
+def _quote_primary(raw: str | None) -> str:
+    value = (raw or "product_data").strip().lower()
+    if value not in {"product_data", "native"}:
+        raise ConfigError(["PRODUCT_QUOTE_PRIMARY"])
     return value

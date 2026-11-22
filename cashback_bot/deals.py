@@ -177,7 +177,7 @@ def toggle_category(repo: TrackingRepository, user: int, key: str) -> tuple[list
 
 
 def subscribers(conn: sqlite3.Connection, now: datetime) -> dict[int, list[str]]:
-    """Khách đã chọn danh mục, chưa chặn bot."""
+    """Khách Telegram đã chọn danh mục, chưa chặn bot. Không blast deal sang Zalo (ID âm) — 2026-11-20."""
     rows = conn.execute("SELECT key, value FROM bot_state WHERE key LIKE ? AND value != ''", (CATS_PREFIX + "%",))
     cfg = NotifyConfig(True)
     found: dict[int, list[str]] = {}
@@ -185,6 +185,8 @@ def subscribers(conn: sqlite3.Connection, now: datetime) -> dict[int, list[str]]
         try:
             user = int(key.removeprefix(CATS_PREFIX))
         except ValueError:
+            continue
+        if user <= 0:
             continue
         cats = [c for c in value.split(",") if c in CATEGORIES]
         if cats and customer_block_reason(conn, {"category": CATEGORY, "chat_id": user}, cfg, now) is None:
@@ -252,6 +254,8 @@ def inferred(conn: sqlite3.Connection, now: datetime) -> dict[int, tuple[list[st
     cfg = NotifyConfig(True)
     found: dict[int, tuple[list[str], str]] = {}
     for user in users:
+        if user <= 0:
+            continue  # Zalo: không blast deal (2026-11-20)
         if conn.execute("SELECT 1 FROM bot_state WHERE key = ?", (f"{CATS_PREFIX}{user}",)).fetchone():
             continue
         if customer_block_reason(conn, {"category": engagement.CATEGORY, "chat_id": user}, cfg, now) is not None:

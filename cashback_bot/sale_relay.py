@@ -689,23 +689,24 @@ def enqueue_for_subscribers(
     buttons: list[list[dict]],
     subscribers: list[int],
 ) -> int:
-    """Xếp hàng tin nhắn gửi riêng cho từng khách. Khách Zalo nhận bản gọn (zalo_digest), Telegram nhận đủ."""
+    """Xếp hàng tin mã/deal cho khách Telegram. Không gửi Zalo (ID âm) — săn deal qua kênh ZT báo mã (2026-11-20)."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     markup_json = json.dumps({"inline_keyboard": buttons}, ensure_ascii=False) if buttons else None
     full_html = post_html(text, buttons)
     message_html = fit_html(full_html, 4000)
-    zalo_html = fit_html(zalo_digest(full_html), 4000)  # khách Zalo (ID âm): bản gọn
     queued = 0
 
     with repo.connect() as conn:
         for user_id in subscribers:
+            if user_id <= 0:
+                continue  # Zalo: không blast deal/mã DM
             event_key = f"relay:{post_id}:{user_id}"
             if enqueue_event(
                 conn,
                 event_key=event_key,
                 event_type="VOUCHER",
                 chat_id=user_id,
-                message_html=zalo_html if user_id < 0 else message_html,
+                message_html=message_html,
                 audience="customer",
                 category="voucher",
                 reply_markup_json=markup_json,

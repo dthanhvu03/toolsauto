@@ -1,0 +1,530 @@
+{
+  "at": "2026-11-20T09:01:34.773710+07:00",
+  "db": "data/cashback.sqlite",
+  "mode": "readonly",
+  "timeline": {
+    "first_link": [
+      "2026-10-21T08:59:43Z",
+      "2026-11-19T17:06:11Z",
+      246
+    ],
+    "first_conversion": [
+      "2026-08-22T00:02:58Z",
+      "2026-11-18T01:00:37Z",
+      25
+    ],
+    "first_cashback_entry": [
+      "2026-10-24T01:44:55Z",
+      "2026-11-19T01:45:00Z",
+      21
+    ],
+    "first_settlement_batch": [
+      "2026-10-29T01:55:58Z",
+      "2026-11-18T21:44:34Z",
+      4
+    ]
+  },
+  "cashback_entries_by_status": [
+    {
+      "status": "holding",
+      "n": 13,
+      "commission": 151678,
+      "cashback": 84909,
+      "fee": 1492,
+      "tax": 15173
+    },
+    {
+      "status": "available",
+      "n": 5,
+      "commission": 39275,
+      "cashback": 25910,
+      "fee": 387,
+      "tax": 3930
+    },
+    {
+      "status": "pending",
+      "n": 3,
+      "commission": 17815,
+      "cashback": 10084,
+      "fee": 176,
+      "tax": 1783
+    }
+  ],
+  "cashback_entries_total": {
+    "n": 21,
+    "commission": 208768,
+    "cashback": 120903,
+    "fee": 2055,
+    "tax": 20886,
+    "shop_keep_approx": 87865
+  },
+  "conversions": {
+    "n_all": 25,
+    "n_matched_user": 21,
+    "n_matched_link": 21,
+    "gross_all": 229212,
+    "gross_matched": 208768,
+    "net_all": 229212,
+    "net_matched": 208768,
+    "gmv_all": 5083300,
+    "gmv_matched": 4841957
+  },
+  "conversions_matched_by_settlement": [
+    {
+      "settlement_status": "NOT_VERIFIED",
+      "order_status": "COMPLETED",
+      "n": 13,
+      "gross": 151678,
+      "net": 151678
+    },
+    {
+      "settlement_status": "SETTLED",
+      "order_status": "COMPLETED",
+      "n": 5,
+      "gross": 39275,
+      "net": 39275
+    },
+    {
+      "settlement_status": "NOT_VERIFIED",
+      "order_status": "PAID",
+      "n": 3,
+      "gross": 17815,
+      "net": 17815
+    }
+  ],
+  "settlement_batches": [
+    {
+      "id": 1,
+      "period": "2026-10",
+      "status": "MATCHED",
+      "reported_commission_vnd": 25371,
+      "fee_vnd": 248,
+      "tax_withheld_vnd": 2538,
+      "shopee_payout_vnd": 22585,
+      "bank_received_vnd": 22585,
+      "created_at": "2026-10-29T01:55:58Z"
+    },
+    {
+      "id": 2,
+      "period": "2026-11",
+      "status": "MATCHED",
+      "reported_commission_vnd": 18415,
+      "fee_vnd": 181,
+      "tax_withheld_vnd": 1842,
+      "shopee_payout_vnd": 16392,
+      "bank_received_vnd": 16392,
+      "created_at": "2026-11-01T20:04:26Z"
+    },
+    {
+      "id": 3,
+      "period": "2026-11",
+      "status": "PARTIALLY_MATCHED",
+      "reported_commission_vnd": 43413,
+      "fee_vnd": 425,
+      "tax_withheld_vnd": 4342,
+      "shopee_payout_vnd": 38646,
+      "bank_received_vnd": 38646,
+      "created_at": "2026-11-15T21:39:47Z"
+    },
+    {
+      "id": 4,
+      "period": "2026-11",
+      "status": "EVIDENCE_PENDING",
+      "reported_commission_vnd": 10655,
+      "fee_vnd": 104,
+      "tax_withheld_vnd": null,
+      "shopee_payout_vnd": null,
+      "bank_received_vnd": null,
+      "created_at": "2026-11-18T21:44:34Z"
+    }
+  ],
+  "settlement_totals": {
+    "n": 4,
+    "reported_commission": 97854,
+    "fee": 958,
+    "tax_withheld": 8722,
+    "shopee_payout": 77623,
+    "bank_received": 77623
+  },
+  "settlement_items": {
+    "n": 14,
+    "n_bot": 13,
+    "settled_all": 97852,
+    "settled_bot": 93342,
+    "settled_non_bot": 4510
+  },
+  "customer_payouts": {
+    "n": 0,
+    "amount": 0
+  },
+  "customer_payouts_by_status": [],
+  "customer_wallet_available_vnd": 25910,
+  "customer_payouts_paid_or_pending": 0,
+  "customer_still_in_wallet_approx": 25910,
+  "top_users_by_cashback": [
+    {
+      "telegram_user_id": -24,
+      "username": "",
+      "orders": 2,
+      "cashback": 53380,
+      "commission": 99945
+    },
+    {
+      "telegram_user_id": 6021186257,
+      "username": "",
+      "orders": 7,
+      "cashback": 35039,
+      "commission": 56241
+    },
+    {
+      "telegram_user_id": 8628718420,
+      "username": "",
+      "orders": 1,
+      "cashback": 12157,
+      "commission": 17368
+    },
+    {
+      "telegram_user_id": -22,
+      "username": "",
+      "orders": 1,
+      "cashback": 7291,
+      "commission": 13652
+    },
+    {
+      "telegram_user_id": 1072852578,
+      "username": "bobohuysieucapvippro",
+      "orders": 2,
+      "cashback": 6319,
+      "commission": 10144
+    },
+    {
+      "telegram_user_id": 5589380966,
+      "username": "",
+      "orders": 3,
+      "cashback": 3710,
+      "commission": 5788
+    },
+    {
+      "telegram_user_id": -14,
+      "username": "",
+      "orders": 2,
+      "cashback": 2857,
+      "commission": 5351
+    },
+    {
+      "telegram_user_id": 1836144309,
+      "username": "anphuc0311",
+      "orders": 1,
+      "cashback": 129,
+      "commission": 244
+    },
+    {
+      "telegram_user_id": -4,
+      "username": "",
+      "orders": 1,
+      "cashback": 21,
+      "commission": 35
+    },
+    {
+      "telegram_user_id": 6885232932,
+      "username": "myrai6m",
+      "orders": 1,
+      "cashback": 0,
+      "commission": 0
+    }
+  ],
+  "cashback_by_month_purchase": [
+    {
+      "month": "2026-10",
+      "n": 6,
+      "commission": 39310,
+      "cashback": 25931
+    },
+    {
+      "month": "2026-11",
+      "n": 15,
+      "commission": 169458,
+      "cashback": 94972
+    }
+  ],
+  "link_estimates": {
+    "links": 185,
+    "estimated_cashback_sum": 3804251,
+    "estimated_commission_sum": 6130906
+  },
+  "entries": [
+    {
+      "conversion_id": "246419317220025",
+      "order_sn": "261023C6GM20NS",
+      "telegram_user_id": 5589380966,
+      "status": "available",
+      "commission_vnd": 1372,
+      "cashback_vnd": 960,
+      "fee_vnd": 14,
+      "tax_vnd": 138,
+      "purchase_time": "2026-10-23T01:48:39Z",
+      "completed_at": "2026-10-26T02:40:09Z",
+      "item": "Bộ 5 Cọ Trang Điểm Mắt Cloud 5 TMR Eye Makeup Tán "
+    },
+    {
+      "conversion_id": "246425365260309",
+      "order_sn": "261023CC4UWJ0N",
+      "telegram_user_id": 8628718420,
+      "status": "available",
+      "commission_vnd": 17368,
+      "cashback_vnd": 12157,
+      "fee_vnd": 171,
+      "tax_vnd": 1737,
+      "purchase_time": "2026-10-23T03:29:25Z",
+      "completed_at": "2026-10-27T03:23:56Z",
+      "item": "DOPI Kem Nền Không Bị Lem Và Lâu Trôi 35ml. Lâu Tr"
+    },
+    {
+      "conversion_id": "246681514296737",
+      "order_sn": "261026KTPPNSD1",
+      "telegram_user_id": 6021186257,
+      "status": "available",
+      "commission_vnd": 10391,
+      "cashback_vnd": 6474,
+      "fee_vnd": 102,
+      "tax_vnd": 1040,
+      "purchase_time": "2026-10-26T02:38:34Z",
+      "completed_at": "2026-10-29T06:45:01Z",
+      "item": "[HOẢ TỐC HCM] Mô hình đồ chơi sáng tạo xe đua F1 m"
+    },
+    {
+      "conversion_id": "246729761271292",
+      "order_sn": "261027N7MJJKFV",
+      "telegram_user_id": 1072852578,
+      "status": "available",
+      "commission_vnd": 2120,
+      "cashback_vnd": 1320,
+      "fee_vnd": 21,
+      "tax_vnd": 212,
+      "purchase_time": "2026-10-26T16:02:42Z",
+      "completed_at": "2026-10-27T03:08:58Z",
+      "item": "Nhận đơn từ 2cái-Khung bằng khen A4 (21x30cm) mặt "
+    },
+    {
+      "conversion_id": "246734635277059",
+      "order_sn": "261027NC5TSER3",
+      "telegram_user_id": -4,
+      "status": "holding",
+      "commission_vnd": 35,
+      "cashback_vnd": 21,
+      "fee_vnd": 1,
+      "tax_vnd": 4,
+      "purchase_time": "2026-10-26T17:23:56Z",
+      "completed_at": "2026-11-03T06:45:58Z",
+      "item": "Cáp sạc nhanh Baseus Pudding Series 20W"
+    },
+    {
+      "conversion_id": "246786834252068",
+      "order_sn": "261027PVSFKR94",
+      "telegram_user_id": 1072852578,
+      "status": "available",
+      "commission_vnd": 8024,
+      "cashback_vnd": 4999,
+      "fee_vnd": 79,
+      "tax_vnd": 803,
+      "purchase_time": "2026-10-27T07:54:07Z",
+      "completed_at": "2026-10-28T08:15:02Z",
+      "item": "Đĩa ảo sâu sứ trắng 15cm, 18cm ,20cm, 22cm - Phươn"
+    },
+    {
+      "conversion_id": "247399293216087",
+      "order_sn": "261103BKUUNWAQ",
+      "telegram_user_id": 6021186257,
+      "status": "holding",
+      "commission_vnd": 8002,
+      "cashback_vnd": 4985,
+      "fee_vnd": 79,
+      "tax_vnd": 801,
+      "purchase_time": "2026-11-03T10:01:33Z",
+      "completed_at": "2026-11-07T09:20:08Z",
+      "item": "Mô hình lắp ráp tàu One Piece các loại (+1 món)"
+    },
+    {
+      "conversion_id": "247575827248696",
+      "order_sn": "261105GR8YN1HR",
+      "telegram_user_id": -14,
+      "status": "holding",
+      "commission_vnd": 710,
+      "cashback_vnd": 379,
+      "fee_vnd": 7,
+      "tax_vnd": 71,
+      "purchase_time": "2026-11-05T11:03:48Z",
+      "completed_at": "2026-11-11T08:33:58Z",
+      "item": "Trà Sâm Dứa THÁI NGUYÊN - 250G, trà thiên nhiên th"
+    },
+    {
+      "conversion_id": "247721903296070",
+      "order_sn": "261107N0ACM7J6",
+      "telegram_user_id": 6021186257,
+      "status": "holding",
+      "commission_vnd": 0,
+      "cashback_vnd": 0,
+      "fee_vnd": 0,
+      "tax_vnd": 0,
+      "purchase_time": "2026-11-07T03:38:24Z",
+      "completed_at": "2026-11-10T06:24:54Z",
+      "item": "[Combo 6 túi] Cát vệ sinh cho mèo Tải cát mèo Cat "
+    },
+    {
+      "conversion_id": "247765137255340",
+      "order_sn": "261107P8JUQXWC",
+      "telegram_user_id": 6885232932,
+      "status": "holding",
+      "commission_vnd": 0,
+      "cashback_vnd": 0,
+      "fee_vnd": 0,
+      "tax_vnd": 0,
+      "purchase_time": "2026-11-07T15:39:12Z",
+      "completed_at": "2026-11-09T11:56:04Z",
+      "item": "Giỏ nhựa đựng giấy vệ sinh-phụ kiện nhà tắm- nhà b"
+    },
+    {
+      "conversion_id": "247975804204295",
+      "order_sn": "261110VCS7D187",
+      "telegram_user_id": 1836144309,
+      "status": "holding",
+      "commission_vnd": 244,
+      "cashback_vnd": 129,
+      "fee_vnd": 3,
+      "tax_vnd": 25,
+      "purchase_time": "2026-11-10T02:10:04Z",
+      "completed_at": "2026-11-16T08:01:15Z",
+      "item": "Ổ đĩa Flash Kingston DataTraveler Exodia USB 3.2 G"
+    },
+    {
+      "conversion_id": "248004348298442",
+      "order_sn": "261110041JUH6A",
+      "telegram_user_id": 6021186257,
+      "status": "holding",
+      "commission_vnd": 8955,
+      "cashback_vnd": 5579,
+      "fee_vnd": 88,
+      "tax_vnd": 896,
+      "purchase_time": "2026-11-10T10:05:48Z",
+      "completed_at": "2026-11-11T07:01:20Z",
+      "item": "[ HỎA TỐC] Kệ sách để góc nhà, kệ NGŨ GIÁC, kệ sác"
+    },
+    {
+      "conversion_id": "248029320220488",
+      "order_sn": "2611110U9SX3T8",
+      "telegram_user_id": 6021186257,
+      "status": "holding",
+      "commission_vnd": 12058,
+      "cashback_vnd": 7513,
+      "fee_vnd": 119,
+      "tax_vnd": 1206,
+      "purchase_time": "2026-11-10T17:02:01Z",
+      "completed_at": "2026-11-11T07:00:55Z",
+      "item": "[CÓ SẴN] Mô Hình Lắp Ráp MGEX 2207G Banshee Norn F"
+    },
+    {
+      "conversion_id": "248051012259599",
+      "order_sn": "2611111FG92KRF",
+      "telegram_user_id": -14,
+      "status": "pending",
+      "commission_vnd": 4641,
+      "cashback_vnd": 2478,
+      "fee_vnd": 46,
+      "tax_vnd": 465,
+      "purchase_time": "2026-11-10T23:03:48Z",
+      "completed_at": null,
+      "item": "Jujutsu Kaisen Doujin Khung Ánh Sáng Satoru Gojo G"
+    },
+    {
+      "conversion_id": "248066549288947",
+      "order_sn": "2611111WYAB3YK",
+      "telegram_user_id": -22,
+      "status": "holding",
+      "commission_vnd": 13652,
+      "cashback_vnd": 7291,
+      "fee_vnd": 134,
+      "tax_vnd": 1366,
+      "purchase_time": "2026-11-11T03:22:29Z",
+      "completed_at": "2026-11-12T08:46:42Z",
+      "item": "Thùng 48 hộp Sữa tươi Tiệt Trùng Vinamilk Green Fa"
+    },
+    {
+      "conversion_id": "248080198281045",
+      "order_sn": "2611112AP319TN",
+      "telegram_user_id": 6021186257,
+      "status": "holding",
+      "commission_vnd": 10411,
+      "cashback_vnd": 6486,
+      "fee_vnd": 103,
+      "tax_vnd": 1042,
+      "purchase_time": "2026-11-11T07:09:58Z",
+      "completed_at": "2026-11-17T07:20:13Z",
+      "item": "Tranh treo mô hình Siêu Xe, Poster treo Siêu Xe - "
+    },
+    {
+      "conversion_id": "248094137205834",
+      "order_sn": "2611112QNG7H2A",
+      "telegram_user_id": -24,
+      "status": "holding",
+      "commission_vnd": 93195,
+      "cashback_vnd": 49776,
+      "fee_vnd": 914,
+      "tax_vnd": 9320,
+      "purchase_time": "2026-11-11T11:02:17Z",
+      "completed_at": "2026-11-19T14:59:12Z",
+      "item": "Tủ KATA 5 tầng DUY TÂN nhựa PP/ABS, bao gồm 4 hộc "
+    },
+    {
+      "conversion_id": "tt:587129140476872518:1738431460473013622",
+      "order_sn": "587129140476872518",
+      "telegram_user_id": 5589380966,
+      "status": "holding",
+      "commission_vnd": 3220,
+      "cashback_vnd": 2006,
+      "fee_vnd": 32,
+      "tax_vnd": 322,
+      "purchase_time": "2026-11-11T15:46:27Z",
+      "completed_at": "2026-11-15T07:48:31Z",
+      "item": "(Deal hời) Mua 30 khuyến mãi 30 - Sườn dê  nướng H"
+    },
+    {
+      "conversion_id": "tt:587129140476872518:1736952293375837558",
+      "order_sn": "587129140476872518",
+      "telegram_user_id": 5589380966,
+      "status": "holding",
+      "commission_vnd": 1196,
+      "cashback_vnd": 744,
+      "fee_vnd": 12,
+      "tax_vnd": 120,
+      "purchase_time": "2026-11-11T15:46:27Z",
+      "completed_at": "2026-11-15T07:48:31Z",
+      "item": "250G Snack Que Phô Mai Lắc Ngó Sen,Bim Bim Khoai T"
+    },
+    {
+      "conversion_id": "248375164263053",
+      "order_sn": "261115AWCRGPMD",
+      "telegram_user_id": -24,
+      "status": "pending",
+      "commission_vnd": 6750,
+      "cashback_vnd": 3604,
+      "fee_vnd": 67,
+      "tax_vnd": 675,
+      "purchase_time": "2026-11-14T17:06:04Z",
+      "completed_at": null,
+      "item": "Ấm đun siêu tốc, Bình đun nước thủy tinh siêu tốc "
+    },
+    {
+      "conversion_id": "248662837213640",
+      "order_sn": "261118K9A2TEE8",
+      "telegram_user_id": 6021186257,
+      "status": "pending",
+      "commission_vnd": 6424,
+      "cashback_vnd": 4002,
+      "fee_vnd": 63,
+      "tax_vnd": 643,
+      "purchase_time": "2026-11-18T01:00:37Z",
+      "completed_at": null,
+      "item": "Hạt Cho Mèo PetQ - Hạt Pet Q C90, C90U & C90K Túi "
+    }
+  ]
+}

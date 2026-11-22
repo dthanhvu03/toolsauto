@@ -1,0 +1,26 @@
+{
+  "at": "2026-11-19T16:22:16.976Z",
+  "plan": "PLAN-177",
+  "event": "ab_probe_compare",
+  "order": [
+    "A_gpt_runtime_lifecycle",
+    "B_cursor_portal_session"
+  ],
+  "item_id": "54321049804",
+  "shop_id_expected": "1175585681",
+  "A": {
+    "script": "runtime-lifecycle-probe.mjs",
+    "http": 403,
+    "error": "verification_required"
+  },
+  "B": {
+    "script": "portal-session-probe.mjs",
+    "http": 200,
+    "code": 0,
+    "ids_exact": true,
+    "seller": "0%",
+    "shopee": "7%"
+  },
+  "verdict": "lifecycle_wait_differs_outcome; owner_ui_warmup_insufficient_for_A",
+  "bridge_restored": true
+}

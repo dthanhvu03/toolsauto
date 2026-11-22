@@ -1,0 +1,394 @@
+{
+  "plan": "PLAN-177",
+  "task": "0.1-lookup + 0.2-portal-vs-pd",
+  "at": "2026-11-19T09:21:03.116658Z",
+  "method": "bridge /api/lookup_offer_item (name fragment → exact shop/item filter) + ProductDataClient",
+  "shopee_base_bps": 250,
+  "notes": [
+    "keyword=item_id alone → list empty for these 6 SKUs.",
+    "Exact match proven when searching name fragment then filtering shop_id+item_id.",
+    "Hypotheses A–D candidate only. Prefer Decimal/bps for production parse.",
+    "No cookies/tokens/full product names in artifact."
+  ],
+  "samples": [
+    {
+      "sample": 1,
+      "shop_id": 1206203638,
+      "item_id": 42359593676,
+      "portal": {
+        "fetched_at": "2026-11-19T09:21:09.484Z",
+        "matched": true,
+        "ids_exact": true,
+        "best_strategy": "keyword_extra",
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [
+          {
+            "strategy": "keyword_extra",
+            "list_len": 2,
+            "matched": true,
+            "error": null
+          }
+        ],
+        "rates": {
+          "max": "0%",
+          "seller": "7%",
+          "default": "9,5%",
+          "campaign_shop": ""
+        },
+        "price_vnd": 1354000,
+        "error": null,
+        "hypotheses_sure_vnd": {
+          "A_default_as_total": 128630,
+          "B_seller_plus_2p5_cap_default": 128630,
+          "C_default_split_seller_rest": 128630,
+          "D_max_as_total": 0
+        },
+        "hypotheses_parts": {
+          "seller_vnd": 94780,
+          "default_vnd": 128630,
+          "max_vnd": 0,
+          "shopee_base_2p5_vnd": 33850,
+          "shopee_from_default_minus_seller": 33850
+        }
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:09.486171Z",
+        "price_vnd": 1354000,
+        "commission_vnd": 134780,
+        "seller_commission_vnd": 94780,
+        "shopee_commission_vnd": 40000,
+        "sure_commission_vnd": 128630,
+        "commission_rate_bps": 1500,
+        "is_xtra": true,
+        "is_capped": true,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:10Z"
+      },
+      "delta_vs_pd_sure": {
+        "A_default_as_total": 0,
+        "B_seller_plus_2p5_cap_default": 0,
+        "C_default_split_seller_rest": 0,
+        "D_max_as_total": -128630
+      },
+      "price_delta_vnd": 0
+    },
+    {
+      "sample": 2,
+      "shop_id": 462952014,
+      "item_id": 47963173483,
+      "portal": {
+        "fetched_at": "2026-11-19T09:21:17.101Z",
+        "matched": true,
+        "ids_exact": true,
+        "best_strategy": "keyword_extra",
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [
+          {
+            "strategy": "keyword_extra",
+            "list_len": 19,
+            "matched": true,
+            "error": null
+          }
+        ],
+        "rates": {
+          "max": "0%",
+          "seller": "7%",
+          "default": "9,5%",
+          "campaign_shop": ""
+        },
+        "price_vnd": 60000,
+        "error": null,
+        "hypotheses_sure_vnd": {
+          "A_default_as_total": 5700,
+          "B_seller_plus_2p5_cap_default": 5700,
+          "C_default_split_seller_rest": 5700,
+          "D_max_as_total": 0
+        },
+        "hypotheses_parts": {
+          "seller_vnd": 4200,
+          "default_vnd": 5700,
+          "max_vnd": 0,
+          "shopee_base_2p5_vnd": 1500,
+          "shopee_from_default_minus_seller": 1500
+        }
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:17.103830Z",
+        "price_vnd": 60000,
+        "commission_vnd": 9000,
+        "seller_commission_vnd": 4200,
+        "shopee_commission_vnd": 4800,
+        "sure_commission_vnd": 5700,
+        "commission_rate_bps": 1500,
+        "is_xtra": true,
+        "is_capped": false,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:17Z"
+      },
+      "delta_vs_pd_sure": {
+        "A_default_as_total": 0,
+        "B_seller_plus_2p5_cap_default": 0,
+        "C_default_split_seller_rest": 0,
+        "D_max_as_total": -5700
+      },
+      "price_delta_vnd": 0
+    },
+    {
+      "sample": 3,
+      "shop_id": 1175585681,
+      "item_id": 54321049804,
+      "portal": {
+        "fetched_at": "2026-11-19T09:21:24.909Z",
+        "matched": false,
+        "ids_exact": false,
+        "best_strategy": null,
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [
+          {
+            "strategy": "keyword_extra",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_extra_lt1",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_item_id",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_shop_item",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_product_path",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "qs_item_shop",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "qs_item_only",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          }
+        ],
+        "rates": null,
+        "price_vnd": null,
+        "error": null,
+        "hypotheses_sure_vnd": null,
+        "hypotheses_parts": null
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:24.911107Z",
+        "price_vnd": 138475,
+        "commission_vnd": 9693,
+        "seller_commission_vnd": 0,
+        "shopee_commission_vnd": 9693,
+        "sure_commission_vnd": 3461,
+        "commission_rate_bps": 700,
+        "is_xtra": false,
+        "is_capped": false,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:25Z"
+      },
+      "delta_vs_pd_sure": null
+    },
+    {
+      "sample": 4,
+      "shop_id": 994756706,
+      "item_id": 40009234555,
+      "portal": {
+        "fetched_at": "2026-11-19T09:21:37.924Z",
+        "matched": false,
+        "ids_exact": false,
+        "best_strategy": null,
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [
+          {
+            "strategy": "keyword_extra",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "keyword_extra_lt1",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "keyword_item_id",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "keyword_shop_item",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "keyword_product_path",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "qs_item_shop",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          },
+          {
+            "strategy": "qs_item_only",
+            "list_len": null,
+            "matched": null,
+            "error": "TypeError: Failed to fetch"
+          }
+        ],
+        "rates": null,
+        "price_vnd": null,
+        "error": null,
+        "hypotheses_sure_vnd": null,
+        "hypotheses_parts": null
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:37.925809Z",
+        "price_vnd": 167500,
+        "commission_vnd": 25125,
+        "seller_commission_vnd": 13400,
+        "shopee_commission_vnd": 11725,
+        "sure_commission_vnd": 17587,
+        "commission_rate_bps": 1500,
+        "is_xtra": true,
+        "is_capped": false,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:38Z"
+      },
+      "delta_vs_pd_sure": null
+    },
+    {
+      "sample": 5,
+      "shop_id": 1020571402,
+      "item_id": 22485372686,
+      "portal": {
+        "fetched_at": "2026-11-19T09:21:47.044Z",
+        "matched": false,
+        "ids_exact": false,
+        "best_strategy": null,
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [
+          {
+            "strategy": "keyword_extra",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_extra_lt1",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_item_id",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_shop_item",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "keyword_product_path",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "qs_item_shop",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          },
+          {
+            "strategy": "qs_item_only",
+            "list_len": 0,
+            "matched": false,
+            "error": null
+          }
+        ],
+        "rates": null,
+        "price_vnd": null,
+        "error": null,
+        "hypotheses_sure_vnd": null,
+        "hypotheses_parts": null
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:47.046448Z",
+        "price_vnd": 162000,
+        "commission_vnd": 20250,
+        "seller_commission_vnd": 16200,
+        "shopee_commission_vnd": 4050,
+        "sure_commission_vnd": 20250,
+        "commission_rate_bps": 1250,
+        "is_xtra": true,
+        "is_capped": false,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:49Z"
+      },
+      "delta_vs_pd_sure": null
+    },
+    {
+      "sample": 6,
+      "shop_id": 15106804,
+      "item_id": 56951779910,
+      "portal": {
+        "fetched_at": null,
+        "matched": false,
+        "ids_exact": false,
+        "best_strategy": null,
+        "lookup_note": "keyword=name_fragment then filter exact shop_id+item_id; keyword=item_id alone returns empty",
+        "attempts": [],
+        "rates": null,
+        "price_vnd": null,
+        "error": "HTTP Error 500: Internal Server Error",
+        "hypotheses_sure_vnd": null,
+        "hypotheses_parts": null
+      },
+      "product_data": {
+        "fetched_at": "2026-11-19T09:21:57.207760Z",
+        "price_vnd": 284000,
+        "commission_vnd": 36920,
+        "seller_commission_vnd": 17040,
+        "shopee_commission_vnd": 19880,
+        "sure_commission_vnd": 24140,
+        "commission_rate_bps": 1300,
+        "is_xtra": true,
+        "is_capped": false,
+        "data_source": "api",
+        "last_update": "2026-11-19T09:21:59Z"
+      },
+      "delta_vs_pd_sure": null
+    }
+  ]
+}

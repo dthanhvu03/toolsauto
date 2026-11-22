@@ -17,6 +17,7 @@ import urllib.request
 from typing import Optional
 
 from cashback_bot.affipad import is_meta_signed
+from cashback_bot.deadline_http import request_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,18 @@ def get_bridge_url() -> str:
     return f"http://{get_bridge_host()}:{port}"
 
 
-def shorten_shopee_url(url: str, sub_id: str = "AUTOSALE", timeout: float = DEFAULT_TIMEOUT) -> Optional[str]:
+def shorten_shopee_url(
+    url: str,
+    sub_id: str = "AUTOSALE",
+    timeout: float = DEFAULT_TIMEOUT,
+    *,
+    deadline: float | None = None,
+) -> Optional[str]:
     """Tạo link s.shopee.vn/XXXXX qua shopee-mcp bridge.
 
     Trả về URL rút gọn nếu thành công, None nếu bridge offline / lỗi / timeout / test mode.
     Timeout mặc định DEFAULT_TIMEOUT và có Circuit Breaker 30s để không bao giờ làm nghẽn luồng render tin nhắn.
+    deadline: time.monotonic() tuyệt đối (PLAN-177) — gồm cả thời gian chờ bridge lock.
     """
     global _LAST_BRIDGE_FAIL
 
@@ -72,44 +80,69 @@ def shorten_shopee_url(url: str, sub_id: str = "AUTOSALE", timeout: float = DEFA
     if now - _LAST_BRIDGE_FAIL < FAIL_COOLDOWN_SEC:
         return None
 
-    with _BRIDGE_LOCK:
+    remaining = timeout if deadline is None else max(0.0, deadline - time.monotonic())
+    if remaining <= 0:
+        return None
+    call_timeout = min(timeout, remaining)
+    # Chờ lock không vượt ngân sách còn lại.
+    acquired = _BRIDGE_LOCK.acquire(timeout=remaining)
+    if not acquired:
+        return None
+    try:
         # Trong lúc chờ khoá, luồng khác có thể đã rút gọn link này hoặc vừa gặp lỗi bridge.
         if key in _CACHE:
             return _CACHE[key]
         if time.time() - _LAST_BRIDGE_FAIL < FAIL_COOLDOWN_SEC:
             return None
-        return _call_bridge(url, sub_id, timeout)
+        left = call_timeout if deadline is None else max(0.0, min(call_timeout, deadline - time.monotonic()))
+        if left <= 0:
+            return None
+        if deadline is not None:
+            return _call_bridge(url, sub_id, left, deadline=deadline)
+        return _call_bridge(url, sub_id, left)
+    finally:
+        _BRIDGE_LOCK.release()
 
 
-def _call_bridge(url: str, sub_id: str, timeout: float) -> Optional[str]:
+def _call_bridge(url: str, sub_id: str, timeout: float, *, deadline: float | None = None) -> Optional[str]:
     global _LAST_BRIDGE_FAIL
 
     bridge_url = get_bridge_url()
-    query = urllib.parse.urlencode({"url": url, "sub_id": sub_id})
+    params = {"url": url, "sub_id": sub_id}
+    if deadline is not None:
+        params["timeout_ms"] = str(max(1, min(20000, int(min(timeout, max(0.0, deadline - time.monotonic())) * 1000))))
+    query = urllib.parse.urlencode(params)
     endpoint = f"{bridge_url}/api/generate_shortlink?{query}"
     started = time.monotonic()
 
     try:
-        req = urllib.request.Request(endpoint, headers={"User-Agent": "CashbackBot/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8"))
-                short_link = data.get("short_link")
-                if short_link and short_link.startswith("https://s.shopee.vn/"):
-                    # Quản lý giới hạn bộ nhớ cache FIFO
-                    if len(_CACHE) >= MAX_CACHE_SIZE:
-                        _CACHE.pop(next(iter(_CACHE)))
-                    _CACHE[(url, sub_id)] = short_link
-                    _LAST_BRIDGE_FAIL = 0.0
-                    # Ghi thời gian thật để biết timeout đủ chưa (chủ bot 2026-10-31).
-                    logger.info("[ShopeeShortener] OK %.1fs (timeout %.1fs) %s", time.monotonic() - started, timeout,
-                                short_link)
-                    return short_link
+        if deadline is not None:
+            status, raw = request_bytes(
+                "GET", endpoint, deadline=min(deadline, time.monotonic() + timeout),
+                headers={"User-Agent": "CashbackBot/1.0"},
+            )
+        else:
+            req = urllib.request.Request(endpoint, headers={"User-Agent": "CashbackBot/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status, raw = resp.status, resp.read()
+        if status == 200:
+            data = json.loads(raw.decode("utf-8"))
+            short_link = data.get("short_link")
+            if short_link and short_link.startswith("https://s.shopee.vn/"):
+                # Quản lý giới hạn bộ nhớ cache FIFO
+                if len(_CACHE) >= MAX_CACHE_SIZE:
+                    _CACHE.pop(next(iter(_CACHE)))
+                _CACHE[(url, sub_id)] = short_link
+                _LAST_BRIDGE_FAIL = 0.0
+                # Ghi thời gian thật để biết timeout đủ chưa (chủ bot 2026-10-31).
+                logger.info("[ShopeeShortener] OK %.1fs (timeout %.1fs) %s", time.monotonic() - started, timeout,
+                            short_link)
+                return short_link
         logger.warning("[ShopeeShortener] Bridge trả không có link sau %.1fs: %s", time.monotonic() - started, url)
     except Exception as exc:
         _LAST_BRIDGE_FAIL = time.time()
-        logger.warning("[ShopeeShortener] Lỗi sau %.1fs (timeout %.1fs): %s (ngừng gọi 30s) %s",
-                       time.monotonic() - started, timeout, exc, url)
+        logger.warning("[ShopeeShortener] Lỗi sau %.1fs (timeout %.1fs): %s (ngừng gọi 30s)",
+                       time.monotonic() - started, timeout, type(exc).__name__)
 
     return None
 

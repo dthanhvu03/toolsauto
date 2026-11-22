@@ -16,7 +16,7 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.affiliate import build_an_redir, build_food_redir, is_valid_sub_id
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import CART_HINT, FOOD_BUTTON, STALE, tip_reply
+from cashback_bot.messages import CART_HINT, DEGRADED_UNQUOTED, FOOD_BUTTON, STALE, tip_reply
 from cashback_bot.money import estimated_cashback
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.service import CashbackService
@@ -218,19 +218,20 @@ def test_ac03_cache_cu_va_warning_khong_dua_so(tmp_path):
         commission=8021,
         productName="Gối chữ U",
     )
+    # PLAN-177: mặc định degraded — vẫn tạo link, không bịa số từ cache hỏng.
     reply = service(tmp_path, FakeClient(stale)).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=4, now=NOW
     )
-    assert reply.text == STALE
-    assert reply.button_url is None
+    assert reply.text == DEGRADED_UNQUOTED
+    assert reply.button_url is not None
     assert "8.021" not in reply.text
     assert "145.820" not in reply.text
-    assert "an_redir" not in reply.text
+    assert "Hoàn dự kiến" not in reply.text
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
     saved = conn.execute(
-        "SELECT link_status, estimated_cashback, affiliate_url, reject_reason FROM link_requests"
+        "SELECT link_status, estimated_cashback, reject_reason FROM link_requests"
     ).fetchone()
-    assert saved == ("rejected", None, None, "stale")
+    assert saved == ("created", None, None)
 
 
 def test_ac03_qua_han_du_khong_co_warning(tmp_path):
@@ -238,7 +239,7 @@ def test_ac03_qua_han_du_khong_co_warning(tmp_path):
     reply = service(tmp_path, FakeClient(old)).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=5, now=NOW
     )
-    assert reply.text == STALE
+    assert reply.text == DEGRADED_UNQUOTED
     assert "14.000đ" not in reply.text
 
 
@@ -247,8 +248,16 @@ def test_ac03_api_loi_va_timeout(tmp_path):
         reply = service(tmp_path, FakeClient(error=ProductDataError(code))).handle_text(
             111, "buyer", "https://shopee.vn/product/9/8", update_id=update_id, now=NOW
         )
-        assert reply.text == STALE
-        assert reply.button_url is None
+        assert reply.text == DEGRADED_UNQUOTED
+        assert reply.button_url is not None
+
+
+def test_ac03_rollback_tat_degraded_van_stale(tmp_path):
+    reply = service(
+        tmp_path, FakeClient(error=ProductDataError("timeout")), product_quote_allow_degraded=False
+    ).handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=66, now=NOW)
+    assert reply.text == STALE
+    assert reply.button_url is None
 
 
 def test_cashback_bang_0_hien_thi_trung_thuc(tmp_path):
@@ -601,8 +610,12 @@ def test_last_update_tuong_lai_va_db_con_trong_nguong(tmp_path):
     reply = service(tmp_path, FakeClient(payload(last_update=future))).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=40, now=NOW
     )
-    assert reply.text == STALE
-    assert reply.button_url is None
+    # PLAN-177: quote hỏng → link degraded (không bịa số); tắt cờ thì STALE.
+    assert reply.text == DEGRADED_UNQUOTED and reply.button_url
+    blocked = service(
+        tmp_path, FakeClient(payload(last_update=future)), product_quote_allow_degraded=False,
+    ).handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=41, now=NOW)
+    assert blocked.text == STALE and blocked.button_url is None
 
 
 def test_allowlist_khoa_theo_user_id(tmp_path):
@@ -770,13 +783,14 @@ def test_api_loi_notify_admin_khong_lo_secret(tmp_path):
         admin_notifier=admin,
     )
     reply = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=703, now=NOW)
-    assert reply.text == STALE
+    # PLAN-177: khách vẫn nhận link degraded; admin vẫn được báo product_data_timeout.
+    assert reply.text == DEGRADED_UNQUOTED
+    assert reply.button_url is not None
     admin.flush_pending()
     assert admin_tg.sent, "admin should receive timeout alert"
     msg = "\n".join(item[1] for item in admin_tg.sent)
     assert "Lỗi bot" in msg
     assert "product_data_timeout" in msg
-    assert "https://s.shopee.vn/an_redir" not in msg
     assert not re.search(r"\b\d{8,12}:[A-Za-z0-9_-]{20,}\b", msg)
     assert not re.search(r"\b[a-f0-9]{40,64}\b", msg)
 
@@ -933,6 +947,11 @@ def test_link_video_rut_gon_chi_cach_lay_link_san_pham_va_khong_bao_admin_lap(tm
 
 
 def test_link_san_pham_loi_api_van_bao_thu_lai(tmp_path):
+    # PLAN-177: api lỗi + có shop/item → link degraded; tắt cờ thì vẫn STALE.
     bot = service(tmp_path, FakeClient({"status": "error"}))
     reply = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=NOW)
-    assert "Chưa lấy được dữ liệu sản phẩm" in reply.text
+    assert reply.text == DEGRADED_UNQUOTED and reply.button_url
+    blocked = service(
+        tmp_path, FakeClient({"status": "error"}), product_quote_allow_degraded=False,
+    ).handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=2, now=NOW)
+    assert "Chưa lấy được dữ liệu sản phẩm" in blocked.text

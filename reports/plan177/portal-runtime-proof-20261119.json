@@ -1,0 +1,19 @@
+{
+  "at_utc": "2026-11-19T10:17:00.5368728Z",
+  "health_http": 200,
+  "shortlink_success": true,
+  "shortlink_host": "s.shopee.vn",
+  "npm_sha256": "9F8E47F0A9F02D198A0390E193A29B3937A92DF04E76937C5835B4BCAB8EECBC",
+  "wsl_bridge_health_http": 200,
+  "contract_checks": 59,
+  "contract_failures": 0,
+  "production_cashbot_changed": false,
+  "installed_bridge_changed": false,
+  "pm2_bridge": {
+    "pid": 2317333,
+    "status": "online",
+    "restart_count": 29
+  },
+  "other_pm2_pids_unchanged": true,
+  "poc_processes_remaining": 0
+}

@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-19T16:57:37.644794+00:00",
+  "phase": "p0_baseline",
+  "health": {
+    "status": "ok",
+    "server": "shopee-mcp",
+    "version": "0.3.0"
+  },
+  "shortlink": {
+    "http": 200,
+    "success": true,
+    "host": "s.shopee.vn",
+    "error": null
+  },
+  "product_quote_primary": "product_data"
+}

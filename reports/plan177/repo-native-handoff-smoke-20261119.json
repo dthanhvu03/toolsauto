@@ -1,0 +1,144 @@
+{
+  "at": "2026-11-19T16:11:35.021Z",
+  "handoff": ".comms/handoffs/cursor-to-ag/TASK-plan177-repo-bridge-native-smoke.md",
+  "mode": "smoke_only_no_customer_activation",
+  "calls": [],
+  "stages": [
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "start",
+      "elapsed_ms": 0
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_start",
+      "elapsed_ms": 14
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "get_context_done",
+      "elapsed_ms": 7712
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cookies_sync_done",
+      "elapsed_ms": 7832
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_start",
+      "elapsed_ms": 7837
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "page_ready",
+      "elapsed_ms": 7846
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "navigate_start",
+      "elapsed_ms": 7854
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "abort",
+      "elapsed_ms": 45053
+    },
+    {
+      "operation": "prepare",
+      "request": 1,
+      "stage": "cleanup_done",
+      "elapsed_ms": 52067
+    }
+  ],
+  "upstream_errors": [],
+  "auth_blocked": false,
+  "same_backend_instance": true,
+  "error": "timeout",
+  "result": "failed_before_required_completion",
+  "cleanup": {
+    "closed": true
+  },
+  "total_elapsed_sec": 52.898,
+  "executed_harness_sha256": "d6bcb2bb94450dbaf15626c6d0078ae4557b547e083cea4d49f3edfa5eb4f328",
+  "stop_reason": "prepare_portal_navigation_timeout",
+  "native_quote": {
+    "skipped": true,
+    "reason": "prepare_not_ready"
+  },
+  "repo_shortlink": {
+    "skipped": true,
+    "reason": "prepare_not_ready"
+  },
+  "legacy_restore": {
+    "pm2_start_exit": 0,
+    "wsl_health_http": 200,
+    "health_status": "ok",
+    "is_legacy": true,
+    "shortlink": {
+      "at": "2026-11-19T16:14:36.2226951Z",
+      "http": 200,
+      "success": true,
+      "host": "s.shopee.vn",
+      "elapsed_sec": 15.62
+    },
+    "probe_processes_remaining": 0,
+    "npm_sha256": "9F8E47F0A9F02D198A0390E193A29B3937A92DF04E76937C5835B4BCAB8EECBC"
+  },
+  "execution_note": "Initial combined command rejected before execution; narrower private WSL interface and minimal restoration command accepted; one repo preparation attempted.",
+  "executed_harness_file": "repo-native-handoff-smoke-executed.mjs",
+  "harness_followup": "After the failed prepare, corrected harness-only health/shortlink base URL to match explicit private listen interface. No second live run; production source unchanged.",
+  "invariants": {
+    "at": "2026-11-19T16:15:53.952004+00:00",
+    "all_baseline_files_unchanged": true,
+    "unchanged_files": {
+      ".env": true,
+      "run_shopee_mcp.sh": true,
+      "cashback_bot/config.py": true,
+      "cashback_bot/service.py": true,
+      "cashback_bot/native_shopee_quote.py": true,
+      "scripts/shopee_bridge/browser.mjs": true,
+      "scripts/shopee_bridge/index.mjs": true,
+      "scripts/shopee_bridge/server.mjs": true
+    },
+    "primary_configured": "(unset; default product_data)",
+    "bridge_implementation_configured": "(unset; default legacy)",
+    "cashbot_services_unchanged": true,
+    "services": {
+      "cashback-bot": {
+        "MainPID": "1456507",
+        "ExecMainStartTimestampMonotonic": "519935658635",
+        "ActiveState": "active"
+      },
+      "cashback-zalo": {
+        "MainPID": "1456511",
+        "ExecMainStartTimestampMonotonic": "519935720593",
+        "ActiveState": "active"
+      }
+    },
+    "other_pm2_unchanged": true,
+    "legacy_pm2": {
+      "pid": 3147903,
+      "status": "online"
+    }
+  },
+  "independent_review": {
+    "verdict": "pass_for_failed_smoke_classification_and_legacy_restore_only",
+    "reviewer": "phase2_verification",
+    "native_live_success": false,
+    "required_followup": "diagnose repo portal navigation; fix then repeat native+shortlink smoke before promotion"
+  },
+  "final_artifact_checks": {
+    "git_diff_check_exit": 0,
+    "artifact_files_scanned": 7,
+    "credential_value_matches": 0
+  }
+}

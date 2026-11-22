@@ -220,6 +220,7 @@ def test_magiam_bat_tat_va_trang_chu(tmp_path):
 
 
 def test_zalo_go_magiam_va_chon_so_bat(tmp_path):
+    """Zalo vẫn xem /magiam + tắt nhận; không còn blast DM mã (2026-11-20 → ZT báo mã)."""
     bot, channel, zalo = _channel(tmp_path, _client())
     channel.handle(_update("menu", "m0"), now=NOW)
     _bind(bot)
@@ -227,9 +228,8 @@ def test_zalo_go_magiam_va_chon_so_bat(tmp_path):
     channel.handle(_update("magiam", "m2"), now=NOW)
     assert "Mã giảm giá Shopee" in zalo.sent[-1][1] and "1 · 🔕 Tắt báo mã" in zalo.sent[-1][1]
     voucher.handle_post(bot.repo, _post(DEFAULT, 50), False, NOW)
-    assert voucher.tick(bot.repo, NOW + voucher.GROUP_WAIT) == 1, "khách Zalo đã tạo link nhận mặc định"
-    [row] = _sent(bot)
-    assert row["chat_id"] < 0, "khách Zalo có id âm"
+    assert voucher.tick(bot.repo, NOW + voucher.GROUP_WAIT) == 0, "không blast mã sang Zalo"
+    assert _sent(bot) == []
     channel.handle(_update("magiam", "m3"), now=NOW)
     channel.handle(_update("1", "m4"), now=NOW)
     assert "Đã tắt báo mã" in zalo.sent[-1][1]

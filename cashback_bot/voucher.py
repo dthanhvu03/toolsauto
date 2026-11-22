@@ -163,7 +163,11 @@ def is_on(repo: TrackingRepository, user: int) -> bool:
 
 
 def subscribers(conn: sqlite3.Connection, now: datetime) -> list[int]:
-    """Khách đã tạo link hoặc tự bật, trừ khách tắt báo mã hay chặn bot."""
+    """Khách Telegram đã tạo link hoặc tự bật, trừ tắt báo mã / chặn bot.
+
+    2026-11-20: không gửi báo mã / deal blast sang Zalo (ID âm) — tránh rate limit và loãng kênh hoàn tiền;
+    săn deal hướng vào nhóm Tele ZT báo mã.
+    """
     users = {int(r[0]) for r in conn.execute(
         "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created'")}
     for key, value in conn.execute("SELECT key, value FROM bot_state WHERE key LIKE ?", (ON_PREFIX + "%",)):
@@ -176,7 +180,10 @@ def subscribers(conn: sqlite3.Connection, now: datetime) -> list[int]:
         elif value == "0":
             users.discard(user)
     cfg = NotifyConfig(True)
-    return sorted(u for u in users if customer_block_reason(conn, {"category": CATEGORY, "chat_id": u}, cfg, now) is None)
+    return sorted(
+        u for u in users
+        if u > 0 and customer_block_reason(conn, {"category": CATEGORY, "chat_id": u}, cfg, now) is None
+    )
 
 
 # --- Tin trong kênh ---------------------------------------------------------------------------------------------

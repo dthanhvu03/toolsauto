@@ -329,6 +329,13 @@ STALE = (
     "Thông tin hoàn tiền của món này chưa sẵn sàng.\n"
     "Bạn thử gửi lại sau ít phút nhé."
 )
+# PLAN-177: tạo link khi Product Data chết — không bịa số hoàn.
+DEGRADED_UNQUOTED = (
+    "✅ <b>Đã tạo link mua</b>\n"
+    "Chưa ước tính được hoàn tiền lúc này (dữ liệu tạm chưa sẵn).\n"
+    "Bạn vẫn mua qua nút dưới — đơn hợp lệ vẫn được ghi nhận.\n"
+    "👉 Bấm <b>🛒 Mua trên Shopee</b> rồi đặt hàng."
+)
 # Link rút gọn AddLiveTag không đọc ra sản phẩm (chủ bot 12/11: link vn.shp.ee…?fromSource=copy_link mở ra video Shopee).
 SHORT_LINK_UNREADABLE = (
     "⚠️ <b>Bot chưa đọc được link này</b>\n"
@@ -661,6 +668,11 @@ def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_u
                        tiktok: bool = False, extra_vnd: int = 0, capped: bool = False,
                        rank_line: str | None = None, xtra: bool = False) -> BotReply:
     return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped, rank_line, xtra)
+
+
+def render_degraded_unquoted(affiliate_url: str) -> BotReply:
+    """PLAN-177: link tạo được nhưng chưa có số hoàn — không bịa giá/HH."""
+    return BotReply(DEGRADED_UNQUOTED, button_url=affiliate_url, button_label=BUY_BUTTON)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------

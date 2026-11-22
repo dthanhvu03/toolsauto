@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-19T10:51:15.132Z",
+  "command": ".venv/bin/python -m pytest -q tests/test_cashback_plan177.py tests/test_cashback_bot.py tests/test_cashback_affipad.py tests/test_shopee_resolve.py tests/test_cashback_zalo.py",
+  "pytest": "107 passed in 15.22s",
+  "hashes": {
+    "cashback_bot/config.py": "a1b2155612eac2533cc1c6cba73833acb0c2ce7dd7a3e74ec95280e9f978a392",
+    "cashback_bot/service.py": "82070954f9543b1c29e6c69c927671fd1fb7e9d6dd0e086e00d6c1e82d79073d",
+    "cashback_bot/product_data.py": "8e6aece981c6e4a6b46e75e1f97b044a71813a0d890d862451c41b61dc37b431",
+    "cashback_bot/shopee_shortener.py": "99d766f0b80703cda323f052715ef878c6667b5bbc5cf645771a5423136781c3",
+    "cashback_bot/poller.py": "fc37c9d34e23bb3a8503c44c57ed5262a966c82e1cc9ada52936f2a53b547eca",
+    "cashback_bot/zalo_bot.py": "7a130c3f7e840a61dfa33e5e99ef7c9db0d530a234a57f047dc40146c8727ac2",
+    "run_shopee_mcp.sh": "2f67259991f427ed7bde8fe38477c908f677418e3002a0b2c8c707671732abf8"
+  }
+}
