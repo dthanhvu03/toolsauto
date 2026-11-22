@@ -1,0 +1,23 @@
+{
+  "plan": "PLAN-182",
+  "account": "us28qt",
+  "slot": "zt-bf26-threads-image-p1",
+  "parent_url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+  "parent_text_sha256": "55d88c9d710980fead11c376c2aa2a54c02add0ff9d14341e7b3dd938efc77a2",
+  "caption": "Đây là tin hướng dẫn thật trong kênh ZT báo mã 🛍️ Mình chuẩn bị săn Black Friday 27/11 cùng nhau, xem điều kiện mã rồi hãy chốt nhé. Link vào kênh ở bài phía trên.",
+  "caption_sha256": "35883e6e99b435e87da6befbc3de4042e45f7b34cb1effb10f9096159fe03e19",
+  "image_path": "/home/vu/toolsauto/reports/zt-blackfriday-20261120/zt-blackfriday-guide.png",
+  "image_sha256": "090145e1468897f303fa1060cf1ef2e7e2a1bff40254f773daa1a4c466d92316",
+  "prepared_at": "2026-11-20T02:26:59.776921+00:00",
+  "source": "Actual Telegram desktop screenshot of pinned guide617; crop only; no chat list or coupon images",
+  "crop_box": [
+    455,
+    360,
+    887,
+    727
+  ],
+  "asset_dimensions": [
+    1080,
+    1350
+  ]
+}

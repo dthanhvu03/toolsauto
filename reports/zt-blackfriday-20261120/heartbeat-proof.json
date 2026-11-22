@@ -1,0 +1,11 @@
+{
+  "id": "theo-d-i-t-th-capcut",
+  "kind": "heartbeat",
+  "name": "Theo dõi kết quả nhóm agent",
+  "status": "ACTIVE",
+  "rrule": "FREQ=MINUTELY;INTERVAL=15",
+  "target_thread_id": "01a1ec50-b910-77c2-a614-3d7e33f49dd9",
+  "has_PLAN181": true,
+  "has_post": true,
+  "has_measure": true
+}

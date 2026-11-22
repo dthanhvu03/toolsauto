@@ -1,0 +1,41 @@
+{
+  "plan": "PLAN-181",
+  "channel_id": -1004496405998,
+  "content_sha256": "da4c76872dbfb31825dc11f3c6b395d5d226c04e90d90a10a16931f1e7dc59b2",
+  "baseline_member_count": 3,
+  "status": "completed",
+  "started_at": "2026-11-20T02:04:35.559144+00:00",
+  "readiness": {
+    "channel_title": "ZT báo mã",
+    "channel_type": "channel",
+    "public_username": false,
+    "member_count": 3,
+    "bot_rights": {
+      "can_post_messages": true,
+      "can_edit_messages": true,
+      "can_invite_users": true
+    },
+    "own_guide_pinned": true,
+    "pinned_message_id": 617
+  },
+  "invite": {
+    "status": "done",
+    "attempted_at": "2026-11-20T02:04:35.559176+00:00",
+    "invite_link": "https://t.me/+02gPhoNuEjcxMmJl",
+    "name": "ZT BF26 Threads P1",
+    "expire_date": 1796057999,
+    "is_primary": false,
+    "is_revoked": false
+  },
+  "updated_at": "2026-11-20T02:04:45.788355+00:00",
+  "guide": {
+    "status": "done",
+    "attempted_at": "2026-11-20T02:04:36.356525+00:00",
+    "message_id": 617,
+    "text": "🛍 Chuẩn bị săn Black Friday 27/11 cùng ZT báo mã\n\nỞ đây có mã Shopee và các món tham khảo để bạn xem trước khi mua.\n\n1. Lên danh sách món thật sự cần và mức giá bạn chấp nhận trước khi săn sale.\n2. Với mỗi mã, xem đơn tối thiểu, mức giảm tối đa, ngành hàng và khung giờ; kiểm tra lại ở bước thanh toán. Mã có thể hết lượt hoặc không áp dụng cho tài khoản/món của bạn.\n3. Muốn xem số hoàn dự kiến: dán link sản phẩm vào Cashbot, rồi mua bằng link bot trả riêng cho bạn. Link mua công khai trong kênh không tự ghi hoàn vào tài khoản Cashbot của bạn.\n\nChỉ chốt khi giá cuối phù hợp ngân sách; đừng mua thêm chỉ để đủ điều kiện mã.\nMột số đường dẫn trong kênh là link tiếp thị liên kết.\n👉 Mở Cashbot: https://t.me/zt_shopee_bot?start=zt_bf26_guide"
+  },
+  "pin": {
+    "status": "verified",
+    "message_id": 617
+  }
+}

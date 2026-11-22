@@ -1,0 +1,135 @@
+{
+  "status": "posted",
+  "slot": "zt-bf26-threads-p1",
+  "attempt_started_at": "2026-11-20T02:07:29.924998+00:00",
+  "text": "Chuẩn bị săn Black Friday 27/11 cùng nhau nhé 🛍️\n\nMình có kênh Telegram ZT báo mã: tổng hợp mã Shopee, món tham khảo và lưu ý điều kiện áp dụng. Vào kênh lên danh sách món cần mua, canh mã cùng nhau:\nhttps://t.me/+02gPhoNuEjcxMmJl\n\nMã có thể hết lượt hoặc tùy tài khoản. Trong kênh có link tiếp thị liên kết.",
+  "create_post_called": true,
+  "post_url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+  "pm2_before": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 26025,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "preflight": {
+    "observed_at": "2026-11-20T02:07:29.924998+00:00",
+    "checks": {
+      "role": true,
+      "worker_enabled": true,
+      "outside_quiet_hours": true,
+      "account_active": true,
+      "profile_unlocked": true,
+      "worker_idle": true,
+      "hour_budget": true,
+      "day_budget": true,
+      "spacing": true,
+      "no_previous_attempt": true
+    },
+    "blocked": [],
+    "combined_public_last_hour": 0,
+    "combined_public_last_day": 8,
+    "gap_seconds": 32479.156313
+  },
+  "verified_live_handle": "us28qt",
+  "permalink_content_and_links_verified": true,
+  "pm2_after": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 895556,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "worker_restored": true,
+  "finished_at": "2026-11-20T02:08:32.392989+00:00"
+}

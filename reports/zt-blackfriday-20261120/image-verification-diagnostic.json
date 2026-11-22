@@ -1,0 +1,23 @@
+{
+  "parent_path_verified": true,
+  "payload_candidates": {
+    "Df8pynHiYfZ": {
+      "media_count": 1,
+      "is_reply": true,
+      "reply_to_author": "us28qt",
+      "parent_references": []
+    }
+  },
+  "dom_candidates": [
+    {
+      "path": "/@us28qt/post/Df8jAaUCVmk",
+      "images": 1,
+      "caption_matches": false
+    },
+    {
+      "path": "/@us28qt/post/Df8pynHiYfZ",
+      "images": 1,
+      "caption_matches": true
+    }
+  ]
+}

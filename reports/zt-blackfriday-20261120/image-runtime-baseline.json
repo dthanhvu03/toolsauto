@@ -1,0 +1,64 @@
+{
+  "at": "2026-11-20T02:39:00.987088+00:00",
+  "pm2": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1042779,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "systemd": {
+    "store-bot": "MainPID=25744\nActiveState=active\nActiveEnterTimestamp=Thu 2026-11-19 18:33:43 UTC",
+    "cashback-bot": "MainPID=25731\nActiveState=active\nActiveEnterTimestamp=Thu 2026-11-19 18:33:43 UTC",
+    "cashback-zalo": "MainPID=25732\nActiveState=active\nActiveEnterTimestamp=Thu 2026-11-19 18:33:43 UTC"
+  },
+  "hashes": {
+    ".env": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+    "/home/vu/toolsauto/storage/db/config/threads_growth_accounts.json": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81"
+  }
+}

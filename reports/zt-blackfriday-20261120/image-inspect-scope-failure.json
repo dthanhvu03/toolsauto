@@ -1,0 +1,132 @@
+{
+  "status": "not_published",
+  "plan": "PLAN-182",
+  "mode": "inspect",
+  "slot": "zt-bf26-threads-image-p1",
+  "parent_url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+  "caption_sha256": "35883e6e99b435e87da6befbc3de4042e45f7b34cb1effb10f9096159fe03e19",
+  "image_sha256": "090145e1468897f303fa1060cf1ef2e7e2a1bff40254f773daa1a4c466d92316",
+  "attempt_started_at": "2026-11-20T02:35:01.528048+00:00",
+  "submit_called": false,
+  "preflight": {
+    "observed_at": "2026-11-20T02:35:01.428280+00:00",
+    "checks": {
+      "account_active": true,
+      "profile_unlocked": true,
+      "worker_idle": true
+    },
+    "blocked": [],
+    "combined_public_last_hour": 1,
+    "combined_public_last_day": 8,
+    "gap_seconds": 1651.503282
+  },
+  "pm2_before": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1026273,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "verified_live_handle": "us28qt",
+  "error_type": "GuardError",
+  "error_reason": "Original parent scope ambiguous",
+  "pm2_after": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1042779,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "worker_restored": true,
+  "finished_at": "2026-11-20T02:35:23.654174+00:00"
+}

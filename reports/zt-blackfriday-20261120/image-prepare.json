@@ -1,0 +1,152 @@
+{
+  "status": "prepared",
+  "plan": "PLAN-182",
+  "mode": "prepare",
+  "slot": "zt-bf26-threads-image-p1",
+  "parent_url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+  "caption_sha256": "35883e6e99b435e87da6befbc3de4042e45f7b34cb1effb10f9096159fe03e19",
+  "image_sha256": "090145e1468897f303fa1060cf1ef2e7e2a1bff40254f773daa1a4c466d92316",
+  "attempt_started_at": "2026-11-20T03:01:32.906400+00:00",
+  "submit_called": false,
+  "preflight": {
+    "observed_at": "2026-11-20T03:01:32.782600+00:00",
+    "checks": {
+      "account_active": true,
+      "profile_unlocked": true,
+      "worker_idle": true,
+      "role": true,
+      "worker_enabled": true,
+      "outside_quiet_hours": true,
+      "hour_budget": true,
+      "day_budget": true,
+      "spacing": true,
+      "no_previous_attempt": true
+    },
+    "blocked": [],
+    "combined_public_last_hour": 1,
+    "combined_public_last_day": 8,
+    "gap_seconds": 3242.857602
+  },
+  "pm2_before": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1058801,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "verified_live_handle": "us28qt",
+  "parent_inspection": {
+    "parent_verified": true,
+    "edit_available": false,
+    "menu_labels": [
+      "Insights",
+      "Copy link",
+      "Get embed code",
+      "Save",
+      "Pin to profile",
+      "Archive",
+      "Hide like and share counts",
+      "Post options",
+      "Delete"
+    ]
+  },
+  "pm2_after": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1077191,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "worker_restored": true,
+  "finished_at": "2026-11-20T03:02:21.160890+00:00"
+}

@@ -1,0 +1,41 @@
+{
+  "observed_at": "2026-11-20T02:10:24.410945+00:00",
+  "systemd": {
+    "store-bot": [
+      "MainPID=25744",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-bot": [
+      "MainPID=25731",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-zalo": [
+      "MainPID=25732",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ]
+  },
+  "roles_sha256": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+  "env_sha256": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82",
+  "trial_rows": [
+    [
+      "zt-bf26-threads-p1",
+      "posted",
+      "https://www.threads.com/@us28qt/post/Df8jAaUCVmk"
+    ]
+  ],
+  "create_post_calls": 1,
+  "unrelated_pm2_changed": [],
+  "guide_message_id": 617,
+  "pin_verified": true,
+  "telegram_completed_steps": {
+    "invite": "done",
+    "guide": "done",
+    "pin": "verified"
+  },
+  "systemd_unchanged": true,
+  "roles_unchanged": true,
+  "env_unchanged": true
+}

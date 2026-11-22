@@ -1,0 +1,30 @@
+{
+  "plan": "PLAN-181",
+  "observed_at": "2026-11-20T04:04:50.624576+00:00",
+  "since": "2026-11-20T02:04:35.559144+00:00",
+  "source": "zt_bf26_guide",
+  "baseline_member_count": 3,
+  "channel": {
+    "status": "available",
+    "member_count": 3,
+    "still_private": true,
+    "guide_still_pinned": true
+  },
+  "business": {
+    "status": "available",
+    "new_customers": 0,
+    "new_customers_created_link": 0,
+    "created_links": 0,
+    "configured_exclusions": 1
+  },
+  "joins_attributed_to_invite": null,
+  "impressions": null,
+  "cash_received_vnd": null,
+  "customer_or_public_actions": 0,
+  "limitations": [
+    "Member totals include administrators/bots and do not prove acquisition source.",
+    "No chat_member/join-per-invite handler is deployed; invite attribution is unavailable.",
+    "Cashbot source is first-touch for new users, not returning users or causal proof.",
+    "A created product link is use, not a purchase or received commission."
+  ]
+}

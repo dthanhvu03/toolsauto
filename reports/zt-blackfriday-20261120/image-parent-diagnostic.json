@@ -1,0 +1,284 @@
+{
+  "path": "/@us28qt/post/Df8jAaUCVmk",
+  "parent_links": 2,
+  "timestamp_links": 1,
+  "href": "/@us28qt/post/Df8jAaUCVmk",
+  "ancestors": [
+    {
+      "tag": "A",
+      "role": "link",
+      "pressable": null,
+      "text": "59m"
+    },
+    {
+      "tag": "SPAN",
+      "role": null,
+      "pressable": null,
+      "text": "59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "us28qt 59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "us28qt 59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "us28qt 59m"
+    },
+    {
+      "tag": "DIV",
+      "role": null,
+      "pressable": null,
+      "text": "us28qt 59m Chuẩn bị săn Black Friday 27/11 cùng nhau nhé 🛍️ Mình có kênh Telegram ZT báo mã: tổng hợp mã Shopee, món tham khảo và lưu ý điều kiện áp "
+    }
+  ],
+  "exact_text_in_body": false,
+  "payload_parent_found": true,
+  "scope_candidates": [
+    {
+      "depth": 1,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 0,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 2,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 0,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 3,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 0,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 4,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 0,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 5,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 1,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 6,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 0,
+      "more_count": 1,
+      "paragraphs_match": false,
+      "invite_anchor_match": false
+    },
+    {
+      "depth": 7,
+      "timestamp_codes": [
+        "Df8jAaUCVmk"
+      ],
+      "reply_count": 1,
+      "more_count": 1,
+      "paragraphs_match": true,
+      "invite_anchor_match": true,
+      "svg_controls": [
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": "More",
+          "child_title": "More",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": "Like",
+          "child_title": "Like",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": "Reply",
+          "child_title": "Reply",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": "Repost",
+          "child_title": "Repost",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": "Share",
+          "child_title": "Share",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": "Save",
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": null,
+          "child_title": "Save",
+          "role": "img",
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": null,
+          "child_title": null,
+          "role": null,
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": null,
+          "child_title": null,
+          "role": null,
+          "testid": null
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "labelledby_text": "",
+          "title": null,
+          "child_title": null,
+          "role": null,
+          "testid": null
+        }
+      ],
+      "button_controls": [
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": "Translate"
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": null,
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": "Attach media",
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": "Add a GIF",
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        },
+        {
+          "label": "Expand composer",
+          "labelledby": null,
+          "title": null,
+          "text": ""
+        }
+      ]
+    }
+  ],
+  "scope": {
+    "ancestor_depth": 7,
+    "timestamp_codes": [
+      "Df8jAaUCVmk"
+    ],
+    "reply_count": 1,
+    "more_count": 1,
+    "paragraphs_and_invite_anchor_verified": true
+  }
+}

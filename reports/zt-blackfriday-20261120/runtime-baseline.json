@@ -1,0 +1,76 @@
+{
+  "observed_at": "2026-11-20T02:06:05.981993+00:00",
+  "snapshot_scope": "after Telegram actions, before any Threads worker pause",
+  "initial_snapshot_error": "KeyError: pid on unrelated PM2 entry; no PM2 action was attempted by that snapshot",
+  "pm2": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": null,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 26025,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "systemd": {
+    "store-bot": [
+      "MainPID=25744",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-bot": [
+      "MainPID=25731",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ],
+    "cashback-zalo": [
+      "MainPID=25732",
+      "ExecMainStartTimestamp=Thu 2026-11-19 18:33:43 UTC",
+      "ActiveState=active"
+    ]
+  },
+  "roles_sha256": "bd5b43f30835dc372c94409aaabc54f181bf6797525443b273a2f0e33198dd81",
+  "env_sha256": "7b9b8c96b96bb4d95db0713226f3cacb633f6ff23b91c01e74bee34b35db7b82"
+}

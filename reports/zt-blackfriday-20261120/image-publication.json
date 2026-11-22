@@ -1,0 +1,145 @@
+{
+  "status": "posted",
+  "plan": "PLAN-182",
+  "mode": "publish",
+  "slot": "zt-bf26-threads-image-p1",
+  "parent_url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+  "caption_sha256": "35883e6e99b435e87da6befbc3de4042e45f7b34cb1effb10f9096159fe03e19",
+  "image_sha256": "090145e1468897f303fa1060cf1ef2e7e2a1bff40254f773daa1a4c466d92316",
+  "attempt_started_at": "2026-11-20T03:06:51.813584+00:00",
+  "submit_called": true,
+  "preflight": {
+    "observed_at": "2026-11-20T03:06:51.411805+00:00",
+    "checks": {
+      "account_active": true,
+      "profile_unlocked": true,
+      "worker_idle": true,
+      "role": true,
+      "worker_enabled": true,
+      "outside_quiet_hours": true,
+      "hour_budget": true,
+      "day_budget": true,
+      "spacing": true,
+      "no_previous_attempt": true
+    },
+    "blocked": [],
+    "combined_public_last_hour": 1,
+    "combined_public_last_day": 8,
+    "gap_seconds": 3561.486807
+  },
+  "pm2_before": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1077191,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "verified_live_handle": "us28qt",
+  "post_url": "https://www.threads.com/@us28qt/post/Df8pynHiYfZ",
+  "media_count": 1,
+  "caption_verified": true,
+  "parent_page_and_original_text_verified": true,
+  "reply_to_own_account_verified": true,
+  "media_payload_and_dom_verified": true,
+  "parent_reference_available": false,
+  "parent_reference_verified": false,
+  "pm2_after": {
+    "Maintenance": {
+      "pid": 26007,
+      "status": "online",
+      "restarts": 0
+    },
+    "DB_Backup": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Web_Dashboard": {
+      "pid": 26011,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Heavy": {
+      "pid": 26012,
+      "status": "online",
+      "restarts": 0
+    },
+    "Studio_Light": {
+      "pid": 26013,
+      "status": "online",
+      "restarts": 0
+    },
+    "VieNeu_TTS": {
+      "pid": 26014,
+      "status": "online",
+      "restarts": 0
+    },
+    "shopee-mcp": {
+      "pid": 591016,
+      "status": "online",
+      "restarts": 0
+    },
+    "9Router_Gateway": {
+      "pid": 26023,
+      "status": "online",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 1103039,
+      "status": "online",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 26028,
+      "status": "online",
+      "restarts": 0
+    }
+  },
+  "worker_restored": true,
+  "finished_at": "2026-11-20T03:07:50.395650+00:00"
+}
