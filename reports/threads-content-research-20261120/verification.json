@@ -1,0 +1,38 @@
+{
+  "at": "2026-11-20T03:52:54.656573+00:00",
+  "runtime_unchanged": true,
+  "public_actions": 0,
+  "checks": [
+    {
+      "id": "E01",
+      "chars": 259,
+      "links": 0,
+      "status": "draft_not_published",
+      "asset_status": "pending_original_or_authorized_product_images"
+    },
+    {
+      "id": "E02",
+      "chars": 300,
+      "links": 0,
+      "status": "draft_not_published",
+      "asset_status": "pending_live_verified_voucher"
+    },
+    {
+      "id": "E03",
+      "chars": 241,
+      "links": 0,
+      "status": "draft_not_published",
+      "asset_status": "text_first_optional_image"
+    }
+  ],
+  "raw_data_files": [
+    "search-sample.json",
+    "selected-posts.json",
+    "own-profile.json"
+  ],
+  "limitations": [
+    "No causal inference or sales proof from engagement.",
+    "Public view labels canbe rounded; repeatedselfchecks maycount.",
+    "Search recent mayreturnrelated orolderposts; datesfromtaken_at."
+  ]
+}

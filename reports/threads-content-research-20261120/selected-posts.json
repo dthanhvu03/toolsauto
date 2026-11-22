@@ -1,0 +1,717 @@
+{
+  "plan": "PLAN-184",
+  "started_at": "2026-11-20T03:43:17.955668+00:00",
+  "posts": [
+    {
+      "code": "Df6miw7CZgp",
+      "url": "https://www.threads.com/@nzi.n_z/post/Df6miw7CZgp",
+      "observed_at": "2026-11-20T03:43:20.442417+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@nzi.n_z/post/Df6miw7CZgp",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n3.1K views\nnzi.n_z\n19h\nBấm mi này của Vacosi xài êm khum mý bà, thấy có chị kia review tui thấy ổn quá, giá cũm ok nữa. Không biết ở ngoài có chắc chắn và công dụng tốt giống trên ảnh và vid ko?  \nTranslate\n22\n20\n1\n4\nphont.vizee\n19h\nBữa mua săn sale trên live có mấy chục cành à mà chất lượng vượt mong đợi lun, kim loại cầm nặng tay chứ ko ọp ẹp  \nTranslate\n1\nnzi.n_z\n18h\n·\nAuthor\nBà mua trên shopee mall hay tiktok shop á, độ cong mi giữ đc lâu ko?  \nTranslate\n1\nphont.vizee\n18h\nTui mua bên sàn cam á, bấm xong chuốt thêm xíu mascara là giữ nếp cong vút cả ngày đi làm lun nha  \nTranslate\npnhiii_bongg\n19h\nBấm mi Vacosi thì chắc quốc dân luôn rùi á, giá thì hạt dẻ mà bấm cong ơi là cong, giữ được lâu mà còn ôm sát chân mi nữa  \nTranslate\n1\nnzi.n_z\n18h\n·\nAuthor\nThấy mn khen nhiều quá chắc tui chốt đơn lun kẻo hết mã giảm giá kkk  \nTranslate\nbngannnnn\n19h\nCung bấm mi này thiết kế khá vừa với khuôn mắt người châu Á mình nè, tui mắt mí lót bấm ko sợ bị kẹp trúng da mắt đâu  \nTranslate\n1\nnzi.n_z\n18h\n·\nAuthor\nUầy mắt tui cũng mí lót đây, bấm mấy cây cũ toàn kẹp vào góc mắt đau điếng :(  \nTranslate\n1\nbngannnnn\n18h\nZ thì bà cứ yên tâm đổi qua cây này thử đi, độ cong vòng cung vừa vặn ôm sát chân mi lun á  \nTranslate\nmt_mtw\n19h\nTui đang xài cây bấm mi cán đen của Vacosi nè, cầm đầm tay với bấm nhẹ là mi cong vút rùi, ko bị gãy gập mi đâu bà  \nTranslate\n1\nnzi.n_z\n18h\n·\nAuthor\nNghe êm dị bà, miếng đệm cao su có bị cứng hay nhanh rách khum á?  \nTranslate\n1\nmt_mtw\n10h\nĐệm silicon mềm dẻo lắm, bấm êm ko sợ đứt mi đâu, trong hộp hình như có tặng kèm thêm 1 miếng đệm sơ cua nữa á bà  \nTranslate\nkaay_26\n19h\ntui xài thấy ok\nmà ko phải cây này\ncây khác cơ  \nTranslate\n1\ndohudonkhongngheloi._\n19h\ncây này xài bền hông bà  \nTranslate\n1\nkaay_26\n19h\ntui mua từ tháng 2 xài đến h ko có vấn đề gì\nphải thay cái đệm mút tại thấy dơ quá thui  \nTranslate\n1\n1\ndohudonkhongngheloi._\n19h\noki tui cám ơn nheee  \nTranslate\n1\n_untitled101_\n19h\ntui thấy bấm mi nhà này oke á, bấm khá êm  \nTranslate\nthanhah",
+      "screenshot": "post-Df6miw7CZgp.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "nzi.n_z",
+        "text": "Bấm mi này của Vacosi xài êm khum mý bà, thấy có chị kia review tui thấy ổn quá, giá cũm ok nữa. Không biết ở ngoài có chắc chắn và công dụng tốt giống trên ảnh và vid ko?",
+        "like_count": 22,
+        "reply_count": 20,
+        "view_count": null,
+        "media_type": 8,
+        "has_video": false,
+        "media_count": 2,
+        "date": "2026-11-19T15:00:40+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "Df6nmStktKL",
+          "same_author_as_parent": false,
+          "text": "Bữa mua săn sale trên live có mấy chục cành à mà chất lượng vượt mong đợi lun, kim loại cầm nặng tay chứ ko ọp ẹp",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6rvneiVX1",
+          "same_author_as_parent": true,
+          "text": "Bà mua trên shopee mall hay tiktok shop á, độ cong mi giữ đc lâu ko?",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Df6r54Jkudr",
+          "same_author_as_parent": false,
+          "text": "Tui mua bên sàn cam á, bấm xong chuốt thêm xíu mascara là giữ nếp cong vút cả ngày đi làm lun nha",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6nkKDFIjP",
+          "same_author_as_parent": false,
+          "text": "Bấm mi Vacosi thì chắc quốc dân luôn rùi á, giá thì hạt dẻ mà bấm cong ơi là cong, giữ được lâu mà còn ôm sát chân mi nữa",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6sADnibK3",
+          "same_author_as_parent": true,
+          "text": "Thấy mn khen nhiều quá chắc tui chốt đơn lun kẻo hết mã giảm giá kkk",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Df6m-lOj3ov",
+          "same_author_as_parent": false,
+          "text": "Cung bấm mi này thiết kế khá vừa với khuôn mắt người châu Á mình nè, tui mắt mí lót bấm ko sợ bị kẹp trúng da mắt đâu",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6rrriCXHB",
+          "same_author_as_parent": true,
+          "text": "Uầy mắt tui cũng mí lót đây, bấm mấy cây cũ toàn kẹp vào góc mắt đau điếng :(",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Df6sbirDyVl",
+          "same_author_as_parent": false,
+          "text": "Z thì bà cứ yên tâm đổi qua cây này thử đi, độ cong vòng cung vừa vặn ôm sát chân mi lun á",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6n9uzn6Fz",
+          "same_author_as_parent": false,
+          "text": "Tui đang xài cây bấm mi cán đen của Vacosi nè, cầm đầm tay với bấm nhẹ là mi cong vút rùi, ko bị gãy gập mi đâu bà",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6rhZaiZRH",
+          "same_author_as_parent": true,
+          "text": "Nghe êm dị bà, miếng đệm cao su có bị cứng hay nhanh rách khum á?",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Df7lMW2H8Be",
+          "same_author_as_parent": false,
+          "text": "Đệm silicon mềm dẻo lắm, bấm êm ko sợ đứt mi đâu, trong hộp hình như có tặng kèm thêm 1 miếng đệm sơ cua nữa á bà",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df6nnpWD0Mc",
+          "same_author_as_parent": false,
+          "text": "tui xài thấy ok \nmà ko phải cây này\ncây khác cơ",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 10,
+      "reply_sample_parent_author_replies": 4,
+      "public_view_label": "3.1K views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "DfreGVNnzsd",
+      "url": "https://www.threads.com/@odora.order/post/DfreGVNnzsd",
+      "observed_at": "2026-11-20T03:43:26.900564+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@odora.order/post/DfreGVNnzsd",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n50.3K views\nodora.order\nSănsale\n6d\nYêu lắm mùa black friday nước Mỹ🇺🇸🫶🏻 Nơi tui săn được áo len zipneck Tommy gốc tiền trịu với dzá xiền trăm🤣\nChấn động rùii đây mn ơiii🫶🏻 Mã này khen k bít bao nhiu cho đủ, chất đẹp, len đanh nha về tay quớ rẻ navy 8️⃣5️⃣0️⃣kaa trắng 8️⃣9️⃣0️⃣kaa mời chị e vào việccc  \nTranslate\n297\n83\n11\n163\nodora.order\n6d\n·\nAuthor\nTinh tế từ cái khoá kéo lunnn aa🫶🏻 Mn check var cho e chất len đii  \nTranslate\nodora.order\n6d\n·\nAuthor\nBig kid M<50kg L<55kg XL<60kg mn ơiiii\nodora.order\n6d\n·\nAuthor\nForm lên đẹp thoải mái vào việc lun aa  \nTranslate\n1\nng.minhhh__\n6d\nCó kèm túi giấy ko ạ  \nTranslate\n1\n2\ntramii___\n6d\nAuth kh ạ\n1\n2\nniemtinthu88\n6d\ncó mẫu nam ko ad  \nTranslate\n1\n2\nn.levy91\n6d\nCó be k b  \nTranslate\n1\n2\nhitrh.uei\n6d\nXin in4 áo ạ  \nTranslate\n1\n2\n_dp.trang_\n6d\nIb m màu xanh  \nTranslate\n1\n2\nRelated threads\nchuppy_store\n11/12/26\nChấn động về tay Tommy Úc, Chuppy sẽ lên D E A L BLACK FRIDAY của hãng nhá\n[AUTHENTIC ORDER] hàng về sau 2-3 tuần\nCable knit sweater trứ danh, đẹp điêng ko lỗi mode\nĐang full size XXS đến 3XL tuỳ màu size\nVề tay: 1550k quá hờiii (cọc full đơn ạ)\n1\ndieulibhh\nThreads\n11/12/26\n🙈🙈🙈 GOM KNITWEAR TOMMY ĐỒNG GIÁ\n929🐠 ❣️❣️❣️\nmở màn cho mùa black friday năm nayy là không thể thiếu tommy ruiiii🤫 bthuong knit phải 4 trẹo mới múc dc yyyyyy\nsieu sieu sieu chấn động ạaaa em nhận polo đồng giá 829🐠 ạaaaa và knitwear 929🐠 thui ạaaaa\ndeal hờiii là em share liền cho các bác nhà mìnhhhh đóooo🙄 nhắn em lẹee\nbao auth bao bill  \nTranslate\n9\n2\n8\nkimthu1781994\n11/12/26\nBlack Friday chỉ có rẻ hơn thui ạ. Nhưng size thì cả nhà chốt nhanh nhé. Sold lẹ lắm\nTommy Hilfiger Cable Knit (Form Girls)\nSize L fit <48kg ; XL fit <55kg\nSêu 1 tr xx 🌺\nBlack/ Đỏ full size L XL\nTrắng chỉ size L  \nTranslate\n1\ndmpauth\nTommy Hilfiger\n20h\nTommy blackfriday ghé tường e nhé  \nTranslate\n2\n1\n__verum.authentic__\nTommy Hilfiger\n6d\n✨Sốp đang về 1 số món đang sale black-friday nhaaa\nBạn nào ưng món nào nhắn sốp chốt ngay nèee\nhàng về sốp sẽ để giá khác nhennn 🥰\nBill c",
+      "screenshot": "post-DfreGVNnzsd.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "odora.order",
+        "text": "Yêu lắm mùa black friday nước Mỹ🇺🇸🫶🏻 Nơi tui săn được áo len zipneck Tommy gốc tiền trịu với dzá xiền trăm🤣 \n\nChấn động rùii đây mn ơiii🫶🏻 Mã này khen k bít bao nhiu cho đủ, chất đẹp, len đanh nha về tay quớ rẻ navy 8️⃣5️⃣0️⃣kaa trắng 8️⃣9️⃣0️⃣kaa mời chị e vào việccc",
+        "like_count": 297,
+        "reply_count": 83,
+        "view_count": null,
+        "media_type": 8,
+        "has_video": false,
+        "media_count": 5,
+        "date": "2026-11-13T17:58:16+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "DfreP2znzGU",
+          "same_author_as_parent": true,
+          "text": "Big kid M<50kg L<55kg XL<60kg mn ơiiii",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfreRSgH2Tk",
+          "same_author_as_parent": true,
+          "text": "Form lên đẹp thoải mái vào việc lun aa",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfrqnQNFG3J",
+          "same_author_as_parent": false,
+          "text": "Có kèm túi giấy ko ạ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Dfrmzn0HbdK",
+          "same_author_as_parent": false,
+          "text": "Auth kh ạ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfreohSgV0O",
+          "same_author_as_parent": false,
+          "text": "có mẫu nam ko ad",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Dfr2EXhn3nP",
+          "same_author_as_parent": false,
+          "text": "Có be k b",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Dfrv4XUEwU5",
+          "same_author_as_parent": false,
+          "text": "Xin in4 áo ạ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Dfr2Zj7Ha_y",
+          "same_author_as_parent": false,
+          "text": "Ib m màu xanh",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfreOMLn1KE",
+          "same_author_as_parent": true,
+          "text": "Tinh tế từ cái khoá kéo lunnn aa🫶🏻 Mn check var cho e chất len đii",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 7,
+      "reply_sample_parent_author_replies": 3,
+      "public_view_label": "50.3K views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "DffH7aHmuBk",
+      "url": "https://www.threads.com/@pocosmetics/post/DffH7aHmuBk",
+      "observed_at": "2026-11-20T03:43:32.444683+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@pocosmetics/post/DffH7aHmuBk",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n29.4K views\npocosmetics\n11/08/26\n🔥 Áo Parka Uniqlo chống gió, chống mưa nhẹ SALE SẬP 50%\nEm này mang dáng suông hay rút bo gấu vào mang đều xinh, mua 1 được 2 kiểu mặc luônn 💯\nSale 2 ngày cuối nữa thôi ạa  \nTranslate\n39\n94\n3\n18\npocosmetics\n11/08/26\n·\nAuthor\n3 màu: 19 WINE - 31 BEIGE - 57 OLIVE\nSize S M L XL nha cả nhà ơiiii ❤️  \nTranslate\n1\n1\n1\npocosmetics\n11/08/26\n·\nAuthor\nCận từng chi tiết áo xịn xò lắm ạa 💯  \nTranslate\n4\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\n1\nbinh882014\n11/09/26\nBao nhiêu ạ  \nTranslate\n1\n1\npocosmetics\n11/09/26\n·\nAuthor\nDạ bạn check tin nhắn IG giúp shop nha ❤️  \nTranslate\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\npocosmetics\n11/08/26\n·\nAuthor\n1\nRelated threads\npocosmetics\n11/06/26\n🔥 Áo parka Uniqlo chống gió, chống mưa CHÁY HÀNG đợt trước nay SALE lại rồi cả nhà ơiiii\nChiếc này cực kỳ đáng mua luôn ạ 💯 Đợt trước sale đã hết sạch size, nay hãng sale lại rồi\nCả nhà tranh thủ chốt size nha, kẻo lại lỡ deal ạa 🫶🏻  \nTranslate\n24\n57\n1\n7\npocosmetics\n10/27/26\n🔥 Áo parka UNIQLO SALE NGÀY CUỐI – GIẢM TẬN NỬA GIÁ cả nhà ơiiii 😭💯\nÁo có dây rút 2 bên hông có thể cân chỉnh thành dáng áo bo hoặc suông, form đứng đẹp, mũ trùm đầu & túi hộp rộng rãi 🫶🏻\nDeal hời thế này tranh thủ chốt đơn nha cả nhà ơiii, hết sale lại tiếc ạa 🔥  \nTranslate\n2\n9\n1\npocosmetics\n10/24/26\n🔥 UNIQLO SALE NỬA GIÁ – Áo parka đa năng chống gió, chống nước, chống mưa xịn xòo 💯\nÁo dày dặn, đứng form, mũ lớn, túi to, từng đường may đều chỉn chu 💯 Vừa đẹp vừa xịn, quá đáng tiền luôn ạ!\nSale vài ngày thôi ạa 🔥  \nTranslate\n22\n54\n3\n12\ntiemnhaoanhuniqlo\nUniqlo\n10/29/26\n🍀♥️🍀COTTON BLEND PARKA U NÌ 2026 lên kệ seo\n6️⃣4️⃣9️⃣❣️\n🍂 Mùa thu đông mà thiếu em này là thiếu hẳn một chiếc áo khoác vừa đẹp vừa tiện dụng nha chị em\nLớp phủ chống bám nước giúp bảo vệ bạn khỏi những cơn mưa nhỏ.\nDáng parka dây rút, che lạnh phần cổ và có mũ chùm đầu\n🔥 TRỜI SE LẠNH C",
+      "screenshot": "post-DffH7aHmuBk.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "pocosmetics",
+        "text": "🔥 Áo Parka Uniqlo chống gió, chống mưa nhẹ SALE SẬP 50% \n\nEm này mang dáng suông hay rút bo gấu vào mang đều xinh, mua 1 được 2 kiểu mặc luônn 💯 \n\nSale 2 ngày cuối nữa thôi ạa",
+        "like_count": 39,
+        "reply_count": 94,
+        "view_count": null,
+        "media_type": 8,
+        "has_video": false,
+        "media_count": 4,
+        "date": "2026-11-08T22:53:39+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "DffIS4DGpfm",
+          "same_author_as_parent": true,
+          "text": "Cận từng chi tiết áo xịn xò lắm ạa 💯",
+          "like_count": 4,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfgEGL0H3jq",
+          "same_author_as_parent": false,
+          "text": "Bao nhiêu ạ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfgXedKmmVt",
+          "same_author_as_parent": true,
+          "text": "Dạ bạn check tin nhắn IG giúp shop nha ❤️",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "DffIKuCmoBB",
+          "same_author_as_parent": true,
+          "text": "3 màu: 19 WINE - 31 BEIGE - 57 OLIVE\nSize S M L XL nha cả nhà ơiiii ❤️",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 2,
+      "reply_sample_parent_author_replies": 3,
+      "public_view_label": "29.4K views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "DffTFhWHXb1",
+      "url": "https://www.threads.com/@sandeal.shopee/post/DffTFhWHXb1",
+      "observed_at": "2026-11-20T03:43:37.963227+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@sandeal.shopee/post/DffTFhWHXb1",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n22.7K views\nsandeal.shopee\nShoppe\n11/08/26\n🚨 SHHD 80K KHUNG 0H, VÀO ĐẦU TUẦN T2! LIỆU CÓ PHẢI TÍN HIỆU NHÀ LỌC? 👀\nĐầu tuần mà Shopee thả loạt mã ngon thế này thì ae đừng ngủ sớm nha 🤣 Lưu sẵn mã, tes thử vận may nhé!\n🎟️ Loạt mã 80K/0Đ:\nNOVSHHDBVNORTH180\nHSHANOIVCLPNOV80K\nNOVSHHDUSNORTH380\nNOVSHHDBVCENTRAL180\nNOVSHHDBVNORTH380\nNOVSHHDBVNORTH280\nNOVSHHDUSNORTH180\nNOVSHHDUSNORTH380\n❤️ Chúc cả nhà vừa săn sale xong ngủ ngon nhaaa! Ai húp được mã nhớ quay lại khoe thành quả với tui nhé 😂  \nTranslate\n189\n18\n26\n30\nPinned\nsandeal.shopee\nShoppe\n11/08/26\n·\nAuthor\n☕ Bác nào bận đi học, đi làm không có thời gian canh mã 0H thì ghé BIO tớ nha! 🧡 Tớ gom sẵn một góc deal Shopee, cập nhật mã 0Đ, voucher giảm sâu và deal ngon mỗi ngày. Rảnh cứ vào lựa, khỏi phải canh sale vất vả nè 🤣🛒  \nTranslate\n3\nmax.por.9026\n11/09/26\nmai còn đc ko ha  \nTranslate\n4\n1\npxjel._\n11/08/26\ntui iu bà 🩷🥰💝  \nTranslate\n6\n2\n1\ncwu_iuoi\n11/09/26\nTối nay còn khong ạ  \nTranslate\n1\n1\nsandeal.shopee\n11/09/26\n·\nAuthor\nTớ vừa cập nhật lại link nhóm trên bio rồi nè b ơi, b ghé vào lại nha! Mọi đợt deal mới tớ đều báo trong nhóm sớm nhất cho cả nhà đó ạ ✨  \nTranslate\n1\nwrofjzx\n11/09/26\nnhóm tiktok full r ạ  \nTranslate\n2\nkhuong_1410\n11/09/26\n@_qgi4.ng_21\n1\nphqaw\n11/09/26\n.\n1\nielj0.yo_\n11/09/26\n.\n2\ngoat.5720429\n3d\nTải ShopeePay nhập mã QXQQR2QTC\nđể nhận ngay 80k xu nha🥰🥰  \nTranslate\n1\ngoat.5720429\n3d\nQXQQR2QTC\ntnhg28_\n11/10/26\nTui cho thuê số 7k kèm mã 100k nè  \nTranslate\nRelated threads\ntheg.coner\n10/26/26\nnhóm săn sale shopee công cao nè mngg  \nTranslate\ntheg.coner\n10/26/26\nnhóm săn sale shopee công cao nè mngg  \nTranslate\ntheg.coner\n10/26/26\nnhóm săn sale shopee công cao nè mngg  \nTranslate\ntheg.coner\n10/26/26\nnhóm săn sale shopee công cao nè mngg  \nTranslate\ntheg.coner\n10/26/26\nnhóm săn sale shopee CÔNG cao nè mng  \nTranslate\nLog in to see more replies.\nLog in\nLog in or sign up for Threads\nSee what people are talking about and join the conversation.\nContinue with Instagram\nLog in with username instead\n© 2026\n",
+      "screenshot": "post-DffTFhWHXb1.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "sandeal.shopee",
+        "text": "🚨 SHHD 80K KHUNG 0H, VÀO ĐẦU TUẦN T2! LIỆU CÓ PHẢI TÍN HIỆU NHÀ LỌC? 👀\n\nĐầu tuần mà Shopee thả loạt mã ngon thế này thì ae đừng ngủ sớm nha 🤣 Lưu sẵn mã, tes thử vận may nhé!\n\n🎟️ Loạt mã 80K/0Đ:\n\nNOVSHHDBVNORTH180\nHSHANOIVCLPNOV80K\nNOVSHHDUSNORTH380\nNOVSHHDBVCENTRAL180\nNOVSHHDBVNORTH380\nNOVSHHDBVNORTH280\nNOVSHHDUSNORTH180\nNOVSHHDUSNORTH380\n\n❤️ Chúc cả nhà vừa săn sale xong ngủ ngon nhaaa! Ai húp được mã nhớ quay lại khoe thành quả với tui nhé 😂",
+        "like_count": 189,
+        "reply_count": 18,
+        "view_count": null,
+        "media_type": 1,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-09T00:31:09+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "Dfhhg7eCZwW",
+          "same_author_as_parent": false,
+          "text": "mai còn đc ko ha",
+          "like_count": 4,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DffXqTvkjtO",
+          "same_author_as_parent": false,
+          "text": "tui iu bà 🩷🥰💝",
+          "like_count": 6,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfhjB1aGWAl",
+          "same_author_as_parent": false,
+          "text": "Tối nay còn khong ạ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfhkOFCHf_s",
+          "same_author_as_parent": true,
+          "text": "Tớ vừa cập nhật lại link nhóm trên bio rồi nè b ơi, b ghé vào lại nha! Mọi đợt deal mới tớ đều báo trong nhóm sớm nhất cho cả nhà đó ạ ✨",
+          "like_count": 1,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Dfg42RGGZpo",
+          "same_author_as_parent": false,
+          "text": "nhóm tiktok full r ạ",
+          "like_count": 2,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfhMLOeFJzS",
+          "same_author_as_parent": false,
+          "text": "@_qgi4.ng_21",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfhtO0smDlu",
+          "same_author_as_parent": false,
+          "text": ".",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfhmGyuEhhP",
+          "same_author_as_parent": false,
+          "text": ".",
+          "like_count": 2,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df0tRZsE9wI",
+          "same_author_as_parent": false,
+          "text": "Tải ShopeePay nhập mã QXQQR2QTC\nđể nhận ngay 80k xu nha🥰🥰",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df0tTjik9ll",
+          "same_author_as_parent": false,
+          "text": "QXQQR2QTC",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Dfj_FKrk3mv",
+          "same_author_as_parent": false,
+          "text": "Tui cho thuê số 7k kèm mã 100k nè",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DffTTNhnZFz",
+          "same_author_as_parent": true,
+          "text": "☕ Bác nào bận đi học, đi làm không có thời gian canh mã 0H thì ghé BIO tớ nha! 🧡 Tớ gom sẵn một góc deal Shopee, cập nhật mã 0Đ, voucher giảm sâu và deal ngon mỗi ngày. Rảnh cứ vào lựa, khỏi phải canh sale vất vả nè 🤣🛒",
+          "like_count": 3,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 10,
+      "reply_sample_parent_author_replies": 2,
+      "public_view_label": "22.7K views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "Dfd9byaEZum",
+      "url": "https://www.threads.com/@zun_kun.t/post/Dfd9byaEZum",
+      "observed_at": "2026-11-20T03:43:44.000734+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@zun_kun.t/post/Dfd9byaEZum",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n1.1M views\nzun_kun.t\n11/08/26\nBạn đã thử món đồ xa xỉ của giới nhà giàu nào một lần và ngay lập tức hiểu tại sao họ lại thích nó đến vậy?  \nTranslate\n28.8K\n1.5K\n1.3K\n1K\nbedes26ultra\n11/08/26\nTừng ngồi Lexus 5 tỷ của người quen (thực ra t cũng k rõ 5 tỷ đã là xa xỉ theo tiêu chuẩn người giàu chưa nữa, but anws) và hiểu liền sao nó đáng giá 5 tỷ 😭 T siêu nhạy cảm với mùi ô tô và cực dễ bị say xe, cho đến khi t ngồi lên con Lexus đó 😭 Nó không hề có mùi da nồng, cực kỳ dễ chịu, và xe di chuyển êm ái nhẹ nhàng ngọt ngào như tình yêu của mẹ đkm 😭 Đến mức t nghĩ có khi t k bị say xe đâu, chẳng qua t bị dị ứng với xe rẻ tiền thôi 😭😭😭  \nTranslate\n24.4K\n163\n380\n1.6K\nletung8721\n11/08/26\n- Ăn tối fine dining\n- ngồi xe lexus\n- bơi ở bể bơi nước mặn\n- đi spa\n- ngồi ké xe biển xanh và business lounge ở sân bay với sếp\nÔi nói chung là trên cả toẹt vời  \nTranslate\n8.8K\n34\n60\n50\nngxtrdanhduc\n11/08/26\nDùng 1 lần và nhận ra chả tự nhiên mà con ngta giết nhau vì tiền :))  \nTranslate\n5K\n3\n61\n43\noldtoys.newjoys\n11/08/26\nNấu steak, pasta cho Mẹ ăn thử vì mẹ thấy lạ.\nDắt Mẹ đi mega market hay emart mua đồ gia dụng khỏi xem giá.\nDắt mẹ đi xem phim, xem kịch\nCho mẹ tiền đi du lịch, đi hành hương\nCho mẹ tiền làm đám giỗ 20 năm của Ba\nCho mẹ mặc áo cử nhân khi tốt nghiệp\nCho mẹ nhà chỉ 1 tầng nhưng 6 trái tim vàng, 4 con chó mập\nSẽ không xa xỉ với người giàu nhưng rất xa xỉ với mình.  \nTranslate\n3.8K\n10\n34\n5\nngthinh_35\n11/08/26\nmấy đồ gia dụng nhà cửa hoặc chăn ga gối nệm :))) nhìn thì đơn giản mà kh hề rẻ, ví dụ vào muji cũng chưa phải cao cấp lắm nhưng cũng k phải hàng rẻ, sờ thôi đã sướng hết người chứ đừng nói là sử dụng hàng ngày 😃  \nTranslate\n2.6K\n8\n16\n16\n_jjoyy___\n11/08/26\nCái này cũng không exclusively cho người giàu lắm nhưng từng đi tắm nước nóng ở Iceland (2 cái nổi nhất là Blue lagoon và Sky lagoon). Ta nói nó đãaa, nhiệt độ nước hoàn hảo đến nỗi ngồi ngâm 4-5 tiếng mà không bị nóng ngốt, tay cũng không bị nhăn luôn how can??  \nTranslate\n1.8K\n7\n32\n35\nduoc.chongchongtrenenobi",
+      "screenshot": "post-Dfd9byaEZum.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "zun_kun.t",
+        "text": "Bạn đã thử món đồ xa xỉ của giới nhà giàu nào một lần và ngay lập tức hiểu tại sao họ lại thích nó đến vậy?",
+        "like_count": 28833,
+        "reply_count": 1557,
+        "view_count": null,
+        "media_type": 19,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-08T12:02:42+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "DfenLJfgLNs",
+          "same_author_as_parent": false,
+          "text": "Từng ngồi Lexus 5 tỷ của người quen (thực ra t cũng k rõ 5 tỷ đã là xa xỉ theo tiêu chuẩn người giàu chưa nữa, but anws) và hiểu liền sao nó đáng giá 5 tỷ 😭 T siêu nhạy cảm với mùi ô tô và cực dễ bị say xe, cho đến khi t ngồi lên con Lexus đó 😭 Nó không hề có mùi da nồng, cực kỳ dễ chịu, và xe di chuyển êm ái nhẹ nhàng ngọt ngào như tình yêu của mẹ đkm 😭 Đến mức t nghĩ có khi t k bị say xe đâu, chẳng qua t bị dị ứng với xe rẻ tiền thôi 😭😭😭",
+          "like_count": 24478,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfeHyCVGP4D",
+          "same_author_as_parent": false,
+          "text": "- Ăn tối fine dining \n- ngồi xe lexus\n- bơi ở bể bơi nước mặn \n- đi spa \n- ngồi ké xe biển xanh và business lounge ở sân bay với sếp \nÔi nói chung là trên cả toẹt vời",
+          "like_count": 8862,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfeFCtHozPH",
+          "same_author_as_parent": false,
+          "text": "Dùng 1 lần và nhận ra chả tự nhiên mà con ngta giết nhau vì tiền :))",
+          "like_count": 5002,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DffD7fElMK2",
+          "same_author_as_parent": false,
+          "text": "Nấu steak, pasta cho Mẹ ăn thử vì mẹ thấy lạ.\nDắt Mẹ đi mega market hay emart mua đồ gia dụng khỏi xem giá.\nDắt mẹ đi xem phim, xem kịch\nCho mẹ tiền đi du lịch, đi hành hương\nCho mẹ tiền làm đám giỗ 20 năm của Ba\nCho mẹ mặc áo cử nhân khi tốt nghiệp\nCho mẹ nhà chỉ 1 tầng nhưng 6 trái tim vàng, 4 con chó mập\nSẽ không xa xỉ với người giàu nhưng rất xa xỉ với mình.",
+          "like_count": 3817,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfecND2k-e9",
+          "same_author_as_parent": false,
+          "text": "mấy đồ gia dụng nhà cửa hoặc chăn ga gối nệm :))) nhìn thì đơn giản mà kh hề rẻ, ví dụ vào muji cũng chưa phải cao cấp lắm nhưng cũng k phải hàng rẻ, sờ thôi đã sướng hết người chứ đừng nói là sử dụng hàng ngày 😃",
+          "like_count": 2673,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfexEx5jONg",
+          "same_author_as_parent": false,
+          "text": "Cái này cũng không exclusively cho người giàu lắm nhưng từng đi tắm nước nóng ở Iceland (2 cái nổi nhất là Blue lagoon và Sky lagoon). Ta nói nó đãaa, nhiệt độ nước hoàn hảo đến nỗi ngồi ngâm 4-5 tiếng mà không bị nóng ngốt, tay cũng không bị nhăn luôn how can??",
+          "like_count": 1889,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfenXzYkwmz",
+          "same_author_as_parent": false,
+          "text": "- Dạy trường quốc tế nằm top học phí đắt nhất SG mới thấy cái câu ngta hay nói \"tụi nhà giàu dư tiền cúng cho mấy trường quốc tế rồi học ko bằng trường công VN\" thực ra chỉ là đang an ủi nhau \n- Cầm thử trên tay chiếc túi Chanel của nhỏ em họ mới hiểu vì sao từ ngày nó có cái túi LV đầu tiên là nó ko quay lại Cnk Pedro thậm chí MCM nữa",
+          "like_count": 1853,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "DfekVuVE5W6",
+          "same_author_as_parent": false,
+          "text": "Đi mấy resort cao cấp đắt tiền mới thấy đồ họ dùng từ đồ tắm tới chăn ga gối đệm nó sướng hết cả người ý, bảo sao ngủ ở resort khách sạc bao giờ cũng ngon điên, nước tắm dầu gội thì thơm nức. Muốn hỏi họ dùng gì mà họ toàn dùng supplier riêng thì phải, mình dùng nhàng nhàng Muji Nitori Hanvico đã mê lắm r :))",
+          "like_count": 2311,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Dfeu8fYn1WV",
+          "same_author_as_parent": false,
+          "text": "- quần lót & quần ngủ victoria secret\n- áo ngực có gọng của calvin klein\n- sơ mi & polo ralph lauren\n- sơ mi muji\n- áo thun uniqlo\n- khăn quàng cổ len của loro piana\n-  giày alexander mcqueen\ncó những thứ không phải xa xỉ nhưng mà cũng không rẻ và t đã từng nghĩ nó không cần thiết phải đắt đến thế cho tới khi trải nghiệm 🥲 thậc sự là nó rất khác với hàng có giá rẻ hơn",
+          "like_count": 779,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 9,
+      "reply_sample_parent_author_replies": 0,
+      "public_view_label": "1.1M views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "Df4FdsajwWe",
+      "url": "https://www.threads.com/@mimido1429/post/Df4FdsajwWe",
+      "observed_at": "2026-11-20T03:43:50.766228+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@mimido1429/post/Df4FdsajwWe",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n175 views\nmimido1429\nĐồ Gia Dụng\n1d\nỦa mọi người ơi, một miếng rửa bát mà giá bằng cả túi miếng rửa bát bình thường thì có gì đặc biệt vậy 😭\nMình thấy loại mặt cười này đang được nhiều người mua nên tò mò thật sự.\nCó ai dùng Scrub Daddy rồi không? Nó có đáng tiền hơn loại 5–10k ngoài siêu thị không?\nMình đang định mua về test trên chảo dầu mỡ. Nếu có ai dùng rồi thì review thật giúp mình với 🥹  \nTranslate\nAI content\n3\n2\nmimido1429\n1d\n·\nAuthor\nĐắt khùm lun: s.shopee.vn/906rj…\ns.shopee.vn\n[Pew Pew Độc Quyền] Miếng rửa chén bọt biển Scrub Mommy - 2 mặt đa năng - an toàn - chống mùi | Shopee Việt Nam\n1\nthuyvu_24.10\n1d\nT thấy k đáng tiền đến vậy.  \nTranslate\nRelated threads\nfishy.317\n6d\nCảm giác cái scrub daddy này ở Việt nam mình công dụng chính là để cọ bồn - cọ bếp chứ ko phải rửa bát\nVì mua về rửa bát chán hơn cái lưới đỏ nên tận dụng cọ rửa cái khác cho đỡ phí 120k thôi chứ ai dại gì mua về chỉ để cọ bồn các bác nhỉ 😌  \nTranslate\n1\n5\nnhancvit\n11/11/26\nHai em át chủ bài trong típ làm sạch nhà cửa của tui:)))\nChắc hẳn chị em nào nghiện sạch cũng biết đến em nó ! ￼\nMột là bột nhão làm sạch các bề mặt , tẩy được các vết mực vẽ trên tường trên sàn nhà trên ghế da, ￼ làm sạch các cặn canxi trong nhà tắm, làm sạch chậu rửa bếp từ, ,,,\n2 là miếng lau thấm hút nước của Scrub daddy, lau tới đâu sạch tới đó, thấm hút nước siêu tốt, lau ￼ miếng lau thấm hút này = 3 khăn lau thông thường\n#nghiensach #scrub\n1\nmeowus7722\n10/20/26\nTách set scrub daddy\nRandom màu nhé mn ơi\n- Miếng rửa bát cọ nồi chảo sạch, đa dụng, ko làm xước bề mặt hay hỏng nồi\n- Ko bị bám mùi\n- Gặp nước lạnh thì cứng, nước ấm thì mềm để có thể chà rửa nhiều dạng vết bẩn\nSale => 90kar / miếng  \nTranslate\nhienne_98\n11/02/26\n1 miếng bọt biển 🧽 rửa chén scrub daddy bằng 10 miếng rửa chén bình thường, mà dùng rồi mới biết xịn như nào mọi người ơi 🫧👍🏻 #scrubdaddy #miengruabat #nhacuadoisong #giadungtienich #reviewdogiadung  \nTranslate\ncam.nhon\n10/28/26\nMiếng Lau Thấm Hút Scrub Daddy Basics Mop Ups – Siêu Thấm Nư",
+      "screenshot": "post-Df4FdsajwWe.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "mimido1429",
+        "text": "Ủa mọi người ơi, một miếng rửa bát mà giá bằng cả túi miếng rửa bát bình thường thì có gì đặc biệt vậy 😭\n\nMình thấy loại mặt cười này đang được nhiều người mua nên tò mò thật sự.\n\nCó ai dùng Scrub Daddy rồi không? Nó có đáng tiền hơn loại 5–10k ngoài siêu thị không?\n\nMình đang định mua về test trên chảo dầu mỡ. Nếu có ai dùng rồi thì review thật giúp mình với 🥹",
+        "like_count": 3,
+        "reply_count": 2,
+        "view_count": null,
+        "media_type": 1,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-18T15:33:08+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "Df4IYzZlFv7",
+          "same_author_as_parent": false,
+          "text": "T thấy k đáng tiền đến vậy.",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df4FmJFD8xe",
+          "same_author_as_parent": true,
+          "text": "Đắt khùm lun: https://s.shopee.vn/906rj66x6H",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 2,
+      "reply_sample_parent_author_replies": 1,
+      "public_view_label": "175 views",
+      "public_view_label_is_rounded": false
+    },
+    {
+      "code": "Df8oFXxiCYU",
+      "url": "https://www.threads.com/@pdh.io.vn/post/Df8oFXxiCYU",
+      "observed_at": "2026-11-20T03:43:56.100287+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@pdh.io.vn/post/Df8oFXxiCYU",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n1 view\npdh.io.vn\n51m\n🎁 CẬP NHẬT MÃ GIẢM GIÁ HOT:\nMã 30% game thủ lọc acc\ns.shopee.vn/3qObY…\n💡 Bật mí một chiếc web cực xịn cho hội nghiện TikTok - Tiki - Shopee - Lazada: hệ thống pdh.io.vn. Một bên là cột Kèo Thơm & Voucher cập nhật tự động từng phút, một bên là công cụ đổi link hoàn tiền 56.17% hoa hồng theo SĐT. Vào một chỗ vừa lấy được mã giảm giá vừa lấy được tiền hoàn, tiện hết nước chấm 💸🔥\n🛒 Cộng đồng Zalo báo mã Shopee - Lazada sớm nhất: zalo.me/g/n6r…  \nTranslate\nRelated threads\npdh.io.vn\n5d\n🎁 CẬP NHẬT MÃ GIẢM GIÁ HOT:\nMã 30% game thủ lọc acc\ns.shopee.vn/3qObY…\n💡 Cuối tháng tổng kết đống đơn Lazada, TikTok Shop, Shopee, Tiki mới thấy may mà mình biết đến pdh.io.vn sớm. Đơn nào trước khi đặt cũng chịu khó copy link qua web gắn SĐT rồi mới chốt, nhờ vậy được hoàn lại 56,17% hoa hồng cho từng đơn, cộng dồn lại được một khoản đáng kể chuyển thẳng về tài khoản 👍💸\n🛒 Cộng đồng Zalo báo mã Shopee - Lazada sớm nhất: zalo.me/g/n6r…  \nTranslate\n1\npdh.io.vn\n6d\n🎁 CẬP NHẬT MÃ GIẢM GIÁ HOT:\nMã 30% game thủ lọc acc\ns.shopee.vn/3qObY…\n💡 Góc tiết kiệm cho hội nghiện đặt hàng: Hãy tập thói quen copy link món hàng từ Lazada - Shopee - Tiki - TikTok qua hệ thống pdh.io.vn gắn SĐT tạo link mới rồi hẵng thanh toán. Trên web vừa có sẵn danh sách mã giảm giá mới nhất, vừa trả lại cho khách tới gần 60% (56.17%) hoa hồng mỗi đơn. 💯💰\n⚡ Săn voucher khung giờ vàng tại nhóm Zalo: zalo.me/g/n6r…  \nTranslate\npdh.io.vnn\n4d\n🎁 CẬP NHẬT MÃ GIẢM GIÁ HOT:\nMã 30% game thủ lọc acc\ns.shopee.vn/3qObY…\n💡 Công thức mua hàng Tiki, Lazada, TikTok, Shopee auto được hoàn lại 56,17% thực nhận hoa hồng cho ai chưa biết: B1: Copy link món định mua -> B2: Vào web pdh.io.vn nhập SĐT + dán link để tạo link mới -> B3: Bấm vào link vừa tạo để chốt đơn. Đơn thành công là có tiền hoàn về SĐT cực dễ 🎁🛒\n🎟️ Húp mã giảm sâu mỗi ngày tại nhóm Zalo: zalo.me/g/n6r…  \nTranslate\nhiep.pd\n11/08/26\n🔥 VOUCHER MỚI NHẤT VỪA LÊN:\nMã 30% game thủ\ns.shopee.vn/8AXTO…\n💡 Bật mí một chiếc web cực xịn cho hội nghiện Lazada, Shopee",
+      "screenshot": "post-Df8oFXxiCYU.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "pdh.io.vn",
+        "text": "🎁 CẬP NHẬT MÃ GIẢM GIÁ HOT:\nMã 30% game thủ lọc acc\nhttps://s.shopee.vn/3qObYNol5k\n💡 Bật mí một chiếc web cực xịn cho hội nghiện TikTok - Tiki - Shopee - Lazada: hệ thống https://pdh.io.vn/. Một bên là cột Kèo Thơm & Voucher cập nhật tự động từng phút, một bên là công cụ đổi link hoàn tiền 56.17% hoa hồng theo SĐT. Vào một chỗ vừa lấy được mã giảm giá vừa lấy được tiền hoàn, tiện hết nước chấm 💸🔥\n🛒 Cộng đồng Zalo báo mã Shopee - Lazada sớm nhất: https://zalo.me/g/n6rf3yzmatqm6guv860g",
+        "like_count": 0,
+        "reply_count": 0,
+        "view_count": null,
+        "media_type": 1,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-20T09:52:36+07:00"
+      },
+      "visible_reply_sample": [],
+      "reply_sample_distinct_author_count": 0,
+      "reply_sample_parent_author_replies": 0,
+      "public_view_label": "1 views",
+      "public_view_label_is_rounded": false
+    },
+    {
+      "code": "Df6xtanG9na",
+      "url": "https://www.threads.com/@hls.tung/post/Df6xtanG9na",
+      "observed_at": "2026-11-20T03:44:01.421677+00:00",
+      "own_post": false,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@hls.tung/post/Df6xtanG9na",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n23.2K views\nhls.tung\n18h\nThứ đang ngăn cản tôi tiến tới ước mơ  \nTranslate\n52\n64\n7\nmotvisaosparkling\n17h\nvl quả giá 2024  \nTranslate\n32\n2\narchytechie\n12h\nThứ duy nhất cản tôi là tôi hết cmn tiền mua game nếu game ra trên PC trong năm nay :)))  \nTranslate\n3\n2\nntd1610\n16h\nBộ này giờ phải mua tầm hơn 2x rồi chứ 17 sờ vào chặt tay =))  \nTranslate\n3\nbatter1568\n15h\nGiờ bộ này đầu 2 chứ làm gì còn giá này  \nTranslate\n1\n1\nhls.tung\n15h\n·\nAuthor\nHèn chi thấy giá gpu với ram hơi sai sai  \nTranslate\nholyhdwg\n1h\ne giá như bác được mỗi quả 2070 vca 700gb ssd th bác oi =))) Bộ này 2026 ít cũng 2x tiểu học  \nTranslate\n1\nminhvan005\n54m\nSăn sale căng lắm cũng éo được giá này kể cả mua cũ  \nTranslate\n1\nbfmaterial185cm\n17h\n17 giờ lấy đâu 3060 nữa @@  \nTranslate\n1\nltn.dwmt\n11h\nPhải gấp rưỡi chỗ này lên bạn ơi😂  \nTranslate\n1\nhuy_ng2611\n1h\nThứ duy nhất ngăn cản là nó chưa port lên PC, còn không dám coi ngta chơi sợ bị spoil :))  \nTranslate\n1\n_artdau\n2h\nTrước mua 3060 16 củ rồi giờ rớt hơn nửa giá có thật không vậy trời,với 2 thanh 32 gb đây mà còn chưa dám chơi sợ nổ máy nữa là 2 thanh 16  \nTranslate\n1\nRelated threads\ndonanhh\nPC\n3d\nBác nào mix full set báo giá giúp mình nhé ạ.\nĐa tạ🫶  \nTranslate\n9\n15\ncong_anh22\n10/23/26\na e có chia mình ít đu đỉnh tiếp !!!!!  \nTranslate\nsansalelinhkienpcshopeetiktok\n11/10/26\nLên rồi kìa húp\nvt.tiktok.com/ZS9fA…  \nTranslate\nngodinh4841\n11/05/26\nBộ này giờ có giá bn nhỉ mn  \nTranslate\n1\n7\n1\nthanhan12630\n10/31/26\nTôi có ông anh đẹp trai thì thôi rồi  \nTranslate\nLog in to see more replies.\nLog in\nLog in or sign up for Threads\nSee what people are talking about and join the conversation.\nContinue with Instagram\nLog in with username instead\n© 2026\nThreads Terms\nPrivacy Policy\nCookies Policy\nReport a problem\nSay more with Threads\nJoin Threads to share thoughts, find out what's going on, follow your people and more.\nContinue with Instagram",
+      "screenshot": "post-Df6xtanG9na.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "hls.tung",
+        "text": "Thứ đang ngăn cản tôi tiến tới ước mơ",
+        "like_count": 52,
+        "reply_count": 64,
+        "view_count": null,
+        "media_type": 8,
+        "has_video": false,
+        "media_count": 2,
+        "date": "2026-11-19T16:38:14+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "Df6ykqGGc4v",
+          "same_author_as_parent": false,
+          "text": "vl quả giá 2024",
+          "like_count": 32,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df7al3YI09N",
+          "same_author_as_parent": false,
+          "text": "Thứ duy nhất cản tôi là tôi hết cmn tiền mua game nếu game ra trên PC trong năm nay :)))",
+          "like_count": 3,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df68RsBAUDJ",
+          "same_author_as_parent": false,
+          "text": "Bộ này giờ phải mua tầm hơn 2x rồi chứ 17 sờ vào chặt tay =))",
+          "like_count": 3,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df7CpQrj2nr",
+          "same_author_as_parent": false,
+          "text": "Giờ bộ này đầu 2 chứ làm gì còn giá này",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df7EJD1GN-f",
+          "same_author_as_parent": true,
+          "text": "Hèn chi thấy giá gpu với ram hơi sai sai",
+          "like_count": 0,
+          "reply_to_parent_author": false
+        },
+        {
+          "code": "Df8mzWLDHqg",
+          "same_author_as_parent": false,
+          "text": "e giá như bác được mỗi quả 2070 vca 700gb ssd th bác oi =))) Bộ này 2026 ít cũng 2x tiểu học",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df8nr4Lowl1",
+          "same_author_as_parent": false,
+          "text": "Săn sale căng lắm cũng éo được giá này kể cả mua cũ",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df60XI0kmYF",
+          "same_author_as_parent": false,
+          "text": "17 giờ lấy đâu 3060 nữa @@",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df7hnk3o2Wk",
+          "same_author_as_parent": false,
+          "text": "Phải gấp rưỡi chỗ này lên bạn ơi😂",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df8jm2zChhz",
+          "same_author_as_parent": false,
+          "text": "Thứ duy nhất ngăn cản là nó chưa port lên PC, còn không dám coi ngta chơi sợ bị spoil :))",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        },
+        {
+          "code": "Df8bfDbAn5T",
+          "same_author_as_parent": false,
+          "text": "Trước mua 3060 16 củ rồi giờ rớt hơn nửa giá có thật không vậy trời,với 2 thanh 32 gb đây mà còn chưa dám chơi sợ nổ máy nữa là 2 thanh 16",
+          "like_count": 1,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 11,
+      "reply_sample_parent_author_replies": 1,
+      "public_view_label": "23.2K views",
+      "public_view_label_is_rounded": true
+    },
+    {
+      "code": "Df8jAaUCVmk",
+      "url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+      "observed_at": "2026-11-20T03:44:06.847128+00:00",
+      "own_post": true,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n1 view\nus28qt\n1h\nChuẩn bị săn Black Friday 27/11 cùng nhau nhé 🛍️\nMình có kênh Telegram ZT báo mã: tổng hợp mã Shopee, món tham khảo và lưu ý điều kiện áp dụng. Vào kênh lên danh sách món cần mua, canh mã cùng nhau:\nt.me/+02gP…\nMã có thể hết lượt hoặc tùy tài khoản. Trong kênh có link tiếp thị liên kết.  \nTranslate\nt.me\nJoin group chat on Telegram\n1\nus28qt\n36m\n·\nAuthor\nĐây là tin hướng dẫn thật trong kênh ZT báo mã 🛍️ Mình chuẩn bị săn Black Friday 27/11 cùng nhau, xem điều kiện mã rồi hãy chốt nhé. Link vào kênh ở bài phía trên.  \nTranslate\nRelated threads\nttnanhiii\nVận Hành Shopee\n11/04/26\nAnh chị ơi, anh chị có kinh nghiệm trong lĩnh vực vận hành shopee thường đến dịp black friday mình tính toán sản phẩm combo sale, chương trình cho sản phẩm như thế nào ạ. Em mới vào làm mà sếp kêu em chuẩn bị em còn mơ hồ quá, anh chị nào chia sẻ giúp em qua với ạ, em cảm ơn rất nhiều 🥹🥹🥹  \nTranslate\n2\n2\nunicorn.1583104\nSinh Viên\n5d\n23h59 tối nay là hạn lưu mã đó mọi người 🦄\n0h đêm nay 15/11 Shopee sale giữa tháng: VIP giảm 50% toàn sàn (trừ điện gia dụng), deal SVIP đồng giá 29K, mã Xtra 30% tối đa 900K cho đơn từ 3 triệu.\nMở app lưu mã trước rồi hẵng ngủ, mai dậy là hết lượt. Mọi người định chốt món gì đầu tiên?  \nTranslate\nus28qt\n11/06/26\nCòn 5 ngày nữa là tới 11.11 rồi á mn, tui vừa gom sẵn cả đống đồ vô giỏ xong. Mấy bà nhớ lưu mã freeship trc, lúc gần 0h thì check lại giá xem có rẻ hơn ko nha. Mà trc khi bấm thanh toán, nhớ copy link món đó dán qua bot Telegram @zt_shopee_bot để đc hoàn thêm tiền về tài khoản ngân hàng nè. Link bot đây nha\nt.me/zt_sh…  \nTranslate\nt.me\nSăn Hoàn Tiền\nsoso.cem\n11/09/26\nCho ai chưa biết chỗ lưu nha\ns.shopee.vn/20wtX…  \nTranslate\ncotheyeuladay2212\n11/09/26\nSỰ THẬT : mình làm gì để lấy mã 11.11 này  \nTranslate\n542\n28\n5\n28\n1\ndealngon.lonton\n11/04/26\n🔥 SĂN MÃ SHOPEE LÚC 0H cho anh chị em đây!\n• Mã FB: canh lấy mã 30% từ FB, mã 50% từ Instagram\n• Voucher Xtra: 25% tối đa 100K (đơn từ 100K), 20% tối đa 300K (đơn từ 500K), 25% tối đa 2tr (đơn ",
+      "screenshot": "post-Df8jAaUCVmk.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "us28qt",
+        "text": "Chuẩn bị săn Black Friday 27/11 cùng nhau nhé 🛍️\n\nMình có kênh Telegram ZT báo mã: tổng hợp mã Shopee, món tham khảo và lưu ý điều kiện áp dụng. Vào kênh lên danh sách món cần mua, canh mã cùng nhau:\nhttps://t.me/+02gPhoNuEjcxMmJl\n\nMã có thể hết lượt hoặc tùy tài khoản. Trong kênh có link tiếp thị liên kết.",
+        "like_count": 0,
+        "reply_count": 1,
+        "view_count": null,
+        "media_type": 19,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-20T09:08:14+07:00"
+      },
+      "visible_reply_sample": [
+        {
+          "code": "Df8pynHiYfZ",
+          "same_author_as_parent": true,
+          "text": "Đây là tin hướng dẫn thật trong kênh ZT báo mã 🛍️ Mình chuẩn bị săn Black Friday 27/11 cùng nhau, xem điều kiện mã rồi hãy chốt nhé. Link vào kênh ở bài phía trên.",
+          "like_count": 0,
+          "reply_to_parent_author": true
+        }
+      ],
+      "reply_sample_distinct_author_count": 1,
+      "reply_sample_parent_author_replies": 1,
+      "public_view_label": "1 views",
+      "public_view_label_is_rounded": false
+    },
+    {
+      "code": "Df7lHTTnRXl",
+      "url": "https://www.threads.com/@us28qt/post/Df7lHTTnRXl",
+      "observed_at": "2026-11-20T03:44:12.618893+00:00",
+      "own_post": true,
+      "http_status": 200,
+      "page_path": "https://www.threads.com/@us28qt/post/Df7lHTTnRXl",
+      "timestamp_code_visible": true,
+      "body_excerpt": "Thread\n10 views\nus28qt\n10h\nChọn một món dưới 200k để đổi outfit: bạn thích áo basic hay váy xếp ly?\nÁo dài tay JUSTDUN Z12 — 49.500đ\ns.shopee.vn/9KjkH…\nChân váy Ngọc Bích 9678 — 192.580đ\ns.shopee.vn/4fxui…\nTrước khi chốt, xem bảng size của shop và ảnh đánh giá đúng màu/phân loại nhé.\nGiá tham khảo, có thể thay đổi.\nLink tiếp thị liên kết.  \nTranslate\ns.shopee.vn\nNGỌC BÍCH - Chân Váy Nữ Xếp Ly KHÔNG Kèm Tang Chất Dạ Nhiều Màu Hàng Sẵn Xếp Ly Hàng Quảng Châu Loại 1 - Mã 9678 | Shopee Việt Nam\nRelated threads\nnghitram0208\n11/09/26\nMột chiếc quần ống rộng nhìn đơn giản mà dễ phối đồ ghê 🤎🍂\nQuần nè s.shopee.vn/70LYz…\nChất drap, form rộng thoải mái, diện cùng áo len hay áo ôm đều ra outfit thu đông xinh xắn nè =))))) ✨  \nTranslate\ns.shopee.vn\nQuần Ống Rộng Phong Cách Hàn Quốc Chất Liệu Drap, Thích Hợp Mùa Thu Đông | Shopee Việt Nam\ncuocgoivigieo\n11/05/26\nChân váy chấm bi chữ A 🌹link mua hàng➡️s.shopee.vn/AKbut…  \nTranslate\ns.shopee.vn\nDottie Skirt - Chân Váy Chấm Bi/Trơn Chữ A Nữ-Kèm Quần Bảo Hộ-Dễ Phối Đồ-Phù Hợp Mùa Hè Mùa Thu | Shopee Việt Nam\nus28qt\n2d\nT thấy bot check đáy 30 ngày\nChân váy xẻ tà 139k, hoàn dự kiến 6.310đ\nLưu ý trước khi mua: sẵn giỏ thì xoá, mở link bot gửi qua nút Mua rồi thêm/đặt mới đc hoàn.\nLink món dưới cùng: copy dán bot Telegram (link dưới) để hoàn, đừng mua thẳng.\nt.me/zt_sh…\n👇 Link món (copy dán vào bot ở trên để đc hoàn):\n- Bộ Vệ Sinh Laptop Macbook: s.shopee.vn/70LgO…\n- Chân Váy Xẻ Tà 2: s.shopee.vn/6L5x0…  \nTranslate\ns.shopee.vn\nChân Váy Xẻ Tà 2 Lớp Cạp Cao Che Bụng, Quần Giả Váy Có Lớp Quần Trong Và Tà Ngoài MiSoul 575 | Shopee Việt Nam\nphongcachsaigon.vn\n1d\nPhối đồ xinh\n🛒 s.shopee.vn/7psya…  \nTranslate\ns.shopee.vn\nChân Váy Midi Lụa Form A Phối Đuôi Cá Nhẹ Dáng Dài Hàn Quốc NV606 Chân Váy Midi Dáng Dài Chất Liệu Lụa Satin Mềm Mịn Nữ | Shopee Việt Nam\ntaphoachangi\n11/01/26\nSiêu rẻ luôn mấy nàng\nChân váy: s.shopee.vn/7VHcm…  \nTranslate\ns.shopee.vn\nDottie Skirt - Chân Váy Chấm Bi/Trơn Chữ A Nữ-Kèm Quần Bảo Hộ-Dễ Phối Đồ-Phù Hợp Mùa Hè Mùa Th",
+      "screenshot": "post-Df7lHTTnRXl.png",
+      "payload_exact_code_found": true,
+      "parent": {
+        "author": "us28qt",
+        "text": "Chọn một món dưới 200k để đổi outfit: bạn thích áo basic hay váy xếp ly?\n\nÁo dài tay JUSTDUN Z12 — 49.500đ\nhttps://s.shopee.vn/9KjkH8yoPR\nChân váy Ngọc Bích 9678 — 192.580đ\nhttps://s.shopee.vn/4fxuiZ8fjm\n\nTrước khi chốt, xem bảng size của shop và ảnh đánh giá đúng màu/phân loại nhé.\nGiá tham khảo, có thể thay đổi.\nLink tiếp thị liên kết.",
+        "like_count": 0,
+        "reply_count": 0,
+        "view_count": null,
+        "media_type": 19,
+        "has_video": false,
+        "media_count": 1,
+        "date": "2026-11-20T00:07:25+07:00"
+      },
+      "visible_reply_sample": [],
+      "reply_sample_distinct_author_count": 0,
+      "reply_sample_parent_author_replies": 0,
+      "public_view_label": "10 views",
+      "public_view_label_is_rounded": false
+    }
+  ],
+  "public_actions": 0,
+  "mode": "public_logged_out_chromium",
+  "finished_at": "2026-11-20T03:44:18.063222+00:00"
+}

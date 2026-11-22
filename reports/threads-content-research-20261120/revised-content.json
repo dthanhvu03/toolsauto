@@ -1,0 +1,52 @@
+{
+  "plan": "PLAN-184",
+  "prepared_at": "2026-11-20T03:52:53.741758+00:00",
+  "status": "drafts_for_review_not_scheduled",
+  "supersedes_recommendation": "PLAN183 C01-C03 remain preserved as prior generic drafts; prefer these evidence-informed formats for nexttest.",
+  "posts": [
+    {
+      "id": "E01",
+      "type": "Hỏi một món cụ thể",
+      "text": "Một chiếc bấm mi tốt với mọi người phải đạt gì: ôm vừa mắt, không kẹp da hay giữ mi cong?\n\nAi đã dùng Vacosi, kể giúp một điểm thích và một điểm chưa ổn, nhất là sau vài tháng nhé. Mình đang gom trải nghiệm để làm bài so sánh, không chốt chỉ từ ảnh quảng cáo.",
+      "basis": [
+        "Df6miw7CZgp"
+      ],
+      "image_brief": "Ảnh sản phẩm chính hãng được phép dùng và ảnh thông số/thiết kế; không lấy ảnh mặt/người hay ảnh test của tác giả mẫu. Chưa có asset riêng được kiểm cho bài này.",
+      "asset_status": "pending_original_or_authorized_product_images",
+      "status": "draft_not_published",
+      "chars": 259,
+      "text_sha256": "c531706bb29dfc77cf152fef355253a38359535e445415bca7f6efb7e3d475b4"
+    },
+    {
+      "id": "E02",
+      "type": "Tình huống áp mã cụ thể",
+      "text": "Một tình huống hay gặp: cùng một món nhưng hai tài khoản thấy mã khác nhau. Mọi người thường kiểm gì đầu tiên?\n\nMình kiểm phân loại, shop, điều kiện tài khoản và giờ dùng. Nếu vẫn lệch, gửi ảnh phần điều kiện đã che thông tin riêng; mình cùng đọc từng dòng.\n\nĐừng thêm món không cần chỉ để đủ mã nhé.",
+      "basis": [
+        "DffTFhWHXb1",
+        "Df4FdsajwWe"
+      ],
+      "image_brief": "Một mã thật đang còn hiệu lực với điều kiện/giờ chụp, che tên/số điện thoại/địa chỉ; chưa có mã mới xác minh nên chỉ là hướng biên tập.",
+      "asset_status": "pending_live_verified_voucher",
+      "status": "draft_not_published",
+      "chars": 300,
+      "text_sha256": "46af66aaac49207b8c501cea0d4428a1ff095279edac6a8dcf6d5c7810c018b4"
+    },
+    {
+      "id": "E03",
+      "type": "Món không đáng mua / tradeoff",
+      "text": "Có món nào lúc săn sale thấy quá hời, dùng xong lại nghĩ “biết vậy đừng mua” không?\n\nCho mình tên món + dùng để làm gì + điểm khiến bạn thất vọng. Mình muốn gom thành danh sách những thứ cần kiểm trước khi mua, nhất là đồ bếp và đồ gia dụng.",
+      "basis": [
+        "Dfd9byaEZum",
+        "Df4FdsajwWe",
+        "Df6xtanG9na"
+      ],
+      "image_brief": "Có thể mở bằng text; bài tổng hợp sau chỉ dùng ảnh do mình chụp hoặc người gửi cho phép. Không bịa hóa đơn/trải nghiệm.",
+      "asset_status": "text_first_optional_image",
+      "status": "draft_not_published",
+      "chars": 241,
+      "text_sha256": "faaec3efaa7343b143a20cd171f298b701802b2e6371044838bb4c2e448be7ac"
+    }
+  ],
+  "public_actions": 0,
+  "publication_requires": "Account/profile/topic/asset facts andcurrentquota verified; this audit does not publish or alterworker."
+}

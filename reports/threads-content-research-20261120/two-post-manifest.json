@@ -1,0 +1,36 @@
+{
+  "plan": "PLAN-186",
+  "created_at": "2026-11-20T07:23:00+00:00",
+  "status": "published_and_verified",
+  "account": "us28qt",
+  "posts": [
+    {
+      "key": "a-water",
+      "slot": "threads-content-ab-20261120-a-water",
+      "text_sha256": "e2d3238dae99ce9b4506717b20310096bdcf3df1de95a9e0477e83d39bad1a65",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/Df9HXiUCWG1",
+      "submitted_at": "2026-11-20T07:25:57.807644+00:00",
+      "caption_verified": true
+    },
+    {
+      "key": "b-vacuum",
+      "slot": "threads-content-ab-20261120-b-vacuum",
+      "text_sha256": "2fc201cd263602f18ab010e1a6a241bab5750099766894754281d2d8f7ae0bec",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/Df9ILO9ieoK",
+      "submitted_at": "2026-11-20T07:33:01.495488+00:00",
+      "caption_verified": true
+    }
+  ],
+  "constraints": {
+    "growth_agent_reenabled": false,
+    "growth_enabled": false,
+    "links_or_media_added": false,
+    "additional_public_actions": 0
+  },
+  "limitations": [
+    "A and B concern different product categories, so this is exploratory rather than a causal A/B comparison.",
+    "Engagement and conversion outcomes remain pending."
+  ]
+}

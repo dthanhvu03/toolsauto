@@ -1,0 +1,110 @@
+{
+  "plan": "PLAN-186",
+  "post_key": "b-vacuum",
+  "slot": "threads-content-ab-20261120-b-vacuum",
+  "caption": "Mấy bà ơi, máy hút bụi mini có hút nổi tóc với vụn bánh trên sofa thiệt không 😭\n\nHay mua về hút được mấy bữa rồi nằm im trong tủ, lúc cần vẫn phải lôi máy to ra =)))\n\nAi đang xài rồi review tui với, có đáng tiền không?",
+  "sha256": "2fc201cd263602f18ab010e1a6a241bab5750099766894754281d2d8f7ae0bec",
+  "status": "posted",
+  "submit_called": true,
+  "attempt_started_at": "2026-11-20T07:32:45.413772+00:00",
+  "preflight": {
+    "at": "2026-11-20T07:32:44.865475+00:00",
+    "post_key": "b-vacuum",
+    "label": "B — máy hút bụi mini",
+    "caption": "Mấy bà ơi, máy hút bụi mini có hút nổi tóc với vụn bánh trên sofa thiệt không 😭\n\nHay mua về hút được mấy bữa rồi nằm im trong tủ, lúc cần vẫn phải lôi máy to ra =)))\n\nAi đang xài rồi review tui với, có đáng tiền không?",
+    "sha256": "2fc201cd263602f18ab010e1a6a241bab5750099766894754281d2d8f7ae0bec",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 1,
+    "posts_last_24h": 8,
+    "last_post_at": "2026-11-20T07:25:57.787033+00:00",
+    "spacing_seconds": 407.078442,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "click_started_at": "2026-11-20T07:33:01.495488+00:00",
+  "preflight_before_submit": {
+    "at": "2026-11-20T07:33:01.055073+00:00",
+    "post_key": "b-vacuum",
+    "label": "B — máy hút bụi mini",
+    "caption": "Mấy bà ơi, máy hút bụi mini có hút nổi tóc với vụn bánh trên sofa thiệt không 😭\n\nHay mua về hút được mấy bữa rồi nằm im trong tủ, lúc cần vẫn phải lôi máy to ra =)))\n\nAi đang xài rồi review tui với, có đáng tiền không?",
+    "sha256": "2fc201cd263602f18ab010e1a6a241bab5750099766894754281d2d8f7ae0bec",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 1,
+    "posts_last_24h": 8,
+    "last_post_at": "2026-11-20T07:25:57.787033+00:00",
+    "spacing_seconds": 423.26804,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "post_url": "https://www.threads.com/@us28qt/post/Df9ILO9ieoK",
+  "exact_caption_verified": true,
+  "finished_at": "2026-11-20T07:33:12.577215+00:00",
+  "growth_enabled_after": false,
+  "agents_after": {
+    "CapCut_Agent_Supervisor": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    }
+  },
+  "profile_unlocked_after": true
+}

@@ -1,0 +1,57 @@
+{
+  "plan": "PLAN-186",
+  "observed_at": "2026-11-20T07:37:09.274375+00:00",
+  "publication_rows": [
+    {
+      "slot": "threads-content-ab-20261120-a-water",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/Df9HXiUCWG1",
+      "account": "us28qt",
+      "created_at": "2026-11-20T07:25:57.787033+00:00"
+    },
+    {
+      "slot": "threads-content-ab-20261120-b-vacuum",
+      "status": "posted",
+      "post_url": "https://www.threads.com/@us28qt/post/Df9ILO9ieoK",
+      "account": "us28qt",
+      "created_at": "2026-11-20T07:33:01.489104+00:00"
+    }
+  ],
+  "proof_urls": {
+    "a-water": "https://www.threads.com/@us28qt/post/Df9HXiUCWG1",
+    "b-vacuum": "https://www.threads.com/@us28qt/post/Df9ILO9ieoK"
+  },
+  "public_posts_last_hour": 2,
+  "public_posts_last_24h": 9,
+  "limits": {
+    "max_hour": 3,
+    "max_day": 20,
+    "min_spacing_sec": 180
+  },
+  "agents": {
+    "Threads_Growth": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "CapCut_Agent_Supervisor": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    }
+  },
+  "growth_enabled": false,
+  "publication_succeeded_by_worker": false,
+  "checks": {
+    "both_exact_slots_posted": true,
+    "permalinks_match_publication_proof": true,
+    "captions_match": true,
+    "workers_still_stopped": true,
+    "growth_stays_disabled": true,
+    "profile_unlocked_after_each": true,
+    "no_urls_in_posts": true
+  },
+  "all_checks_pass": true,
+  "no_additional_images_or_links": true,
+  "external_public_actions": 2
+}

@@ -1,0 +1,110 @@
+{
+  "plan": "PLAN-186",
+  "post_key": "a-water",
+  "slot": "threads-content-ab-20261120-a-water",
+  "caption": "Mấy bà đang niềng ơi, máy tăm nước có đáng sắm không 😭\n\nThấy ai cũng khen tiện mà tui cứ nghĩ tới cảnh mua về lười rửa bình rồi quăng xó =)))\n\nAi dùng rồi kể tui nghe với: có xài đều không, vệ sinh máy có phiền lắm hông?",
+  "sha256": "e2d3238dae99ce9b4506717b20310096bdcf3df1de95a9e0477e83d39bad1a65",
+  "status": "posted",
+  "submit_called": true,
+  "attempt_started_at": "2026-11-20T07:25:30.387446+00:00",
+  "preflight": {
+    "at": "2026-11-20T07:25:29.622027+00:00",
+    "post_key": "a-water",
+    "label": "A — máy tăm nước",
+    "caption": "Mấy bà đang niềng ơi, máy tăm nước có đáng sắm không 😭\n\nThấy ai cũng khen tiện mà tui cứ nghĩ tới cảnh mua về lười rửa bình rồi quăng xó =)))\n\nAi dùng rồi kể tui nghe với: có xài đều không, vệ sinh máy có phiền lắm hông?",
+    "sha256": "e2d3238dae99ce9b4506717b20310096bdcf3df1de95a9e0477e83d39bad1a65",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 0,
+    "posts_last_24h": 7,
+    "last_post_at": "2026-11-20T03:07:30.714161+00:00",
+    "spacing_seconds": 15478.907866,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "click_started_at": "2026-11-20T07:25:57.807644+00:00",
+  "preflight_before_submit": {
+    "at": "2026-11-20T07:25:56.433741+00:00",
+    "post_key": "a-water",
+    "label": "A — máy tăm nước",
+    "caption": "Mấy bà đang niềng ơi, máy tăm nước có đáng sắm không 😭\n\nThấy ai cũng khen tiện mà tui cứ nghĩ tới cảnh mua về lười rửa bình rồi quăng xó =)))\n\nAi dùng rồi kể tui nghe với: có xài đều không, vệ sinh máy có phiền lắm hông?",
+    "sha256": "e2d3238dae99ce9b4506717b20310096bdcf3df1de95a9e0477e83d39bad1a65",
+    "checks": {
+      "exact_caption_length_and_hash": true,
+      "no_urls": true,
+      "growth_stays_disabled": true,
+      "selected_agent_processes_stopped": true,
+      "account_active": true,
+      "account_role_allows_original_posts": true,
+      "profile_unlocked": true,
+      "outside_quiet_hours": true,
+      "per_hour_quota": true,
+      "per_day_quota": true,
+      "minimum_post_spacing": true,
+      "slot_has_no_previous_attempt": true,
+      "no_unknown_campaign_attempt": true,
+      "not_duplicate_caption": true
+    },
+    "blocked": [],
+    "posts_last_hour": 0,
+    "posts_last_24h": 7,
+    "last_post_at": "2026-11-20T03:07:30.714161+00:00",
+    "spacing_seconds": 15505.71958,
+    "growth_enabled": false,
+    "agents": {
+      "CapCut_Agent_Supervisor": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      },
+      "Threads_Growth": {
+        "pid": 0,
+        "status": "stopped",
+        "restarts": 0
+      }
+    }
+  },
+  "post_url": "https://www.threads.com/@us28qt/post/Df9HXiUCWG1",
+  "exact_caption_verified": true,
+  "finished_at": "2026-11-20T07:26:09.728959+00:00",
+  "growth_enabled_after": false,
+  "agents_after": {
+    "CapCut_Agent_Supervisor": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    },
+    "Threads_Growth": {
+      "pid": 0,
+      "status": "stopped",
+      "restarts": 0
+    }
+  },
+  "profile_unlocked_after": true
+}

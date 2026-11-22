@@ -1,0 +1,203 @@
+{
+  "plan": "PLAN-184",
+  "observed_at": "2026-11-20T03:58:15.992739+00:00",
+  "mode": "public_logged_out_chromium",
+  "search_count": 10,
+  "unique_post_count": 126,
+  "direct_permalink_count": 10,
+  "public_actions": 0,
+  "runtime_unchanged": true,
+  "conclusion": "Prefer one specific product/use-case question, one verified voucher condition, or one experience tradeoff. Generic checklist/CTA is not yet shown to acquire users.",
+  "selected_posts": [
+    {
+      "url": "https://www.threads.com/@nzi.n_z/post/Df6miw7CZgp",
+      "code": "Df6miw7CZgp",
+      "own_post": false,
+      "posted_at_vn": "2026-11-19T15:00:40+07:00",
+      "observed_at": "2026-11-20T03:43:20.442417+00:00",
+      "likes": 22,
+      "replies": 20,
+      "views_display_label": "3.1K views",
+      "views_exact": null,
+      "reply_sample_n": 12,
+      "reply_sample_parent_author_replies": 4,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@odora.order/post/DfreGVNnzsd",
+      "code": "DfreGVNnzsd",
+      "own_post": false,
+      "posted_at_vn": "2026-11-13T17:58:16+07:00",
+      "observed_at": "2026-11-20T03:43:26.900564+00:00",
+      "likes": 297,
+      "replies": 83,
+      "views_display_label": "50.3K views",
+      "views_exact": null,
+      "reply_sample_n": 9,
+      "reply_sample_parent_author_replies": 3,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@pocosmetics/post/DffH7aHmuBk",
+      "code": "DffH7aHmuBk",
+      "own_post": false,
+      "posted_at_vn": "2026-11-08T22:53:39+07:00",
+      "observed_at": "2026-11-20T03:43:32.444683+00:00",
+      "likes": 39,
+      "replies": 94,
+      "views_display_label": "29.4K views",
+      "views_exact": null,
+      "reply_sample_n": 4,
+      "reply_sample_parent_author_replies": 3,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@sandeal.shopee/post/DffTFhWHXb1",
+      "code": "DffTFhWHXb1",
+      "own_post": false,
+      "posted_at_vn": "2026-11-09T00:31:09+07:00",
+      "observed_at": "2026-11-20T03:43:37.963227+00:00",
+      "likes": 189,
+      "replies": 18,
+      "views_display_label": "22.7K views",
+      "views_exact": null,
+      "reply_sample_n": 12,
+      "reply_sample_parent_author_replies": 2,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@zun_kun.t/post/Dfd9byaEZum",
+      "code": "Dfd9byaEZum",
+      "own_post": false,
+      "posted_at_vn": "2026-11-08T12:02:42+07:00",
+      "observed_at": "2026-11-20T03:43:44.000734+00:00",
+      "likes": 28833,
+      "replies": 1557,
+      "views_display_label": "1.1M views",
+      "views_exact": null,
+      "reply_sample_n": 9,
+      "reply_sample_parent_author_replies": 0,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@mimido1429/post/Df4FdsajwWe",
+      "code": "Df4FdsajwWe",
+      "own_post": false,
+      "posted_at_vn": "2026-11-18T15:33:08+07:00",
+      "observed_at": "2026-11-20T03:43:50.766228+00:00",
+      "likes": 3,
+      "replies": 2,
+      "views_display_label": "175 views",
+      "views_exact": null,
+      "reply_sample_n": 2,
+      "reply_sample_parent_author_replies": 1,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@pdh.io.vn/post/Df8oFXxiCYU",
+      "code": "Df8oFXxiCYU",
+      "own_post": false,
+      "posted_at_vn": "2026-11-20T09:52:36+07:00",
+      "observed_at": "2026-11-20T03:43:56.100287+00:00",
+      "likes": 0,
+      "replies": 0,
+      "views_display_label": "1 view",
+      "views_exact": null,
+      "reply_sample_n": 0,
+      "reply_sample_parent_author_replies": 0,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@hls.tung/post/Df6xtanG9na",
+      "code": "Df6xtanG9na",
+      "own_post": false,
+      "posted_at_vn": "2026-11-19T16:38:14+07:00",
+      "observed_at": "2026-11-20T03:44:01.421677+00:00",
+      "likes": 52,
+      "replies": 64,
+      "views_display_label": "23.2K views",
+      "views_exact": null,
+      "reply_sample_n": 11,
+      "reply_sample_parent_author_replies": 1,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@us28qt/post/Df8jAaUCVmk",
+      "code": "Df8jAaUCVmk",
+      "own_post": true,
+      "posted_at_vn": "2026-11-20T09:08:14+07:00",
+      "observed_at": "2026-11-20T03:44:06.847128+00:00",
+      "likes": 0,
+      "replies": 1,
+      "views_display_label": "1 view",
+      "views_exact": null,
+      "reply_sample_n": 1,
+      "reply_sample_parent_author_replies": 1,
+      "exact_code_verified": true
+    },
+    {
+      "url": "https://www.threads.com/@us28qt/post/Df7lHTTnRXl",
+      "code": "Df7lHTTnRXl",
+      "own_post": true,
+      "posted_at_vn": "2026-11-20T00:07:25+07:00",
+      "observed_at": "2026-11-20T03:44:12.618893+00:00",
+      "likes": 0,
+      "replies": 0,
+      "views_display_label": "10 views",
+      "views_exact": null,
+      "reply_sample_n": 0,
+      "reply_sample_parent_author_replies": 0,
+      "exact_code_verified": true
+    }
+  ],
+  "recommended_formats": [
+    {
+      "id": "E01",
+      "format": "Hỏi một món cụ thể",
+      "asset_status": "pending_original_or_authorized_product_images"
+    },
+    {
+      "id": "E02",
+      "format": "Tình huống áp mã cụ thể",
+      "asset_status": "pending_live_verified_voucher"
+    },
+    {
+      "id": "E03",
+      "format": "Món không đáng mua / tradeoff",
+      "asset_status": "text_first_optional_image"
+    }
+  ],
+  "own_baseline": {
+    "follower_display": "2,091",
+    "followers_are_not_reach": true,
+    "black_friday_post_views_display": "1 view",
+    "product_post_views_display": "10 views",
+    "channel_total_members_at_1020_vn": 3,
+    "new_cashbot_used_from_campaign_source_at_1020_vn": 0,
+    "attributed_invite_joins": null
+  },
+  "limitations": [
+    "Search top is not platform-wide trending.",
+    "Public logged-out results differ from personalized feed.",
+    "Views display labels may be rounded; exact views not inferred.",
+    "Engagement and self replies are not acquired customers or causality.",
+    "Reply samples are partial.",
+    "Different post ages/account distribution/paidboost are uncontrolled.",
+    "Prices/codes/reviews in sample posts are not validated offers.",
+    "Recursive search image counts can overcount carousel covers.",
+    "No evidence establishing external-link penalty."
+  ],
+  "official_sources": [
+    {
+      "url": "https://about.fb.com/news/2024/10/find-your-community-with-new-threads-educational-insights/",
+      "facts": "Replies almost half views; conversation, original content and media with text correlate with discovery."
+    },
+    {
+      "url": "https://about.fb.com/news/2025/03/new-threads-features-more-personalized-experience-you-control/",
+      "facts": "Insights supports link visits, views, interactions, follower growth and discovery sources; topic-view association is not causal."
+    }
+  ],
+  "publication_status": "drafts_only_not_scheduled",
+  "report": "RESEARCH.md",
+  "drafts": "REVISED-CONTENT.md"
+}
