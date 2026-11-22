@@ -1,0 +1,21 @@
+{
+  "at": "2026-11-21T17:07:21.537579+00:00",
+  "checks": {
+    "monitor_file_absent": true,
+    "monitor_state_cancelled": true,
+    "automation_active": true,
+    "hourly": true,
+    "bounded_deadline": true,
+    "first_comment_verified": true,
+    "single_attempt": true,
+    "pm2_same": true,
+    "business_bots_same": true,
+    "growth_disabled": true,
+    "profile_unlocked": true
+  },
+  "automation_id": "agent-b-nh-lu-n-threads-ng-ch",
+  "comment_url": "https://www.threads.com/@us28qt/post/DgAtwCAHb_a",
+  "test_result": "12 passed in 1.16s",
+  "ruff": "All checks passed!",
+  "compile_exit": 0
+}

@@ -1,0 +1,3 @@
+# TASK-075 — Agent hội thoại trên bài Threads đang có tương tác
+Owner: Codex. PLAN-189. Status: Verified — execution done, hourly72h active; outcomes/reviews pending.
+Acceptance: monitor cũ hủy; agent hourly 72h hoạt động đúng policy3/24h+45min, verified hoặc truthful skip; một submit/chống trùng/unknown pause; @us28qt đúng identity; worker cũ/bots/config không đổi. Proof reports/threads-conversation-20261121/.
