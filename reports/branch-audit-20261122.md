@@ -18,5 +18,5 @@
 ## Worktree state
 
 - Main merge worktree fast-forwarded cleanly to `5e3c46b`; status was clean after the fast-forward.
-- The original 345-file WIP was captured in focused commits; 10 active/local-only files remain outside Git (runtime locks plus PLAN189 live `state.json` and `candidates.json`). Two safety stashes remain intact. No reset, branch deletion, or push was done. PLAN187 cancellation was verified; PLAN189 stays hourly active through 2026-11-24 23:51 VN.
+- The original 345-file WIP was captured in focused commits; 10 active/local-only files remain outside Git (runtime locks plus PLAN189 live `state.json` and `candidates.json`). Two safety stashes remain intact. No reset, branch deletion, or push was done. PLAN187 cancellation was verified; The last recorded PLAN189 readback showed hourly active through 2026-11-24 23:51 VN; live scheduler state was not re-queried in this cleanup.
 - An earlier write accidentally truncated `current-status.md`. It was restored byte-for-byte from the last committed 6,186-line version. The uncommitted text lost in that overwrite was not available in Local History or Git; latest PLAN-190 facts were reconstructed from its PLAN, TASK, and review artifact.
